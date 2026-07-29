@@ -4,19 +4,9 @@
 import { pipeline } from "stream/promises";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
-import {
-  BulkCreateReportsInputSchema,
-  BulkReportStatusInputSchema,
-  BulkReportSummaryInputSchema,
-  BulkReportSummaryResponseSchema,
-  BulkTriggerReportsInputSchema,
-  CreateReportInputSchema,
-  InsightResponseSchema,
-  ReportResponseSchema,
-  TriggerReportsInputSchema,
-  evaluateTrigger,
-} from "shared";
-import type { TaskPromptDocument } from "shared";
+import { BulkCreateReportsInputSchema, BulkReportStatusInputSchema, BulkReportSummaryInputSchema, BulkReportSummaryResponseSchema, BulkTriggerReportsInputSchema, CreateReportInputSchema, InsightResponseSchema, ReportResponseSchema, TriggerReportsInputSchema } from "@scope/core";
+import { evaluateTrigger } from "@scope/platform";
+import type { TaskPromptDocument } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type {
   InsightReference,

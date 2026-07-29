@@ -9,7 +9,12 @@ packages:
   - apps/workers/*
   - apps/model-scanners/*
   - apps/version-checkers/*
-  - packages/shared
+  - packages/core
+  - packages/secrets
+  - packages/platform
+  - packages/agent-protocol
+  - packages/criteria
+  - packages/worker-runtime
   - packages/version-checking
   - packages/github-auth
   - packages/model-scanning

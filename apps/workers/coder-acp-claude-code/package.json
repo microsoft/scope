@@ -10,9 +10,12 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "shared": "workspace:*",
-    "dotenv": "^16.4.5",
-    "@agentclientprotocol/sdk": "^0.13.1"
+    "@agentclientprotocol/sdk": "^0.13.1",
+    "@scope/agent-protocol": "workspace:*",
+    "@scope/core": "workspace:*",
+    "@scope/secrets": "workspace:*",
+    "@scope/worker-runtime": "workspace:*",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@types/dockerode": "^4.0.1",

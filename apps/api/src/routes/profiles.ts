@@ -3,16 +3,9 @@
 
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
-import {
-  CreateProfileInputSchema,
-  UpdateProfileIdentitySchema,
-  ProfileResponseSchema,
-  ProfileVersionResponseSchema,
-  ProfileWithVersionResponseSchema,
-  ExtensionClient,
-  parseExtensionSpec,
-} from "shared";
-import type { ProfileDocument, ProfileVersionDocument } from "shared";
+import { CreateProfileInputSchema, UpdateProfileIdentitySchema, ProfileResponseSchema, ProfileVersionResponseSchema, ProfileWithVersionResponseSchema } from "@scope/core";
+import { ExtensionClient, parseExtensionSpec } from "@scope/platform";
+import type { ProfileDocument, ProfileVersionDocument } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { RouteContext } from "../route-context.js";
 import { resolveSkillSpecs } from "../utils/skill-helpers.js";

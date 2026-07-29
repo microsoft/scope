@@ -30,22 +30,30 @@ vi.mock("@github/copilot-sdk", () => {
   return { CopilotClient: StubCopilotClient };
 });
 
-vi.mock("shared", () => {
+vi.mock("@scope/worker-runtime", () => {
   // Minimal stub of BaseQueueProcessor – only what the constructor needs
   class StubBaseQueueProcessor {
     protected collection = { updateOne: vi.fn().mockResolvedValue({}) };
     constructor() {}
     protected safeDeleteMessage = vi.fn().mockResolvedValue(undefined);
   }
+  return {
+    BaseQueueProcessor: StubBaseQueueProcessor,
+  };
+});
+
+vi.mock("@scope/secrets", () => {
   class StubTokenManagerClient {
     acquireToken = vi.fn().mockResolvedValue("fake-token");
   }
   return {
-    BaseQueueProcessor: StubBaseQueueProcessor,
     TokenManagerClient: StubTokenManagerClient,
-    withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
   };
 });
+
+vi.mock("@scope/core", () => ({
+  withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
+}));
 
 vi.mock("./tools.js", () => ({
   createReportTools: vi.fn(() => []),
@@ -403,7 +411,7 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
     };
   }
 
-  function makeReportDoc(overrides: Partial<import("shared").ReportDocument> = {}): import("shared").ReportDocument {
+  function makeReportDoc(overrides: Partial<import("@scope/core").ReportDocument> = {}): import("@scope/core").ReportDocument {
     return {
       _id: "report-1",
       requestId: "req-1",
@@ -411,7 +419,7 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
       logs: [],
       createdAt: new Date(),
       ...overrides,
-    } as import("shared").ReportDocument;
+    } as import("@scope/core").ReportDocument;
   }
 
   it("throws when report has no templateId", async () => {

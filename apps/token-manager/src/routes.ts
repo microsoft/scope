@@ -4,16 +4,8 @@
 import { Router } from "express";
 import { Collection } from "mongodb";
 import { v4 as uuidv4 } from "uuid";
-import {
-  KeyDocument,
-  KeyType,
-  KeyCapability,
-  AcquireKeyResponse,
-  CreateKeyRequest,
-  UpdateKeyRequest,
-  AcquireKeyRequest,
-  deriveSecretName,
-} from "shared";
+import { KeyDocument, CreateKeyRequest, UpdateKeyRequest, AcquireKeyRequest, deriveSecretName } from "@scope/secrets";
+import { KeyType, KeyCapability, AcquireKeyResponse } from "@scope/secrets";
 import { SecretStore } from "./keyvault-store.js";
 import { validateToken } from "./token-validators.js";
 import { RoundRobinMap } from "./round-robin.js";

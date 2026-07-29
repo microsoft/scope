@@ -3,12 +3,8 @@
 
 import { join, basename } from "path";
 import { z } from "zod";
-import {
-  CreateReportTemplateInputSchema,
-  REPORT_SYSTEM_PROMPT,
-  ReportTemplateResponseSchema,
-  UpdateReportTemplateInputSchema,
-} from "shared";
+import { CreateReportTemplateInputSchema, ReportTemplateResponseSchema, UpdateReportTemplateInputSchema } from "@scope/core";
+import { REPORT_SYSTEM_PROMPT } from "@scope/platform";
 import { apiRoute } from "../openapi/api-route.js";
 import type { ReportTemplateDocument, RouteContext } from "../route-context.js";
 import { validateTrigger } from "../utils/validate-trigger.js";

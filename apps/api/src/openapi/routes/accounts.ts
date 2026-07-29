@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
 import { registry } from "../registry.js";
-import { AccountInputSchema, AccountResponseSchema } from "shared";
+import { AccountInputSchema, AccountResponseSchema } from "@scope/core";
 
 extendZodWithOpenApi(z);
 

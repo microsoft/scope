@@ -7,6 +7,7 @@ WORKDIR /app
 # Copy workspace root files
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
+COPY nx.json ./
 COPY packages/db-migrations/package.json ./packages/db-migrations/
 
 # Install dependencies (production + dev for tsx)

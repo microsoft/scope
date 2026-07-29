@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { Document } from "mongodb";
-import type { GroupByKey, RunGroup, AggregateStats, GroupUniformValues } from "shared";
+import type { GroupByKey, RunGroup, AggregateStats, GroupUniformValues } from "@scope/core";
 
 /**
  * Build a MongoDB aggregation pipeline that groups runs and computes

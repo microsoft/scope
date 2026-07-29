@@ -17,7 +17,7 @@
  *   TEST_MODEL    — Model to select via ACP set_model (e.g. "claude-opus-4.6")
  */
 import { runACPSession } from "./acp-client.js";
-import { createFreshWorkspace } from "shared";
+import { createFreshWorkspace } from "@scope/core";
 import { execSync } from "child_process";
 
 interface PromptResult {

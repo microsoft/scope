@@ -1,14 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-  CriteriaConfig,
-  CriterionResult,
-  ConversationTurn,
-  DetailedEvaluationResult,
-  DependencyGraph,
-} from "shared";
-import { getCriteriaProvider } from "shared/criteria-provider-factory";
+import { CriteriaConfig, CriterionResult, ConversationTurn, DetailedEvaluationResult } from "@scope/core";
+import { DependencyGraph } from "@scope/criteria";
+import { getCriteriaProvider } from "@scope/criteria/criteria-provider-factory";
 import { createJudgeStrategy } from "./judge-strategies.js";
 import { FeedbackGenerator } from "./feedback-generator.js";
 

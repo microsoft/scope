@@ -7,7 +7,7 @@ import {
   listHistoricalRuns,
   getHistoricalRun,
 } from "./runs-repo.js";
-import type { RunState } from "shared";
+import type { RunState } from "@scope/core";
 
 function makeRunsCol(initial: any[] = []) {
   const docs = [...initial];

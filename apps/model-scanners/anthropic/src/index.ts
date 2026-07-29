@@ -4,7 +4,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { TokenManagerClient } from "shared";
+import { TokenManagerClient } from "@scope/secrets";
 import {
   parseScannerArgs,
   waitForApi,

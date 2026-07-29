@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import type { RunState } from "shared";
+import type { RunState } from "@scope/core";
 import type { Response } from "express";
 import { apiRoute } from "../../openapi/api-route.js";
 import type { RouteContext } from "../../route-context.js";

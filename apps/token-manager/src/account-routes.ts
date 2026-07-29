@@ -4,15 +4,8 @@
 import { Router } from "express";
 import { Collection } from "mongodb";
 import { v4 as uuidv4 } from "uuid";
-import {
-  AccountDocument,
-  AccountType,
-  AccountSecretValue,
-  AcquireAccountRequest,
-  CreateAccountRequest,
-  UpdateAccountRequest,
-  deriveAccountSecretName,
-} from "shared";
+import { AccountDocument, AccountSecretValue, AcquireAccountRequest, CreateAccountRequest, UpdateAccountRequest, deriveAccountSecretName } from "@scope/secrets";
+import { AccountType } from "@scope/secrets";
 import { SecretStore } from "./keyvault-store.js";
 
 const VALID_ACCOUNT_TYPES: AccountType[] = ["github"];

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { KeyType, KeyValidationResult, deriveCapabilities, parseAzureAiFoundrySecret } from "shared";
+import { KeyType, KeyValidationResult, deriveCapabilities, parseAzureAiFoundrySecret } from "@scope/secrets";
 
 /**
  * Validate a key by calling the provider's API and derive its capabilities.

@@ -14,23 +14,9 @@ import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
-import {
-  BulkResubmitInputSchema,
-  CreateRequestInputSchema,
-  ExtensionClient,
-  ListRequestsQuerySchema,
-  MULTI_TURN_DEFAULTS,
-  PaginatedRunGroupsResponseSchema,
-  PaginatedRunsResponseSchema,
-  ReportResponseSchema,
-  RequestResponseSchema,
-  RunStateSchema,
-  decodeCursor,
-  encodeCursor,
-  parseExtensionSpec,
-  resolveAgentVersion,
-} from "shared";
-import type { ProfileDocument, ProfileVersionDocument } from "shared";
+import { BulkResubmitInputSchema, CreateRequestInputSchema, ListRequestsQuerySchema, MULTI_TURN_DEFAULTS, PaginatedRunGroupsResponseSchema, PaginatedRunsResponseSchema, ReportResponseSchema, RequestResponseSchema, RunStateSchema, decodeCursor, encodeCursor, resolveAgentVersion } from "@scope/core";
+import { ExtensionClient, parseExtensionSpec } from "@scope/platform";
+import type { ProfileDocument, ProfileVersionDocument } from "@scope/core";
 import { apiRoute } from "../../openapi/api-route.js";
 import { VALID_WORKERS } from "../../route-context.js";
 import type {
@@ -49,7 +35,7 @@ import {
   packRunIntoTar,
 } from "../../archive-har.js";
 import { insertHistoricalRun, listHistoricalRuns, getHistoricalRun } from "../../runs-repo.js";
-import type { RunState } from "shared";
+import type { RunState } from "@scope/core";
 
 export function registerRequestsRoutes(ctx: RouteContext): void {
 

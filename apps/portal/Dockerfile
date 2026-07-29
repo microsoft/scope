@@ -16,7 +16,7 @@ COPY apps/portal/package.json apps/portal/
 RUN pnpm install --frozen-lockfile --filter portal
 
 COPY apps/portal/ apps/portal/
-RUN pnpm --filter portal build
+RUN npx nx run-many --target=build --projects=portal
 
 # --- Dev stage: Vite dev server with HMR ---
 FROM builder AS dev

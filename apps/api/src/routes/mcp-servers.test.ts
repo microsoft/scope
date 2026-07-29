@@ -9,7 +9,7 @@ import express from "express";
 import request from "supertest";
 import type { RouteContext } from "../route-context.js";
 import { registerMcpServersRoutes } from "./mcp-servers.js";
-import type { McpSecretClient, McpSecretListItem } from "shared";
+import type { McpSecretClient, McpSecretListItem } from "@scope/agent-protocol";
 
 extendZodWithOpenApi(z);
 

@@ -20,7 +20,7 @@
  */
 import ModelClient, { type ModelClient as ModelClientType } from "@azure-rest/ai-inference";
 import { AzureKeyCredential } from "@azure/core-auth";
-import { TokenManagerClient, parseAzureAiFoundrySecret } from "shared";
+import { TokenManagerClient, parseAzureAiFoundrySecret } from "@scope/secrets";
 
 const GITHUB_MODELS_ENDPOINT = "https://models.inference.ai.azure.com";
 

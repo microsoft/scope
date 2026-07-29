@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { isUnexpected } from "@azure-rest/ai-inference";
-import { PromptFeatureConfig, PromptFeatureResult, SuggestedPromptFeature } from "shared";
+import { PromptFeatureConfig, PromptFeatureResult, SuggestedPromptFeature } from "@scope/core";
 import { acquireInferenceClient, isLlmAvailable as inferenceAvailable } from "./llm-token.js";
 
 // ---------------------------------------------------------------------------

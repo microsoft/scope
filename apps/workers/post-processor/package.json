@@ -10,7 +10,9 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "shared": "workspace:*",
+    "@scope/core": "workspace:*",
+    "@scope/platform": "workspace:*",
+    "@scope/worker-runtime": "workspace:*",
     "@azure/storage-queue": "^12.25.0",
     "atifact": "^0.7.0",
     "dotenv": "^16.4.5",

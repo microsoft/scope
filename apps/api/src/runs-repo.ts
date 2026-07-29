@@ -21,7 +21,7 @@
  */
 
 import type { Collection } from "mongodb";
-import type { RunState, RunHistoryDocument } from "shared";
+import type { RunState, RunHistoryDocument } from "@scope/core";
 
 export interface RunsRepoOptions {
   runsCollection: Collection<RunHistoryDocument>;

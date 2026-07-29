@@ -58,7 +58,7 @@ export interface CriterionResult {
   evaluated: boolean;
 }
 
-import { computeTaskPromptId } from 'shared';
+import { computeTaskPromptId } from '@scope/platform';
 
 // Run data needed for analysis (subset of RequestDocument)
 export interface AnalyzableRun {

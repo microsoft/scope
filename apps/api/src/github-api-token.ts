@@ -17,7 +17,7 @@
  *
  * Mirrors the pattern in llm-token.ts.
  */
-import { TokenManagerClient } from "shared";
+import { TokenManagerClient } from "@scope/secrets";
 
 let tokenManagerClient: TokenManagerClient | null = null;
 

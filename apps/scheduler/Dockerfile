@@ -6,19 +6,18 @@ WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
-COPY packages/shared/package.json ./packages/shared/
+COPY nx.json ./
+COPY packages/core/package.json ./packages/core/
 COPY apps/scheduler/package.json ./apps/scheduler/
 
 RUN pnpm install --frozen-lockfile
 
-COPY packages/shared/tsconfig.json ./packages/shared/
-COPY packages/shared/src ./packages/shared/src/
-RUN pnpm --filter shared build
-
+COPY packages/core/tsconfig.json ./packages/core/
+COPY packages/core/src ./packages/core/src/
 COPY apps/scheduler/tsconfig.json ./apps/scheduler/
 COPY apps/scheduler/src ./apps/scheduler/src/
 
-RUN pnpm --filter scheduler build
+RUN npx nx run-many --target=build --projects=scheduler
 
 # --- Dev stage: hot reload with tsx watch ---
 FROM builder AS dev
@@ -37,12 +36,12 @@ RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/shared/package.json ./packages/shared/
+COPY packages/core/package.json ./packages/core/
 COPY apps/scheduler/package.json ./apps/scheduler/
 
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist/
+COPY --from=builder /app/packages/core/dist ./packages/core/dist/
 COPY --from=builder /app/apps/scheduler/dist ./apps/scheduler/dist/
 
 WORKDIR /app/apps/scheduler

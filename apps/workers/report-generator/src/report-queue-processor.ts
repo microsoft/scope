@@ -6,18 +6,12 @@ import { CopilotClient, SessionEvent } from "@github/copilot-sdk";
 import { mkdirSync, rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import {
-  BaseQueueProcessor,
-  BaseQueueProcessorConfig,
-  LogEvent,
-  ReportDocument,
-  ReportTemplateDocument,
-  Reporter,
-  TokenManagerClient,
-  type VisibilityHeartbeat,
-} from "shared";
+import { BaseQueueProcessorConfig, LogEvent, ReportDocument, ReportTemplateDocument, Reporter } from "@scope/core";
+import { TokenManagerClient } from "@scope/secrets";
+import { BaseQueueProcessor, type VisibilityHeartbeat } from "@scope/worker-runtime";
 import { createReportTools } from "./tools.js";
-import { REPORT_SYSTEM_PROMPT, withRetry } from "shared";
+import { REPORT_SYSTEM_PROMPT } from "@scope/platform";
+import { withRetry } from "@scope/core";
 
 export interface ReportQueueProcessorConfig extends BaseQueueProcessorConfig {
   /** The LLM model to use for report generation, e.g. "gpt-4.1" */

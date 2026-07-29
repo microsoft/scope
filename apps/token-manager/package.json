@@ -10,14 +10,15 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "shared": "workspace:*",
     "@azure/identity": "^4.5.0",
     "@azure/keyvault-secrets": "^4.8.0",
+    "@scope/core": "workspace:*",
+    "@scope/secrets": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "mongodb": "^6.12.0",
-    "uuid": "^10.0.0"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

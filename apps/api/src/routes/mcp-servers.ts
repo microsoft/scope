@@ -2,12 +2,7 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import {
-  McpServerHeaderSchema,
-  McpServerResponseSchema,
-  McpTransportTypeSchema,
-  UpdateMcpServerInputSchema,
-} from "shared";
+import { McpServerHeaderSchema, McpServerResponseSchema, McpTransportTypeSchema, UpdateMcpServerInputSchema } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { McpServerDocument, RouteContext } from "../route-context.js";
 

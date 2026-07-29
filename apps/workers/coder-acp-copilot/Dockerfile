@@ -70,17 +70,30 @@ WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
-COPY packages/shared/package.json ./packages/shared/
+COPY nx.json ./
+COPY packages/agent-protocol/package.json ./packages/agent-protocol/
+COPY packages/core/package.json ./packages/core/
+COPY packages/platform/package.json ./packages/platform/
+COPY packages/secrets/package.json ./packages/secrets/
+COPY packages/worker-runtime/package.json ./packages/worker-runtime/
 COPY apps/workers/coder-acp-copilot/package.json ./apps/workers/coder-acp-copilot/
 
 RUN pnpm install --frozen-lockfile
 
-COPY packages/shared/tsconfig.json ./packages/shared/
-COPY packages/shared/src ./packages/shared/src/
+COPY packages/core/tsconfig.json ./packages/core/
+COPY packages/core/src ./packages/core/src/
+COPY packages/secrets/tsconfig.json ./packages/secrets/
+COPY packages/secrets/src ./packages/secrets/src/
+COPY packages/platform/tsconfig.json ./packages/platform/
+COPY packages/platform/src ./packages/platform/src/
+COPY packages/agent-protocol/tsconfig.json ./packages/agent-protocol/
+COPY packages/agent-protocol/src ./packages/agent-protocol/src/
+COPY packages/worker-runtime/tsconfig.json ./packages/worker-runtime/
+COPY packages/worker-runtime/src ./packages/worker-runtime/src/
 COPY apps/workers/coder-acp-copilot/tsconfig.json ./apps/workers/coder-acp-copilot/
 COPY apps/workers/coder-acp-copilot/src ./apps/workers/coder-acp-copilot/src/
 
-RUN pnpm --filter shared build && pnpm --filter coder-acp-copilot build
+RUN npx nx run-many --target=build --projects=coder-acp-copilot
 
 # --- Dev stage: hot reload with tsx watch ---
 FROM builder AS dev
@@ -97,7 +110,7 @@ ENV SERVICE_DIR=workers/coder-acp-copilot
 ENV WORKER_NAME=coder-acp-copilot
 COPY scripts/dev-entrypoint.sh /app/scripts/dev-entrypoint.sh
 COPY config /app/config/
-RUN chown -R node:node /app/packages/shared/dist /app/apps/workers/coder-acp-copilot/dist
+RUN chown -R node:node /app/packages/core/dist /app/packages/secrets/dist /app/packages/platform/dist /app/packages/agent-protocol/dist /app/packages/worker-runtime/dist /app/apps/workers/coder-acp-copilot/dist
 USER node
 CMD ["/app/scripts/dev-entrypoint.sh"]
 
@@ -111,12 +124,20 @@ RUN npm install -g @github/copilot@${COPILOT_CLI_VERSION}
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/shared/package.json ./packages/shared/
+COPY packages/agent-protocol/package.json ./packages/agent-protocol/
+COPY packages/core/package.json ./packages/core/
+COPY packages/platform/package.json ./packages/platform/
+COPY packages/secrets/package.json ./packages/secrets/
+COPY packages/worker-runtime/package.json ./packages/worker-runtime/
 COPY apps/workers/coder-acp-copilot/package.json ./apps/workers/coder-acp-copilot/
 
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist/
+COPY --from=builder /app/packages/agent-protocol/dist ./packages/agent-protocol/dist/
+COPY --from=builder /app/packages/core/dist ./packages/core/dist/
+COPY --from=builder /app/packages/platform/dist ./packages/platform/dist/
+COPY --from=builder /app/packages/secrets/dist ./packages/secrets/dist/
+COPY --from=builder /app/packages/worker-runtime/dist ./packages/worker-runtime/dist/
 COPY --from=builder /app/apps/workers/coder-acp-copilot/dist ./apps/workers/coder-acp-copilot/dist/
 
 # Use existing node user (UID 1000) so coding agents allow bypassPermissions mode

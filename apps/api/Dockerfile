@@ -6,24 +6,33 @@ WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
-COPY packages/shared/package.json ./packages/shared/
+COPY nx.json ./
+COPY packages/agent-protocol/package.json ./packages/agent-protocol/
+COPY packages/core/package.json ./packages/core/
 COPY packages/db-migrations/package.json ./packages/db-migrations/
+COPY packages/platform/package.json ./packages/platform/
+COPY packages/secrets/package.json ./packages/secrets/
+COPY packages/worker-runtime/package.json ./packages/worker-runtime/
 COPY apps/api/package.json ./apps/api/
 
 RUN pnpm install --frozen-lockfile
 
-COPY packages/shared/tsconfig.json ./packages/shared/
-COPY packages/shared/src ./packages/shared/src/
-RUN pnpm --filter shared build
-
+COPY packages/core/tsconfig.json ./packages/core/
+COPY packages/core/src ./packages/core/src/
+COPY packages/secrets/tsconfig.json ./packages/secrets/
+COPY packages/secrets/src ./packages/secrets/src/
+COPY packages/platform/tsconfig.json ./packages/platform/
+COPY packages/platform/src ./packages/platform/src/
+COPY packages/agent-protocol/tsconfig.json ./packages/agent-protocol/
+COPY packages/agent-protocol/src ./packages/agent-protocol/src/
+COPY packages/worker-runtime/tsconfig.json ./packages/worker-runtime/
+COPY packages/worker-runtime/src ./packages/worker-runtime/src/
 COPY packages/db-migrations/tsconfig.json ./packages/db-migrations/
 COPY packages/db-migrations/src ./packages/db-migrations/src/
-RUN pnpm --filter db-migrations build
-
 COPY apps/api/tsconfig.json ./apps/api/
 COPY apps/api/src ./apps/api/src/
 
-RUN pnpm --filter api build
+RUN npx nx run-many --target=build --projects=api
 
 # --- Dev stage: hot reload with tsx watch ---
 FROM builder AS dev
@@ -43,14 +52,22 @@ RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/shared/package.json ./packages/shared/
+COPY packages/agent-protocol/package.json ./packages/agent-protocol/
+COPY packages/core/package.json ./packages/core/
 COPY packages/db-migrations/package.json ./packages/db-migrations/
+COPY packages/platform/package.json ./packages/platform/
+COPY packages/secrets/package.json ./packages/secrets/
+COPY packages/worker-runtime/package.json ./packages/worker-runtime/
 COPY apps/api/package.json ./apps/api/
 
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist/
+COPY --from=builder /app/packages/agent-protocol/dist ./packages/agent-protocol/dist/
+COPY --from=builder /app/packages/core/dist ./packages/core/dist/
 COPY --from=builder /app/packages/db-migrations/dist ./packages/db-migrations/dist/
+COPY --from=builder /app/packages/platform/dist ./packages/platform/dist/
+COPY --from=builder /app/packages/secrets/dist ./packages/secrets/dist/
+COPY --from=builder /app/packages/worker-runtime/dist ./packages/worker-runtime/dist/
 COPY --from=builder /app/apps/api/dist ./apps/api/dist/
 
 WORKDIR /app/apps/api
@@ -66,3 +83,4 @@ EXPOSE 80
 ENV PORT=80
 
 CMD ["node", "dist/index.js"]
+# Optimized: uses nx run-many for parallel builds

@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { Collection } from "mongodb";
-import { KeyDocument, KeyType, KeyValidationResult } from "shared";
+import { KeyDocument } from "@scope/secrets";
+import { KeyType, KeyValidationResult } from "@scope/secrets";
 
 export interface TokenSchedulerDeps {
   collection: Collection<KeyDocument>;

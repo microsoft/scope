@@ -4,7 +4,8 @@
 import { BlobServiceClient } from "@azure/storage-blob";
 import { DefaultAzureCredential } from "@azure/identity";
 import type { Collection } from "mongodb";
-import type { SkillDocument, SkillRevisionStore, SkillResolver } from "shared";
+import type { SkillDocument } from "@scope/core";
+import type { SkillRevisionStore, SkillResolver } from "@scope/agent-protocol";
 
 /** Parse "slug@commitHash" → { slug, commitHash } or "slug" → { slug } */
 export function parseSkillSpec(spec: string): { slug: string; commitHash?: string } {

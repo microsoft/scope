@@ -4,7 +4,9 @@
   "private": true,
   "description": "Scoped - coding agent workers (Claude Code, Copilot ACP, VS Code Web) + API + CLI",
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "nx run-many --target=build",
+    "affected:build": "nx affected --target=build",
+    "affected:test": "nx affected --target=test",
     "cli": "pnpm --filter cli exec tsx src/index.ts",
     "build:cli": "pnpm --filter cli build",
     "dev:api": "pnpm --filter api dev",
@@ -35,7 +37,7 @@
     "portal:url": "tsx scripts/portal-url.ts",
     "get-copilot-token": "tsx scripts/get-copilot-token.ts",
     "validate-skill": "tsx scripts/validate-skill.ts",
-    "lint": "pnpm -r lint",
+    "lint": "nx run-many --target=lint",
     "test:copilot:concurrent": "concurrently -n req1,req2 -c blue,green \"pnpm cli submit -m 'Request 1: Say hello' -w coder-acp-copilot -u $API_ENDPOINT\" \"pnpm cli submit -m 'Request 2: Say goodbye' -w coder-acp-copilot -u $API_ENDPOINT\"",
     "test:all-coders": "concurrently -n copilot,claude -c blue,magenta \"pnpm cli submit -m 'Hello from Copilot test' -w coder-acp-copilot -u $API_ENDPOINT\" \"pnpm cli submit -m 'Hello from Claude test' -w coder-acp-claude-code -u $API_ENDPOINT\"",
     "test": "vitest run",
@@ -64,10 +66,12 @@
   },
   "devDependencies": {
     "@d2t/vitest-ctrf-json-reporter": "^1.3.0",
+    "@nx/js": "^22.7.4",
     "@vitest/coverage-v8": "^4.0.18",
     "concurrently": "^9.2.1",
     "dotenv-cli": "^11.0.0",
     "github-actions-ctrf": "^0.0.58",
+    "nx": "^22.7.4",
     "tsx": "^4.21.0",
     "vitest": "^4.0.18",
     "worktree-env": "^0.1.0"

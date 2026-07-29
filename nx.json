@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/nx/schemas/nx-schema.json",
+  "targetDefaults": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["production"],
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "test": {
+      "dependsOn": ["build"]
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    }
+  },
+  "namedInputs": {
+    "production": [
+      "{projectRoot}/src/**",
+      "{projectRoot}/tsconfig.json",
+      "{projectRoot}/package.json"
+    ]
+  },
+  "defaultBase": "main"
+}
+
