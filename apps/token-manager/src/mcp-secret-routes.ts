@@ -3,7 +3,7 @@
 
 import { Router } from "express";
 import { Collection, ObjectId } from "mongodb";
-import type { McpSecretDocument, McpServerDocument } from "shared";
+import type { McpSecretDocument, McpServerDocument } from "@scope/core";
 import { SecretStore } from "./keyvault-store.js";
 
 /** KV secret name for an MCP secret — keyed by its MongoDB _id to prevent collisions on rename */

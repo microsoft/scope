@@ -3,7 +3,7 @@
 
 import type { RouteContext, RequestDocument } from "../../route-context.js";
 import { getHistoricalRun } from "../../runs-repo.js";
-import type { RunState } from "shared";
+import type { RunState } from "@scope/core";
 
 /**
  * Resolve a specific RunState by runId — checks the current request.run

@@ -24,7 +24,7 @@ import { Readable } from "stream";
 import { gzipSync, gunzipSync } from "zlib";
 import { pack as tarPack, extract as tarExtract } from "tar-stream";
 import { RestError } from "@azure/storage-blob";
-import { computeTaskPromptId } from "shared";
+import { computeTaskPromptId } from "@scope/platform";
 
 extendZodWithOpenApi(z);
 

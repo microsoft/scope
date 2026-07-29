@@ -5,7 +5,7 @@ import { RestError } from "@azure/storage-blob";
 import { createGzip } from "zlib";
 import { pack as tarPack } from "tar-stream";
 import { z } from "zod";
-import type { RunState } from "shared";
+import type { RunState } from "@scope/core";
 import type { Response } from "express";
 import { apiRoute } from "../../openapi/api-route.js";
 import type { RouteContext, RequestDocument } from "../../route-context.js";

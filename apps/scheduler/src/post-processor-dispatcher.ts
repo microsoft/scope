@@ -3,7 +3,7 @@
 
 import { Collection, Db } from "mongodb";
 import { QueueClient } from "@azure/storage-queue";
-import type { RequestDocument } from "shared";
+import type { RequestDocument } from "@scope/core";
 
 /**
  * PostProcessorDispatcher — detects completed runs needing post-processing

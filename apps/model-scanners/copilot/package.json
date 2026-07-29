@@ -10,9 +10,9 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "shared": "workspace:*",
-    "model-scanning": "workspace:*",
-    "dotenv": "^16.4.5"
+    "@scope/secrets": "workspace:*",
+    "dotenv": "^16.4.5",
+    "model-scanning": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

@@ -1,24 +1,22 @@
-FROM node:22.22.0-slim AS builder
-
+FROM node:22.22.0-slim AS pruner
 RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
-
 WORKDIR /app
+COPY . .
+RUN npx turbo prune scheduler --docker
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY tsconfig.base.json ./
-COPY packages/shared/package.json ./packages/shared/
-COPY apps/scheduler/package.json ./apps/scheduler/
-
+FROM node:22.22.0-slim AS installer
+RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
+WORKDIR /app
+COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile
 
-COPY packages/shared/tsconfig.json ./packages/shared/
-COPY packages/shared/src ./packages/shared/src/
-RUN pnpm --filter shared build
-
-COPY apps/scheduler/tsconfig.json ./apps/scheduler/
-COPY apps/scheduler/src ./apps/scheduler/src/
-
-RUN pnpm --filter scheduler build
+FROM node:22.22.0-slim AS builder
+RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
+WORKDIR /app
+COPY --from=installer /app/ .
+COPY --from=pruner /app/out/full/ .
+COPY tsconfig.base.json ./
+RUN pnpm run build --filter=scheduler...
 
 # --- Dev stage: hot reload with tsx watch ---
 FROM builder AS dev
@@ -36,13 +34,10 @@ RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
 
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/shared/package.json ./packages/shared/
-COPY apps/scheduler/package.json ./apps/scheduler/
-
+COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist/
+COPY --from=builder /app/packages/core/dist ./packages/core/dist/
 COPY --from=builder /app/apps/scheduler/dist ./apps/scheduler/dist/
 
 WORKDIR /app/apps/scheduler

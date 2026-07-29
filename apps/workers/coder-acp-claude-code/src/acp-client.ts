@@ -13,7 +13,7 @@ import { Duplex } from "node:stream";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve, isAbsolute } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
-import type { McpServerConfig } from "shared";
+import type { McpServerConfig } from "@scope/core";
 
 export interface ACPClientOptions {
   command: string;

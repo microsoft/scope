@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 import type { DequeuedMessageItem } from "@azure/storage-queue";
-import { BaseQueueProcessor, BlobStorage, Retry, type BaseQueueProcessorConfig, type LogEvent, type VisibilityHeartbeat } from "shared";
+import { BaseQueueProcessor, type VisibilityHeartbeat } from "@scope/worker-runtime";
+import { BlobStorage } from "@scope/platform";
+import { Retry, type BaseQueueProcessorConfig, type LogEvent } from "@scope/core";
 import { POST_PROCESSOR_VERSION } from "./version.js";
 import type { PostProcessHandler, PostProcessorMessage, HandlerContext } from "./types.js";
 

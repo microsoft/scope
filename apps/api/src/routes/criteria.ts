@@ -2,12 +2,7 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import {
-  CreateCriteriaInputSchema,
-  CriteriaGraphSchema,
-  CriteriaResponseSchema,
-  UpdateCriteriaInputSchema,
-} from "shared";
+import { CreateCriteriaInputSchema, CriteriaGraphSchema, CriteriaResponseSchema, UpdateCriteriaInputSchema } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { CriteriaDocument, RouteContext } from "../route-context.js";
 import { computeMdp } from "../criteria-mdp.js";

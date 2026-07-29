@@ -3,12 +3,7 @@
 
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
-import {
-  CreateInsightInputSchema,
-  InsightResponseSchema,
-  ReportResponseSchema,
-  UpdateInsightInputSchema,
-} from "shared";
+import { CreateInsightInputSchema, InsightResponseSchema, ReportResponseSchema, UpdateInsightInputSchema } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { InsightDocument, RouteContext } from "../route-context.js";
 

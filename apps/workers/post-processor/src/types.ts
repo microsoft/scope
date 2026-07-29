@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import type { Collection } from "mongodb";
-import type { BlobStorage, LogEvent } from "shared";
+import type { BlobStorage } from "@scope/platform";
+import type { LogEvent } from "@scope/core";
 
 /** Queue message dispatched by the PostProcessorDispatcher in the scheduler. */
 export interface PostProcessorMessage {

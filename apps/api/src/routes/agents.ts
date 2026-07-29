@@ -2,14 +2,7 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import {
-  AgentResponseSchema,
-  AgentVersionSchema,
-  CreateAgentInputSchema,
-  PatchAgentVersionInputSchema,
-  RegisterAgentVersionInputSchema,
-  UpdateAgentInputSchema,
-} from "shared";
+import { AgentResponseSchema, AgentVersionSchema, CreateAgentInputSchema, PatchAgentVersionInputSchema, RegisterAgentVersionInputSchema, UpdateAgentInputSchema } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { AgentVersion, CodingAgentDocument, RouteContext } from "../route-context.js";
 

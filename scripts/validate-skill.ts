@@ -16,9 +16,9 @@
 //   pnpm validate-skill Azure/documentdb-agent-kit connection
 //   pnpm validate-skill Azure/documentdb-agent-kit documentdb-connection
 
-import { SkillResolver } from '../packages/shared/src/skills/skill-resolver.js';
-import { parseSkillMd } from '../packages/shared/src/skills/skill-parser.js';
-import { validateSkillFrontmatter } from '../packages/shared/src/skills/skill-validator.js';
+import { SkillResolver } from '../packages/agent-protocol/src/skills/skill-resolver.js';
+import { parseSkillMd } from '../packages/agent-protocol/src/skills/skill-parser.js';
+import { validateSkillFrontmatter } from '../packages/agent-protocol/src/skills/skill-validator.js';
 
 async function main() {
   const [source, skillName] = process.argv.slice(2);

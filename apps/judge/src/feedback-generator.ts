@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 import { CopilotClient, SessionEvent } from "@github/copilot-sdk";
-import { CriteriaConfig, CriterionResult, DependencyGraph, TokenManagerClient } from "shared";
+import { CriteriaConfig, CriterionResult } from "@scope/core";
+import { DependencyGraph } from "@scope/criteria";
+import { TokenManagerClient } from "@scope/secrets";
 
 export interface FeedbackContext {
   judgeResults: CriterionResult[];

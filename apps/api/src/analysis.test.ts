@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from "vitest";
 import { computeAnalysis, type AnalyzableRun } from "./analysis.js";
-import { computeTaskPromptId } from "shared";
+import { computeTaskPromptId } from "@scope/platform";
 
 describe("computeAnalysis – taskPromptId grouping", () => {
   const kValues = [1, 5];

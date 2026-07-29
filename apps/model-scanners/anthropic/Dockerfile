@@ -1,25 +1,22 @@
-FROM node:22.22.0-slim AS builder
-
+FROM node:22.22.0-slim AS pruner
 RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
-
 WORKDIR /app
+COPY . .
+RUN npx turbo prune model-scanner-anthropic --docker
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY tsconfig.base.json ./
-COPY packages/shared/package.json ./packages/shared/
-COPY packages/model-scanning/package.json ./packages/model-scanning/
-COPY apps/model-scanners/anthropic/package.json ./apps/model-scanners/anthropic/
-
+FROM node:22.22.0-slim AS installer
+RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
+WORKDIR /app
+COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile
 
-COPY packages/shared/tsconfig.json ./packages/shared/
-COPY packages/shared/src ./packages/shared/src/
-COPY packages/model-scanning/tsconfig.json ./packages/model-scanning/
-COPY packages/model-scanning/src ./packages/model-scanning/src/
-COPY apps/model-scanners/anthropic/tsconfig.json ./apps/model-scanners/anthropic/
-COPY apps/model-scanners/anthropic/src ./apps/model-scanners/anthropic/src/
-
-RUN pnpm --filter shared build && pnpm --filter model-scanning build && pnpm --filter model-scanner-anthropic build
+FROM node:22.22.0-slim AS builder
+RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
+WORKDIR /app
+COPY --from=installer /app/ .
+COPY --from=pruner /app/out/full/ .
+COPY tsconfig.base.json ./
+RUN pnpm run build --filter=model-scanner-anthropic...
 
 # --- Production stage ---
 FROM node:22.22.0-slim
@@ -29,14 +26,11 @@ RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
 
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/shared/package.json ./packages/shared/
-COPY packages/model-scanning/package.json ./packages/model-scanning/
-COPY apps/model-scanners/anthropic/package.json ./apps/model-scanners/anthropic/
-
+COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist/
+COPY --from=builder /app/packages/core/dist ./packages/core/dist/
+COPY --from=builder /app/packages/secrets/dist ./packages/secrets/dist/
 COPY --from=builder /app/packages/model-scanning/dist ./packages/model-scanning/dist/
 COPY --from=builder /app/apps/model-scanners/anthropic/dist ./apps/model-scanners/anthropic/dist/
 

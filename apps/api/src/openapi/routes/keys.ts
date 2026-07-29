@@ -4,11 +4,7 @@
 import { z } from "zod";
 import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
 import { registry } from "../registry.js";
-import {
-  KeyInputSchema,
-  KeyResponseSchema,
-  ValidateKeyInputSchema,
-} from "shared";
+import { KeyInputSchema, KeyResponseSchema, ValidateKeyInputSchema } from "@scope/core";
 
 extendZodWithOpenApi(z);
 

@@ -534,7 +534,12 @@ jobs:
           base: ${{ github.event.before }}
           filters: |
             shared:
-              - 'packages/shared/**'
+              - 'packages/core/**'
+              - 'packages/secrets/**'
+              - 'packages/platform/**'
+              - 'packages/agent-protocol/**'
+              - 'packages/criteria/**'
+              - 'packages/worker-runtime/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'tsconfig.base.json'
@@ -776,6 +781,33 @@ jobs:
           build-args: ${{ steps.versions.outputs.build_args }}
           cache-from: type=gha,scope=${{ matrix.image.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
+
+      - name: Report image size
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          set +e
+          TAG="${{ steps.tags.outputs.git_sha }}"
+          REPO="scoped/${{ matrix.image.name }}"
+          REGISTRY="${{ vars.ACR_NAME }}"
+          echo "Querying size for $REPO:$TAG in $REGISTRY"
+
+          # Use az acr repository show-manifests (stable, not preview)
+          SIZE_BYTES=$(az acr repository show-manifests \
+            --name "$REGISTRY" \
+            --repository "$REPO" \
+            --query "[?tags[?contains(@, '$TAG')]].imageSize | [0]" -o tsv 2>/dev/null)
+          echo "Size query result: '$SIZE_BYTES'"
+
+          if [ -n "$SIZE_BYTES" ] && [[ "$SIZE_BYTES" =~ ^[0-9]+$ ]]; then
+            SIZE_MB=$(echo "scale=1; $SIZE_BYTES / 1048576" | bc)
+            echo "Image ${{ matrix.image.name }}: ${SIZE_MB} MB (${SIZE_BYTES} bytes)"
+            echo "### 📦 Image: ${{ matrix.image.name }}" >> $GITHUB_STEP_SUMMARY
+            echo "Size: **${SIZE_MB} MB** (${SIZE_BYTES} bytes)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Image ${{ matrix.image.name }}: could not determine size"
+            echo "### 📦 Image: ${{ matrix.image.name }}" >> $GITHUB_STEP_SUMMARY
+            echo "Size: _could not determine_" >> $GITHUB_STEP_SUMMARY
+          fi
 
   # ---------------------------------------------------------------------------
   # Build Windows image — uses az acr build --platform windows/amd64

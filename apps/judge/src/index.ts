@@ -4,7 +4,8 @@
 import express, { Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
 import { evaluateWorkspace } from "./judge-agent.js";
-import { BlobStorage, RedisLogPublisher } from "shared";
+import { BlobStorage } from "@scope/platform";
+import { RedisLogPublisher } from "@scope/worker-runtime";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -90,7 +91,7 @@ app.post(
 
         // Build onProgress callback that publishes criterion results via Redis
         const onProgress = (requestId && logPublisher)
-          ? (result: import("shared").CriterionResult) => {
+          ? (result: import("@scope/core").CriterionResult) => {
               const statusIcon = !result.evaluated ? "⏭️" : result.passed ? "✅" : "❌";
               logPublisher!.publish(requestId, "info", `${statusIcon} Criterion: ${result.criterionId}`, {
                 type: "criterion_result",

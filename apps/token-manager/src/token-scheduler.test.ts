@@ -3,7 +3,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { startTokenScheduler, TokenSchedulerDeps } from "./token-scheduler.js";
-import { KeyDocument } from "shared";
+import { KeyDocument } from "@scope/secrets";
 
 function makeToken(overrides: Partial<KeyDocument> = {}): KeyDocument {
   return {

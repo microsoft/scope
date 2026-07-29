@@ -2,13 +2,7 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import {
-  CreateTaskPromptInputSchema,
-  PatchTaskPromptFeatureInputSchema,
-  PromptFeatureResultSchema,
-  SuggestedPromptFeatureSchema,
-  TaskPromptResponseSchema,
-} from "shared";
+import { CreateTaskPromptInputSchema, PatchTaskPromptFeatureInputSchema, PromptFeatureResultSchema, SuggestedPromptFeatureSchema, TaskPromptResponseSchema } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { RouteContext } from "../route-context.js";
 import { extractPromptFeatures, isLlmAvailable as isPromptFeatureLlmAvailable } from "../prompt-feature-llm.js";

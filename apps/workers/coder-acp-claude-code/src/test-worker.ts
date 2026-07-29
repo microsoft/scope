@@ -17,7 +17,7 @@
  *   TEST_PROMPT_2          — Optional second prompt (tests session reuse)
  */
 import { runACPSession } from "./acp-client.js";
-import { createFreshWorkspace } from "shared";
+import { createFreshWorkspace } from "@scope/core";
 import { execSync } from "child_process";
 
 interface PromptResult {

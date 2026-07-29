@@ -25,7 +25,7 @@
     "@azure/storage-blob": "^12.26.0",
     "mongo-migrate-ts": "^2.0.0",
     "mongodb": "^6.16.0",
-    "uuid": "^10.0.0"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.16.0",

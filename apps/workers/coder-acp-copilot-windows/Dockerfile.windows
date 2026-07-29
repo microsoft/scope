@@ -40,20 +40,32 @@ WORKDIR C:/app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
-COPY packages/shared/package.json ./packages/shared/
+COPY packages/agent-protocol/package.json ./packages/agent-protocol/
+COPY packages/core/package.json ./packages/core/
+COPY packages/platform/package.json ./packages/platform/
+COPY packages/secrets/package.json ./packages/secrets/
+COPY packages/worker-runtime/package.json ./packages/worker-runtime/
 COPY apps/workers/coder-acp-copilot/package.json ./apps/workers/coder-acp-copilot/
 COPY apps/workers/coder-acp-copilot-windows/package.json ./apps/workers/coder-acp-copilot-windows/
 
 RUN C:\tools\pnpm.exe install --frozen-lockfile
 
-COPY packages/shared/tsconfig.json ./packages/shared/
-COPY packages/shared/src ./packages/shared/src/
+COPY packages/core/tsconfig.json ./packages/core/
+COPY packages/core/src ./packages/core/src/
+COPY packages/secrets/tsconfig.json ./packages/secrets/
+COPY packages/secrets/src ./packages/secrets/src/
+COPY packages/platform/tsconfig.json ./packages/platform/
+COPY packages/platform/src ./packages/platform/src/
+COPY packages/agent-protocol/tsconfig.json ./packages/agent-protocol/
+COPY packages/agent-protocol/src ./packages/agent-protocol/src/
+COPY packages/worker-runtime/tsconfig.json ./packages/worker-runtime/
+COPY packages/worker-runtime/src ./packages/worker-runtime/src/
 COPY apps/workers/coder-acp-copilot/tsconfig.json ./apps/workers/coder-acp-copilot/
 COPY apps/workers/coder-acp-copilot/src ./apps/workers/coder-acp-copilot/src/
 COPY apps/workers/coder-acp-copilot-windows/tsconfig.json ./apps/workers/coder-acp-copilot-windows/
 COPY apps/workers/coder-acp-copilot-windows/src ./apps/workers/coder-acp-copilot-windows/src/
 
-RUN C:\tools\pnpm.exe --filter shared build; C:\tools\pnpm.exe --filter coder-acp-copilot build; C:\tools\pnpm.exe --filter coder-acp-copilot-windows build
+RUN C:\tools\pnpm.exe --filter core build; C:\tools\pnpm.exe --filter secrets build; C:\tools\pnpm.exe --filter platform build; C:\tools\pnpm.exe --filter agent-protocol build; C:\tools\pnpm.exe --filter worker-runtime build; C:\tools\pnpm.exe --filter coder-acp-copilot build; C:\tools\pnpm.exe --filter coder-acp-copilot-windows build
 
 # --- Production stage ---
 FROM base AS production
@@ -62,13 +74,21 @@ SHELL ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Comma
 WORKDIR C:/app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/shared/package.json ./packages/shared/
+COPY packages/agent-protocol/package.json ./packages/agent-protocol/
+COPY packages/core/package.json ./packages/core/
+COPY packages/platform/package.json ./packages/platform/
+COPY packages/secrets/package.json ./packages/secrets/
+COPY packages/worker-runtime/package.json ./packages/worker-runtime/
 COPY apps/workers/coder-acp-copilot/package.json ./apps/workers/coder-acp-copilot/
 COPY apps/workers/coder-acp-copilot-windows/package.json ./apps/workers/coder-acp-copilot-windows/
 
 RUN C:\tools\pnpm.exe install --frozen-lockfile --prod
 
-COPY --from=builder C:/app/packages/shared/dist ./packages/shared/dist/
+COPY --from=builder C:/app/packages/agent-protocol/dist ./packages/agent-protocol/dist/
+COPY --from=builder C:/app/packages/core/dist ./packages/core/dist/
+COPY --from=builder C:/app/packages/platform/dist ./packages/platform/dist/
+COPY --from=builder C:/app/packages/secrets/dist ./packages/secrets/dist/
+COPY --from=builder C:/app/packages/worker-runtime/dist ./packages/worker-runtime/dist/
 COPY --from=builder C:/app/apps/workers/coder-acp-copilot/dist ./apps/workers/coder-acp-copilot/dist/
 COPY --from=builder C:/app/apps/workers/coder-acp-copilot-windows/dist ./apps/workers/coder-acp-copilot-windows/dist/
 

@@ -32,8 +32,20 @@ services:
           path: ./apps/api/src
           target: /app/apps/api/src
         - action: sync
-          path: ./packages/shared/src
-          target: /app/packages/shared/src
+          path: ./packages/agent-protocol/src
+          target: /app/packages/agent-protocol/src
+        - action: sync
+          path: ./packages/core/src
+          target: /app/packages/core/src
+        - action: sync
+          path: ./packages/platform/src
+          target: /app/packages/platform/src
+        - action: sync
+          path: ./packages/secrets/src
+          target: /app/packages/secrets/src
+        - action: sync
+          path: ./packages/worker-runtime/src
+          target: /app/packages/worker-runtime/src
         - action: sync
           path: ./config
           target: /app/config
@@ -51,8 +63,23 @@ services:
           path: ./apps/judge/src
           target: /app/apps/judge/src
         - action: sync
-          path: ./packages/shared/src
-          target: /app/packages/shared/src
+          path: ./packages/agent-protocol/src
+          target: /app/packages/agent-protocol/src
+        - action: sync
+          path: ./packages/core/src
+          target: /app/packages/core/src
+        - action: sync
+          path: ./packages/criteria/src
+          target: /app/packages/criteria/src
+        - action: sync
+          path: ./packages/platform/src
+          target: /app/packages/platform/src
+        - action: sync
+          path: ./packages/secrets/src
+          target: /app/packages/secrets/src
+        - action: sync
+          path: ./packages/worker-runtime/src
+          target: /app/packages/worker-runtime/src
         - action: sync
           path: ./config
           target: /app/config
@@ -70,8 +97,11 @@ services:
           path: ./apps/token-manager/src
           target: /app/apps/token-manager/src
         - action: sync
-          path: ./packages/shared/src
-          target: /app/packages/shared/src
+          path: ./packages/core/src
+          target: /app/packages/core/src
+        - action: sync
+          path: ./packages/secrets/src
+          target: /app/packages/secrets/src
         - action: rebuild
           path: ./apps/token-manager/package.json
         - action: rebuild
@@ -86,8 +116,8 @@ services:
           path: ./apps/scheduler/src
           target: /app/apps/scheduler/src
         - action: sync
-          path: ./packages/shared/src
-          target: /app/packages/shared/src
+          path: ./packages/core/src
+          target: /app/packages/core/src
         - action: rebuild
           path: ./apps/scheduler/package.json
         - action: rebuild
@@ -132,8 +162,20 @@ services:
           path: ./apps/workers/coder-acp-claude-code/src
           target: /app/apps/workers/coder-acp-claude-code/src
         - action: sync
-          path: ./packages/shared/src
-          target: /app/packages/shared/src
+          path: ./packages/agent-protocol/src
+          target: /app/packages/agent-protocol/src
+        - action: sync
+          path: ./packages/core/src
+          target: /app/packages/core/src
+        - action: sync
+          path: ./packages/platform/src
+          target: /app/packages/platform/src
+        - action: sync
+          path: ./packages/secrets/src
+          target: /app/packages/secrets/src
+        - action: sync
+          path: ./packages/worker-runtime/src
+          target: /app/packages/worker-runtime/src
         - action: sync
           path: ./config
           target: /app/config
@@ -151,8 +193,20 @@ services:
           path: ./apps/workers/coder-acp-copilot/src
           target: /app/apps/workers/coder-acp-copilot/src
         - action: sync
-          path: ./packages/shared/src
-          target: /app/packages/shared/src
+          path: ./packages/agent-protocol/src
+          target: /app/packages/agent-protocol/src
+        - action: sync
+          path: ./packages/core/src
+          target: /app/packages/core/src
+        - action: sync
+          path: ./packages/platform/src
+          target: /app/packages/platform/src
+        - action: sync
+          path: ./packages/secrets/src
+          target: /app/packages/secrets/src
+        - action: sync
+          path: ./packages/worker-runtime/src
+          target: /app/packages/worker-runtime/src
         - action: sync
           path: ./config
           target: /app/config
@@ -170,8 +224,20 @@ services:
           path: ./apps/workers/report-generator/src
           target: /app/apps/workers/report-generator/src
         - action: sync
-          path: ./packages/shared/src
-          target: /app/packages/shared/src
+          path: ./packages/agent-protocol/src
+          target: /app/packages/agent-protocol/src
+        - action: sync
+          path: ./packages/core/src
+          target: /app/packages/core/src
+        - action: sync
+          path: ./packages/platform/src
+          target: /app/packages/platform/src
+        - action: sync
+          path: ./packages/secrets/src
+          target: /app/packages/secrets/src
+        - action: sync
+          path: ./packages/worker-runtime/src
+          target: /app/packages/worker-runtime/src
         - action: sync
           path: ./config
           target: /app/config

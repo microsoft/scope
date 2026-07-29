@@ -63,24 +63,26 @@ RUN apt-get update && apt-get install -y \
 
 ENV PATH="/root/.cargo/bin:/root/.local/bin:$PATH"
 
-# --- Builder stage: compile TypeScript ---
-FROM base AS builder
-
+# --- Pruner stage: generate minimal workspace ---
+FROM node:22.22.0-slim AS pruner
+RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
 WORKDIR /app
+COPY . .
+RUN npx turbo prune coder-acp-copilot --docker
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY tsconfig.base.json ./
-COPY packages/shared/package.json ./packages/shared/
-COPY apps/workers/coder-acp-copilot/package.json ./apps/workers/coder-acp-copilot/
-
+# --- Installer stage: install dependencies ---
+FROM base AS installer
+WORKDIR /app
+COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile
 
-COPY packages/shared/tsconfig.json ./packages/shared/
-COPY packages/shared/src ./packages/shared/src/
-COPY apps/workers/coder-acp-copilot/tsconfig.json ./apps/workers/coder-acp-copilot/
-COPY apps/workers/coder-acp-copilot/src ./apps/workers/coder-acp-copilot/src/
-
-RUN pnpm --filter shared build && pnpm --filter coder-acp-copilot build
+# --- Builder stage: compile TypeScript ---
+FROM base AS builder
+WORKDIR /app
+COPY --from=installer /app/ .
+COPY --from=pruner /app/out/full/ .
+COPY tsconfig.base.json ./
+RUN pnpm run build --filter=coder-acp-copilot...
 
 # --- Dev stage: hot reload with tsx watch ---
 FROM builder AS dev
@@ -97,7 +99,7 @@ ENV SERVICE_DIR=workers/coder-acp-copilot
 ENV WORKER_NAME=coder-acp-copilot
 COPY scripts/dev-entrypoint.sh /app/scripts/dev-entrypoint.sh
 COPY config /app/config/
-RUN chown -R node:node /app/packages/shared/dist /app/apps/workers/coder-acp-copilot/dist
+RUN chown -R node:node /app/packages/core/dist /app/packages/secrets/dist /app/packages/platform/dist /app/packages/agent-protocol/dist /app/packages/worker-runtime/dist /app/apps/workers/coder-acp-copilot/dist
 USER node
 CMD ["/app/scripts/dev-entrypoint.sh"]
 
@@ -110,13 +112,14 @@ RUN npm install -g @github/copilot@${COPILOT_CLI_VERSION}
 
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/shared/package.json ./packages/shared/
-COPY apps/workers/coder-acp-copilot/package.json ./apps/workers/coder-acp-copilot/
-
+COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist/
+COPY --from=builder /app/packages/agent-protocol/dist ./packages/agent-protocol/dist/
+COPY --from=builder /app/packages/core/dist ./packages/core/dist/
+COPY --from=builder /app/packages/platform/dist ./packages/platform/dist/
+COPY --from=builder /app/packages/secrets/dist ./packages/secrets/dist/
+COPY --from=builder /app/packages/worker-runtime/dist ./packages/worker-runtime/dist/
 COPY --from=builder /app/apps/workers/coder-acp-copilot/dist ./apps/workers/coder-acp-copilot/dist/
 
 # Use existing node user (UID 1000) so coding agents allow bypassPermissions mode

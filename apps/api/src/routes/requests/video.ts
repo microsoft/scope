@@ -3,7 +3,7 @@
 
 import { RestError } from "@azure/storage-blob";
 import { z } from "zod";
-import type { RunState } from "shared";
+import type { RunState } from "@scope/core";
 import type { Request, Response } from "express";
 import { apiRoute } from "../../openapi/api-route.js";
 import type { RouteContext } from "../../route-context.js";

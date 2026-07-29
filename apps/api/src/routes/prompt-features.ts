@@ -2,13 +2,7 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import {
-  CreatePromptFeatureInputSchema,
-  PromptFeatureResponseSchema,
-  PromptFeatureResultSchema,
-  SuggestedPromptFeatureSchema,
-  UpdatePromptFeatureInputSchema,
-} from "shared";
+import { CreatePromptFeatureInputSchema, PromptFeatureResponseSchema, PromptFeatureResultSchema, SuggestedPromptFeatureSchema, UpdatePromptFeatureInputSchema } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { PromptFeatureDocument, RouteContext } from "../route-context.js";
 import { extractPromptFeatures, generatePromptFeaturePrompt, isLlmAvailable as isPromptFeatureLlmAvailable } from "../prompt-feature-llm.js";

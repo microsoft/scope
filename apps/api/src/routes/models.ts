@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import { ListModelsQuerySchema, ModelResponseSchema } from "shared";
+import { ListModelsQuerySchema, ModelResponseSchema } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { ModelDocument, RouteContext } from "../route-context.js";
 

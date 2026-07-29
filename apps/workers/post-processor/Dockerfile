@@ -1,22 +1,22 @@
-FROM node:22.22.0-slim AS builder
-
+FROM node:22.22.0-slim AS pruner
 RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
-
 WORKDIR /app
+COPY . .
+RUN npx turbo prune post-processor --docker
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY tsconfig.base.json ./
-COPY packages/shared/package.json ./packages/shared/
-COPY apps/workers/post-processor/package.json ./apps/workers/post-processor/
-
+FROM node:22.22.0-slim AS installer
+RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
+WORKDIR /app
+COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile
 
-COPY packages/shared/tsconfig.json ./packages/shared/
-COPY packages/shared/src ./packages/shared/src/
-COPY apps/workers/post-processor/tsconfig.json ./apps/workers/post-processor/
-COPY apps/workers/post-processor/src ./apps/workers/post-processor/src/
-
-RUN pnpm --filter shared build && pnpm --filter post-processor build
+FROM node:22.22.0-slim AS builder
+RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
+WORKDIR /app
+COPY --from=installer /app/ .
+COPY --from=pruner /app/out/full/ .
+COPY tsconfig.base.json ./
+RUN pnpm run build --filter=post-processor...
 
 # --- Dev stage: hot reload with tsx watch ---
 FROM builder AS dev
@@ -35,13 +35,13 @@ RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
 
 WORKDIR /app
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/shared/package.json ./packages/shared/
-COPY apps/workers/post-processor/package.json ./apps/workers/post-processor/
-
+COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist/
+COPY --from=builder /app/packages/agent-protocol/dist ./packages/agent-protocol/dist/
+COPY --from=builder /app/packages/core/dist ./packages/core/dist/
+COPY --from=builder /app/packages/platform/dist ./packages/platform/dist/
+COPY --from=builder /app/packages/worker-runtime/dist ./packages/worker-runtime/dist/
 COPY --from=builder /app/apps/workers/post-processor/dist ./apps/workers/post-processor/dist/
 
 WORKDIR /app/apps/workers/post-processor

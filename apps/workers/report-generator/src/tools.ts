@@ -5,7 +5,7 @@ import { defineTool } from "@github/copilot-sdk";
 import { readFileSync, readdirSync, statSync, existsSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
-import type { RequestDocument } from "shared";
+import type { RequestDocument } from "@scope/core";
 
 /**
  * Create tools for the report agent to access run data via the REST API

@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CodingAgentQueueProcessor, WorkerProcessor, WorkerProcessorOptions, WorkerResult, QueueProcessorConfig, LogEvent, WorkerLogFn, TokenManagerClient, createProxyClient, isProxyEnabled, type ProxyClient, McpGatewayClient, McpServerConfig, createFreshWorkspace, cleanupWorkspaces } from "shared";
+import { createProxyClient, isProxyEnabled, McpGatewayClient, type ProxyClient } from "@scope/agent-protocol";
+import { WorkerProcessor, WorkerProcessorOptions, WorkerResult, QueueProcessorConfig, LogEvent, WorkerLogFn, McpServerConfig, createFreshWorkspace, cleanupWorkspaces } from "@scope/core";
+import { TokenManagerClient } from "@scope/secrets";
+import { CodingAgentQueueProcessor } from "@scope/worker-runtime";
 import { runACPSession } from "./acp-client.js";
 import dotenv from "dotenv";
 

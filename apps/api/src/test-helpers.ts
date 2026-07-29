@@ -7,7 +7,7 @@ import type {
   Db,
   Document,
 } from "mongodb";
-import type { BlobStorage } from "shared";
+import type { BlobStorage } from "@scope/platform";
 import type { TestDependencies } from "./index.js";
 
 // ---------------------------------------------------------------------------

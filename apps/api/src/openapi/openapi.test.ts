@@ -6,46 +6,7 @@ import express from "express";
 import { z } from "zod";
 import { generateOpenAPIDocument, registry } from "./index.js";
 import { apiRoute } from "./api-route.js";
-import {
-  CreateCriteriaInputSchema,
-  UpdateCriteriaInputSchema,
-  CriteriaResponseSchema,
-  CriteriaGraphSchema,
-  ModelResponseSchema,
-  ListModelsQuerySchema,
-  McpServerResponseSchema,
-  UpdateMcpServerInputSchema,
-  McpTransportTypeSchema,
-  McpServerHeaderSchema,
-  FeatureFlagResponseSchema,
-  UpdateFeatureFlagInputSchema,
-  AgentResponseSchema,
-  AgentVersionSchema,
-  CreateAgentInputSchema,
-  UpdateAgentInputSchema,
-  RegisterAgentVersionInputSchema,
-  PatchAgentVersionInputSchema,
-  CreateReportTemplateInputSchema,
-  UpdateReportTemplateInputSchema,
-  ReportTemplateResponseSchema,
-  InsightResponseSchema,
-  CreateInsightInputSchema,
-  UpdateInsightInputSchema,
-  ReportResponseSchema,
-  CreateReportInputSchema,
-  BulkCreateReportsInputSchema,
-  BulkReportStatusInputSchema,
-  TriggerReportsInputSchema,
-  BulkTriggerReportsInputSchema,
-  SkillResponseSchema,
-  SkillRevisionResponseSchema,
-  SkillSearchResultSchema,
-  CreateSkillInputSchema,
-  RequestResponseSchema,
-  CreateRequestInputSchema,
-  ListRequestsQuerySchema,
-  BulkResubmitInputSchema,
-} from "shared";
+import { CreateCriteriaInputSchema, UpdateCriteriaInputSchema, CriteriaResponseSchema, CriteriaGraphSchema, ModelResponseSchema, ListModelsQuerySchema, McpServerResponseSchema, UpdateMcpServerInputSchema, McpTransportTypeSchema, McpServerHeaderSchema, FeatureFlagResponseSchema, UpdateFeatureFlagInputSchema, AgentResponseSchema, AgentVersionSchema, CreateAgentInputSchema, UpdateAgentInputSchema, RegisterAgentVersionInputSchema, PatchAgentVersionInputSchema, CreateReportTemplateInputSchema, UpdateReportTemplateInputSchema, ReportTemplateResponseSchema, InsightResponseSchema, CreateInsightInputSchema, UpdateInsightInputSchema, ReportResponseSchema, CreateReportInputSchema, BulkCreateReportsInputSchema, BulkReportStatusInputSchema, TriggerReportsInputSchema, BulkTriggerReportsInputSchema, SkillResponseSchema, SkillRevisionResponseSchema, SkillSearchResultSchema, CreateSkillInputSchema, RequestResponseSchema, CreateRequestInputSchema, ListRequestsQuerySchema, BulkResubmitInputSchema } from "@scope/core";
 
 // Register apiRoute()-based routes so they appear in the OpenAPI doc.
 // These need an Express app + the registry; we use a throwaway app since

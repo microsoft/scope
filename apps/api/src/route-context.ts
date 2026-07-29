@@ -6,37 +6,12 @@ import type { Collection, Db } from "mongodb";
 import type { QueueClient } from "@azure/storage-queue";
 import type { Express } from "express";
 import type { OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
-import type { BlobStorage } from "shared";
-import type { HeartbeatStore } from "shared";
-import type {
-  TaskPromptStore,
-  TaskPromptDocument,
-  SkillRevisionStore,
-  SkillResolver,
-  SkillDocument,
-  SkillRevisionDocument,
-  McpSecretClient,
-  ProfileDocument,
-  ProfileVersionDocument,
-  // Zod response schemas → inferred types replace hand-written interfaces
-  CriteriaResponseSchema,
-  ExtensionResponseSchema,
-  PromptFeatureResponseSchema,
-  PromptFeatureExtractionResponseSchema,
-  InsightReferenceSchema,
-  LogEventSchema,
-  ReportResponseSchema,
-  InsightResponseSchema,
-  AgentVersionSchema,
-  AgentResponseSchema,
-  ModelResponseSchema,
-  McpServerResponseSchema,
-  FeatureFlagResponseSchema,
-  ReportTriggerSchema,
-  ReportTemplateResponseSchema,
-  RequestResponseSchema,
-  RunHistoryDocumentSchema,
-} from "shared";
+import type { BlobStorage } from "@scope/platform";
+import type { HeartbeatStore } from "@scope/worker-runtime";
+import type { SkillRevisionStore, SkillResolver, McpSecretClient } from "@scope/agent-protocol";
+import type { TaskPromptDocument, ProfileDocument, ProfileVersionDocument, SkillDocument, SkillRevisionDocument, // Zod response schemas → inferred types replace hand-written interfaces
+  CriteriaResponseSchema, ExtensionResponseSchema, PromptFeatureResponseSchema, PromptFeatureExtractionResponseSchema, InsightReferenceSchema, LogEventSchema, ReportResponseSchema, InsightResponseSchema, AgentVersionSchema, AgentResponseSchema, ModelResponseSchema, McpServerResponseSchema, FeatureFlagResponseSchema, ReportTriggerSchema, ReportTemplateResponseSchema, RequestResponseSchema, RunHistoryDocumentSchema } from "@scope/core";
+import type { TaskPromptStore } from "@scope/platform";
 
 // ─── Document types (inferred from Zod schemas) ─────────────────────────────
 

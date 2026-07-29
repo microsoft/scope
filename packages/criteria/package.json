@@ -1,0 +1,43 @@
+{
+  "name": "@scope/criteria",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./criteria-store": {
+      "source": "./src/criteria/criteria-store.ts",
+      "types": "./dist/criteria/criteria-store.d.ts",
+      "import": "./dist/criteria/criteria-store.js"
+    },
+    "./criteria-provider": {
+      "source": "./src/criteria/criteria-provider.ts",
+      "types": "./dist/criteria/criteria-provider.d.ts",
+      "import": "./dist/criteria/criteria-provider.js"
+    },
+    "./criteria-provider-factory": {
+      "source": "./src/criteria/criteria-provider-factory.ts",
+      "types": "./dist/criteria/criteria-provider-factory.d.ts",
+      "import": "./dist/criteria/criteria-provider-factory.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@scope/core": "workspace:*",
+    "mongodb": "^6.12.0",
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "typescript": "^5.6.2"
+  }
+}

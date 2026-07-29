@@ -2,15 +2,9 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import {
-  CreateExtensionInputSchema,
-  ExtensionClient,
-  ExtensionResponseSchema,
-  ExtensionSearchResultSchema,
-  ExtensionVersionInfoSchema,
-  UpdateExtensionInputSchema,
-} from "shared";
-import type { ExtensionSearchResult } from "shared";
+import { CreateExtensionInputSchema, ExtensionResponseSchema, ExtensionSearchResultSchema, ExtensionVersionInfoSchema, UpdateExtensionInputSchema } from "@scope/core";
+import { ExtensionClient } from "@scope/platform";
+import type { ExtensionSearchResult } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { ExtensionDocument, RouteContext } from "../route-context.js";
 

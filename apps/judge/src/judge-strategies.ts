@@ -5,14 +5,9 @@ import { CopilotClient, defineTool, SessionEvent } from "@github/copilot-sdk";
 import { readFileSync, readdirSync, statSync, existsSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
-import {
-  CriteriaConfig,
-  CriterionResult,
-  DetailedEvaluationResult,
-  ConversationTurn,
-  DependencyGraph,
-  TokenManagerClient,
-} from "shared";
+import { CriteriaConfig, CriterionResult, DetailedEvaluationResult, ConversationTurn } from "@scope/core";
+import { DependencyGraph } from "@scope/criteria";
+import { TokenManagerClient } from "@scope/secrets";
 
 export interface JudgeStrategyContext {
   workspacePath: string;

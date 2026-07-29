@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import {
-  FeatureFlagResponseSchema,
-  UpdateFeatureFlagInputSchema,
-} from "shared";
+import { FeatureFlagResponseSchema, UpdateFeatureFlagInputSchema } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { RouteContext } from "../route-context.js";
 

@@ -16,9 +16,7 @@
     "dev": "tsc --watch",
     "lint": "eslint src/"
   },
-  "dependencies": {
-    "shared": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.7.0",
     "tsx": "^4.19.0",

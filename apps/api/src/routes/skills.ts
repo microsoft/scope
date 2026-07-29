@@ -5,14 +5,8 @@ import { BlobServiceClient, RestError } from "@azure/storage-blob";
 import { DefaultAzureCredential } from "@azure/identity";
 import { join, basename } from "path";
 import { z } from "zod";
-import {
-  CreateSkillInputSchema,
-  SkillResponseSchema,
-  SkillRevisionResponseSchema,
-  SkillSearchResultSchema,
-  SkillDiscoveryResultSchema,
-} from "shared";
-import type { SkillDocument, SkillSearchResult } from "shared";
+import { CreateSkillInputSchema, SkillResponseSchema, SkillRevisionResponseSchema, SkillSearchResultSchema, SkillDiscoveryResultSchema } from "@scope/core";
+import type { SkillDocument, SkillSearchResult } from "@scope/core";
 import { apiRoute } from "../openapi/api-route.js";
 import type { RouteContext } from "../route-context.js";
 
