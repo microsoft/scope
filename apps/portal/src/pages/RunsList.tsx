@@ -45,6 +45,8 @@ import {
   type CustomizeColumnsOption,
 } from "@/components/list-layout";
 import { useShiftModifier } from "@/hooks/useShiftModifier";
+import { CliCommand } from "@/components/CliCommand";
+import { buildRunList, buildRunBulk } from "@/lib/cli/buildCommand";
 import { useModelCapabilities, ModelSelectItems } from "@/components/ReasoningEffortSelect";
 import { formatDate, formatId, formatDuration, truncate, cn } from "@/lib/utils";
 import { WORKER_TYPES, STATUS_LIST, OUTCOME_LIST } from "@/types";
@@ -515,6 +517,50 @@ export function RunsList() {
   const maxIterOp = ((state.getFilter("maxIterOp") as IterationOp | null) ?? "gte") as IterationOp;
   const turnsValue = turnsRaw === "" ? undefined : Number(turnsRaw);
   const maxIterValue = maxIterRaw === "" ? undefined : Number(maxIterRaw);
+  // Equivalent CLI for the current bulk selection. We surface `delete` (the
+  // canonical destructive bulk op) and note that retry/cancel/download follow
+  // the same id-list pattern.
+  const bulkCli = useMemo(() => {
+    const ids = [...selectedIds];
+    const cmd = buildRunBulk("delete", ids);
+    return {
+      ...cmd,
+      notes: [
+        ...cmd.notes,
+        "Swap `delete` for `cancel`, `retry`, or `download` to apply other bulk actions to the same runs.",
+      ],
+    };
+  }, [selectedIds]);
+  // The CLI only supports a subset of the Portal's filters, so anything it
+  // can't express is surfaced as a note rather than silently dropped.
+  const runListCli = useMemo(() => {
+    const unsupported: string[] = [];
+    if (state.search) unsupported.push("text search");
+    if (workers.length > 1) unsupported.push("worker (multiple)");
+    if (statuses.length > 0) unsupported.push("status");
+    if (outcomes.length > 0) unsupported.push("outcome");
+    if (taskPromptId) unsupported.push("task");
+    if (criteria) unsupported.push("criteria");
+    if (models.length > 0) unsupported.push("model");
+    if (profiles.length > 0) unsupported.push("profile");
+    if (osList.length > 0) unsupported.push("OS");
+    if (priorities.length > 0) unsupported.push("priority");
+    if (versions.length > 0) unsupported.push("version");
+    if (dateFrom || dateTo) unsupported.push("date range");
+    return buildRunList({
+      worker: workers.length === 1 ? workers[0] : undefined,
+      submissionId,
+      turns: turnsRaw || undefined,
+      turnsOp,
+      maxIter: maxIterRaw || undefined,
+      maxIterOp,
+      unsupportedFilters: unsupported,
+    });
+  }, [
+    state.search, workers, statuses, outcomes, taskPromptId, criteria, models,
+    profiles, osList, priorities, versions, dateFrom, dateTo, submissionId,
+    turnsRaw, turnsOp, maxIterRaw, maxIterOp,
+  ]);
 
   const currentCursor: RunsPageCursor = cursorStack[state.page - 1] ?? { kind: "first" };
 
@@ -1767,6 +1813,7 @@ export function RunsList() {
             value={groupBy}
             onChange={(next) => state.setFilter("groupBy", next === "none" ? null : next)}
           />
+          <CliCommand command={runListCli} />
         </div>
       }
       filterRail={
@@ -2014,6 +2061,7 @@ export function RunsList() {
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
+          <CliCommand command={bulkCli} title="Bulk action from the CLI" />
         </BulkActionBar>
 
         {groupBy === "none" ? (

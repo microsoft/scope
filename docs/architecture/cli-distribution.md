@@ -109,3 +109,32 @@ Source: `apps/cli/src/utils/update-check.ts`
 | Version | `0.1.0-dev` | Actual semver from CI bump |
 | Command name | `pnpm cli` | `scope` |
 | Update check | Disabled | Enabled |
+
+## "Copy as CLI" affordance (Portal → CLI)
+
+To reinforce CLI ⇄ Portal parity, the Portal surfaces the exact `scope` command
+equivalent to a user's current view via a terminal-glyph (`>_`) button that
+opens a GitHub-style modal with step-by-step instructions: (1) install the CLI,
+(2) point it at the API, (3) run the generated command — each with its own copy
+button, plus any parity caveats.
+
+- **Component:** `apps/portal/src/components/CliCommand.tsx` — a `Dialog`-based
+  modal mirroring GitHub's "Merging via command line" UX. Renders numbered steps
+  (install one-liner from `cli-distribution.md`, `SCOPE_API_URL` pointing at the
+  current origin, then the generated command) with per-block copy buttons and a
+  notes callout for parity caveats.
+- **Builders:** `apps/portal/src/lib/cli/buildCommand.ts` — pure functions that
+  translate Portal state into a command. They only emit flags the CLI actually
+  supports; anything the CLI can't express (e.g. Portal-only filters, priority,
+  occurrences) is surfaced as a `note` rather than dropped. Secrets are never
+  embedded. Unit-tested in `buildCommand.test.ts` (the tests double as a living
+  parity check — see issue #1004).
+- **Mount points (Phase 1):**
+  - `RunDetail` header → `scope run get -i <id>` (reactive to the open run).
+  - `RunsList` header → `scope run list` reflecting active filters/sort.
+  - `RunsList` bulk bar → id-list action over the selection (`cancel` is
+    variadic; `delete`/`retry`/`download` use a `for` loop for >1 id).
+  - `SubmitRun` footer → `scope run submit …` built live from the form.
+
+Subsequent phases extend the same `<CliCommand command={…} />` pattern to the
+remaining resource pages (Criteria, Profiles, Task Prompts, MCP, Reports, etc.).

@@ -36,6 +36,8 @@ import { toast } from "sonner";
 import type { RunState } from "@/types";
 import { useShiftModifier } from "@/hooks/useShiftModifier";
 import { getRetryButtonState } from "@/components/RetryButton";
+import { CliCommand } from "@/components/CliCommand";
+import { buildRunGet } from "@/lib/cli/buildCommand";
 
 /** A compact labeled stat: a micro uppercase label above its value. */
 function MetaItem({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
@@ -382,6 +384,7 @@ export function RunDetail() {
                 {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                 <span className="sr-only">Copy run ID</span>
               </button>
+              <CliCommand command={buildRunGet(id ?? "")} align="start" />
             </div>
 
             {/* Tier 1 — semantic status pills */}
