@@ -5,6 +5,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
+    "./server": {
+      "source": "./src/schemas/server.ts",
+      "types": "./dist/schemas/server.d.ts",
+      "import": "./dist/schemas/server.js"
+    },
     ".": {
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",

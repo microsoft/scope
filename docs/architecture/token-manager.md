@@ -59,6 +59,9 @@ The Token Manager uses a **capability-based model** where tokens are associated 
 | `github-oauth-cookie-state` | `{` (JSON) | Browser-extracted session cookies |
 | `anthropic-api-key` | `sk-ant-` | Anthropic API key for Claude |
 | `azure-ai-foundry` | `{` (JSON) | Endpoint + API key + optional model for an Azure AI Foundry chat-completions deployment |
+| `openai-api-key` | `{` (JSON) | OpenAI endpoint + API key + model |
+| `openrouter-api-key` | `{` (JSON) | OpenRouter endpoint + API key + provider-qualified model |
+| `openai-compatible` | `{` (JSON) | Bearer-authenticated OpenAI-compatible chat endpoint + API key + model |
 
 The `azure-ai-foundry` secret stores a JSON blob:
 
@@ -72,6 +75,36 @@ the endpoint with `max_tokens=1`, so a misconfigured endpoint (missing
 `/models` suffix) or a wrong deployment name surfaces immediately at
 registration time.
 
+The three new compatible credential types store the same JSON shape, with **all
+three fields required**:
+
+```json
+{ "endpoint": "https://api.openai.com/v1", "apiKey": "…", "model": "gpt-4.1" }
+```
+
+Portal presets are OpenAI (`https://api.openai.com/v1`, `gpt-4.1`) and OpenRouter
+(`https://openrouter.ai/api/v1`, `openai/gpt-4.1`). The compatible option requires
+an explicit base endpoint and model. Supported protocol: non-streaming, text-only
+`POST /chat/completions`, bearer authentication, and an OpenAI-style
+`choices[].message.content` response. HTTPS is required except for explicit
+HTTP localhost/loopback endpoints. URL credentials, queries, fragments, and
+redirects are rejected. Endpoint URLs are resolved from the API/Token Manager
+network, not from the browser (a container's `localhost` is that container).
+
+Preview, registration validation and scheduled revalidation issue a minimal
+chat request against the chosen model. These probes can incur provider usage.
+New provider validators and inference transports use one bounded shared retry
+layer for transient failures; authentication and other permanent 4xx responses
+do not retry. OpenAI reasoning-model calls use `max_completion_tokens` and omit
+unsupported temperature. Provider error bodies are not reflected into stored
+metadata or public errors.
+
+**Anthropic remains `anthropic-api-key` with the existing raw `sk-ant-…` value.**
+No credential conversion or new Anthropic secret type is needed. Portal
+inference uses native `/v1/messages` with `x-api-key` and `anthropic-version`;
+Claude Code and the model scanner retain their existing credential behavior.
+Subscription OAuth keys do not provide the `anthropic-api` capability.
+
 ### Capabilities
 
 | Capability | Description |
@@ -82,6 +115,9 @@ registration time.
 | `copilot-cli` | GitHub Copilot CLI authentication |
 | `claude-code-cli` | Anthropic Claude Code CLI |
 | `azure-ai-inference` | Chat-completion inference against an Azure AI Foundry deployment (used by the portal's AI features) |
+| `openai-api` | Portal authoring against OpenAI |
+| `openrouter-api` | Portal authoring against OpenRouter |
+| `openai-compatible` | Portal authoring against a configured compatible endpoint |
 
 `github-public-api` is granted to **any** valid GitHub bearer token (PAT classic, PAT fine-grained, OAuth, scopeless OAuth) since public-repo reads require no scopes.
 
@@ -145,14 +181,86 @@ stateDiagram-v2
 | `GET` | `/api/v1/keys/:id` | Get key details (excludes secret) |
 | `DELETE` | `/api/v1/keys/:id` | Delete a key |
 | `POST` | `/api/v1/keys/:id/validate` | Trigger manual validation |
+| `GET` | `/api/v1/keys/portal-ai` | Read the instance's non-secret Portal AI selection |
+| `PUT` | `/api/v1/keys/portal-ai` | Replace the Portal AI selection |
 
 ### Key Acquisition
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/v1/keys/acquire?capability=X` | Acquire a key for given capability |
+| `POST` | `/api/v1/keys/acquire` | Acquire a key for a capability supplied in the JSON body (internal only) |
 
 The acquire endpoint uses round-robin selection among valid, enabled keys that provide the requested capability.
+
+The internal acquisition method is `POST /api/v1/keys/acquire` with
+`{ capability, keyType?, strictKeyType?, keyId? }`. Existing callers retain
+`keyType` preference/fallback behavior. Portal explicit selections use
+`strictKeyType: true`, so an unavailable provider does not silently select
+another type. Optional `keyId` pins a credential; it is still checked for
+capability, type, enabled/valid state, deletion and expiry. Without `keyId`,
+selection round-robins within that provider's credential type. Expired keys
+are excluded even before the next scheduler tick.
+
+### Selecting the Portal AI provider
+
+After registering a credential at `/secrets/keys/new`, use the **Portal AI**
+controls at `/secrets/keys` to select a provider, optionally pin a credential,
+and optionally override its model. The controls call the existing authenticated
+API transport and Secrets proxy:
+
+```http
+PUT /api/v1/keys/portal-ai
+Content-Type: application/json
+
+{"provider":"openrouter","keyId":"<registered-key-id>","model":"openai/gpt-4.1"}
+```
+
+The response and `GET` shape are `{ provider, keyId?, model? }`. Supported
+`provider` values are `auto`, `azure-ai-foundry`, `github-models`, `anthropic`,
+`openai`, `openrouter`, and `openai-compatible`. `keyId` and `model` are optional
+nonempty strings. `{"provider":"auto"}` clears overrides and restores the legacy
+Foundry → GitHub Models chain; `auto` does not accept `keyId` or `model`.
+If provided, the pinned key must be valid, enabled, unexpired and compatible
+with the selected provider.
+
+Both public routes are registered through the API's `apiRoute`/OpenAPI
+registry. `PortalAiSettingsSchema` documents the response, and
+`UpdatePortalAiSettingsSchema` validates PUT input in both API and Token Manager.
+The schemas use the canonical `PORTAL_AI_PROVIDERS` values, reject blank optional
+fields and disallow overrides with `auto`. They are exported from `shared`.
+The routes remain discoverable when Token Manager is disabled and return **503**
+without making an upstream request; the existing secret CRUD proxies keep their
+previous conditional registration and forwarding behavior.
+
+The selection is one non-secret document (`_id: "default"`) in Token Manager's
+`portal-ai-settings` collection, atomically replaced on update. An absent
+document means `auto`. No migration or custom index is required: existing key
+documents and vault values are unchanged, and settings use the built-in `_id`
+index. This is not a model catalog or provider registry.
+
+An explicit selection takes precedence over legacy Foundry environment defaults,
+uses the stored credential rather than a provider environment variable, and
+never falls through to another provider on errors. Pin a key when compatible
+endpoints/models differ. Settings-read failures also fail closed rather than
+guessing another backend. Anthropic's default model is
+`claude-sonnet-4-20250514`; use the model override to choose another available
+model. Compatible provider secrets carry their required model. Existing
+extraction calls with an explicit `model` argument retain that override.
+
+All existing Portal AI calls automatically use this saved selection; request
+and result shapes remain unchanged:
+
+| POST endpoint | Body | Result |
+|---|---|---|
+| `/api/v1/criteria/generate-prompt` | `{ behavior, currentId?, gates? }` | `{ prompt, suggestedId, suggestedParents, suggestedChildren }` |
+| `/api/v1/prompt-features/generate-prompt` | `{ behavior, currentId? }` | `{ prompt, suggestedId }` |
+| `/api/v1/task-prompts/generate` | `{ description?, existingPrompt? }` | `{ taskPrompt }` |
+| `/api/v1/prompt-features/extract-from-text` | `{ text, model?, type? }` | `{ features, suggestedFeatures?, cached }` |
+
+Existing project query parameters remain unchanged. The API helpers also accept
+an optional final `PortalAiSettings` argument for an explicit per-call selection;
+the public routes use the saved setting, not a new body field. Judge, feedback,
+reports, coding-agent credentials and worker scheduling do not use this setting.
 
 ## Usage Tracking
 
@@ -237,7 +345,8 @@ if (result) {
 The API's portal-LLM modules (`llm.ts`, `prompt-feature-llm.ts`,
 `task-prompt-llm.ts`) all go through a shared
 `acquireInferenceClient()` helper in `apps/api/src/llm-token.ts`. The
-helper resolves a chat-completions client in this order, returning the
+helper first honors the saved explicit Portal AI selection above. In automatic
+mode it resolves a chat-completions client in this order, returning the
 first source that succeeds:
 
 1. **Azure AI Foundry via env vars** —

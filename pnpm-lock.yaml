@@ -440,6 +440,9 @@ importers:
       remark-github-markdown-alerts:
         specifier: ^1.2.2
         version: 1.2.2
+      shared:
+        specifier: workspace:*
+        version: link:../../packages/shared
       sonner:
         specifier: ^1.7.0
         version: 1.7.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

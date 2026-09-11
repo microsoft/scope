@@ -18,6 +18,7 @@ import { generateOpenAPIDocument, registry } from "./openapi/index.js";
 import swaggerUi from "swagger-ui-express";
 import { registerFeatureFlagRoutes } from "./routes/feature-flags.js";
 import { registerSystemRoutes } from "./routes/system.js";
+import { registerServerRoutes } from "./routes/server.js";
 import { registerRequestsRoutes } from "./routes/requests/index.js";
 import { registerRequestsCancelRoutes } from "./routes/requests/cancel.js";
 import { registerRequestsLogsRoutes } from "./routes/requests/logs.js";
@@ -298,6 +299,7 @@ const routeCtx: RouteContext = {
 // Secrets/proxy routes must be registered first (before :id param routes)
 registerSecretsRoutes(routeCtx);
 registerSystemRoutes(routeCtx);
+registerServerRoutes(routeCtx);
 registerProjectsRoutes(routeCtx);
 registerRequestsRoutes(routeCtx);
 registerRequestsCancelRoutes(routeCtx);

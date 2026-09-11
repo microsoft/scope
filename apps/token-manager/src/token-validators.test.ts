@@ -4,6 +4,38 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { validateToken } from "./token-validators.js";
 
+describe("Portal AI provider validation", () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+  it.each([
+    ["openai-api-key", "openai-api"],
+    ["openrouter-api-key", "openrouter-api"],
+    ["openai-compatible", "openai-compatible"],
+  ] as const)("validates %s with the configured endpoint/model without mixing capabilities", async (type, capability) => {
+    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+    const result = await validateToken(type, JSON.stringify({
+      endpoint: "https://provider.test/v1/", apiKey: "test-private", model: "chosen-model",
+    }));
+    expect(result).toEqual({ status: "valid", capabilities: [capability] });
+    expect(spy).toHaveBeenCalledWith("https://provider.test/v1/chat/completions", expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: "Bearer test-private" }),
+      body: expect.stringContaining('"model":"chosen-model"'),
+    }));
+  });
+  it("rejects missing model before network access", async () => {
+    const spy = vi.spyOn(globalThis, "fetch");
+    const result = await validateToken("openai-compatible", '{"endpoint":"https://provider.test","apiKey":"test"}');
+    expect(result.status).toBe("invalid");
+    expect(spy).not.toHaveBeenCalled();
+  });
+  it("does not retry authentication errors or include private provider error bodies", async () => {
+    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("test-private", { status: 401 }));
+    const result = await validateToken("openai-api-key", '{"endpoint":"https://api.openai.com/v1","apiKey":"test","model":"gpt-4.1"}');
+    expect(result.status).toBe("invalid");
+    expect(result.error).not.toContain("test-private");
+    expect(spy).toHaveBeenCalledOnce();
+  });
+});
+
 describe("validateToken", () => {
   afterEach(() => {
     vi.restoreAllMocks();

@@ -13,6 +13,10 @@ import {
   UpdateKeyRequest,
   AcquireKeyRequest,
   deriveSecretName,
+  type PortalAiSettingsDocument,
+  UpdatePortalAiSettingsSchema,
+  portalAiCredential,
+  parseOpenAiSecret,
 } from "shared";
 import { SecretStore } from "./keyvault-store.js";
 import { validateToken } from "./token-validators.js";
@@ -26,6 +30,9 @@ const VALID_TYPES: KeyType[] = [
   "anthropic-api-key",
   "anthropic-oauth",
   "azure-ai-foundry",
+  "openai-api-key",
+  "openrouter-api-key",
+  "openai-compatible",
 ];
 const VALID_CAPABILITIES: KeyCapability[] = [
   "github-models",
@@ -36,14 +43,57 @@ const VALID_CAPABILITIES: KeyCapability[] = [
   "claude-code-cli",
   "anthropic-api",
   "azure-ai-inference",
+  "openai-api",
+  "openrouter-api",
+  "openai-compatible",
 ];
 
 export function createKeyRouter(
   collection: Collection<KeyDocument>,
-  store: SecretStore
+  store: SecretStore,
+  settings?: Collection<PortalAiSettingsDocument>,
 ): Router {
   const router = Router();
   const roundRobin = new RoundRobinMap<KeyDocument>();
+
+  router.get("/api/v1/keys/portal-ai", async (_req, res, next) => {
+    try {
+      const saved = await settings?.findOne({ _id: "default" });
+      res.json(saved ? { provider: saved.provider, keyId: saved.keyId, model: saved.model } : { provider: "auto" });
+    } catch (err) { next(err); }
+  });
+
+  router.put("/api/v1/keys/portal-ai", async (req, res, next) => {
+    try {
+      const parsed = UpdatePortalAiSettingsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid Portal AI settings" });
+        return;
+      }
+      const body = parsed.data;
+      if (body.keyId && body.provider !== "auto") {
+        const credential = portalAiCredential(body.provider);
+        const key = await collection.findOne({
+          _id: body.keyId, deletedAt: { $exists: false },
+          ...(credential.keyType ? { type: credential.keyType } : {}),
+          capabilities: { $in: [credential.capability] },
+          enabled: true, lastValidationStatus: "valid",
+        });
+        if (!key || (key.expiresAt && new Date(key.expiresAt).getTime() <= Date.now())) {
+          res.status(400).json({ error: "Select a valid, enabled, unexpired key for this provider" });
+          return;
+        }
+      }
+      if (!settings) throw new Error("Portal AI settings store is not configured");
+      const saved: PortalAiSettingsDocument = {
+        _id: "default", provider: body.provider,
+        ...(body.keyId ? { keyId: body.keyId } : {}),
+        ...(body.model ? { model: body.model.trim() } : {}),
+      };
+      await settings.replaceOne({ _id: "default" }, saved, { upsert: true });
+      res.json({ provider: saved.provider, keyId: saved.keyId, model: saved.model });
+    } catch (err) { next(err); }
+  });
 
   // ──────────────────────────────────────────────
   // POST /api/v1/keys/preview — Validate without storing
@@ -86,6 +136,10 @@ export function createKeyRouter(
       }
       if (!body.value || typeof body.value !== "string") {
         res.status(400).json({ error: "value is required" });
+        return;
+      }
+      if (["openai-api-key", "openrouter-api-key", "openai-compatible"].includes(body.type) && !parseOpenAiSecret(body.value)) {
+        res.status(400).json({ error: "Provider value must be JSON with endpoint, apiKey and model; use HTTPS (HTTP allowed only for localhost)" });
         return;
       }
 
@@ -304,6 +358,12 @@ export function createKeyRouter(
         });
         return;
       }
+      if ((body.keyType !== undefined && !VALID_TYPES.includes(body.keyType)) ||
+        (body.strictKeyType !== undefined && typeof body.strictKeyType !== "boolean") ||
+        (body.keyId !== undefined && (typeof body.keyId !== "string" || !body.keyId))) {
+        res.status(400).json({ error: "Invalid key type or key selector" });
+        return;
+      }
 
       const tokens = await collection
         .find({
@@ -311,10 +371,13 @@ export function createKeyRouter(
           enabled: true,
           lastValidationStatus: "valid",
           deletedAt: { $exists: false },
+          ...(body.keyId ? { _id: body.keyId } : {}),
+          ...(body.strictKeyType && body.keyType ? { type: body.keyType } : {}),
         })
         .toArray();
 
-      if (tokens.length === 0) {
+      const unexpired = tokens.filter((token) => !token.expiresAt || new Date(token.expiresAt).getTime() > Date.now());
+      if (unexpired.length === 0) {
         res.status(404).json({
           error: `No valid keys available for capability '${body.capability}'`,
         });
@@ -322,16 +385,16 @@ export function createKeyRouter(
       }
 
       // If a preferred keyType was requested, try those first
-      let pool = tokens;
+      let pool = unexpired;
       if (body.keyType) {
-        const preferred = tokens.filter((t) => t.type === body.keyType);
+        const preferred = unexpired.filter((t) => t.type === body.keyType);
         if (preferred.length > 0) {
           pool = preferred;
         }
       }
 
       // Round-robin selection
-      const selected = roundRobin.next(body.capability, pool);
+      const selected = roundRobin.next(`${body.capability}:${body.keyType ?? ""}:${body.keyId ?? ""}`, pool);
 
       // Increment acquire count (fire-and-forget)
       collection

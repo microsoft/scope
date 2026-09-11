@@ -1471,6 +1471,47 @@ describe("API Endpoints", () => {
   // Submit with profile — server-side field resolution
   // ===================================================================
 
+  describe("host worker admission", () => {
+    it.each(["coder-acp-copilot-host", "coder-acp-claude-code-host"])(
+      "rejects %s until it is registered and available",
+      async worker => {
+        vi.mocked(mocks.agentCollection.findOne).mockResolvedValue(null);
+        const response = await request(app)
+          .post(`/api/v1/requests?worker=${worker}&projectId=${TEST_PROJECT_ID}`)
+          .send({ scenario: { task: "Write hello.js", criteria: [] }, maxIterations: 1 });
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain("not available");
+        expect(mocks.collection.insertOne).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["coder-acp-copilot-host", "coder-acp-claude-code-host"])(
+      "accepts a configured %s using the existing request flow",
+      async worker => {
+        vi.mocked(mocks.agentCollection.findOne).mockResolvedValue({
+          _id: worker,
+          name: worker,
+          available: true,
+          supportedModels: ["host-model"],
+          defaultModel: "host-model",
+          createdAt: new Date(),
+          versions: [{
+            agentVersion: "host-v1", workerVersion: "test", components: {},
+            gitCommit: "test", buildTime: "test", imageTag: "host",
+            queueName: `queue-${worker}`, status: "active", createdAt: new Date(),
+          }],
+        });
+        const response = await request(app)
+          .post(`/api/v1/requests?worker=${worker}&projectId=${TEST_PROJECT_ID}`)
+          .send({ scenario: { task: "Write hello.js", criteria: [] }, maxIterations: 1 });
+        expect(response.status).toBe(201);
+        expect(mocks.collection.insertOne).toHaveBeenCalledWith(
+          expect.objectContaining({ workerType: worker, model: "host-model", agentVersion: "host-v1" }),
+        );
+      },
+    );
+  });
+
   describe("POST /api/v1/requests?worker=... (profile)", () => {
     it("applies profile fields server-side, ignoring client-omitted fields", async () => {
       (mocks.profileCollection.findOne as any).mockResolvedValue({

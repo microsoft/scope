@@ -1894,6 +1894,39 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
         "type": "object",
       },
+      "PortalAiSettings": {
+        "properties": {
+          "keyId": {
+            "description": "Optional registered credential ID; otherwise round-robin within the selected provider.",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string",
+          },
+          "model": {
+            "description": "Optional Portal authoring model override.",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string",
+          },
+          "provider": {
+            "description": "Portal authoring provider. auto preserves the legacy Foundry → GitHub Models chain.",
+            "enum": [
+              "auto",
+              "azure-ai-foundry",
+              "github-models",
+              "anthropic",
+              "openai",
+              "openrouter",
+              "openai-compatible",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "provider",
+        ],
+        "type": "object",
+      },
       "ProfileResponse": {
         "properties": {
           "_id": {
@@ -3443,6 +3476,40 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
         },
+        "type": "object",
+      },
+      "UpdatePortalAiSettings": {
+        "description": "Replaces the Portal-only provider selection. Use {"provider":"auto"} without keyId/model to restore legacy defaults.",
+        "properties": {
+          "keyId": {
+            "description": "Optional registered credential ID; otherwise round-robin within the selected provider.",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string",
+          },
+          "model": {
+            "description": "Optional Portal authoring model override.",
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string",
+          },
+          "provider": {
+            "description": "Portal authoring provider. auto preserves the legacy Foundry → GitHub Models chain.",
+            "enum": [
+              "auto",
+              "azure-ai-foundry",
+              "github-models",
+              "anthropic",
+              "openai",
+              "openrouter",
+              "openai-compatible",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "provider",
+        ],
         "type": "object",
       },
       "UpdateProfileIdentity": {
@@ -5796,6 +5863,62 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Create key",
         "tags": [
           "Keys",
+        ],
+      },
+    },
+    "/api/v1/keys/portal-ai": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalAiSettings",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "503": {
+            "description": "Token Manager is not configured",
+          },
+        },
+        "summary": "Get the Portal AI provider selection",
+        "tags": [
+          "Secrets",
+        ],
+      },
+      "put": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePortalAiSettings",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalAiSettings",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "400": {
+            "description": "Invalid selection or pinned credential is unavailable for this provider",
+          },
+          "503": {
+            "description": "Token Manager is not configured",
+          },
+        },
+        "summary": "Replace the Portal AI provider selection",
+        "tags": [
+          "Secrets",
         ],
       },
     },
@@ -10036,6 +10159,218 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Import batch run archive",
         "tags": [
           "Requests",
+        ],
+      },
+    },
+    "/api/v1/server": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "agents": {
+                      "items": {
+                        "properties": {
+                          "available": {
+                            "type": "boolean",
+                          },
+                          "enabled": {
+                            "type": "boolean",
+                          },
+                          "error": {
+                            "type": "string",
+                          },
+                          "executable": {
+                            "type": "string",
+                          },
+                          "label": {
+                            "type": "string",
+                          },
+                          "runtime": {
+                            "enum": [
+                              "host",
+                              "docker",
+                            ],
+                            "type": "string",
+                          },
+                          "version": {
+                            "type": "string",
+                          },
+                          "workerType": {
+                            "enum": [
+                              "coder-acp-copilot",
+                              "coder-acp-copilot-host",
+                              "coder-acp-claude-code",
+                              "coder-acp-claude-code-host",
+                            ],
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "workerType",
+                          "label",
+                          "runtime",
+                          "enabled",
+                          "available",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "enabled": {
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "agents",
+                    "enabled",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "503": {
+            "description": "Local server control is unavailable",
+          },
+        },
+        "summary": "Get local server agent setup status",
+        "tags": [
+          "Agents",
+        ],
+      },
+    },
+    "/api/v1/server/agents/{workerType}": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workerType",
+            "required": true,
+            "schema": {
+              "enum": [
+                "coder-acp-copilot",
+                "coder-acp-copilot-host",
+                "coder-acp-claude-code",
+                "coder-acp-claude-code-host",
+              ],
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "consent": {
+                    "type": "boolean",
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                  },
+                  "executable": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "enabled",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "agents": {
+                      "items": {
+                        "properties": {
+                          "available": {
+                            "type": "boolean",
+                          },
+                          "enabled": {
+                            "type": "boolean",
+                          },
+                          "error": {
+                            "type": "string",
+                          },
+                          "executable": {
+                            "type": "string",
+                          },
+                          "label": {
+                            "type": "string",
+                          },
+                          "runtime": {
+                            "enum": [
+                              "host",
+                              "docker",
+                            ],
+                            "type": "string",
+                          },
+                          "version": {
+                            "type": "string",
+                          },
+                          "workerType": {
+                            "enum": [
+                              "coder-acp-copilot",
+                              "coder-acp-copilot-host",
+                              "coder-acp-claude-code",
+                              "coder-acp-claude-code-host",
+                            ],
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "workerType",
+                          "label",
+                          "runtime",
+                          "enabled",
+                          "available",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "enabled": {
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "agents",
+                    "enabled",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "400": {
+            "description": "Invalid setup or missing host consent",
+          },
+          "404": {
+            "description": "Local agent setup is not enabled",
+          },
+          "409": {
+            "description": "Agent has active work or setup is in progress",
+          },
+          "503": {
+            "description": "Local server control is unavailable",
+          },
+        },
+        "summary": "Configure a local host or Docker agent",
+        "tags": [
+          "Agents",
         ],
       },
     },

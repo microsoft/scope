@@ -185,6 +185,8 @@ export interface GateRunSummary {
 export const WORKER_TYPES = [
   "coder-acp-claude-code",
   "coder-acp-copilot",
+  "coder-acp-claude-code-host",
+  "coder-acp-copilot-host",
   "coder-acp-copilot-windows"
 ] as const;
 
@@ -522,10 +524,10 @@ export interface ReportTemplate {
 // =============================================================================
 
 export type KeyType =
-  "github-pat-classic" | "github-pat-fine-grained" | "github-oauth" | "github-oauth-cookie-state" | "anthropic-api-key" | "anthropic-oauth" | "azure-ai-foundry";
+  "github-pat-classic" | "github-pat-fine-grained" | "github-oauth" | "github-oauth-cookie-state" | "anthropic-api-key" | "anthropic-oauth" | "azure-ai-foundry" | "openai-api-key" | "openrouter-api-key" | "openai-compatible";
 
 export type KeyCapability =
-  "github-models" | "github-public-api" | "copilot-models" | "copilot-sdk" | "copilot-cli" | "claude-code-cli" | "anthropic-api" | "azure-ai-inference";
+  "github-models" | "github-public-api" | "copilot-models" | "copilot-sdk" | "copilot-cli" | "claude-code-cli" | "anthropic-api" | "azure-ai-inference" | "openai-api" | "openrouter-api" | "openai-compatible";
 
 export type KeyValidationStatus =
   | "valid"
@@ -587,6 +589,9 @@ export const KEY_TYPE_LABELS: Record<KeyType, string> = {
   "anthropic-api-key": "Anthropic API Key",
   "anthropic-oauth": "Anthropic OAuth (Subscription)",
   "azure-ai-foundry": "Azure AI Foundry",
+  "openai-api-key": "OpenAI",
+  "openrouter-api-key": "OpenRouter",
+  "openai-compatible": "OpenAI-compatible endpoint",
 };
 
 export const KEY_CAPABILITY_LABELS: Record<KeyCapability, string> = {
@@ -598,6 +603,9 @@ export const KEY_CAPABILITY_LABELS: Record<KeyCapability, string> = {
   "claude-code-cli": "Claude Code CLI",
   "anthropic-api": "Anthropic API",
   "azure-ai-inference": "Azure AI Inference",
+  "openai-api": "OpenAI API",
+  "openrouter-api": "OpenRouter API",
+  "openai-compatible": "OpenAI-compatible chat",
 };
 
 export const KEY_CAPABILITY_DESCRIPTIONS: Record<KeyCapability, string> = {
@@ -609,6 +617,9 @@ export const KEY_CAPABILITY_DESCRIPTIONS: Record<KeyCapability, string> = {
   "claude-code-cli": "Run Claude Code as an agentic coding assistant",
   "anthropic-api": "Access the Anthropic REST API (model scanning, direct API calls)",
   "azure-ai-inference": "Chat-completion inference against an Azure AI Foundry deployment",
+  "openai-api": "Portal AI authoring with OpenAI",
+  "openrouter-api": "Portal AI authoring with OpenRouter",
+  "openai-compatible": "Portal AI authoring with bearer-authenticated chat/completions",
 };
 
 /**
@@ -625,10 +636,14 @@ export const KEY_TYPE_EXPECTED_CAPABILITIES: Record<KeyType, KeyCapability[]> = 
   "anthropic-api-key": ["claude-code-cli", "anthropic-api"],
   "anthropic-oauth": ["claude-code-cli"],
   "azure-ai-foundry": ["azure-ai-inference"],
+  "openai-api-key": ["openai-api"],
+  "openrouter-api-key": ["openrouter-api"],
+  "openai-compatible": ["openai-compatible"],
 };
 
 export const ALL_CAPABILITIES: KeyCapability[] = [
   "github-models", "github-public-api", "copilot-models", "copilot-sdk", "copilot-cli", "claude-code-cli", "anthropic-api", "azure-ai-inference",
+  "openai-api", "openrouter-api", "openai-compatible",
 ];
 
 // Account types

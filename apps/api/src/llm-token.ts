@@ -4,7 +4,8 @@
 /**
  * Shared helper for acquiring an inference client for the portal AI features.
  *
- * Endpoint resolution priority:
+ * An explicit Portal AI selection (stored by Token Manager) is resolved first.
+ * Automatic endpoint resolution retains the existing priority:
  *   1. Azure AI Foundry env vars — AZURE_AI_INFERENCE_ENDPOINT +
  *      AZURE_AI_INFERENCE_API_KEY (preferred for local dev; explicit override).
  *   2. Azure AI Foundry via the Token Manager — TOKEN_MANAGER_URL with at
@@ -14,13 +15,17 @@
  *      GITHUB_MODELS_API_KEY → TokenManagerClient("github-models") → GITHUB_TOKEN
  *      (fallback; slow public endpoint, fine for local dev only).
  *
+ * OpenAI, OpenRouter and compatible endpoints use bearer-authenticated chat;
+ * Anthropic reuses anthropic-api-key credentials via its native Messages API.
+ *
  * All three portal LLM modules (llm.ts, prompt-feature-llm.ts,
  * task-prompt-llm.ts) call acquireInferenceClient() instead of constructing
  * a ModelClient inline so the endpoint can be swapped in one place.
  */
-import ModelClient, { type ModelClient as ModelClientType } from "@azure-rest/ai-inference";
+import ModelClient, { isUnexpected } from "@azure-rest/ai-inference";
 import { AzureKeyCredential } from "@azure/core-auth";
-import { TokenManagerClient, parseAzureAiFoundrySecret } from "shared";
+import { TokenManagerClient, parseAzureAiFoundrySecret, parseOpenAiSecret, portalAiCredential, type PortalAiProvider, type PortalAiSettings } from "shared";
+import { createPortalChatClient, type PortalChatClient } from "./llm-provider.js";
 
 const GITHUB_MODELS_ENDPOINT = "https://models.inference.ai.azure.com";
 
@@ -147,7 +152,7 @@ export async function acquireGitHubModelsToken(): Promise<string> {
   );
 }
 
-export type InferenceSource = "azure-ai-foundry" | "github-models";
+export type InferenceSource = PortalAiProvider;
 
 /**
  * How the credential was actually resolved. Useful for log lines so an
@@ -162,16 +167,72 @@ export type InferenceVia =
   | "github-token";
 
 export interface InferenceClientHandle {
-  client: ModelClientType;
+  client: PortalChatClient;
   endpoint: string;
   source: InferenceSource;
-  via: InferenceVia;
+  via: InferenceVia | "portal-ai-token-manager";
   /**
-   * When the source is "azure-ai-foundry" via the Token Manager, the
-   * registered secret can override the default model name. Callers should
-   * honour this when present (and fall back to `process.env.LLM_MODEL`).
+   * The saved model override or credential-specific model. New providers
+   * never inherit a Foundry deployment name from the global environment.
    */
   model?: string;
+}
+
+function azureClient(endpoint: string, apiKey: string): PortalChatClient {
+  const sdk = ModelClient(endpoint, new AzureKeyCredential(apiKey));
+  return {
+    path: () => ({
+      post: async ({ body }) => {
+        const response = await sdk.path("/chat/completions").post({ body });
+        if (isUnexpected(response)) {
+          return { status: response.status, body: { error: { message: response.body.error?.message } } };
+        }
+        return { status: response.status, body: { choices: response.body.choices } };
+      },
+    }),
+  };
+}
+
+async function acquireSelectedInference(selection: PortalAiSettings): Promise<InferenceClientHandle> {
+  if (selection.provider === "auto") throw new Error("LLM request failed: invalid explicit provider");
+  const manager = getTokenManagerClient();
+  if (!manager) throw new Error("LLM not configured: select a registered provider key in Secrets");
+  const credential = portalAiCredential(selection.provider);
+  let raw: string;
+  try {
+    const result = await manager.acquirePortalToken({
+      ...credential, strictKeyType: true, ...(selection.keyId ? { keyId: selection.keyId } : {}),
+    });
+    raw = result.value;
+  } catch {
+    throw new Error(`LLM not configured: no usable ${selection.provider} credential. Check Secrets → Portal AI; no other provider was selected.`);
+  }
+  let endpoint: string;
+  let apiKey: string;
+  let model: string | undefined;
+  if (selection.provider === "anthropic") {
+    endpoint = "https://api.anthropic.com/v1";
+    apiKey = raw;
+    model = "claude-sonnet-4-20250514";
+  } else if (selection.provider === "github-models") {
+    endpoint = GITHUB_MODELS_ENDPOINT;
+    apiKey = raw;
+  } else {
+    const parsed = selection.provider === "azure-ai-foundry" ? parseAzureAiFoundrySecret(raw) : parseOpenAiSecret(raw);
+    if (!parsed) throw new Error(`LLM not configured: invalid ${selection.provider} endpoint/key/model in Secrets`);
+    endpoint = selection.provider === "azure-ai-foundry" ? normalizeFoundryEndpoint(parsed.endpoint) : parsed.endpoint;
+    apiKey = parsed.apiKey;
+    model = parsed.model;
+  }
+  const handle: InferenceClientHandle = {
+    client: selection.provider === "azure-ai-foundry" || selection.provider === "github-models"
+      ? azureClient(endpoint, apiKey)
+      : createPortalChatClient(selection.provider, endpoint, apiKey),
+    endpoint, source: selection.provider, via: "portal-ai-token-manager",
+    model: selection.model || model,
+  };
+  logInferenceAcquired(handle);
+  return handle;
 }
 
 function logInferenceAcquired(handle: InferenceClientHandle): void {
@@ -218,13 +279,25 @@ async function tryAcquireFoundryFromTokenManager(): Promise<{
  *
  * @throws Error if no inference backend is configured.
  */
-export async function acquireInferenceClient(): Promise<InferenceClientHandle> {
+export async function acquireInferenceClient(selection?: PortalAiSettings): Promise<InferenceClientHandle> {
+  // Persisted Portal-only selection is explicit: failures never fall through to a different provider.
+  // With no selection, retain the historical Foundry/GitHub defaults.
+  const manager = getTokenManagerClient();
+  let configured = selection;
+  if (!configured && manager) {
+    try {
+      configured = await manager.getPortalAiSettings();
+    } catch {
+      throw new Error("LLM not configured: unable to read Portal AI settings from Token Manager");
+    }
+  }
+  if (configured && configured.provider !== "auto") return acquireSelectedInference(configured);
   // 1. Azure AI Foundry via env vars — explicit override, preferred locally.
   if (isFoundryConfigured()) {
     const endpoint = normalizeFoundryEndpoint(process.env.AZURE_AI_INFERENCE_ENDPOINT!);
     const apiKey = process.env.AZURE_AI_INFERENCE_API_KEY!;
     const handle: InferenceClientHandle = {
-      client: ModelClient(endpoint, new AzureKeyCredential(apiKey)),
+      client: azureClient(endpoint, apiKey),
       endpoint,
       source: "azure-ai-foundry",
       via: "azure-ai-foundry-env",
@@ -237,7 +310,7 @@ export async function acquireInferenceClient(): Promise<InferenceClientHandle> {
   const tmFoundry = await tryAcquireFoundryFromTokenManager();
   if (tmFoundry) {
     const handle: InferenceClientHandle = {
-      client: ModelClient(tmFoundry.endpoint, new AzureKeyCredential(tmFoundry.apiKey)),
+      client: azureClient(tmFoundry.endpoint, tmFoundry.apiKey),
       endpoint: tmFoundry.endpoint,
       source: "azure-ai-foundry",
       via: "azure-ai-foundry-token-manager",
@@ -257,7 +330,7 @@ export async function acquireInferenceClient(): Promise<InferenceClientHandle> {
           ? "github-models-token-manager"
           : "github-token";
       const handle: InferenceClientHandle = {
-        client: ModelClient(GITHUB_MODELS_ENDPOINT, new AzureKeyCredential(token)),
+        client: azureClient(GITHUB_MODELS_ENDPOINT, token),
         endpoint: GITHUB_MODELS_ENDPOINT,
         source: "github-models",
         via,
@@ -273,6 +346,6 @@ export async function acquireInferenceClient(): Promise<InferenceClientHandle> {
   }
 
   throw new Error(
-    "LLM not configured: no inference backend available. Please register a new secret key for GitHub Model or Azure Foundry."
+    "LLM not configured: register a provider key and select it under Secrets → Portal AI, or configure Azure AI Foundry / GitHub Models."
   );
 }

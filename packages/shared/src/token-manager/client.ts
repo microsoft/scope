@@ -8,7 +8,17 @@ import {
   KEY_CAPABILITY_ENV_VARS,
   KeyCapability,
   KeyType,
+  type AcquireKeyRequest,
+  type PortalAiSettings,
+  PORTAL_AI_PROVIDERS,
 } from "./types.js";
+import { withRetry } from "../utils/retry.js";
+
+class TokenManagerRequestError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
+}
 
 /**
  * Client for acquiring keys from the Token Manager service.
@@ -27,6 +37,53 @@ export class TokenManagerClient {
       process.env.TOKEN_MANAGER_URL ||
       ""
     ).replace(/\/+$/, "");
+  }
+
+  private async portalRequest(path: string, body?: AcquireKeyRequest): Promise<unknown> {
+    if (!this.baseUrl) throw new Error("Token Manager not configured: register a key at /secrets/keys/new");
+    return withRetry(async () => {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        method: body ? "POST" : "GET",
+        headers: { "Content-Type": "application/json" },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) {
+        throw new TokenManagerRequestError(response.status, `Token Manager request failed (HTTP ${response.status})`);
+      }
+      const result: unknown = await response.json();
+      return result;
+    }, {
+      maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 5000,
+      isRetryable: (err) => !(err instanceof TokenManagerRequestError) || err.status === 429 || err.status >= 500,
+    });
+  }
+
+  /** Portal selections never consult process env or fall back to another credential type. */
+  async acquirePortalToken(request: AcquireKeyRequest): Promise<AcquireKeyResponse> {
+    const data = await this.portalRequest("/api/v1/keys/acquire", request);
+    if (!data || typeof data !== "object" || !("value" in data) || typeof data.value !== "string" ||
+      !("keyType" in data) || typeof data.keyType !== "string") {
+      throw new Error("Invalid Portal AI credential response");
+    }
+    const result = data as AcquireKeyResponse;
+    if (result.capability !== request.capability ||
+      (request.strictKeyType && request.keyType && result.keyType !== request.keyType) ||
+      (request.keyId && result.keyId !== request.keyId)) {
+      throw new Error("Token Manager did not honor the explicit Portal AI credential selection");
+    }
+    return result;
+  }
+
+  async getPortalAiSettings(): Promise<PortalAiSettings> {
+    const data = await this.portalRequest("/api/v1/keys/portal-ai");
+    if (!data || typeof data !== "object" || !("provider" in data) ||
+      !PORTAL_AI_PROVIDERS.includes(data.provider as PortalAiSettings["provider"]) ||
+      ("keyId" in data && data.keyId !== undefined && typeof data.keyId !== "string") ||
+      ("model" in data && data.model !== undefined && typeof data.model !== "string")) {
+      throw new Error("Invalid Portal AI settings response");
+    }
+    return data as PortalAiSettings;
   }
 
   /**

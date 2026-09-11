@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { KeyType, KeyValidationResult, deriveCapabilities, parseAzureAiFoundrySecret, trimTrailingSlashes } from "shared";
+import { KeyType, KeyValidationResult, deriveCapabilities, parseAzureAiFoundrySecret, parseOpenAiSecret, trimTrailingSlashes, withRetry } from "shared";
 
 /**
  * Validate a key by calling the provider's API and derive its capabilities.
@@ -35,13 +35,59 @@ export async function validateToken(
     case "azure-ai-foundry":
       result = await validateAzureAiFoundry(value);
       break;
+    case "openai-api-key":
+    case "openrouter-api-key":
+    case "openai-compatible":
+      result = await validateOpenAiCompatible(type, value);
+      break;
     default:
       return { status: "error", error: `Unknown token type: ${type}` };
   }
 
-  // Derive capabilities from validation result
   result.capabilities = deriveCapabilities(type, result);
   return result;
+}
+
+class ProviderProbeError extends Error {
+  constructor(readonly status: number) {
+    super(`Provider API returned HTTP ${status}`);
+  }
+}
+
+async function validateOpenAiCompatible(type: KeyType, value: string): Promise<KeyValidationResult> {
+  const credential = parseOpenAiSecret(value);
+  if (!credential) {
+    return { status: "invalid", error: "Expected JSON with endpoint, apiKey and model. Use HTTPS, or HTTP on localhost." };
+  }
+  const reasoning = type === "openai-api-key" && /^(gpt-5|o[134])(?:[.-]|$)/.test(credential.model);
+  try {
+    // Explicit validation probes have one retry layer, never retries on auth/configuration errors.
+    await withRetry(async () => {
+      const response = await fetch(`${credential.endpoint}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${credential.apiKey}` },
+        body: JSON.stringify({
+          model: credential.model,
+          messages: [{ role: "user", content: "ping" }],
+          ...(reasoning ? { max_completion_tokens: 16 } : { max_tokens: 1 }),
+        }),
+        signal: AbortSignal.timeout(30_000),
+        redirect: "error",
+      });
+      if (!response.ok) throw new ProviderProbeError(response.status);
+    }, {
+      maxRetries: 3, baseDelayMs: 500, maxDelayMs: 5000,
+      isRetryable: (err) => !(err instanceof ProviderProbeError) || err.status === 429 || err.status >= 500,
+    });
+    return { status: "valid" };
+  } catch (err) {
+    return {
+      status: err instanceof ProviderProbeError && err.status >= 400 && err.status < 500 && err.status !== 429 ? "invalid" : "error",
+      error: err instanceof ProviderProbeError
+        ? `${err.message}. Check the endpoint, model and API key.`
+        : "Provider validation failed: endpoint unavailable",
+    };
+  }
 }
 
 /**

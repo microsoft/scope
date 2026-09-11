@@ -109,6 +109,8 @@ export const RequestOutcomeSchema = z.enum([
 export const VALID_WORKERS = [
   "coder-acp-claude-code",
   "coder-acp-copilot",
+  "coder-acp-claude-code-host",
+  "coder-acp-copilot-host",
   "coder-acp-copilot-windows"
 ] as const;
 

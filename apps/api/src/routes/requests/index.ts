@@ -798,7 +798,7 @@ apiRoute(ctx.app, ctx.registry, {
 
     // Check if the worker (agent) is available for new submissions
     const workerAgent = await ctx.agentCollection.findOne({ _id: worker, deletedAt: { $exists: false } });
-    if (workerAgent && workerAgent.available === false) {
+    if (workerAgent?.available === false || (worker.endsWith("-host") && workerAgent?.available !== true)) {
       res.status(400).json({
         error: `Worker "${worker}" is not available for new submissions`,
       });
@@ -1784,7 +1784,7 @@ apiRoute(ctx.app, ctx.registry, {
     // Check if the overridden worker is available for new submissions
     if (overrides?.workerType) {
       const overrideAgent = await ctx.agentCollection.findOne({ _id: overrides.workerType, deletedAt: { $exists: false } });
-      if (overrideAgent && overrideAgent.available === false) {
+      if (overrideAgent?.available === false || (overrides.workerType.endsWith("-host") && overrideAgent?.available !== true)) {
         res.status(400).json({ error: `Worker "${overrides.workerType}" is not available for new submissions` });
         return;
       }
