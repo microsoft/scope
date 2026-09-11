@@ -25,7 +25,7 @@
 import ModelClient, { isUnexpected } from "@azure-rest/ai-inference";
 import { AzureKeyCredential } from "@azure/core-auth";
 import { TokenManagerClient, parseAzureAiFoundrySecret, parseOpenAiSecret, portalAiCredential, type PortalAiProvider, type PortalAiSettings } from "shared";
-import { createPortalChatClient, type PortalChatClient } from "./llm-provider.js";
+import { createPortalChatClient, normalizeOpenAiChatBody, type PortalChatClient } from "./llm-provider.js";
 
 const GITHUB_MODELS_ENDPOINT = "https://models.inference.ai.azure.com";
 
@@ -178,12 +178,13 @@ export interface InferenceClientHandle {
   model?: string;
 }
 
-function azureClient(endpoint: string, apiKey: string): PortalChatClient {
+function azureClient(endpoint: string, apiKey: string, source: "azure-ai-foundry" | "github-models"): PortalChatClient {
   const sdk = ModelClient(endpoint, new AzureKeyCredential(apiKey));
   return {
     path: () => ({
       post: async ({ body }) => {
-        const response = await sdk.path("/chat/completions").post({ body });
+        const requestBody = source === "azure-ai-foundry" ? normalizeOpenAiChatBody(body) : body;
+        const response = await sdk.path("/chat/completions").post({ body: requestBody });
         if (isUnexpected(response)) {
           return { status: response.status, body: { error: { message: response.body.error?.message } } };
         }
@@ -226,7 +227,7 @@ async function acquireSelectedInference(selection: PortalAiSettings): Promise<In
   }
   const handle: InferenceClientHandle = {
     client: selection.provider === "azure-ai-foundry" || selection.provider === "github-models"
-      ? azureClient(endpoint, apiKey)
+      ? azureClient(endpoint, apiKey, selection.provider)
       : createPortalChatClient(selection.provider, endpoint, apiKey),
     endpoint, source: selection.provider, via: "portal-ai-token-manager",
     model: selection.model || model,
@@ -297,7 +298,7 @@ export async function acquireInferenceClient(selection?: PortalAiSettings): Prom
     const endpoint = normalizeFoundryEndpoint(process.env.AZURE_AI_INFERENCE_ENDPOINT!);
     const apiKey = process.env.AZURE_AI_INFERENCE_API_KEY!;
     const handle: InferenceClientHandle = {
-      client: azureClient(endpoint, apiKey),
+      client: azureClient(endpoint, apiKey, "azure-ai-foundry"),
       endpoint,
       source: "azure-ai-foundry",
       via: "azure-ai-foundry-env",
@@ -310,7 +311,7 @@ export async function acquireInferenceClient(selection?: PortalAiSettings): Prom
   const tmFoundry = await tryAcquireFoundryFromTokenManager();
   if (tmFoundry) {
     const handle: InferenceClientHandle = {
-      client: azureClient(tmFoundry.endpoint, tmFoundry.apiKey),
+      client: azureClient(tmFoundry.endpoint, tmFoundry.apiKey, "azure-ai-foundry"),
       endpoint: tmFoundry.endpoint,
       source: "azure-ai-foundry",
       via: "azure-ai-foundry-token-manager",
@@ -330,7 +331,7 @@ export async function acquireInferenceClient(selection?: PortalAiSettings): Prom
           ? "github-models-token-manager"
           : "github-token";
       const handle: InferenceClientHandle = {
-        client: azureClient(GITHUB_MODELS_ENDPOINT, token),
+        client: azureClient(GITHUB_MODELS_ENDPOINT, token, "github-models"),
         endpoint: GITHUB_MODELS_ENDPOINT,
         source: "github-models",
         via,

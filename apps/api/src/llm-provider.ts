@@ -10,6 +10,15 @@ export interface PortalChatBody {
   max_tokens?: number;
 }
 
+export function normalizeOpenAiChatBody(body: PortalChatBody): PortalChatBody & { max_completion_tokens?: number } {
+  if (!/^(gpt-5|o[134])(?:[.-]|$)/.test(body.model)) return body;
+  return {
+    model: body.model,
+    messages: body.messages,
+    ...(body.max_tokens !== undefined ? { max_completion_tokens: body.max_tokens } : {}),
+  };
+}
+
 export interface PortalChatResponse {
   status: string;
   body: {
@@ -40,16 +49,12 @@ export function createPortalChatClient(
     path: () => ({
       post: async ({ body }) => {
         const anthropic = provider === "anthropic";
-        const reasoning = provider === "openai" && /^(gpt-5|o[134])(?:[.-]|$)/.test(body.model);
         const requestBody = anthropic ? {
           model: body.model,
           system: body.messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n"),
           messages: body.messages.filter((m) => m.role !== "system"),
           max_tokens: body.max_tokens ?? 1024,
-          ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
-        } : reasoning ? {
-          model: body.model, messages: body.messages, max_completion_tokens: body.max_tokens,
-        } : body;
+        } : provider === "openai" ? normalizeOpenAiChatBody(body) : body;
         let retryNotBefore = 0;
         const data = await withRetry(async () => {
           const waitMs = retryNotBefore - Date.now();

@@ -78,6 +78,36 @@ describe("Portal provider selection and authoring", () => {
     expect(mocks.acquire).not.toHaveBeenCalled();
   });
 
+  it.each(["gpt-5.4-mini", "o1", "o3-mini", "o4-mini"])("sends reasoning parameters through the existing Foundry Azure client for %s", async (model) => {
+    const endpoint = "https://scope.services.ai.azure.com/models";
+    mocks.acquire.mockResolvedValue({ keyType: "azure-ai-foundry", value: JSON.stringify({ endpoint, model, apiKey: "foundry-test" }) });
+    mocks.azurePost.mockResolvedValue({ status: "200", body: { choices: [{ message: { content: "criterion text" } }] } });
+    const handle = await acquireInferenceClient({ provider: "azure-ai-foundry", keyId: "foundry-key" });
+    const messages = [{ role: "user" as const, content: "Write a hello.js criterion" }];
+    const response = await handle.client.path("/chat/completions").post({
+      body: { model, messages, max_tokens: 512, temperature: 0.3 },
+    });
+    expect(mocks.azure).toHaveBeenCalledWith(endpoint, expect.objectContaining({ key: "foundry-test" }));
+    expect(mocks.azurePost).toHaveBeenCalledExactlyOnceWith({
+      body: { model, messages, max_completion_tokens: 512 },
+    });
+    expect(response.body.choices?.[0].message.content).toBe("criterion text");
+  });
+
+  it("preserves the legacy Foundry gpt-4.1 request shape and Azure authentication", async () => {
+    const endpoint = "https://scope.services.ai.azure.com/models";
+    mocks.acquire.mockResolvedValue({ keyType: "azure-ai-foundry", value: JSON.stringify({ endpoint, model: "gpt-4.1", apiKey: "foundry-test" }) });
+    mocks.azurePost.mockResolvedValue({ status: "200", body: { choices: [{ message: { content: "legacy criterion" } }] } });
+    const handle = await acquireInferenceClient({ provider: "azure-ai-foundry" });
+    const body = {
+      model: "gpt-4.1", messages: [{ role: "user" as const, content: "Write a criterion" }], max_tokens: 512, temperature: 0.3,
+    };
+    await handle.client.path("/chat/completions").post({ body });
+    expect(mocks.azure).toHaveBeenCalledWith(endpoint, expect.objectContaining({ key: "foundry-test" }));
+    expect(mocks.azurePost).toHaveBeenCalledExactlyOnceWith({ body });
+    expect(mocks.azurePost.mock.calls[0][0].body).toBe(body);
+  });
+
   it("explicit Anthropic selection overrides Foundry env without changing any worker credential", async () => {
     vi.stubEnv("AZURE_AI_INFERENCE_ENDPOINT", "https://foundry.test/models");
     vi.stubEnv("AZURE_AI_INFERENCE_API_KEY", "foundry-test");

@@ -95,13 +95,21 @@ Preview, registration validation and scheduled revalidation issue a minimal
 chat request against the chosen model. These probes can incur provider usage.
 New provider validators and inference transports use one bounded shared retry
 layer for transient failures; authentication and other permanent 4xx responses
-do not retry. OpenAI reasoning-model calls use `max_completion_tokens` and omit
-unsupported temperature. Provider error bodies are not reflected into stored
-metadata or public errors.
+do not retry. Portal OpenAI and Foundry authoring requests for recognized
+GPT-5/o1/o3/o4 model IDs use `max_completion_tokens` and omit unsupported
+temperature. Both transports share a small, pure request-parameter normalizer;
+Foundry still uses the existing Azure REST client, authentication and endpoint.
+Legacy Foundry models such as `gpt-4.1` retain their existing request shape,
+including `max_tokens` and temperature. These Portal parameter adaptations do
+not change Token Manager validation probes. New provider transports do not echo
+raw error bodies; existing Foundry error handling is preserved.
 
 **Anthropic remains `anthropic-api-key` with the existing raw `sk-ant-…` value.**
 No credential conversion or new Anthropic secret type is needed. Portal
 inference uses native `/v1/messages` with `x-api-key` and `anthropic-version`;
+it omits optional temperature and uses the service's sampling defaults, because
+Sonnet 5 rejects that deprecated parameter. Model, system instructions, messages,
+token limit and parsed text output retain their existing shape.
 Claude Code and the model scanner retain their existing credential behavior.
 Subscription OAuth keys do not provide the `anthropic-api` capability.
 
