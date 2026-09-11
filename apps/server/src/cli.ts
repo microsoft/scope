@@ -61,7 +61,7 @@ async function dockerClient(): Promise<InstanceType<typeof Docker>> {
     throw new Error("Scope Server requires a local Unix-socket Docker engine because its persistent data uses host bind mounts.");
   }
   const socketPath = endpoint.slice("unix://".length);
-  return new Docker({ socketPath });
+  return new Docker({ socketPath, timeout: 120_000 });
 }
 
 async function npmRegistry(): Promise<string> {

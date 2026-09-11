@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     agentClose: vi.fn(async () => {}),
     controlClose: vi.fn(async () => {}),
     cancel: vi.fn(),
+    dockerOptions: vi.fn(),
     connect: vi.fn(async () => {}),
     stop: vi.fn(async () => {}),
     start: vi.fn(async () => {}),
@@ -29,7 +30,9 @@ vi.mock("node:fs/promises", () => ({
   writeFile: vi.fn(async () => {}),
 }));
 vi.mock("docker-orchestrator", () => ({
-  Docker: class {},
+  Docker: class {
+    constructor(options: unknown) { mocks.dockerOptions(options); }
+  },
   Orchestrator: class {
     cancel = mocks.cancel;
     stop = mocks.stop;
@@ -102,6 +105,9 @@ describe("launcher signal cleanup", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     await import("./cli.js");
     await vi.waitFor(() => expect(error).toHaveBeenCalledWith("Engine probe timed out"));
+    expect(mocks.dockerOptions).toHaveBeenCalledWith({
+      socketPath: `${mocks.paths.runtime}/docker.sock`, timeout: 120_000,
+    });
     expect(mocks.agentClose).not.toHaveBeenCalled();
     expect(mocks.stop).not.toHaveBeenCalled();
     expect(mocks.start).not.toHaveBeenCalled();
