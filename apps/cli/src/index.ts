@@ -6,7 +6,9 @@ import dotenv from "dotenv";
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Command } from "commander";
+import { ScopeCommand } from "./utils/connection.js";
+import { registerEnvCommands } from "./commands/env.js";
+import { registerSecretCommands } from "./commands/secret.js";
 import { configureHelp, generateOutputFormatsHelp, generateEnvVarsHelp } from "./utils/helpFormatter.js";
 import { OUTPUT_FORMATS, ENV_VARS, applyApiPortFallback, getCliName } from "./utils/shared.js";
 import { registerRunCommands } from "./commands/run.js";
@@ -57,12 +59,13 @@ dotenv.config(envPath ? { path: envPath } : undefined);
 // default.
 applyApiPortFallback();
 
-export const program = new Command();
+export const program = new ScopeCommand();
 
 program
   .name(getCliName())
   .description("Scope — The AI Agentic Experience Evaluation Platform")
   .version(CLI_VERSION)
+  .option("--env <name>", "Named connection (put before the command, especially for MCP --env)")
   .action(() => {
     program.help();
   })
@@ -72,6 +75,8 @@ program
 configureHelp(program);
 
 // Register all command groups
+registerEnvCommands(program);
+registerSecretCommands(program);
 registerProjectCommands(program);
 registerRunCommands(program);
 registerCriteriaCommands(program);

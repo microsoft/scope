@@ -4,7 +4,7 @@
 import { build, type Plugin } from "esbuild";
 import { chmodSync, readFileSync } from "node:fs";
 
-const pkg = JSON.parse(readFileSync("package.json", "utf-8"));
+const pkg: { version: string } = JSON.parse(readFileSync("package.json", "utf-8"));
 
 // ESM banner: shebang + createRequire polyfill for CJS deps (e.g. dotenv uses require("fs"))
 const banner = `#!/usr/bin/env node
@@ -43,6 +43,26 @@ const shimReactDevtools: Plugin = {
   },
 };
 
+const sharedClientExports: Plugin = {
+  name: "shared-client-exports",
+  setup(b) {
+    // Runtime shared imports are limited to client-safe gate/retry/credential helpers.
+    // The server barrel also executes createRequire("ioredis"), which esbuild
+    // cannot bundle and which breaks standalone installation without a checkout.
+    b.onResolve({ filter: /^shared$/ }, () => ({ path: "shared-client", namespace: "shared-client" }));
+    b.onLoad({ filter: /.*/, namespace: "shared-client" }, () => ({
+      contents: [
+        'export * from "../../packages/shared/dist/types/types.js";',
+        'export * from "../../packages/shared/dist/gates/gates.js";',
+        'export * from "../../packages/shared/dist/utils/retry.js";',
+        'export * from "../../packages/shared/dist/token-manager/types.js";',
+      ].join("\n"),
+      loader: "js",
+      resolveDir: process.cwd(),
+    }));
+  },
+};
+
 await build({
   entryPoints: ["src/index.ts"],
   bundle: true,
@@ -61,7 +81,7 @@ await build({
   },
   external: [],
   logLevel: "warning",
-  plugins: [stripShebang, shimReactDevtools],
+  plugins: [stripShebang, shimReactDevtools, sharedClientExports],
 });
 
 console.log(`✓ Built dist/scope.mjs (v${pkg.version})`);

@@ -30,9 +30,13 @@
  */
 import ky, { type KyInstance, type BeforeRequestHook } from "ky";
 import { normalizeUrl } from "./shared.js";
+import { currentEnvironment, resolveApiUrl } from "./connection.js";
+import EventSource from "eventsource";
 
 /** Init accepted by {@link apiFetch}. Adds a couple of client-only knobs to `RequestInit`. */
 export interface ApiFetchInit extends RequestInit {
+  /** Redact entire request/response log bodies when registering or validating credentials. */
+  sensitiveBody?: boolean;
   /**
    * Skip `Authorization` header injection for this request (e.g. truly public
    * endpoints). Defaults to `false` — every Scope API call is authenticated.
@@ -433,7 +437,8 @@ const authHook: BeforeRequestHook = async ({ request }) => {
   request.headers.delete(SKIP_AUTH_HEADER);
   if (skip) return;
   if (request.headers.has("authorization")) return;
-  const token = await tokenProvider();
+  const environment = currentEnvironment();
+  const token = environment ? environment.token : await tokenProvider();
   if (token) request.headers.set("authorization", `Bearer ${token}`);
 };
 
@@ -473,30 +478,40 @@ function getClient(): KyInstance {
  *          `response.ok` / `response.json()` / streaming handling.
  */
 export async function apiFetch(baseUrl: string, path: string, init?: ApiFetchInit): Promise<Response> {
-  const url = `${normalizeUrl(baseUrl)}${withProjectId(resolveApiPath(path), init?.projectId)}`;
+  const environment = currentEnvironment();
+  const url = `${normalizeUrl(resolveApiUrl(baseUrl))}${withProjectId(resolveApiPath(path), init?.projectId)}`;
 
   const headers = new Headers(init?.headers);
   if (init?.skipAuth) headers.set(SKIP_AUTH_HEADER, "1");
 
   // Strip our client-only fields before handing the init to ky.
-  const { skipAuth: _skipAuth, projectId: _projectId, ...rest } = init ?? {};
+  const { skipAuth: _skipAuth, projectId: _projectId, sensitiveBody: _sensitiveBody, ...rest } = init ?? {};
   const finalInit: RequestInit = { ...rest, headers };
 
-  let response = await dispatch(url, finalInit, init?.body);
+  let response = await dispatch(url, finalInit, init?.body, init?.sensitiveBody);
 
-  if (response.status === 401 && reauthHandler) {
+  if (response.status === 401 && reauthHandler && !environment) {
     const shouldRetry = await reauthHandler(response);
     if (shouldRetry) {
       // Re-dispatch: the auth hook re-resolves the (possibly refreshed) token.
-      response = await dispatch(url, finalInit, init?.body);
+      response = await dispatch(url, finalInit, init?.body, init?.sensitiveBody);
     }
   }
 
   return response;
 }
 
+/** EventSource owns reconnects; its fixed URL and headers retain this operation's connection. */
+export async function apiEventSource(baseUrl: string, path: string): Promise<EventSource> {
+  const environment = currentEnvironment();
+  const url = `${normalizeUrl(resolveApiUrl(baseUrl))}${resolveApiPath(path)}`;
+  // Preserve legacy SSE's existing unauthenticated behavior.
+  const headers = environment?.token ? { Authorization: `Bearer ${environment.token}` } : undefined;
+  return new EventSource(url, headers ? { headers } : undefined);
+}
+
 /** Single request attempt through `ky`, wrapped with logging-sink instrumentation. */
-async function dispatch(url: string, init: RequestInit, originalBody: BodyInit | null | undefined): Promise<Response> {
+async function dispatch(url: string, init: RequestInit, originalBody: BodyInit | null | undefined, sensitiveBody = false): Promise<Response> {
   const send = getClient();
   if (!logSink) {
     return send(url, init);
@@ -509,7 +524,7 @@ async function dispatch(url: string, init: RequestInit, originalBody: BodyInit |
     method: (init.method ?? "GET").toUpperCase(),
     url,
     requestHeaders: redactedRequestHeaders(init.headers),
-    requestBody: previewBody(originalBody),
+    requestBody: sensitiveBody ? REDACTED : previewBody(originalBody),
   };
 
   try {
@@ -518,7 +533,7 @@ async function dispatch(url: string, init: RequestInit, originalBody: BodyInit |
     // Gated on content type/length so binary and streaming bodies aren't buffered.
     let responseBody: string | undefined;
     try {
-      responseBody = await captureResponseBody(response);
+      responseBody = sensitiveBody ? REDACTED : await captureResponseBody(response);
     } catch {
       responseBody = undefined;
     }

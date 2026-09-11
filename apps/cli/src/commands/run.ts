@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { Command, Option } from "commander";
-import EventSource from "eventsource";
 import { execSync } from "child_process";
 import { mkdtempSync, mkdirSync, createWriteStream, rmSync, readFileSync, readdirSync, existsSync, statSync } from "fs";
 import { tmpdir } from "os";
@@ -17,7 +16,7 @@ import type { OutputFormat, DisplayField } from "../utils/types.js";
 import { runGetAction } from "../run-get-action.js";
 import { normalizeUrl, printFollowUpCommands, withOutputOption, withProjectOption, getDefaultApiUrl } from "../utils/shared.js";
 import { requireProjectId } from "../utils/config.js";
-import { apiFetch, getApiBasePath } from "../utils/api-client.js";
+import { apiFetch, apiEventSource, getApiBasePath } from "../utils/api-client.js";
 import { parseGatesOption } from "../utils/gates.js";
 
 /**
@@ -219,7 +218,7 @@ run
       // Stream logs
       console.log(`\n${banner('--- Streaming logs ---')}\n`);
 
-      const eventSource = new EventSource(`${normalizeUrl(url)}${getApiBasePath()}/requests/${result.id}/logs`);
+      const eventSource = await apiEventSource(url, `/requests/${result.id}/logs`);
 
       eventSource.onmessage = (event) => {
         try {
@@ -364,11 +363,8 @@ run
   .option("--from-start", "Include historical logs from start")
   .action(async (options) => {
     const { id } = options;
-    const url = options.fromStart
-      ? `${normalizeUrl(options.url)}${getApiBasePath()}/requests/${id}/logs?fromStart=true`
-      : `${normalizeUrl(options.url)}${getApiBasePath()}/requests/${id}/logs`;
-
-    const eventSource = new EventSource(url);
+    const path = `/requests/${id}/logs${options.fromStart ? "?fromStart=true" : ""}`;
+    const eventSource = await apiEventSource(options.url, path);
 
     eventSource.onmessage = (event) => {
       try {

@@ -2,6 +2,10 @@
   "name": "cli",
   "version": "0.0.0-dev",
   "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "scope": "./dist/scope.mjs"
   },
@@ -17,6 +21,7 @@
   "scripts": {
     "build": "tsc --noEmit && tsx build.ts",
     "build:tsc": "tsc --noEmit",
+    "pack:standalone": "pnpm build && tsx package.ts && npm pack ./dist/npm --pack-destination ./dist",
     "dev": "tsx src/index.ts",
     "start": "node dist/scope.mjs",
     "test": "vitest run",
