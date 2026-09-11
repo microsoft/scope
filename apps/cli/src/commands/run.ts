@@ -48,7 +48,7 @@ run
   .option("-p, --persona <path>", "Path to persona YAML file (provides judge personality)")
   .option("-t, --traits <path>", "Path to traits.yaml (default: config/traits.yaml next to persona)")
   .option("-m, --message <message>", "Message/task to process (overrides scenario task)")
-  .option("-w, --worker <worker>", "Worker to use (coder-acp-claude-code, coder-acp-copilot)", "coder-acp-copilot")
+  .option("-w, --worker <worker>", "Worker type (Docker or -host variant)", "coder-acp-copilot")
   .option("-c, --criteria <criteria...>", "Evaluation criteria (overrides scenario criteria)")
   .option("--max-iterations <number>", "Max judge iterations for multi-turn mode", parseInt)
   .option("--model <model>", "Model to use for the coding agent")

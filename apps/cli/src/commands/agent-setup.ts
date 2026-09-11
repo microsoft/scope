@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { Command } from "commander";
+import { NetworkError } from "ky";
 import { stringify as stringifyYaml } from "yaml";
 import { withRetry } from "shared";
 import {
@@ -56,7 +57,7 @@ async function fetchStatus(url: string, signal = AbortSignal.timeout(30_000)): P
       maxRetries: 2,
       baseDelayMs: 250,
       maxDelayMs: 2000,
-      isRetryable: (error: unknown) => !signal.aborted && (error instanceof TypeError
+      isRetryable: (error: unknown) => !signal.aborted && (error instanceof TypeError || error instanceof NetworkError
         || (error instanceof ApiError && [429, 500, 502, 503, 504].includes(error.status))),
     },
   );

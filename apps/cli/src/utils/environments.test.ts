@@ -388,6 +388,26 @@ describe("operation pinning across streams, downloads, polling and retry", () =>
         expect(JSON.parse(String(vi.mocked(console.log).mock.calls.at(-1)?.[0]))).toEqual(status);
       });
 
+      it("retries ky-wrapped network failures on the pinned status connection", async () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        reply = () => {
+          if (requests.length === 1) {
+            store.use("staging");
+            throw new TypeError("fetch failed");
+          }
+          return json(status);
+        };
+        await run("--env", "local", "agent", "status", "-o", "json");
+        expect(requests).toHaveLength(2);
+        expect(requests.every(request => request.url === "http://127.0.0.1:43127/api/v1/server")).toBe(true);
+      });
+
+      it("does not replay a setup mutation after a network failure", async () => {
+        reply = () => { throw new TypeError("fetch failed"); };
+        await expect(run("--env", "local", "agent", "setup", "coder-acp-copilot-host", "--enable")).rejects.toThrow();
+        expect(requests.map(request => request.method)).toEqual(["PUT"]);
+      });
+
       it("surfaces asynchronous startup errors while waiting", async () => {
         reply = (request) => json({
           ...status,

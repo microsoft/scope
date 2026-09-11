@@ -139,6 +139,22 @@ describe("provider secret CLI", () => {
     await expect(run("secret", "create", "--type", "openai-api-key", "--api-key", "fixture")).rejects.toThrow("Registration unavailable");
     expect(requests).toHaveLength(1);
   });
+
+  it("retries ky-wrapped network failures for metadata reads", async () => {
+    reply = () => {
+      if (requests.length === 1) throw new TypeError("fetch failed");
+      return json([metadata]);
+    };
+    await run("secret", "list", "-o", "json");
+    expect(requests.map(request => request.method)).toEqual(["GET", "GET"]);
+    expect(requests[0].url).toBe(requests[1].url);
+  });
+
+  it("does not replay credential registration after a network failure", async () => {
+    reply = () => { throw new TypeError("fetch failed"); };
+    await expect(run("secret", "create", "--type", "openai-api-key", "--api-key", "fixture")).rejects.toThrow();
+    expect(requests.map(request => request.method)).toEqual(["POST"]);
+  });
 });
 
 describe("Portal AI selection CLI", () => {

@@ -3,6 +3,7 @@
 
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
+import { NetworkError } from "ky";
 import {
   PORTAL_AI_PROVIDERS, parseAzureAiFoundrySecret, parseOpenAiSecret, withRetry,
   type CreateKeyRequest, type KeyDocument, type KeyType, type KeyValidationResult,
@@ -58,7 +59,7 @@ async function request(url: string, path: string, init?: ApiFetchInit): Promise<
   return !init?.method || init.method === "GET" || init.method === "PUT"
     ? withRetry(send, {
       maxRetries: 2, baseDelayMs: 250, maxDelayMs: 2000,
-      isRetryable: (error: unknown) => error instanceof TypeError
+      isRetryable: (error: unknown) => error instanceof TypeError || error instanceof NetworkError
         || (error instanceof ApiError && [429, 500, 502, 503, 504].includes(error.status)),
     })
     : send();
