@@ -6,6 +6,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest, parseScannerModels, registerAgent, registerModels } from "./api.js";
+import { buildEnvironment, imageTag, type AssetManifest } from "./manifest.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -30,7 +31,9 @@ describe("ordinary agent/version registration", () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it("uses the existing API and retires previous versions independently for each worker type", async () => {
+  it.each(["coder-acp-copilot-host", "coder-acp-copilot"] as const)(
+    "registers matching runtime build metadata and retires previous versions for %s",
+    async id => {
     const directory = resolve("apps/server/.test-state", randomUUID());
     directories.push(directory);
     await mkdir(directory, { recursive: true });
@@ -42,17 +45,23 @@ describe("ordinary agent/version registration", () => {
       calls.push({ path: url.pathname, method: options.method ?? "GET", body: options.body ? JSON.parse(String(options.body)) as unknown : undefined });
       return Response.json(options.method === "GET" ? [{ agentVersion: "copilot-old" }] : {});
     }));
-    await registerAgent("http://localhost", directory, "coder-acp-copilot-host", {
-      version: "0.1.0", digest: "a".repeat(64), versions: {},
-    }, "copilot-1.0.65", { COPILOT_CLI_VERSION: "1.0.65" });
-    expect(calls[0].body).toMatchObject({ _id: "coder-acp-copilot-host", available: false, modelProvider: "github-copilot" });
+    const manifest: AssetManifest = {
+      version: "0.1.0", buildTime: "2026-09-11T20:23:10.773Z", digest: "a".repeat(64), versions: {},
+    };
+    const { BUILD_TIME: buildTime, GIT_COMMIT: gitCommit } = buildEnvironment(manifest);
+    await registerAgent("http://localhost", directory, id, manifest, "copilot-1.0.65", { COPILOT_CLI_VERSION: "1.0.65" });
+    expect(calls[0].body).toMatchObject({ _id: id, available: false, modelProvider: "github-copilot" });
     expect(calls[2]).toMatchObject({
-      path: "/api/v1/agents/coder-acp-copilot-host/versions/copilot-old",
+      path: `/api/v1/agents/${id}/versions/copilot-old`,
       method: "PATCH", body: { status: "retired" },
     });
     expect(calls[3].body).toMatchObject({
       agentVersion: "copilot-1.0.65",
-      queueName: "queue-coder-acp-copilot-host",
+      workerVersion: `copilot-1.0.65-${buildTime}-${gitCommit}`,
+      buildTime,
+      gitCommit,
+      imageTag: id.endsWith("-host") ? `host-${imageTag(manifest)}` : `scope-local/${id}:${imageTag(manifest)}`,
+      queueName: `queue-${id}`,
       components: { COPILOT_CLI_VERSION: "1.0.65" },
     });
   });

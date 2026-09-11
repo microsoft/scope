@@ -15,7 +15,7 @@ import { startControl, type ServerStatus } from "./control.js";
 import { controlAddress, isLocalControlAddress } from "./control-address.js";
 import { HostWorkers } from "./host.js";
 import {
-  backendServices, dockerWorker, modelScanner, providerEnv, readAssetManifest,
+  backendServices, buildEnvironment, dockerWorker, modelScanner, providerEnv, readAssetManifest,
   storageConnection, targetIds, type StackOptions, type TargetId,
 } from "./manifest.js";
 import { acquireLock, isMissing, preparePaths, readPorts, serverPaths, writeJson } from "./paths.js";
@@ -274,7 +274,7 @@ async function main(): Promise<void> {
         JUDGE_SERVICE_URL: `http://127.0.0.1:${await runtime.hostPort("judge", 80)}`,
         TOKEN_MANAGER_URL: `http://127.0.0.1:${await runtime.hostPort("token-manager", 80)}`,
         AZURE_STORAGE_QUEUE_POSTPROCESSOR: "post-processor-queue",
-        GIT_COMMIT: `local-${manifest.digest.slice(0, 12)}`, BUILD_TIME: manifest.version,
+        ...buildEnvironment(manifest),
       };
       backendReady = true;
       await agents.activate();

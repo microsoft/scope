@@ -4,7 +4,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import type { AssetManifest, TargetId } from "./manifest.js";
+import { buildEnvironment, imageTag, type AssetManifest, type TargetId } from "./manifest.js";
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -60,14 +60,14 @@ export async function registerAgent(
       await apiRequest(apiUrl, `/api/v1/agents/${id}/versions/${encodeURIComponent(value.agentVersion)}`, "PATCH", { status: "retired" });
     }
   }
-  const gitCommit = `local-${manifest.digest.slice(0, 12)}`;
+  const { BUILD_TIME: buildTime, GIT_COMMIT: gitCommit } = buildEnvironment(manifest);
   await apiRequest(apiUrl, `/api/v1/agents/${id}/versions`, "POST", {
     agentVersion,
-    workerVersion: `${agentVersion}-${manifest.version}-${gitCommit}`,
+    workerVersion: `${agentVersion}-${buildTime}-${gitCommit}`,
     components,
     gitCommit,
-    buildTime: manifest.version,
-    imageTag: id.endsWith("-host") ? `host-${manifest.digest.slice(0, 16)}` : `scope-local/${id}:${manifest.digest.slice(0, 16)}`,
+    buildTime,
+    imageTag: id.endsWith("-host") ? `host-${imageTag(manifest)}` : `scope-local/${id}:${imageTag(manifest)}`,
     queueName: `queue-${id}`,
   });
 }

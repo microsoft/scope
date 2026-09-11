@@ -32,7 +32,11 @@ The package builds `.scope` copies of the existing Dockerfiles, leaving the
 Compose/Kubernetes recipes unchanged. These copies install the same pinned pnpm
 version through npm, supporting registry proxies that lack Corepack's
 version-specific metadata route. Builds honor the configured npm registry and
-HTTP(S) proxy, and image cache keys include the generated build recipes.
+HTTP(S) proxy. Packaged metadata keeps the npm version separate from a UTC
+ISO-8601 build timestamp; that timestamp and a metadata-derived local commit
+stamp are reused in image build arguments, runtime environments, and worker
+registrations. Image cache keys include sources/generated build recipes,
+package version, build timestamp, and component versions.
 An interrupted Docker build transport is retried once using cached layers;
 recipe/compiler failures are surfaced without retry. Cancelling startup also
 cancels active image transfers and prevents another retry.

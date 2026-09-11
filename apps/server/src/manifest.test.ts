@@ -1,15 +1,24 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, expect, it } from "vitest";
-import { backendServices, dockerWorker, modelScanner, storageConnection, targetIds, type StackOptions } from "./manifest.js";
+import { readFile } from "node:fs/promises";
+import { describe, expect, it, vi } from "vitest";
+import {
+  applicationImage, backendServices, buildEnvironment, dockerWorker, imageTag,
+  modelScanner, readAssetManifest, storageConnection, targetIds, type AssetManifest, type StackOptions,
+} from "./manifest.js";
 import { startupOrder } from "docker-orchestrator";
+
+vi.mock("node:fs/promises", async importOriginal => ({
+  ...await importOriginal<typeof import("node:fs/promises")>(),
+  readFile: vi.fn(),
+}));
 
 const options: StackOptions = {
   source: "/package/assets/source",
   data: "/home/person/.local/share/scope-server",
   manifest: {
-    version: "0.1.0", digest: "a".repeat(64),
+    version: "0.1.0", buildTime: "2026-09-11T20:23:10.773Z", digest: "a".repeat(64),
     versions: { COPILOT_CLI_VERSION: "1.0.65", CLAUDE_CODE_ACP_VERSION: "0.52.0", CLAUDE_AGENT_SDK_VERSION: "0.3.191" },
   },
   registry: "https://registry.example.test/",
@@ -18,6 +27,58 @@ const options: StackOptions = {
 };
 
 describe("packaged backend", () => {
+  it("reads a real build timestamp separately from the package version", async () => {
+    vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(options.manifest));
+    await expect(readAssetManifest("unused")).resolves.toEqual(options.manifest);
+    expect(new Date(options.manifest.buildTime).toISOString()).toBe(options.manifest.buildTime);
+  });
+
+  it.each([undefined, "0.1.0", "not-a-date", "2026-13-01T00:00:00.000Z"])(
+    "rejects missing or invalid packaged build timestamps (%s)",
+    async buildTime => {
+      vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify({ ...options.manifest, buildTime }));
+      await expect(readAssetManifest("unused")).rejects.toThrow("Invalid bundled server assets");
+    },
+  );
+
+  it("uses identical build metadata for every application image and service runtime", () => {
+    const metadata = buildEnvironment(options.manifest);
+    expect(metadata).toEqual({
+      BUILD_TIME: options.manifest.buildTime,
+      GIT_COMMIT: `local-${imageTag(options.manifest).slice(0, 12)}`,
+    });
+    const services = [
+      ...backendServices(options),
+      dockerWorker("coder-acp-copilot", options),
+      dockerWorker("coder-acp-claude-code", options),
+      modelScanner("coder-acp-copilot", options),
+      modelScanner("coder-acp-claude-code", options),
+    ];
+    for (const service of services.filter(service => service.image.build)) {
+      expect(service.image.name).toMatch(new RegExp(`:${imageTag(options.manifest)}$`));
+      expect(service.image.build?.args).toMatchObject(metadata);
+      expect(service.env).toMatchObject(metadata);
+    }
+  });
+
+  it.each([
+    { version: "0.2.0" },
+    { buildTime: "2026-09-12T00:00:00.000Z" },
+    { digest: "b".repeat(64) },
+    { versions: { ...options.manifest.versions, COPILOT_CLI_VERSION: "1.0.84-3" } },
+  ] satisfies Partial<AssetManifest>[])("invalidates image and commit identity when metadata changes (%j)", change => {
+    const manifest = { ...options.manifest, ...change };
+    expect(imageTag(manifest)).not.toBe(imageTag(options.manifest));
+    expect(buildEnvironment(manifest).GIT_COMMIT).not.toBe(buildEnvironment(options.manifest).GIT_COMMIT);
+    expect(applicationImage("api", "apps/api/Dockerfile", { ...options, manifest }).name)
+      .not.toBe(applicationImage("api", "apps/api/Dockerfile", options).name);
+  });
+
+  it("keeps image identity stable for equivalent component version maps", () => {
+    const versions = Object.fromEntries(Object.entries(options.manifest.versions).reverse());
+    expect(imageTag({ ...options.manifest, versions })).toBe(imageTag(options.manifest));
+  });
+
   it("starts the actual backend and Portal with migrations and no coding-agent image builds", () => {
     const services = backendServices(options);
     expect(startupOrder(services)).toHaveLength(services.length);
@@ -45,6 +106,8 @@ describe("packaged backend", () => {
     expect(worker.image.build?.dockerfile).toBe("apps/workers/coder-acp-copilot/Dockerfile.scope");
     expect(worker.image.build?.args?.COPILOT_CLI_VERSION).toBe("1.0.65");
     expect(worker.image.build?.args?.NPM_CONFIG_REGISTRY).toBe(options.registry);
+    expect(worker.env?.DEV_PROXY_ENABLED).toBe("");
+    expect(Boolean(worker.env?.DEV_PROXY_ENABLED)).toBe(false);
     expect(() => dockerWorker("coder-acp-copilot-host", options)).toThrow("Not a Docker target");
   });
 

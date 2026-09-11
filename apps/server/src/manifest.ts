@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Image, Service } from "docker-orchestrator";
@@ -17,6 +18,7 @@ export function isTargetId(value: string): value is TargetId {
 
 export interface AssetManifest {
   version: string;
+  buildTime: string;
   digest: string;
   versions: Record<string, string>;
 }
@@ -24,13 +26,32 @@ export interface AssetManifest {
 export async function readAssetManifest(assets: string): Promise<AssetManifest> {
   const value: unknown = JSON.parse(await readFile(join(assets, "manifest.json"), "utf8"));
   if (typeof value !== "object" || value === null || !("version" in value) ||
-    typeof value.version !== "string" || !("digest" in value) ||
+    typeof value.version !== "string" || !("buildTime" in value) ||
+    typeof value.buildTime !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.buildTime) ||
+    !Number.isFinite(Date.parse(value.buildTime)) || !("digest" in value) ||
     typeof value.digest !== "string" || !/^[a-f0-9]{64}$/.test(value.digest) ||
     !("versions" in value) || typeof value.versions !== "object" || value.versions === null ||
     !Object.values(value.versions).every(version => typeof version === "string")) {
     throw new Error("Invalid bundled server assets. Rebuild/reinstall @scope/server.");
   }
   return value as AssetManifest;
+}
+
+export function imageTag(manifest: AssetManifest): string {
+  return createHash("sha256").update(JSON.stringify({
+    digest: manifest.digest,
+    version: manifest.version,
+    buildTime: manifest.buildTime,
+    versions: Object.entries(manifest.versions).sort(([left], [right]) => left.localeCompare(right)),
+  })).digest("hex").slice(0, 16);
+}
+
+export function buildEnvironment(manifest: AssetManifest): { BUILD_TIME: string; GIT_COMMIT: string } {
+  return {
+    BUILD_TIME: manifest.buildTime,
+    GIT_COMMIT: `local-${imageTag(manifest).slice(0, 12)}`,
+  };
 }
 
 // Public emulator key, as shipped by Azurite and docker-compose.yml; not a credential.
@@ -86,15 +107,14 @@ function httpHealth(port = 80, path = "/health"): string[] {
 export function applicationImage(name: string, dockerfile: string, options: StackOptions): Image {
   const env = options.env ?? process.env;
   return {
-    name: `scope-local/${name}:${options.manifest.digest.slice(0, 16)}`,
+    name: `scope-local/${name}:${imageTag(options.manifest)}`,
     build: {
       context: options.source,
       dockerfile: `${dockerfile}.scope`,
       args: {
         NPM_CONFIG_REGISTRY: options.registry,
-        GIT_COMMIT: `local-${options.manifest.digest.slice(0, 12)}`,
-        BUILD_TIME: options.manifest.version,
         ...options.manifest.versions,
+        ...buildEnvironment(options.manifest),
         ...Object.fromEntries(["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"].flatMap(key =>
           env[key] || env[key.toLowerCase()] ? [[key, env[key] ?? env[key.toLowerCase()]!]] : [])),
       },
@@ -103,7 +123,7 @@ export function applicationImage(name: string, dockerfile: string, options: Stac
 }
 
 export function backendServices(options: StackOptions): Service[] {
-  const env = { ...commonEnv(), ...providerEnv(options.env ?? process.env) };
+  const env = { ...commonEnv(), ...providerEnv(options.env ?? process.env), ...buildEnvironment(options.manifest) };
   const image = (name: string, dockerfile = `apps/${name}/Dockerfile`): Image => applicationImage(name, dockerfile, options);
   const mount = (name: string, target: string) => [{ source: join(options.data, name), target }];
   return [
@@ -196,7 +216,7 @@ export function backendServices(options: StackOptions): Service[] {
     {
       name: "portal", image: image("portal"), memoryMb: 128,
       dependsOn: ["api"], ports: [{ container: 80, host: options.portalPort }],
-      env: { SCOPE_AUTH_ENABLED: "false" },
+      env: { SCOPE_AUTH_ENABLED: "false", ...buildEnvironment(options.manifest) },
       healthcheck: ["wget", "-qO-", "http://127.0.0.1/"],
     },
   ];
@@ -211,7 +231,8 @@ export function dockerWorker(id: TargetId, options: StackOptions): Service {
     restart: true,
     env: {
       ...commonEnv(), ...providerEnv(options.env ?? process.env),
-      DEV_PROXY_ENABLED: "false",
+      ...buildEnvironment(options.manifest),
+      DEV_PROXY_ENABLED: "",
       WORKER_NAME: id,
       NPM_CONFIG_REGISTRY: options.registry,
     },
@@ -229,6 +250,6 @@ export function modelScanner(id: TargetId, options: StackOptions): Service {
     memoryMb: 256,
     readinessTimeoutMs: 180_000,
     command: ["node", "--import", "telemetry/register", "dist/index.js", "--dry-run"],
-    env: { ...commonEnv(), ...providerEnv(options.env ?? process.env), API_URL: "http://api:80" },
+    env: { ...commonEnv(), ...providerEnv(options.env ?? process.env), ...buildEnvironment(options.manifest), API_URL: "http://api:80" },
   };
 }

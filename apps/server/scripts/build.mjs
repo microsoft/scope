@@ -13,6 +13,7 @@ const root = fileURLToPath(new URL("../../../", import.meta.url));
 const app = join(root, "apps/server");
 const source = join(app, "assets/source");
 const packageJson = JSON.parse(await readFile(join(app, "package.json"), "utf8"));
+const buildTime = new Date().toISOString();
 const require = createRequire(join(root, "packages/shared/package.json"));
 await rm(source, { recursive: true, force: true });
 await mkdir(source, { recursive: true });
@@ -59,7 +60,7 @@ for (const worker of ["coder-acp-copilot", "coder-acp-claude-code"]) {
   const agent = require("yaml").parse(await readFile(join(source, "apps/workers", worker, "agent.yaml"), "utf8"));
   await writeFile(join(app, "assets", `${worker}.json`), JSON.stringify(agent) + "\n");
 }
-await writeFile(join(app, "assets/manifest.json"), JSON.stringify({ version: packageJson.version, digest: hash.digest("hex"), versions }, null, 2) + "\n");
+await writeFile(join(app, "assets/manifest.json"), JSON.stringify({ version: packageJson.version, buildTime, digest: hash.digest("hex"), versions }, null, 2) + "\n");
 await mkdir(join(app, "dist"), { recursive: true });
 const options = {
   bundle: true,
