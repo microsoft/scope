@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { HostWorkers, hostCaptureSetting, parseDiscoveredHost, signalHostProcess } from "./host.js";
+import { HostWorkers, hostCaptureSetting, isHostCancellation, parseDiscoveredHost, signalHostProcess } from "./host.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -48,15 +48,28 @@ describe("owned host process groups", () => {
 
   describe("host proxy configuration", () => {
     it("does not require an unconfigured gateway, but honors explicit capture settings", () => {
-      expect(hostCaptureSetting({})).toBe("false");
+      expect(Boolean(hostCaptureSetting({}))).toBe(false);
       expect(hostCaptureSetting({ DEV_PROXY_ENABLED: "true" })).toBe("true");
       expect(hostCaptureSetting({ DEV_PROXY_API_URL: "http://127.0.0.1:18000" })).toBe("true");
-      expect(hostCaptureSetting({ DEV_PROXY_ENABLED: "false", DEV_PROXY_API_URL: "http://127.0.0.1:18000" })).toBe("false");
+      expect(Boolean(hostCaptureSetting({ DEV_PROXY_ENABLED: "false", DEV_PROXY_API_URL: "http://127.0.0.1:18000" }))).toBe(false);
+      expect(Boolean(hostCaptureSetting({ DEV_PROXY_ENABLED: "0" }))).toBe(false);
+      expect(Boolean(hostCaptureSetting({ DEV_PROXY_ENABLED: "" }))).toBe(false);
     });
   });
 
   describe("host cancellation supervision", () => {
-    it("restarts exit-code-1 cancellation and keeps runtime files in the data directory", async () => {
+    it("recognizes only the selected worker's existing cancellation messages", () => {
+      const id = "coder-acp-copilot-host";
+      expect(isHostCancellation(`[${id}] Run run-1 cancelled via pub/sub — exiting process\n`, id)).toBe(true);
+      expect(isHostCancellation(`[${id}] Run run-1 cancel detected via key fallback — exiting process\r\n`, id)).toBe(true);
+      expect(isHostCancellation("genuine runtime failure", id)).toBe(false);
+      expect(isHostCancellation("[coder-acp-claude-code-host] Run run-1 cancelled via pub/sub — exiting process", id)).toBe(false);
+    });
+
+    it.each([
+      { reason: "cancellation", cancel: true },
+      { reason: "runtime failure", cancel: false },
+    ])("classifies post-ready exit1 ($reason) and keeps runtime files in the data directory", async ({ cancel }) => {
       const root = resolve("apps/server/.test-state", randomUUID());
       const dist = join(root, "dist");
       const data = join(root, "data");
@@ -81,7 +94,17 @@ describe("owned host process groups", () => {
           }));
           console.log('[${id}] Ensured queue exists: queue-${id}');
           console.log('[${id}] Connected to MongoDB');
-          if (count === 0) setTimeout(() => process.exit(1), 50);
+          if (count === 0) setTimeout(() => {
+            if (${cancel}) {
+              const marker = Buffer.from('[${id}] Run run-1 cancelled via pub/sub — exiting process\\n');
+              const split = marker.indexOf(Buffer.from('—')) + 1;
+              process.stdout.write(marker.subarray(0, split));
+              setTimeout(() => { process.stdout.write(marker.subarray(split)); process.exit(1); }, 5);
+            } else {
+              console.error('genuine runtime failure');
+              process.exit(1);
+            }
+          }, 50);
           else {
             process.once('SIGTERM', () => process.exit(0));
             setInterval(() => {}, 1000);
@@ -89,16 +112,21 @@ describe("owned host process groups", () => {
         `);
         await workers.start(id, { enabled: true, consent: true }, {});
         const workspace = join(data, "workspaces", id);
-        await vi.waitFor(async () => expect(await readFile(join(workspace, "starts"), "utf8")).toBe("2"), { timeout: 4000 });
+        if (cancel) {
+          await vi.waitFor(async () => expect(await readFile(join(workspace, "starts"), "utf8")).toBe("2"), { timeout: 4000 });
+        } else {
+          await vi.waitFor(() => expect(failures).toHaveLength(1), { timeout: 4000 });
+          expect(failures[0]).toContain("genuine runtime failure");
+        }
         const runtime = join(data, "runtime", id);
         expect(JSON.parse(await readFile(join(workspace, "runtime-env.json"), "utf8")) as unknown).toEqual({
           TMPDIR: runtime, TMP: runtime, TEMP: runtime,
         });
         expect((await stat(runtime)).isDirectory()).toBe(true);
-        expect(failures).toEqual([]);
+        if (cancel) expect(failures).toEqual([]);
         await workers.stop(id);
         await new Promise(resolve => setTimeout(resolve, 600));
-        expect(await readFile(join(workspace, "starts"), "utf8")).toBe("2");
+        expect(await readFile(join(workspace, "starts"), "utf8")).toBe(cancel ? "2" : "1");
       } finally {
         await workers.stop(id);
         await rm(root, { recursive: true, force: true });

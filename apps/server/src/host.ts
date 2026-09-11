@@ -76,7 +76,16 @@ export function signalHostProcess(
 }
 
 export function hostCaptureSetting(env: NodeJS.ProcessEnv): string {
-  return env.DEV_PROXY_ENABLED ?? (env.DEV_PROXY_API_URL ? "true" : "false");
+  // Existing workers enable capture for any nonempty value, including "false".
+  if (env.DEV_PROXY_ENABLED === "false" || env.DEV_PROXY_ENABLED === "0") return "";
+  return env.DEV_PROXY_ENABLED ?? (env.DEV_PROXY_API_URL ? "true" : "");
+}
+
+export function isHostCancellation(output: string, id: TargetId): boolean {
+  return output.split("\n").some(line => line.includes(`[${id}] Run `) && (
+    line.trimEnd().endsWith(" cancelled via pub/sub — exiting process") ||
+    line.trimEnd().endsWith(" cancel detected via key fallback — exiting process")
+  ));
 }
 
 export class HostWorkers {
@@ -144,12 +153,17 @@ export class HostWorkers {
     });
     this.children.set(id, child);
     let output = "";
-    const record = (chunk: Buffer): void => {
-      const message = chunk.toString();
+    let stdout = "";
+    const record = (message: string): void => {
       output = `${output}${message}`.slice(-8192);
       process.stdout.write(`[${id}] ${message}`);
     };
-    child.stdout?.on("data", record);
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", (message: string) => {
+      stdout = `${stdout}${message}`.slice(-8192);
+      record(message);
+    });
     child.stderr?.on("data", record);
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -158,42 +172,37 @@ export class HostWorkers {
       }, 90_000);
       const cleanup = (): void => {
         clearTimeout(timeout);
-        child.off("message", ready);
         child.off("error", failed);
         child.off("exit", exited);
         child.stdout?.off("data", checkStartup);
-      };
-      const ready = (message: unknown): void => {
-        if (typeof message === "object" && message !== null && "type" in message && message.type === "ready") {
-          cleanup();
-          resolve();
-        }
       };
       const failed = (error: Error): void => { cleanup(); reject(error); };
       const exited = (code: number | null): void => { cleanup(); reject(new Error(`${id} exited (${code}).\n${output}`)); };
       // Existing workers log both messages after queue creation and the database connection.
       const checkStartup = (): void => {
-        if (output.includes(`[${id}] Ensured queue exists:`) && output.includes(`[${id}] Connected to MongoDB`)) {
+        if (stdout.includes(`[${id}] Ensured queue exists:`) && stdout.includes(`[${id}] Connected to MongoDB`)) {
           cleanup();
           resolve();
         }
       };
-      child.on("message", ready);
       child.once("error", failed);
       child.once("exit", exited);
       child.stdout?.on("data", checkStartup);
     }).catch(async (error: unknown) => { await this.stop(id); throw error; });
-    child.once("exit", code => {
+    child.once("exit", () => {
       if (this.children.get(id) === child) {
-        this.children.delete(id);
         try { signalHostProcess(child, "SIGKILL"); }
         catch (error) {
+          this.children.delete(id);
           this.onFailure(id, `Failed to stop ${id} subprocesses: ${error instanceof Error ? error.message : String(error)}`);
-          return;
         }
-        // cancelExit uses code 1. Restart an initialized worker after either ordinary
-        // exit, but do not replay failed startup or resurrect an explicitly stopped target.
-        if (code === 0 || code === 1) {
+      }
+    });
+    // "close" follows stdout draining, so the final cancellation marker is available.
+    child.once("close", code => {
+      if (this.children.get(id) === child) {
+        this.children.delete(id);
+        if (code === 0 || (code === 1 && isHostCancellation(stdout, id))) {
           setTimeout(() => {
             if (this.generations.get(id) !== generation) return;
             void this.start(id, settings, backend).catch((error: unknown) => {
