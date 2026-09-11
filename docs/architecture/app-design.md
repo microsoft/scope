@@ -368,6 +368,14 @@ Profile fan-out mode is also supported for comparative runs:
 3. Each expanded request resolves configuration from its variation profile; unpinned specs resolve to `latestVersion`
 4. Expanded requests persist `profileId` and `profileVersionId` on each `RequestDocument` for indexing and traceability
 
+Host-worker admission is checked against the effective worker after profile/version
+precedence is resolved. Every host worker must have a non-deleted agent registration
+with `available: true` before submit, variation fan-out, bulk resubmit, retry, or resume
+creates or requeues work. Variation and resubmit batches reject unavailable hosts before
+inserting requests; bulk retry/resume skip them using their existing result counters.
+Retry checks run before history demotion. Docker admission and scheduler dispatch are
+unchanged; importing terminal run archives does not enqueue work.
+
 ## Runs List Query API
 
 `GET /api/v1/requests` powers the Portal **Runs** list and `scope run list`. All

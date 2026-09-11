@@ -176,6 +176,18 @@ const upload = multer({ dest: tmpdir() });
 /** Maximum number of profile variations (including the base profile) allowed in one submit. */
 const MAX_PROFILE_VARIATIONS = 25;
 
+function workerAvailabilityError(worker: string, available: boolean | undefined): string | undefined {
+  if (available === false || (worker.endsWith("-host") && available !== true)) {
+    return `Worker "${worker}" is not available for new submissions`;
+  }
+}
+
+async function hostWorkerAvailabilityError(worker: string): Promise<string | undefined> {
+  if (!worker.endsWith("-host")) return;
+  const agent = await ctx.agentCollection.findOne({ _id: worker, deletedAt: { $exists: false } });
+  return workerAvailabilityError(worker, agent?.available);
+}
+
 /**
  * Server-side validation of a request's gate configuration (docs/design/gates.md
  * §4.3). Returns an error string when invalid, or null when valid.
@@ -505,6 +517,13 @@ apiRoute(ctx.app, ctx.registry, {
         const requestedVariationAgentVersion = variationProfileVersion.agentVersion ?? requestedAgentVersion;
 
         const agentDoc = await ctx.agentCollection.findOne({ _id: variationWorkerType, deletedAt: { $exists: false } });
+        const availabilityError = variationWorkerType.endsWith("-host")
+          ? workerAvailabilityError(variationWorkerType, agentDoc?.available)
+          : undefined;
+        if (availabilityError) {
+          res.status(400).json({ error: availabilityError, variationProfileId: variationEntry.profileId });
+          return;
+        }
         if (agentDoc && agentDoc.supportedModels.length > 0) {
           if (model && !agentDoc.supportedModels.includes(model)) {
             res.status(400).json({
@@ -798,10 +817,9 @@ apiRoute(ctx.app, ctx.registry, {
 
     // Check if the worker (agent) is available for new submissions
     const workerAgent = await ctx.agentCollection.findOne({ _id: worker, deletedAt: { $exists: false } });
-    if (workerAgent?.available === false || (worker.endsWith("-host") && workerAgent?.available !== true)) {
-      res.status(400).json({
-        error: `Worker "${worker}" is not available for new submissions`,
-      });
+    const availabilityError = workerAvailabilityError(worker, workerAgent?.available);
+    if (availabilityError) {
+      res.status(400).json({ error: availabilityError });
       return;
     }
 
@@ -1784,8 +1802,9 @@ apiRoute(ctx.app, ctx.registry, {
     // Check if the overridden worker is available for new submissions
     if (overrides?.workerType) {
       const overrideAgent = await ctx.agentCollection.findOne({ _id: overrides.workerType, deletedAt: { $exists: false } });
-      if (overrideAgent?.available === false || (overrides.workerType.endsWith("-host") && overrideAgent?.available !== true)) {
-        res.status(400).json({ error: `Worker "${overrides.workerType}" is not available for new submissions` });
+      const availabilityError = workerAvailabilityError(overrides.workerType, overrideAgent?.available);
+      if (availabilityError) {
+        res.status(400).json({ error: availabilityError });
         return;
       }
     }
@@ -1898,6 +1917,14 @@ apiRoute(ctx.app, ctx.registry, {
         const effectiveWorkerType = (activeProfileVersion
           ? activeProfileVersion.workerType
           : (overrides?.workerType ?? original.workerType)) as WorkerType;
+        const agentDoc = await ctx.agentCollection.findOne({ _id: effectiveWorkerType, deletedAt: { $exists: false } });
+        const availabilityError = effectiveWorkerType.endsWith("-host")
+          ? workerAvailabilityError(effectiveWorkerType, agentDoc?.available)
+          : undefined;
+        if (availabilityError) {
+          res.status(400).json({ error: availabilityError });
+          return;
+        }
         const effectiveModel = activeProfileVersion
           ? activeProfileVersion.model
           : (overrides?.model !== undefined ? overrides.model : original.model);
@@ -1929,7 +1956,6 @@ apiRoute(ctx.app, ctx.registry, {
 
         // Resolve agent version for re-submitted run (latest active for the effective worker)
         let resolvedAgentVersion: string | undefined;
-        const agentDoc = await ctx.agentCollection.findOne({ _id: effectiveWorkerType, deletedAt: { $exists: false } });
         if (agentDoc) {
           const versionResult = resolveAgentVersion(agentDoc.versions, undefined);
           if (!("error" in versionResult)) {
@@ -2909,6 +2935,13 @@ apiRoute(ctx.app, ctx.registry, {
         continue;
       }
 
+      const availabilityError = await hostWorkerAvailabilityError(request.workerType);
+      if (availabilityError) {
+        results.push({ requestId: id, error: availabilityError });
+        skipped++;
+        continue;
+      }
+
       const runToDemote = currentRun;
       const newAttemptNumber = (runToDemote.attemptNumber ?? 1) + 1;
       const newRunId = uuidv4();
@@ -2998,6 +3031,12 @@ apiRoute(ctx.app, ctx.registry, {
       res.status(409).json({
         error: "Cannot retry a successful run unless force=true in the request body",
       });
+      return;
+    }
+
+    const availabilityError = await hostWorkerAvailabilityError(request.workerType);
+    if (availabilityError) {
+      res.status(400).json({ error: availabilityError });
       return;
     }
 
@@ -3154,6 +3193,25 @@ apiRoute(ctx.app, ctx.registry, {
   response: z.object({ id: z.string(), status: z.string() }),
   handler: async (req, res) => {
     const { id } = req.params;
+    const request = await ctx.requestCollection.findOne({
+      _id: id,
+      deletedAt: { $exists: false },
+    });
+    if (!request) {
+      res.status(404).json({ error: `Request not found: ${id}` });
+      return;
+    }
+    if (request.run?.status !== "paused") {
+      res.status(409).json({
+        error: `Cannot resume request in status "${request.run?.status}". Only paused requests can be resumed.`,
+      });
+      return;
+    }
+    const availabilityError = await hostWorkerAvailabilityError(request.workerType);
+    if (availabilityError) {
+      res.status(400).json({ error: availabilityError });
+      return;
+    }
     const result = await ctx.requestCollection.updateOne(
       {
         _id: id,
@@ -3224,9 +3282,24 @@ apiRoute(ctx.app, ctx.registry, {
   response: z.object({ updated: z.number(), skipped: z.number() }),
   handler: async (req, res) => {
     const { ids } = req.body;
+    const requests = await ctx.requestCollection.find({
+      _id: { $in: ids },
+      "run.status": "paused",
+      deletedAt: { $exists: false },
+    }).toArray();
+    const admittedIds: string[] = [];
+    for (const request of requests) {
+      if (!await hostWorkerAvailabilityError(request.workerType)) {
+        admittedIds.push(request._id);
+      }
+    }
+    if (admittedIds.length === 0) {
+      res.json({ updated: 0, skipped: ids.length });
+      return;
+    }
     const result = await ctx.requestCollection.updateMany(
       {
-        _id: { $in: ids },
+        _id: { $in: admittedIds },
         "run.status": "paused",
         deletedAt: { $exists: false },
       },
