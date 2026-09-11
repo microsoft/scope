@@ -1,8 +1,9 @@
 # Scope Server
 
-Scope Server adds a local npx deployment alongside the existing Compose and
-Kubernetes deployments. Implementation is in progress; this document does not
-announce a published npm release.
+Scope Server adds a private local npx deployment alongside the existing Compose
+and Kubernetes deployments. This document does not announce a published npm
+release. The observed runtime coverage and remaining environment blockers are
+listed below.
 
 ## Private installation and packaging
 
@@ -76,6 +77,11 @@ forwards another terminal signal. An unresponsive initial engine probe fails
 after 15 seconds and can be cancelled rather than hanging startup.
 Other Docker API requests have a two-minute socket inactivity timeout;
 streaming image builds continue while the engine sends progress.
+Container shutdown allows a 20-second graceful stop and aborts an unresponsive
+stop request after 30 seconds. If that stop fails, the launcher reports the
+failure and force-removes only the container whose ownership it already
+verified. This also applies when replacing or disabling an owned service.
+It does not remove host-backed data; failure of forced removal is still an error.
 `scope-server status` reports the current instance; `scope-server restart`
 stops and starts that instance. The launcher prints actual Portal/API URLs and
 explicit `scope env add`/`scope env use` instructions. It never changes CLI
@@ -149,6 +155,10 @@ Docker agents, without starting or building them.
 If setup fails after starting a runtime, including while publishing its
 availability, the launcher attempts to stop it before reporting failure.
 Cleanup failures are reported alongside the original setup error.
+Docker setup can outlive a CLI `--wait` timeout. Inspect `scope agent status`
+before retrying; a client timeout does not cancel the existing build. Coding
+images include full language toolchains and need several gigabytes plus build
+cache and temporary-layer headroom. Host-only setup avoids those image builds.
 
 Without this setting, status reports `enabled: false` and mutations return 404.
 The Portal's Agents page only shows **Set up local agents** when local setup is
@@ -195,3 +205,28 @@ research harness. Existing deployment authentication is unchanged.
 Additional AI providers are for Portal AI through the existing Secrets/Token
 Manager integration. Judge, feedback, and report generation retain their existing
 provider behavior and credentials.
+
+## Observed local coverage
+
+The private artifacts were exercised outside the checkout on macOS arm64 with
+Node.js 24.18 and a local Podman Docker-compatible Unix socket. The packaged
+platform retained its project, criterion, provider settings, completed request
+and report across a package restart. Both API and Portal displayed the same
+valid build timestamp. No live Linux or native Windows acceptance is claimed.
+
+| Path | Observed result |
+| --- | --- |
+| Claude Code host, installed 2.1.193 | Real coding, passing Judge evaluation, downloaded artifact producing exactly `Hello Scope!` plus a newline, and completed normal report. Setup worked through Portal and CLI. |
+| Copilot Docker, 1.0.65 | Real coding and exact downloaded-artifact output. The Judge rejected missing captured execution history, and the completed report retained that failed verdict; it was not counted as a passing evaluation. |
+| Copilot host | ACP initialization worked, but session creation was blocked by the installed CLI's personal MCP startup. No corrected host benchmark completed. |
+| Claude Code Docker | Image-layer commit failed with `no space left on device` on the shared engine. No benchmark was submitted; the target was disabled through the CLI. |
+| Portal AI | Real authoring passed with OpenAI, Anthropic's default `claude-sonnet-5`, OpenRouter and Foundry's configured `gpt-5.4-mini`. Compatible mode was exercised against an OpenAI endpoint, not every compatible server. |
+| CLI connections | Named environments reached the running instance, and an explicit API URL overrode an intentionally unreachable named-environment URL. |
+
+The validation engine reached 98% disk usage with 3.9 GB available. A stalled
+control connection was recovered by refreshing only the validation-owned
+connection; the shared engine was not restarted or globally pruned. These are
+environment limitations, not successful acceptance of the two blocked agent
+paths. Repair the installed CLI's own ACP/MCP setup or provide engine storage
+before repeating the affected path. Scope does not silently change personal
+CLI configuration or delete unrelated engine resources.

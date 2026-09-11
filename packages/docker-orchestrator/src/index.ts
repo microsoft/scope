@@ -359,8 +359,34 @@ export class Orchestrator {
     try {
       const info = await container.inspect();
       if (info.Config.Labels?.[label] !== this.owner) throw new Error(`Refusing to remove unowned container ${name}`);
-      if (info.State.Running) await container.stop({ t: 20 });
-      await container.remove();
+      let stopFailure: { error: unknown } | undefined;
+      if (info.State.Running) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 30_000);
+        try {
+          const options = { t: 20, abortSignal: controller.signal };
+          await container.stop(options);
+        } catch (error) {
+          if (hasStatus(error, 404)) return;
+          if (!hasStatus(error, 304)) {
+            stopFailure = { error };
+            this.progress({
+              service: name, phase: "stopping",
+              message: `Graceful stop failed; forcing removal of owned container: ${error instanceof Error ? error.message : String(error)}`,
+            });
+          }
+        } finally { clearTimeout(timer); }
+      }
+      if (stopFailure) {
+        try { await container.remove({ force: true }); }
+        catch (error) {
+          if (!hasStatus(error, 404)) {
+            throw new AggregateError([stopFailure.error, error], `Could not remove owned container ${name} after graceful stop failed`);
+          }
+        }
+      } else {
+        await container.remove();
+      }
     } catch (error) {
       if (!hasStatus(error, 404)) throw error;
     }

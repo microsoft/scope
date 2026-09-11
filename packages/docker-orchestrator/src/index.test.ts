@@ -196,6 +196,53 @@ describe("small service/job DSL", () => {
     expect(docker.createContainer).not.toHaveBeenCalled();
   });
 
+  it("bounds graceful shutdown and force-removes only the inspected owned container", async () => {
+    vi.useFakeTimers();
+    try {
+      const remove = vi.fn().mockResolvedValue(undefined);
+      const stop = vi.fn(({ abortSignal }: { abortSignal: AbortSignal }) => new Promise((_, reject) => {
+        abortSignal.addEventListener("abort", () => reject(new Error("Stop request aborted")), { once: true });
+      }));
+      const progress = vi.fn();
+      const docker = { getContainer: vi.fn(() => ({
+        inspect: vi.fn().mockResolvedValue({ Config: { Labels: { "dev.scope.server.owner": "scope-user" } }, State: { Running: true } }),
+        stop, remove,
+      })) };
+      const result = new Orchestrator(docker as unknown as Docker, "scope-user", progress).stopService("api");
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(remove).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await result;
+      expect(stop).toHaveBeenCalledWith({ t: 20, abortSignal: expect.any(AbortSignal) });
+      expect(remove).toHaveBeenCalledExactlyOnceWith({ force: true });
+      expect(progress).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("forcing removal of owned container") }));
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each([304, 404])("handles an already-stopped or removed container (%s) without forcing removal", async statusCode => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const docker = { getContainer: vi.fn(() => ({
+      inspect: vi.fn().mockResolvedValue({ Config: { Labels: { "dev.scope.server.owner": "scope-user" } }, State: { Running: true } }),
+      stop: vi.fn().mockRejectedValue(Object.assign(new Error("Concurrent stop"), { statusCode })),
+      remove,
+    })) };
+    await new Orchestrator(docker as unknown as Docker, "scope-user").stopService("api");
+    if (statusCode === 304) expect(remove).toHaveBeenCalledExactlyOnceWith();
+    else expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("retains graceful-stop and forced-removal errors when cleanup cannot finish", async () => {
+    const stopError = new Error("Stop failed");
+    const removeError = new Error("Remove failed");
+    const docker = { getContainer: vi.fn(() => ({
+      inspect: vi.fn().mockResolvedValue({ Config: { Labels: { "dev.scope.server.owner": "scope-user" } }, State: { Running: true } }),
+      stop: vi.fn().mockRejectedValue(stopError),
+      remove: vi.fn().mockRejectedValue(removeError),
+    })) };
+    await expect(new Orchestrator(docker as unknown as Docker, "scope-user").stopService("api"))
+      .rejects.toMatchObject({ errors: [stopError, removeError] });
+  });
+
   it.each(["pending", "transfer", "backoff"])("does not retry an image pull cancelled during %s", async phase => {
     const stream = new PassThrough();
     const docker = {
