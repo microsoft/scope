@@ -146,6 +146,9 @@ mutations are not automatically replayed: they can initiate a build.
 Unchanged setup requests do not restart a ready target. Startup explicitly
 clears availability for unselected targets, including previously registered
 Docker agents, without starting or building them.
+If setup fails after starting a runtime, including while publishing its
+availability, the launcher attempts to stop it before reporting failure.
+Cleanup failures are reported alongside the original setup error.
 
 Without this setting, status reports `enabled: false` and mutations return 404.
 The Portal's Agents page only shows **Set up local agents** when local setup is

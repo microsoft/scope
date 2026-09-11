@@ -129,15 +129,26 @@ export class AgentManager {
   }
 
   private async apply(state: AgentState): Promise<void> {
+    let startAttempted = false;
     try {
       await this.stop(state.id);
-      if (state.enabled) Object.assign(state, await this.start(state.id, state));
+      if (state.enabled) {
+        startAttempted = true;
+        Object.assign(state, await this.start(state.id, state));
+      }
       state.status = state.enabled ? "ready" : "disabled";
       state.available = state.enabled;
     } catch (error) {
+      let message = error instanceof Error ? error.message : String(error);
+      if (startAttempted) {
+        try { await this.stop(state.id); }
+        catch (cleanupError) {
+          message += `; cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`;
+        }
+      }
       state.status = "error";
       state.available = false;
-      state.error = error instanceof Error ? error.message : String(error);
+      state.error = message;
     }
   }
 

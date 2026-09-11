@@ -68,6 +68,54 @@ describe("agent setup", () => {
     await vi.waitFor(() => expect(manager.snapshot().busy).toBe(false));
   });
 
+  it.each(["coder-acp-copilot-host", "coder-acp-copilot"] as const)(
+    "stops %s when availability publication fails after starting it",
+    async id => {
+      let running = false;
+      const start = vi.fn(async () => {
+        running = true;
+        throw new Error("Availability publication failed");
+      });
+      const stop = vi.fn(async () => { running = false; });
+      const manager = new AgentManager(await directory(), start, stop);
+      await manager.activate();
+      stop.mockClear();
+      await manager.configure(id, { enabled: true, consent: true });
+      await vi.waitFor(() => expect(manager.snapshot().busy).toBe(false));
+      expect(running).toBe(false);
+      expect(stop).toHaveBeenCalledTimes(2);
+      expect(manager.controlStatus().agents.find(agent => agent.workerType === id)).toMatchObject({
+        enabled: true, available: false, error: "Availability publication failed",
+      });
+    },
+  );
+
+  it("reports cleanup failure together with the setup failure", async () => {
+    const stop = vi.fn().mockResolvedValue(undefined);
+    const manager = new AgentManager(await directory(), vi.fn().mockRejectedValue(new Error("Publication failed")), stop);
+    await manager.activate();
+    stop.mockClear();
+    stop.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("Process could not stop"));
+    await manager.configure("coder-acp-copilot-host", { enabled: true, consent: true });
+    await vi.waitFor(() => expect(manager.snapshot().busy).toBe(false));
+    expect(stop).toHaveBeenCalledTimes(2);
+    expect(manager.controlStatus().agents.find(agent => agent.workerType === "coder-acp-copilot-host")?.error)
+      .toBe("Publication failed; cleanup failed: Process could not stop");
+  });
+
+  it("does not start a replacement or retry a failed initial stop", async () => {
+    const start = vi.fn();
+    const stop = vi.fn().mockResolvedValue(undefined);
+    const manager = new AgentManager(await directory(), start, stop);
+    await manager.activate();
+    stop.mockClear();
+    stop.mockRejectedValueOnce(new Error("Existing runtime could not stop"));
+    await manager.configure("coder-acp-copilot-host", { enabled: true, consent: true });
+    await vi.waitFor(() => expect(manager.snapshot().busy).toBe(false));
+    expect(start).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
   it("does not share host consent with the other target", async () => {
     const manager = new AgentManager(await directory(), vi.fn().mockResolvedValue(undefined), vi.fn().mockResolvedValue(undefined));
     manager.choose("coder-acp-copilot-host", true);
