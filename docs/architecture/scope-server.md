@@ -81,6 +81,52 @@ stops and starts that instance. The launcher prints actual Portal/API URLs and
 explicit `scope env add`/`scope env use` instructions. It never changes CLI
 connection settings. See [CLI distribution](cli-distribution.md#named-connections).
 
+## First local benchmark
+
+Choose an installed host agent at first launch, or enable it later under
+**Agents > Set up local agents**. Host consent is separate for each target.
+For Docker targets, register the corresponding agent credential in Secrets
+before enabling the target's model scanner and worker.
+
+Create a project in Portal and add a criterion named `hello_scope_output` for
+a `hello.js` program that prints exactly `Hello Scope!` and a newline. Portal
+AI authoring is optional; when using it, register a provider key in Secrets and
+save the **Portal AI** selection. The Judge and report generator still require
+their own supported Copilot credential in Secrets, even when the coding agent
+uses Claude's host login. Host login is not copied into Token Manager.
+
+Use the separately packaged CLI (`npx --package ./scope-cli-0.0.0-dev.tgz scope`
+in place of `scope` below), the printed API URL and the project's real ID:
+
+```sh
+scope env add local --url <printed-api-url>
+scope env use local
+scope --env local env set project <project-id>
+scope --env local agent model list --id coder-acp-claude-code-host
+scope --env local run submit --worker coder-acp-claude-code-host \
+  --model haiku --criteria hello_scope_output --max-iterations 1 \
+  --message 'Create hello.js that prints exactly Hello Scope! followed by a newline, with no other output. Run node hello.js to verify it.' \
+  --no-stream
+scope --env local run logs --id <request-id> --from-start
+scope --env local run get --id <request-id> --output json
+scope --env local run download --id <request-id> --dir ./result
+node ./result/<request-id>/iteration-1/hello.js
+```
+
+The example uses the installed Claude CLI's advertised `haiku` alias; choose
+an advertised model for the selected worker rather than assuming the same model
+IDs apply to every runtime. Copilot's host worker is `coder-acp-copilot-host`.
+Keep the **Request submitted** ID, not the separate submission ID.
+
+For automatic reports, create an enabled project report template under
+**Reports > Templates** before submitting, using a model supported by the
+report generator's credential. Inspect it with
+`scope --env local report list --run <request-id>` and
+`scope --env local report get --id <report-id> --output markdown`, or open the
+same report from the Portal run. Without optional HAR capture, reports may lack
+raw tool transcripts; execution of the downloaded artifact is an independent
+check, not something to infer solely from a report's verdict.
+
 ## Local agent setup
 
 The launcher owns local processes and containers. The existing API and Portal
