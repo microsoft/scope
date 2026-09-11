@@ -184,6 +184,7 @@ docs/       Architecture, operations, research, and design documentation
 | Criteria DAGs and evaluation providers | [Criteria provider](./docs/architecture/criteria-provider.md) |
 | Writing and delivering agent skills | [Skills architecture](./docs/architecture/skills.md) |
 | CLI installation and automation | [CLI distribution](./docs/architecture/cli-distribution.md) |
+| Local npx deployment (in development) | [Scope Server](./docs/architecture/scope-server.md) |
 | Environment settings | [Environment variable reference](./ENV_VARIABLES.md) |
 | All docs | [Documentation index](./docs/README.md) |
 

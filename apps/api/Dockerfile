@@ -9,6 +9,7 @@ COPY tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/telemetry/package.json ./packages/telemetry/
 COPY packages/db-migrations/package.json ./packages/db-migrations/
+COPY packages/llm-eval/package.json ./packages/llm-eval/
 COPY apps/api/package.json ./apps/api/
 
 RUN pnpm install --frozen-lockfile

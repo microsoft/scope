@@ -7,6 +7,8 @@
     "build": "pnpm -r build",
     "cli": "pnpm --filter cli exec tsx src/index.ts",
     "build:cli": "pnpm --filter shared build && pnpm --filter cli build",
+    "build:server": "pnpm --filter @scope/server... build",
+    "pack:server": "pnpm build:server && pnpm --dir apps/server pack --pack-destination .artifacts",
     "dev:api": "pnpm --filter api dev",
     "dev:portal": "pnpm --filter portal dev",
     "shared-infra:setup": "scripts/shared-infra-setup.sh",

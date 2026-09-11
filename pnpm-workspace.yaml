@@ -5,6 +5,7 @@ packages:
   - apps/judge
   - apps/portal
   - apps/scheduler
+  - apps/server
   - apps/token-manager
   - apps/workers/*
   - apps/model-scanners/*
@@ -14,6 +15,7 @@ packages:
   - packages/github-auth
   - packages/model-scanning
   - packages/db-migrations
+  - packages/docker-orchestrator
   - packages/llm-eval
   - packages/telemetry
 

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect } from "vitest";
-import { buildSubprocessEnv } from "./index.js";
+import { buildSubprocessEnv } from "./worker.js";
 
 describe("buildSubprocessEnv", () => {
   const token = "gho_test_token_1234567890";
