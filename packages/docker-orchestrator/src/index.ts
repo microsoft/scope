@@ -128,6 +128,7 @@ export class Orchestrator {
   private readonly network: string;
   private cancelled = false;
   private cancelTransfer: (() => void) | undefined;
+  private cancelConnection: (() => void) | undefined;
 
   constructor(
     private readonly docker: Docker,
@@ -140,13 +141,28 @@ export class Orchestrator {
   async connect(): Promise<void> {
     for (let attempt = 0; ; attempt++) {
       this.checkCancelled();
+      const controller = new AbortController();
+      this.cancelConnection = () => controller.abort(new Error("Scope startup cancelled"));
+      const timeout = setTimeout(() => controller.abort(new Error(
+        "The local Docker engine did not respond within 15 seconds. Check the selected engine and its socket.",
+      )), 15_000);
+      timeout.unref();
       try {
-        await this.docker.ping();
+        // Dockerode supports these options; its type declarations omit this overload.
+        const ping: (options: { abortSignal: AbortSignal }) => Promise<unknown> = this.docker.ping.bind(this.docker);
+        await ping({ abortSignal: controller.signal });
         break;
       } catch (error) {
+        if (controller.signal.aborted) {
+          const reason: unknown = controller.signal.reason;
+          throw reason;
+        }
         if (attempt === 2 || !isTransportError(error)) throw error;
         this.progress({ service: "docker", phase: "starting", message: "Retrying the local engine connection" });
         await sleep(500 * 2 ** attempt);
+      } finally {
+        clearTimeout(timeout);
+        this.cancelConnection = undefined;
       }
     }
     this.checkCancelled();
@@ -330,6 +346,7 @@ export class Orchestrator {
 
   cancel(): void {
     this.cancelled = true;
+    this.cancelConnection?.();
     this.cancelTransfer?.();
   }
 

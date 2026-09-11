@@ -73,6 +73,38 @@ describe("small service/job DSL", () => {
     expect(docker.getNetwork).toHaveBeenCalledOnce();
   });
 
+  it("aborts a nonresponding engine probe instead of hanging startup", async () => {
+    vi.useFakeTimers();
+    try {
+      const docker = {
+        ping: vi.fn(({ abortSignal }: { abortSignal: AbortSignal }) => new Promise((_, reject) => {
+          abortSignal.addEventListener("abort", () => reject(new Error("Aborted")), { once: true });
+        })),
+        getNetwork: vi.fn(),
+      };
+      const result = expect(new Orchestrator(docker as unknown as Docker, "scope-user").connect())
+        .rejects.toThrow("did not respond within 15 seconds");
+      await vi.advanceTimersByTimeAsync(15_000);
+      await result;
+      expect(docker.ping).toHaveBeenCalledOnce();
+      expect(docker.getNetwork).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("cancels an in-flight engine probe without waiting for its timeout", async () => {
+    const docker = {
+      ping: vi.fn(({ abortSignal }: { abortSignal: AbortSignal }) => new Promise((_, reject) => {
+        abortSignal.addEventListener("abort", () => reject(new Error("Aborted")), { once: true });
+      })),
+      getNetwork: vi.fn(),
+    };
+    const orchestrator = new Orchestrator(docker as unknown as Docker, "scope-user");
+    const result = expect(orchestrator.connect()).rejects.toThrow("Scope startup cancelled");
+    orchestrator.cancel();
+    await result;
+    expect(docker.getNetwork).not.toHaveBeenCalled();
+  });
+
   it("reports real failed-job output and does not start dependents", async () => {
     const container = {
       start: vi.fn().mockResolvedValue(undefined),

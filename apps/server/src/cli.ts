@@ -181,6 +181,7 @@ async function main(): Promise<void> {
   let control: Awaited<ReturnType<typeof startControl>> | undefined;
   let agents: AgentManager | undefined;
   let closing = false;
+  let engineConnected = false;
   let backendReady = false;
   let startupError: unknown;
   const status: ServerStatus = { status: "starting", dataDir: paths.data };
@@ -238,6 +239,7 @@ async function main(): Promise<void> {
     agents = new AgentManager(paths.config, startAgent, stopAgent);
     if (!await agents.load()) await firstRun(agents, values["non-interactive"] ?? false);
     await runtime.connect();
+    engineConnected = true;
     // Clean up only this OS user's stale resources, preserving all host data.
     await runtime.stop();
     await runtime.connect();
@@ -292,14 +294,15 @@ async function main(): Promise<void> {
   } finally {
     closing = true;
     status.status = "stopping";
-    process.off("SIGINT", requestStop);
-    process.off("SIGTERM", requestStop);
     const errors: unknown[] = [];
-    try { await agents?.close(); } catch (error) { errors.push(error); }
-    try { await orchestrator?.stop(); } catch (error) { errors.push(error); }
+    try { if (backendReady) await agents?.close(); } catch (error) { errors.push(error); }
+    try { if (engineConnected) await orchestrator?.stop(); } catch (error) { errors.push(error); }
     try { await control?.close(); } catch (error) { errors.push(error); }
     await rm(runtimeFile, { force: true });
     await release();
+    // npx may forward a second terminal signal while asynchronous cleanup is still running.
+    process.off("SIGINT", requestStop);
+    process.off("SIGTERM", requestStop);
     if (errors.length) {
       const cleanupError = new AggregateError(errors, "Scope stopped with cleanup errors; persistent data was retained");
       if (startupError) console.error(cleanupError.message);

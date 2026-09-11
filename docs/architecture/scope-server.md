@@ -71,6 +71,9 @@ container volumes. `--api-port` and `--portal-port` can select ports; otherwise
 the first startup allocates ports and retains them for later starts.
 
 Ctrl+C or `scope-server stop` stops owned services without deleting data.
+Signal handlers remain active until cleanup finishes, including when npx
+forwards another terminal signal. An unresponsive initial engine probe fails
+after 15 seconds and can be cancelled rather than hanging startup.
 `scope-server status` reports the current instance; `scope-server restart`
 stops and starts that instance. The launcher prints actual Portal/API URLs and
 explicit `scope env add`/`scope env use` instructions. It never changes CLI
