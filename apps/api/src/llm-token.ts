@@ -213,7 +213,7 @@ async function acquireSelectedInference(selection: PortalAiSettings): Promise<In
   if (selection.provider === "anthropic") {
     endpoint = "https://api.anthropic.com/v1";
     apiKey = raw;
-    model = "claude-sonnet-4-20250514";
+    model = "claude-sonnet-5";
   } else if (selection.provider === "github-models") {
     endpoint = GITHUB_MODELS_ENDPOINT;
     apiKey = raw;

@@ -243,7 +243,7 @@ uses the stored credential rather than a provider environment variable, and
 never falls through to another provider on errors. Pin a key when compatible
 endpoints/models differ. Settings-read failures also fail closed rather than
 guessing another backend. Anthropic's default model is
-`claude-sonnet-4-20250514`; use the model override to choose another available
+`claude-sonnet-5`; use the model override to choose another available
 model. Compatible provider secrets carry their required model. Existing
 extraction calls with an explicit `model` argument retain that override.
 

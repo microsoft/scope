@@ -82,7 +82,9 @@ describe("Portal provider selection and authoring", () => {
     vi.stubEnv("AZURE_AI_INFERENCE_ENDPOINT", "https://foundry.test/models");
     vi.stubEnv("AZURE_AI_INFERENCE_API_KEY", "foundry-test");
     mocks.acquire.mockResolvedValue({ value: "sk-ant-test", keyType: "anthropic-api-key" });
-    expect((await acquireInferenceClient({ provider: "anthropic" })).source).toBe("anthropic");
+    expect(await acquireInferenceClient({ provider: "anthropic" })).toMatchObject({
+      source: "anthropic", model: "claude-sonnet-5",
+    });
     expect(mocks.azure).not.toHaveBeenCalled();
   });
 
