@@ -34,6 +34,7 @@
     "@opentelemetry/sdk-trace-base": "^2.9.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "cockatiel": "^3.2.1",
+    "commander": "^14.0.0",
     "dockerode": "^4.0.9",
     "dotenv": "^16.4.5",
     "gray-matter": "^4.0.3",

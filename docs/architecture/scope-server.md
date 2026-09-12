@@ -86,10 +86,15 @@ verified. This also applies when replacing or disabling an owned service.
 It does not remove host-backed data; failure of forced removal is still an error.
 Shutdown follows reverse service order and can take several minutes when
 services use their full grace period.
-`scope-server status` reports the current instance; `scope-server restart`
-stops and starts that instance. The launcher prints actual Portal/API URLs and
-explicit `scope env add`/`scope env use` instructions. It never changes CLI
-connection settings. See [CLI distribution](cli-distribution.md#named-connections).
+The launcher uses Commander with the same styled help conventions as the Scope
+CLI. `scope-server start` is the default when no subcommand is supplied; the
+other subcommands are `stop`, `restart`, and `status`. All commands accept the
+launcher options `--data-dir`, `--api-port`, `--portal-port`, and
+`--non-interactive` for parity with older option parsing. `scope-server status`
+reports the current instance; `scope-server restart` stops and starts that
+instance. The launcher prints actual Portal/API URLs and explicit
+`scope env add`/`scope env use` instructions. It never changes CLI connection
+settings. See [CLI distribution](cli-distribution.md#named-connections).
 
 ## First local benchmark
 

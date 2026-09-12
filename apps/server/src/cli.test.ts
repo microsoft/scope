@@ -104,7 +104,7 @@ describe("launcher signal cleanup", () => {
     mocks.connect.mockRejectedValueOnce(new Error("Engine probe timed out"));
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     await import("./cli.js");
-    await vi.waitFor(() => expect(error).toHaveBeenCalledWith("Engine probe timed out"));
+    await vi.waitFor(() => expect(error).toHaveBeenCalledWith("Error:", "Engine probe timed out"));
     expect(mocks.dockerOptions).toHaveBeenCalledWith({
       socketPath: `${mocks.paths.runtime}/docker.sock`, timeout: 120_000,
     });
