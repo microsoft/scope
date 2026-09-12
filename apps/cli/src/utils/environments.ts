@@ -168,11 +168,18 @@ export class EnvironmentStore {
       .map((file) => this.read(file.slice(0, -4)));
   }
 
-  /** Create a named environment; editing existing names is an explicit set operation. */
-  add(name: string, url: string, token?: string): void {
-    if (existsSync(this.file(name))) {
+  /**
+   * Create a named environment.
+   *
+   * Editing an existing name is an explicit operation: either `env set`, or
+   * `env add --force`, which replaces the whole entry. Without `force` this
+   * refuses rather than silently discarding a saved token or project.
+   */
+  add(name: string, url: string, token?: string, force = false): void {
+    if (!force && existsSync(this.file(name))) {
       throw new Error(
-        `Environment "${name}" already exists. Use \`scope --env ${name} env set\` to edit it.`,
+        `Environment "${name}" already exists. Use \`scope --env ${name} env set\` to edit it, ` +
+        `or \`scope env add ${name} --force\` to replace it.`,
       );
     }
     this.save({ name, url: validateUrl(url), token });

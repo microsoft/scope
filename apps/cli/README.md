@@ -56,6 +56,7 @@ export PATH="$HOME/.local/bin:$PATH"
 ```bash
 scope env add local --url http://127.0.0.1:43127
 scope env add staging --url https://your-scope-api.example.com --token <token>
+scope env add local --url http://127.0.0.1:43127 --force
 scope env list
 scope env show staging
 scope env use local
@@ -72,10 +73,13 @@ scope env remove staging
 
 `local` is an ordinary, explicitly configured name. The server never adds or
 selects it for you; there is no `--local`, server discovery, or dataset identity
-mechanism. `env set` and `unset` accept `url`, `token`, `project`, or
-`SCOPE_API_URL`, `SCOPE_TOKEN`, `SCOPE_PROJECT`. A URL is required and cannot be
-unset; remove the environment instead. Omit a `set` value to read it from piped
-stdin (useful for avoiding tokens in shell history). `list`/`show` redact tokens.
+mechanism. `env add` refuses an existing name so a saved token or project is not
+silently discarded; pass `--force` to replace the whole entry, or use `env set`
+to edit individual values. `env set` and `unset` accept `url`, `token`,
+`project`, or `SCOPE_API_URL`, `SCOPE_TOKEN`, `SCOPE_PROJECT`. A URL is required
+and cannot be unset; remove the environment instead. Omit a `set` value to read
+it from piped stdin (useful for avoiding tokens in shell history).
+`list`/`show` redact tokens.
 
 Each named environment has an independent `environments/<name>.env` file plus
 an `active-environment` selector under:

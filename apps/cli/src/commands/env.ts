@@ -42,9 +42,14 @@ export function registerEnvCommands(program: Command): void {
   env.action(() => { env.help(); });
   env.command("add").argument("<name>").requiredOption("--url <url>", "Scope API URL")
     .option("--token <token>", "Optional Scope bearer token")
-    .action((name: string, options: { url: string; token?: string }) => {
-      new EnvironmentStore().add(name, options.url, options.token);
-      console.log(`Environment "${name}" added. Select it with \`scope env use ${name}\`.`);
+    .option("--force", "Replace an existing environment of the same name")
+    .action((name: string, options: { url: string; token?: string; force?: boolean }) => {
+      const store = new EnvironmentStore();
+      const replaced = options.force && store.list().some((entry) => entry.name === name);
+      store.add(name, options.url, options.token, options.force ?? false);
+      console.log(replaced
+        ? `Environment "${name}" replaced. Select it with \`scope env use ${name}\`.`
+        : `Environment "${name}" added. Select it with \`scope env use ${name}\`.`);
     });
   withOutputOption(env.command("list").description("List saved environments (tokens are redacted)"))
     .action((options: { output: OutputFormat }) => {

@@ -146,6 +146,24 @@ describe("named environment commands and isolated storage", () => {
     await expect(run("--env", "local", "env", "unset", "url")).rejects.toThrow("requires its URL");
     await expect(run("--env", "local", "env", "set", "PATH", "override")).rejects.toThrow("Unknown environment key");
   });
+
+  it("replaces an existing environment only when --force is given", async () => {
+    store.add("dup", "https://first.example", "first-token");
+    store.set("dup", "SCOPE_PROJECT", "keep-me");
+    expect(() => store.add("dup", "https://second.example")).toThrow("already exists");
+    // The refusal must not have modified anything.
+    expect(store.read("dup").url).toBe("https://first.example");
+    expect(store.read("dup").project).toBe("keep-me");
+
+    await run("env", "add", "dup", "--url", "https://second.example", "--force");
+    const replaced = store.read("dup");
+    expect(replaced.url).toBe("https://second.example");
+    // --force replaces the whole entry rather than merging, so stale values go.
+    expect(replaced.token).toBeUndefined();
+    expect(replaced.project).toBeUndefined();
+    // Name validation still applies with --force.
+    expect(() => store.add("../outside", "https://example.com", undefined, true)).toThrow();
+  });
 });
 
 describe("integrated environment resolution and precedence", () => {
