@@ -164,9 +164,13 @@ same report from the Portal run. If HAR capture fails, reports may lack raw
 tool transcripts; execution of the downloaded artifact remains an independent
 check, but missing capture is a setup failure rather than an expected
 local-server mode.
-Docker coding agents use the local gateway proxy for capture by default, while
-the Compose-only ACP Claude Code path remains explicitly pinned to its DevProxy
-sidecar until Phase 4 of the gateway migration. The worker env keeps the legacy
+Capture is enabled for the **Copilot Docker** worker only, matching the state of
+the gateway migration: `docker-compose.yml` runs Copilot on the gateway but still
+pins ACP Claude Code to its DevProxy sidecar. That pin is not arbitrary — routing
+Claude Code through the gateway makes its natively compiled CLI fail with
+`Unable to connect to API (ConnectionRefused)` and record an empty HAR. The local
+stack ships no DevProxy sidecar, so Claude Docker runs uncaptured until the
+gateway supports it (Phase 4). The worker env keeps the legacy
 `DEV_PROXY_ENABLED` and `DEV_PROXY_API_URL` names because both gateway and
 DevProxy clients still read them; only `PROXY_BACKEND` selects the backend.
 
@@ -180,8 +184,11 @@ CA. A real Claude Code host run with capture forced on fails with
 `Unable to connect to API (FailedToOpenSocket)` and records an empty HAR, so
 forcing it on would break the working host path to collect evidence it cannot
 actually collect. Host runs therefore rely on snapshots, evaluation and
-downloaded-artifact execution rather than a raw HTTP transcript. Making this
-work needs a CA-trust and proxy mechanism the native CLIs actually honour.
+downloaded-artifact execution rather than a raw HTTP transcript.
+
+In short, gateway capture is only known to work for Copilot. Extending it to
+Claude Code — in either runtime — needs a CA-trust and proxy mechanism its
+native CLI actually honours, and is the same work that blocks Phase 4.
 
 ## Local agent setup
 

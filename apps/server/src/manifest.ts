@@ -350,13 +350,19 @@ export function dockerWorker(id: TargetId, options: StackOptions): Service {
     env: {
       ...commonEnv(), ...providerEnv(options.env ?? process.env),
       ...buildEnvironment(options.manifest),
-      // Local server runs use the gateway by default. Compose-only ACP Claude
-      // Code still pins PROXY_BACKEND=devproxy explicitly, so removing that pin
-      // cannot silently choose the old sidecar in new server deployments.
+      // Capture is enabled only for the Copilot worker, matching the state of the
+      // gateway migration: docker-compose runs Copilot on the gateway but still
+      // pins ACP Claude Code to its DevProxy sidecar. That pin is not arbitrary —
+      // routing Claude Code through the gateway makes its natively compiled CLI
+      // fail with "Unable to connect to API (ConnectionRefused)" and record an
+      // empty HAR, because it does not honour the Node proxy/TLS mechanisms the
+      // worker sets. Enabling capture for it would trade a working benchmark for
+      // evidence it cannot produce. The local stack has no DevProxy sidecar, so
+      // Claude Docker runs uncaptured until the gateway supports it (Phase 4).
       // Legacy variable names are retained because both proxy clients still use
       // DEV_PROXY_ENABLED/DEV_PROXY_API_URL even when PROXY_BACKEND selects the gateway.
       PROXY_BACKEND: "gateway",
-      DEV_PROXY_ENABLED: "true",
+      DEV_PROXY_ENABLED: id === "coder-acp-copilot" ? "true" : "",
       DEV_PROXY_API_URL: "http://gateway:18000",
       ...(id === "coder-acp-copilot" ? { GATEWAY_TOKEN_PLUGIN_ENABLED: "false" } : {}),
       WORKER_NAME: id,

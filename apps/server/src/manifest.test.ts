@@ -144,7 +144,9 @@ describe("packaged backend", () => {
     const claudeWorker = dockerWorker("coder-acp-claude-code", options);
     expect(claudeWorker.env).toMatchObject({
       PROXY_BACKEND: "gateway",
-      DEV_PROXY_ENABLED: "true",
+      // Claude Code's native CLI cannot reach its API through the gateway, so
+      // capture stays off for it rather than breaking the benchmark.
+      DEV_PROXY_ENABLED: "",
       DEV_PROXY_API_URL: "http://gateway:18000",
     });
     expect(claudeWorker.env).not.toHaveProperty("GATEWAY_TOKEN_PLUGIN_ENABLED");
