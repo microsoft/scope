@@ -2645,6 +2645,11 @@ describe("API Endpoints", () => {
 
   describe("POST /api/v1/requests/:id/resume", () => {
     it("resumes a paused request", async () => {
+      (mocks.collection.findOne as any).mockResolvedValue({
+        _id: "r1",
+        workerType: "coder-acp-copilot",
+        run: { _id: "run1", status: "paused" },
+      });
       (mocks.collection.updateOne as any).mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
 
       const res = await request(app).post("/api/v1/requests/r1/resume");
@@ -2697,6 +2702,12 @@ describe("API Endpoints", () => {
 
   describe("POST /api/v1/requests/bulk-resume", () => {
     it("resumes multiple paused requests", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: async () => [
+          { _id: "r1", workerType: "coder-acp-copilot", run: { status: "paused" } },
+          { _id: "r2", workerType: "coder-acp-copilot", run: { status: "paused" } },
+        ],
+      });
       (mocks.collection.updateMany as any).mockResolvedValue({ matchedCount: 2, modifiedCount: 2 });
 
       const res = await request(app)
