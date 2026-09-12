@@ -5,7 +5,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { MongoClient, Collection, Db } from "mongodb";
-import { KeyDocument, AccountDocument, McpSecretDocument, McpServerDocument, type PortalAiSettingsDocument } from "shared";
+import { KeyDocument, AccountDocument, McpSecretDocument, McpServerDocument } from "shared";
 import { createSecretStore, SecretStore } from "./keyvault-store.js";
 import { createKeyRouter } from "./routes.js";
 import { createAccountRouter } from "./account-routes.js";
@@ -73,7 +73,7 @@ async function initializeClients(): Promise<void> {
   console.log(`[token-manager] Secret store: ${keyvaultUri}`);
 
   // Mount key routes
-  const router = createKeyRouter(keysCollection, secretStore, db.collection<PortalAiSettingsDocument>("portal-ai-settings"));
+  const router = createKeyRouter(keysCollection, secretStore);
   app.use(router);
 
   // Mount account routes

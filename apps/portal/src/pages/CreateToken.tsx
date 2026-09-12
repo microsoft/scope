@@ -95,18 +95,6 @@ const KEY_INSTRUCTIONS: Record<KeyType, { steps: string[]; link?: { label: strin
     link: { label: "Open Azure AI Foundry", url: "https://ai.azure.com/" },
     note: "Used by the portal's AI features (criteria / prompt-feature / task-prompt generation). When at least one valid Foundry key is registered the API prefers it over the slow public GitHub Models endpoint.",
   },
-  "openai-api-key": {
-    steps: ["Create an API key in the OpenAI platform.", "Enter the API base URL, key and model below.", "After registering, select OpenAI in Secrets → Portal AI."],
-    link: { label: "Open OpenAI API keys", url: "https://platform.openai.com/api-keys" },
-  },
-  "openrouter-api-key": {
-    steps: ["Create an API key in OpenRouter settings.", "Enter a provider-qualified model ID (for example openai/gpt-4.1).", "After registering, select OpenRouter in Secrets → Portal AI."],
-    link: { label: "Open OpenRouter keys", url: "https://openrouter.ai/settings/keys" },
-  },
-  "openai-compatible": {
-    steps: ["Use a service supporting bearer-authenticated POST /chat/completions.", "Enter its API base URL (including /v1 if required), API key and model ID.", "After registering, select the compatible provider in Secrets → Portal AI."],
-    note: "Supports non-streaming text chat. Use HTTPS; HTTP is allowed only for localhost. Other protocols, custom auth headers and Azure deployment-style URLs are not supported here.",
-  },
 };
 
 const KEY_TYPES: KeyType[] = [
@@ -117,9 +105,6 @@ const KEY_TYPES: KeyType[] = [
   "anthropic-api-key",
   "anthropic-oauth",
   "azure-ai-foundry",
-  "openai-api-key",
-  "openrouter-api-key",
-  "openai-compatible",
 ];
 
 /** Expected prefix per token type for surface-level validation. */
@@ -131,14 +116,7 @@ const KEY_PREFIXES: Record<KeyType, { prefix: string; description: string }> = {
   "anthropic-api-key": { prefix: "sk-ant-", description: "sk-ant-" },
   "anthropic-oauth": { prefix: "", description: "(any format — OAuth token)" },
   "azure-ai-foundry": { prefix: "{", description: "JSON object (endpoint + apiKey)" },
-  "openai-api-key": { prefix: "", description: "Structured API credential" },
-  "openrouter-api-key": { prefix: "", description: "Structured API credential" },
-  "openai-compatible": { prefix: "", description: "Structured API credential" },
 };
-
-function isStructured(type: KeyType): boolean {
-  return ["azure-ai-foundry", "openai-api-key", "openrouter-api-key", "openai-compatible"].includes(type);
-}
 
 /** Check if the token value matches the expected prefix for the selected type. */
 function validateKeyPrefix(tokenType: KeyType, tokenValue: string): string | null {
@@ -160,7 +138,7 @@ function validateKeyPrefix(tokenType: KeyType, tokenValue: string): string | nul
 
   // Special case: azure-ai-foundry is built from structured inputs, not a
   // raw paste — its prefix check is implicit (we serialize to JSON ourselves).
-  if (isStructured(tokenType)) {
+  if (tokenType === "azure-ai-foundry") {
     return null;
   }
 
@@ -200,15 +178,6 @@ export function CreateToken() {
   const [expiresAt, setExpiresAt] = useState("");
   const [comment, setComment] = useState("");
   const [previewResult, setPreviewResult] = useState<KeyValidationResult | null>(null);
-  const changeType = (next: KeyType) => {
-    setType(next);
-    setFoundryApiKey("");
-    setValue("");
-    setFoundryEndpoint(next === "openai-api-key" ? "https://api.openai.com/v1"
-      : next === "openrouter-api-key" ? "https://openrouter.ai/api/v1" : "");
-    setFoundryModel(next === "openai-api-key" ? "gpt-4.1"
-      : next === "openrouter-api-key" ? "openai/gpt-4.1" : "");
-  };
 
   /**
    * Returns the secret string to send to the API. For Azure AI Foundry we
@@ -216,7 +185,7 @@ export function CreateToken() {
    * validator + the API's `acquireInferenceClient` know how to parse.
    */
   const getSubmitValue = (): string => {
-    if (isStructured(type)) {
+    if (type === "azure-ai-foundry") {
       const endpoint = foundryEndpoint.trim().replace(/\/+$/, "");
       const apiKey = foundryApiKey.trim();
       const model = foundryModel.trim();
@@ -229,9 +198,8 @@ export function CreateToken() {
 
   /** True when the user has supplied enough input to attempt validation. */
   const hasInput = (): boolean => {
-    if (isStructured(type)) {
-      return !!foundryEndpoint.trim() && !!foundryApiKey.trim() &&
-        (type === "azure-ai-foundry" || !!foundryModel.trim());
+    if (type === "azure-ai-foundry") {
+      return !!foundryEndpoint.trim() && !!foundryApiKey.trim();
     }
     return !!value.trim();
   };
@@ -261,20 +229,18 @@ export function CreateToken() {
   const doValidate = () => {
     if (!hasInput()) {
       toast.error(
-        isStructured(type)
-          ? "Endpoint URL, API key and model are required (model optional for Foundry)"
+        type === "azure-ai-foundry"
+          ? "Endpoint URL and API key are required"
           : "Key value is required"
       );
       return;
     }
-    if (isStructured(type)) {
+    if (type === "azure-ai-foundry") {
       const trimmed = foundryEndpoint.trim();
       try {
         const parsed = new URL(trimmed);
-        const local = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
-        if ((parsed.protocol !== "https:" && !(type !== "azure-ai-foundry" && local && parsed.protocol === "http:")) ||
-          parsed.username || parsed.password || parsed.search || parsed.hash) {
-          toast.error("Use HTTPS (or HTTP localhost) without URL credentials, query or fragment");
+        if (parsed.protocol !== "https:") {
+          toast.error("Endpoint URL must use https://");
           return;
         }
       } catch {
@@ -345,8 +311,8 @@ export function CreateToken() {
               {/* Type */}
               <div className="space-y-2">
                 <Label htmlFor="type">Key Type</Label>
-                <Select value={type} onValueChange={(v) => changeType(v as KeyType)}>
-                  <SelectTrigger id="type">
+                <Select value={type} onValueChange={(v) => setType(v as KeyType)}>
+                  <SelectTrigger>
                     <SelectValue>{KEY_TYPE_LABELS[type]}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -412,7 +378,7 @@ export function CreateToken() {
                     rows={6}
                     className="font-mono text-xs"
                   />
-                ) : isStructured(type) ? (
+                ) : type === "azure-ai-foundry" ? (
                   <div className="space-y-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="foundry-endpoint" className="text-xs font-medium">Endpoint URL</Label>
@@ -421,13 +387,11 @@ export function CreateToken() {
                         type="url"
                         value={foundryEndpoint}
                         onChange={(e) => setFoundryEndpoint(e.target.value)}
-                        placeholder={type === "azure-ai-foundry" ? "https://<resource>.services.ai.azure.com/models" : "https://provider.example/v1"}
+                        placeholder="https://<resource>.services.ai.azure.com/models"
                         className="font-mono text-xs"
                       />
                       <p className="text-[11px] text-muted-foreground">
-                        {type === "azure-ai-foundry"
-                          ? "Foundry inference base URL, including the /models path."
-                          : "API base URL. Scope appends /chat/completions. Include /v1 when your provider requires it."}
+                        Base URL of your Azure AI Foundry inference endpoint. Must include the <code>/models</code> path segment (this is the inference data-plane root). No trailing slash.
                       </p>
                     </div>
                     <div className="space-y-1.5">
@@ -436,12 +400,12 @@ export function CreateToken() {
                         id="foundry-api-key"
                         value={foundryApiKey}
                         onChange={(e) => setFoundryApiKey(e.target.value)}
-                        placeholder="Paste provider API key…"
+                        placeholder="Paste Foundry resource key…"
                       />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="foundry-model" className="text-xs font-medium">
-                        Deployment / Model name <span className="text-muted-foreground">{type === "azure-ai-foundry" ? "(optional)" : "(required)"}</span>
+                        Deployment / Model name <span className="text-muted-foreground">(optional)</span>
                       </Label>
                       <Input
                         id="foundry-model"

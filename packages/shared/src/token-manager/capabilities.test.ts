@@ -9,14 +9,6 @@ const validResult: KeyValidationResult = { status: "valid" };
 const invalidResult: KeyValidationResult = { status: "invalid" };
 
 describe("deriveCapabilities", () => {
-  it.each([
-    ["openai-api-key", "openai-api"],
-    ["openrouter-api-key", "openrouter-api"],
-    ["openai-compatible", "openai-compatible"],
-  ] as const)("keeps %s isolated to its own capability", (type, capability) => {
-    expect(deriveCapabilities(type, validResult)).toEqual([capability]);
-    expect(deriveCapabilities(type, invalidResult)).toEqual([]);
-  });
   it("returns empty array for non-valid status", () => {
     expect(deriveCapabilities("github-oauth", invalidResult)).toEqual([]);
   });

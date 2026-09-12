@@ -14,50 +14,6 @@ describe("TokenManagerClient", () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.useRealTimers();
-  });
-
-  describe("Portal AI selection", () => {
-    it("reads the persisted Portal-only settings without reading provider env", async () => {
-      process.env.ANTHROPIC_API_KEY = "env-key";
-      const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
-        provider: "anthropic", keyId: "saved-key", model: "claude-model",
-      })));
-      expect(await new TokenManagerClient("http://tm.test").getPortalAiSettings())
-        .toEqual({ provider: "anthropic", keyId: "saved-key", model: "claude-model" });
-      expect(spy).toHaveBeenCalledWith("http://tm.test/api/v1/keys/portal-ai", expect.objectContaining({ method: "GET" }));
-    });
-    it("forwards strict type and key selection instead of taking an unrelated env key", async () => {
-      process.env.ANTHROPIC_API_KEY = "env-key";
-      const response = { value: "stored-key", keyId: "saved-key", keyType: "anthropic-api-key", capability: "anthropic-api" };
-      const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(response)));
-      const request = { capability: "anthropic-api", keyType: "anthropic-api-key", strictKeyType: true, keyId: "saved-key" } as const;
-      expect(await new TokenManagerClient("http://tm.test").acquirePortalToken(request)).toEqual(response);
-      expect(spy).toHaveBeenCalledWith("http://tm.test/api/v1/keys/acquire", expect.objectContaining({ body: JSON.stringify(request) }));
-    });
-    it("does not retry missing credentials", async () => {
-      const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("no key", { status: 404 }));
-      await expect(new TokenManagerClient("http://tm.test").acquirePortalToken({ capability: "openai-api" })).rejects.toThrow("HTTP 404");
-      expect(spy).toHaveBeenCalledOnce();
-    });
-    it("rejects an upstream that ignores a pinned key instead of silently switching credentials", async () => {
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
-        value: "wrong-key", keyId: "other-key", keyType: "openai-api-key", capability: "openai-api",
-      })));
-      await expect(new TokenManagerClient("http://tm.test").acquirePortalToken({
-        capability: "openai-api", keyType: "openai-api-key", strictKeyType: true, keyId: "selected-key",
-      })).rejects.toThrow("did not honor");
-    });
-    it("retries transient Token Manager failures once before returning settings", async () => {
-      vi.useFakeTimers();
-      const spy = vi.spyOn(globalThis, "fetch")
-        .mockResolvedValueOnce(new Response("", { status: 503 }))
-        .mockResolvedValueOnce(new Response('{"provider":"auto"}'));
-      const result = new TokenManagerClient("http://tm.test").getPortalAiSettings();
-      await vi.runAllTimersAsync();
-      expect(await result).toEqual({ provider: "auto" });
-      expect(spy).toHaveBeenCalledTimes(2);
-    });
   });
 
   describe("acquireToken - env var fallback", () => {

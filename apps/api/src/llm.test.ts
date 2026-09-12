@@ -3,6 +3,11 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// Mock isUnexpected so our fake responses are always treated as success.
+vi.mock("@azure-rest/ai-inference", () => ({
+  isUnexpected: () => false,
+}));
+
 // Mock the inference client acquisition; the per-test `postSpy` drives responses.
 const postSpy = vi.fn();
 vi.mock("./llm-token.js", () => ({
@@ -17,7 +22,7 @@ import { generateCriteriaPrompt, type ExistingCriterion } from "./llm.js";
 
 /** Wrap a JSON payload in the chat-completions response envelope. */
 function reply(payload: unknown) {
-  return { status: "200", body: { choices: [{ message: { content: JSON.stringify(payload) } }] } };
+  return { body: { choices: [{ message: { content: JSON.stringify(payload) } }] } };
 }
 
 /** Classify a request by its system prompt so the mock can branch. */

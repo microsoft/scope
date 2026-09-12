@@ -16,19 +16,13 @@ for that operation. See [named connections](docs/architecture/cli-distribution.m
 ## LLM Configuration (Portal AI Features)
 
 The portal's AI features — criteria prompt generation, prompt-feature
-extraction/generation, and task-prompt generation/variation — use
-`acquireInferenceClient` ([source](apps/api/src/llm-token.ts)).
-Secrets **Portal AI** settings can explicitly select OpenAI, Anthropic,
-OpenRouter, a supported OpenAI-compatible endpoint, Foundry, or GitHub Models.
-The selection is stored by Token Manager, not in a new environment variable.
-Explicit selections use only their chosen provider and optional pinned key;
-failure does not switch providers. Anthropic uses native Messages; other new
-providers use bearer-authenticated chat completions.
-
-In **Automatic** mode the existing Foundry/GitHub resolution remains:
-the **first source that returns a credential wins**; later sources are not
-consulted. See [provider credentials and settings](docs/architecture/token-manager.md)
-for supported endpoint formats. Judge, feedback, and reports are unchanged.
+extraction/generation, and task-prompt generation/variation — all call an
+OpenAI-style chat-completions endpoint through the
+[`@azure-rest/ai-inference`](https://www.npmjs.com/package/@azure-rest/ai-inference)
+SDK. Two backends are supported, resolved in `acquireInferenceClient`
+([`apps/api/src/llm-token.ts`](apps/api/src/llm-token.ts)) using the
+following priority order. The **first source that returns a credential
+wins**; later sources are not consulted.
 
 | # | Source | Trigger | `via` log tag |
 |---|--------|---------|---------------|
@@ -53,9 +47,9 @@ for supported endpoint formats. Judge, feedback, and reports are unchanged.
   the user.
 
 If no source returns a credential, the portal's AI buttons return HTTP
-`503` with an actionable error asking the user to register/select a provider
-in Secrets or configure Foundry/GitHub Models; the rest of the API works
-unchanged.
+`503` with a single actionable error message (`LLM not configured: no
+inference backend available. Please register a new secret key for GitHub
+Model or Azure Foundry.`), and the rest of the API works unchanged.
 
 Every successful acquisition also logs a single line so operators can
 verify which provider served a given AI call:
@@ -89,7 +83,7 @@ verify which provider served a given AI call:
 
 Base URL of the Azure AI Foundry inference endpoint (e.g.
 `https://<foundry-resource>.services.ai.azure.com/models`). When set together
-with `AZURE_AI_INFERENCE_API_KEY` in Automatic mode, the API issues portal-LLM calls to this
+with `AZURE_AI_INFERENCE_API_KEY` the API issues all portal-LLM calls to this
 endpoint and ignores GitHub Models. This is the recommended production
 configuration: GitHub Models' public endpoint regularly takes >1 minute under
 load (see [#847](https://github.com/growth-ecosystems/scope-core/issues/847)),
@@ -141,9 +135,7 @@ the api service's `env_file`.
 **Default:** `gpt-4.1` (applied inside the API when unset)
 **Type:** string
 
-Fallback model / deployment name for Automatic Foundry/GitHub operation.
-A selected provider's model override or credential model takes precedence;
-new provider credentials do not inherit a Foundry deployment name. For Foundry, this must
+Model name / deployment name used by both backends. For Foundry, this must
 match the deployment name on the Foundry resource. Examples: `gpt-4.1`,
 `gpt-4o`, `gpt-4.1-mini`. Put in `.env.local` (see note above).
 
@@ -180,10 +172,6 @@ is **no default project**: if none of these resolves, scoped lists and creates
 **fail fast** with an error asking you to pick a project
 (`scope project use <id>`). Point reads by `_id` (e.g. `run get -i <id>`) are
 globally unique and do not require a project.
-
-With a named CLI environment, only `--project` and that environment's
-`SCOPE_PROJECT` are consulted. `scope project use` updates the named file;
-ambient `SCOPE_PROJECT` and the legacy config do not leak into it.
 
 ### SCOPE_INITIAL_PROJECT_NAME
 **Default:** `Initial Project`
@@ -656,21 +644,6 @@ How far the queue-processor pushes out a duplicate message's visibility when the
 **Type:** integer (milliseconds)
 
 TTL applied to per-run liveness heartbeat keys in Redis (`run-heartbeat:<runId>`). The TTL is refreshed on every beat (every 15s), so the key only expires when the worker stops beating. Set comfortably above `SCOPE_RUN_HEARTBEAT_STALE_MS` so a brief beat delay never causes premature TTL expiry; the default gives 2.5× the staleness threshold.
-
-## Scope Server
-
-### SCOPE_SERVER_CONTROL_URL
-**Default:** (not set)
-**Type:** URL string (API only)
-
-Address of the local Scope Server launcher's control endpoint, reachable from
-the API container. The launcher sets this for its own stack. It enables
-`GET /api/v1/server` and `PUT /api/v1/server/agents/:workerType` to report and
-configure local host/Docker agents from Portal Agents and the CLI.
-
-When unset, status returns `{ "enabled": false, "agents": [] }` and local setup
-is unavailable. Existing Compose and Kubernetes deployments do not need this
-setting. It is not an AI-provider endpoint or an authentication token.
 
 ## Token Manager Configuration
 

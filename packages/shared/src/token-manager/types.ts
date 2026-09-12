@@ -12,14 +12,14 @@
  * The kind of credential stored (key format).
  */
 export type KeyType =
-  "github-pat-classic" | "github-pat-fine-grained" | "github-oauth" | "github-oauth-cookie-state" | "anthropic-api-key" | "anthropic-oauth" | "azure-ai-foundry" | "openai-api-key" | "openrouter-api-key" | "openai-compatible";
+  "github-pat-classic" | "github-pat-fine-grained" | "github-oauth" | "github-oauth-cookie-state" | "anthropic-api-key" | "anthropic-oauth" | "azure-ai-foundry";
 
 /**
  * What a key can do — derived from (type + detected scopes/permissions).
  * Workers acquire keys by capability, not by type.
  */
 export type KeyCapability =
-  "github-models" | "github-public-api" | "copilot-models" | "copilot-sdk" | "copilot-cli" | "claude-code-cli" | "anthropic-api" | "azure-ai-inference" | "openai-api" | "openrouter-api" | "openai-compatible";
+  "github-models" | "github-public-api" | "copilot-models" | "copilot-sdk" | "copilot-cli" | "claude-code-cli" | "anthropic-api" | "azure-ai-inference";
 
 /**
  * Validation status of a key.
@@ -115,10 +115,6 @@ export interface AcquireKeyRequest {
   capability: KeyCapability;
   /** Optional: prefer keys of this type. Falls back to any type if none available. */
   keyType?: KeyType;
-  /** Require this type instead of treating keyType as a preference. */
-  strictKeyType?: boolean;
-  /** Select one registered credential, still subject to capability and validity checks. */
-  keyId?: string;
 }
 
 /**
@@ -138,59 +134,7 @@ export const KEY_CAPABILITY_ENV_VARS: Record<KeyCapability, string> = {
   // capability matrix exhaustive; the env-var path is intentionally not
   // wired up to a single string because the credential is a JSON blob.
   "azure-ai-inference": "AZURE_AI_INFERENCE_API_KEY",
-  "openai-api": "OPENAI_API_KEY",
-  "openrouter-api": "OPENROUTER_API_KEY",
-  "openai-compatible": "OPENAI_COMPATIBLE_API_KEY",
 };
-
-export const PORTAL_AI_PROVIDERS = [
-  "auto", "azure-ai-foundry", "github-models", "anthropic", "openai", "openrouter", "openai-compatible",
-] as const;
-
-export type PortalAiProvider = Exclude<(typeof PORTAL_AI_PROVIDERS)[number], "auto">;
-
-/** Non-secret, instance-wide Portal authoring selection. Does not affect workers or Judge. */
-export interface PortalAiSettings {
-  provider: PortalAiProvider | "auto";
-  keyId?: string;
-  model?: string;
-}
-
-export interface PortalAiSettingsDocument extends PortalAiSettings {
-  _id: "default";
-}
-
-export function portalAiCredential(provider: PortalAiProvider): { capability: KeyCapability; keyType?: KeyType } {
-  switch (provider) {
-    case "azure-ai-foundry": return { capability: "azure-ai-inference", keyType: "azure-ai-foundry" };
-    case "github-models": return { capability: "github-models" };
-    case "anthropic": return { capability: "anthropic-api", keyType: "anthropic-api-key" };
-    case "openai": return { capability: "openai-api", keyType: "openai-api-key" };
-    case "openrouter": return { capability: "openrouter-api", keyType: "openrouter-api-key" };
-    case "openai-compatible": return { capability: "openai-compatible", keyType: "openai-compatible" };
-  }
-}
-
-/** The compatible protocol supported here is non-streaming /chat/completions with bearer auth. */
-export interface OpenAiSecretValue {
-  endpoint: string;
-  apiKey: string;
-  model: string;
-}
-
-export function parseOpenAiSecret(raw: string): OpenAiSecretValue | null {
-  const parsed = parseAzureAiFoundrySecret(raw);
-  if (!parsed?.model) return null;
-  try {
-    const url = new URL(parsed.endpoint);
-    const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-    if ((url.protocol !== "https:" && !(url.protocol === "http:" && local)) ||
-      url.username || url.password || url.search || url.hash) return null;
-    return { ...parsed, model: parsed.model };
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Shape of the secret stored for `azure-ai-foundry` key types.

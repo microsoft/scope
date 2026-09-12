@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { PortalAiSettings } from "shared";
+import { isUnexpected } from "@azure-rest/ai-inference";
 import { acquireInferenceClient, isLlmAvailable as inferenceAvailable } from "./llm-token.js";
 
 // ---------------------------------------------------------------------------
@@ -80,14 +80,13 @@ export async function generateTaskPrompt(
   opts: { description?: string; existingPrompt?: string },
   existingPrompts: string[] = [],
   model?: string,
-  inference?: PortalAiSettings,
 ): Promise<GenerateTaskPromptResult> {
   const { description, existingPrompt } = opts;
 
-  const { client: llm, model: providerModel } = await acquireInferenceClient(inference);
+  const { client: llm, model: foundryModel } = await acquireInferenceClient();
 
-  // Explicit argument > selected provider/credential model > legacy env/default.
-  const modelName = model || providerModel || process.env.LLM_MODEL || "gpt-4.1";
+  // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
+  const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
 
   const isVariation = !!existingPrompt;
   const systemPrompt = isVariation ? VARIATION_SYSTEM_PROMPT : GENERATE_SYSTEM_PROMPT;
@@ -107,8 +106,8 @@ export async function generateTaskPrompt(
     },
   });
 
-  if (response.status !== "200") {
-    const errBody = response.body;
+  if (isUnexpected(response)) {
+    const errBody = response.body as any;
     throw new Error(
       `LLM request failed: ${errBody?.error?.message || response.status}`,
     );

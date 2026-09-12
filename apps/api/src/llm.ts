@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { gatesSatisfyInvariant, type GateId, type PortalAiSettings } from "shared";
+import { isUnexpected } from "@azure-rest/ai-inference";
+import { gatesSatisfyInvariant, type GateId } from "shared";
 import { acquireInferenceClient, isLlmAvailable as inferenceAvailable } from "./llm-token.js";
 
 export type SuggestDirection = "parents" | "children";
@@ -205,8 +206,8 @@ async function chat(
     },
   });
 
-  if (response.status !== "200") {
-    const errBody = response.body;
+  if (isUnexpected(response)) {
+    const errBody = response.body as any;
     throw new Error(`LLM request failed: ${errBody?.error?.message || response.status}`);
   }
 
@@ -312,12 +313,11 @@ export async function generateCriteriaPrompt(
   existingCriteria: ExistingCriterion[] = [],
   newGates?: GateId[],
   model?: string,
-  inference?: PortalAiSettings,
 ): Promise<GenerateResult> {
-  const { client: llm, model: providerModel } = await acquireInferenceClient(inference);
+  const { client: llm, model: foundryModel } = await acquireInferenceClient();
 
-  // Explicit argument > selected provider/credential model > legacy env/default.
-  const modelName = model || providerModel || process.env.LLM_MODEL || "gpt-4.1";
+  // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
+  const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
 
   const parentPool = newGates
     ? existingCriteria.filter((c) => gatesSatisfyInvariant(c.gates, newGates))

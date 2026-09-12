@@ -70,12 +70,6 @@ export function deriveCapabilities(
 
     case "azure-ai-foundry":
       return ["azure-ai-inference"];
-    case "openai-api-key":
-      return ["openai-api"];
-    case "openrouter-api-key":
-      return ["openrouter-api"];
-    case "openai-compatible":
-      return ["openai-compatible"];
 
     default:
       return [];

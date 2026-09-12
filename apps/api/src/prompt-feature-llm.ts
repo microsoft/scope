@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { PromptFeatureConfig, PromptFeatureResult, SuggestedPromptFeature, type PortalAiSettings } from "shared";
+import { isUnexpected } from "@azure-rest/ai-inference";
+import { PromptFeatureConfig, PromptFeatureResult, SuggestedPromptFeature } from "shared";
 import { acquireInferenceClient, isLlmAvailable as inferenceAvailable } from "./llm-token.js";
 
 // ---------------------------------------------------------------------------
@@ -68,12 +69,11 @@ export async function generatePromptFeaturePrompt(
   behavior: string,
   existingFeatures: ExistingPromptFeature[] = [],
   model?: string,
-  inference?: PortalAiSettings,
 ): Promise<GeneratePromptFeatureResult> {
-  const { client: llm, model: providerModel } = await acquireInferenceClient(inference);
+  const { client: llm, model: foundryModel } = await acquireInferenceClient();
 
-  // Explicit argument > selected provider/credential model > legacy env/default.
-  const modelName = model || providerModel || process.env.LLM_MODEL || "gpt-4.1";
+  // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
+  const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
   const userMessage = buildGenerateUserMessage(behavior, existingFeatures);
 
   const response = await llm.path("/chat/completions").post({
@@ -88,8 +88,8 @@ export async function generatePromptFeaturePrompt(
     },
   });
 
-  if (response.status !== "200") {
-    const errBody = response.body;
+  if (isUnexpected(response)) {
+    const errBody = response.body as any;
     throw new Error(
       `LLM request failed: ${errBody?.error?.message || response.status}`,
     );
@@ -179,12 +179,11 @@ export async function extractPromptFeatures(
   taskText: string,
   features: PromptFeatureConfig[],
   model?: string,
-  inference?: PortalAiSettings,
 ): Promise<ExtractionResult> {
-  const { client: llm, model: providerModel } = await acquireInferenceClient(inference);
+  const { client: llm, model: foundryModel } = await acquireInferenceClient();
 
-  // Explicit argument > selected provider/credential model > legacy env/default.
-  const modelName = model || providerModel || process.env.LLM_MODEL || "gpt-4.1";
+  // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
+  const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
   const userMessage = buildExtractUserMessage(taskText, features);
 
   const response = await llm.path("/chat/completions").post({
@@ -199,8 +198,8 @@ export async function extractPromptFeatures(
     },
   });
 
-  if (response.status !== "200") {
-    const errBody = response.body;
+  if (isUnexpected(response)) {
+    const errBody = response.body as any;
     throw new Error(
       `LLM extraction failed: ${errBody?.error?.message || response.status}`,
     );

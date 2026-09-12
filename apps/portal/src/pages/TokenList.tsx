@@ -18,7 +18,6 @@ import { Plus, Trash2, ShieldCheck, KeyRound, AlertTriangle } from "lucide-react
 import { formatDate, formatId } from "@/lib/utils";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { PortalAiSettings } from "./PortalAiSettings";
 import {
   ListLayout,
   FilterRail,
@@ -361,7 +360,6 @@ export function TokenList() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <SecretsTabs />
-      <PortalAiSettings keys={tokens} />
       <div className="min-h-0 flex-1">
         <ListLayout
           title="Keys"

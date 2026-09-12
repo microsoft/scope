@@ -1894,39 +1894,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
         "type": "object",
       },
-      "PortalAiSettings": {
-        "properties": {
-          "keyId": {
-            "description": "Optional registered credential ID; otherwise round-robin within the selected provider.",
-            "minLength": 1,
-            "pattern": "\\S",
-            "type": "string",
-          },
-          "model": {
-            "description": "Optional Portal authoring model override.",
-            "minLength": 1,
-            "pattern": "\\S",
-            "type": "string",
-          },
-          "provider": {
-            "description": "Portal authoring provider. auto preserves the legacy Foundry → GitHub Models chain.",
-            "enum": [
-              "auto",
-              "azure-ai-foundry",
-              "github-models",
-              "anthropic",
-              "openai",
-              "openrouter",
-              "openai-compatible",
-            ],
-            "type": "string",
-          },
-        },
-        "required": [
-          "provider",
-        ],
-        "type": "object",
-      },
       "ProfileResponse": {
         "properties": {
           "_id": {
@@ -3476,40 +3443,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
         },
-        "type": "object",
-      },
-      "UpdatePortalAiSettings": {
-        "description": "Replaces the Portal-only provider selection. Use {"provider":"auto"} without keyId/model to restore legacy defaults.",
-        "properties": {
-          "keyId": {
-            "description": "Optional registered credential ID; otherwise round-robin within the selected provider.",
-            "minLength": 1,
-            "pattern": "\\S",
-            "type": "string",
-          },
-          "model": {
-            "description": "Optional Portal authoring model override.",
-            "minLength": 1,
-            "pattern": "\\S",
-            "type": "string",
-          },
-          "provider": {
-            "description": "Portal authoring provider. auto preserves the legacy Foundry → GitHub Models chain.",
-            "enum": [
-              "auto",
-              "azure-ai-foundry",
-              "github-models",
-              "anthropic",
-              "openai",
-              "openrouter",
-              "openai-compatible",
-            ],
-            "type": "string",
-          },
-        },
-        "required": [
-          "provider",
-        ],
         "type": "object",
       },
       "UpdateProfileIdentity": {
@@ -5863,62 +5796,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Create key",
         "tags": [
           "Keys",
-        ],
-      },
-    },
-    "/api/v1/keys/portal-ai": {
-      "get": {
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PortalAiSettings",
-                },
-              },
-            },
-            "description": "Success",
-          },
-          "503": {
-            "description": "Token Manager is not configured",
-          },
-        },
-        "summary": "Get the Portal AI provider selection",
-        "tags": [
-          "Secrets",
-        ],
-      },
-      "put": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdatePortalAiSettings",
-              },
-            },
-          },
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PortalAiSettings",
-                },
-              },
-            },
-            "description": "Success",
-          },
-          "400": {
-            "description": "Invalid selection or pinned credential is unavailable for this provider",
-          },
-          "503": {
-            "description": "Token Manager is not configured",
-          },
-        },
-        "summary": "Replace the Portal AI provider selection",
-        "tags": [
-          "Secrets",
         ],
       },
     },

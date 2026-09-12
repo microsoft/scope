@@ -2,24 +2,7 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect } from "vitest";
-import { parseAzureAiFoundrySecret, parseOpenAiSecret, portalAiCredential } from "./types.js";
-
-describe("Portal AI credential configuration", () => {
-  it("normalizes compatible endpoints and requires a model", () => {
-    expect(parseOpenAiSecret('{"endpoint":"https://provider.test/v1/","apiKey":" k ","model":" m "}'))
-      .toEqual({ endpoint: "https://provider.test/v1", apiKey: "k", model: "m" });
-    expect(parseOpenAiSecret('{"endpoint":"https://provider.test","apiKey":"k"}')).toBeNull();
-  });
-  it.each(["http://provider.test/v1", "file:///etc/config", "https://user:password@provider.test", "https://provider.test?key=k"])("rejects unsafe endpoint %s", (endpoint) => {
-    expect(parseOpenAiSecret(JSON.stringify({ endpoint, apiKey: "k", model: "m" }))).toBeNull();
-  });
-  it("allows an explicitly configured localhost compatible server", () => {
-    expect(parseOpenAiSecret('{"endpoint":"http://127.0.0.1:8000/v1","apiKey":"local","model":"m"}')).not.toBeNull();
-  });
-  it("reuses the existing Anthropic API key, not subscription OAuth", () => {
-    expect(portalAiCredential("anthropic")).toEqual({ capability: "anthropic-api", keyType: "anthropic-api-key" });
-  });
-});
+import { parseAzureAiFoundrySecret } from "./types.js";
 
 describe("parseAzureAiFoundrySecret", () => {
   it("parses a well-formed blob with endpoint, apiKey, and model", () => {
