@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
     dockerOptions: vi.fn(),
     connect: vi.fn(async () => {}),
     stop: vi.fn(async () => {}),
+    reclaim: vi.fn(async () => {}),
     start: vi.fn(async () => {}),
   };
 });
@@ -36,6 +37,7 @@ vi.mock("docker-orchestrator", () => ({
   Orchestrator: class {
     cancel = mocks.cancel;
     stop = mocks.stop;
+    reclaim = mocks.reclaim;
     start = mocks.start;
     connect = mocks.connect;
     hostPort = vi.fn(async () => 45000);

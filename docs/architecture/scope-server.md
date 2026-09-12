@@ -93,6 +93,16 @@ directories. Persistent data uses host bind mounts rather than anonymous
 container volumes. `--api-port` and `--portal-port` can select ports; otherwise
 the first startup allocates ports and retains them for later starts.
 
+Startup reclaims containers left by an earlier launcher that exited without
+cleaning up, matched on the ownership label so another user's services are never
+touched. Those are reported as `reclaimed`, not `stopping`: a wall of "stopping"
+lines directly after a `start` command reads like the platform is shutting down.
+A clean start reports nothing. This step deliberately does not reuse the full
+`stop()` path, which would also remove the network startup has just created —
+`startService` removes its own stale container anyway, so reclamation exists for
+containers that are not part of the run about to begin, such as a coding worker
+that was enabled previously but is not selected now.
+
 Ctrl+C or `scope-server stop` stops owned services without deleting data.
 Signal handlers remain active until cleanup finishes, including when npx
 forwards another terminal signal. An unresponsive initial engine probe fails

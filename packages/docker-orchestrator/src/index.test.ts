@@ -262,6 +262,52 @@ describe("small service/job DSL", () => {
     expect(docker.createContainer).not.toHaveBeenCalled();
   });
 
+  it("reclaims stale owned containers without touching the network or reporting a stop", async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const networkRemove = vi.fn();
+    const docker = {
+      listContainers: vi.fn().mockResolvedValue([
+        { Labels: { "dev.scope.server.service": "api" } },
+        { Labels: { "dev.scope.server.service": "portal" } },
+      ]),
+      getContainer: vi.fn(() => ({
+        inspect: vi.fn().mockResolvedValue({
+          Config: { Labels: { "dev.scope.server.owner": "scope-user" } },
+          State: { Running: false },
+        }),
+        remove,
+      })),
+      getNetwork: vi.fn(() => ({ inspect: vi.fn(), remove: networkRemove })),
+    };
+    const phases: string[] = [];
+    const orchestrator = new Orchestrator(
+      docker as unknown as Docker, "scope-user", event => phases.push(`${event.service}:${event.phase}`),
+    );
+
+    await orchestrator.reclaim();
+
+    // Both leftovers go, reported as reclaimed — never as "stopping", which
+    // directly after `start` reads like the platform is shutting down.
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(phases).toEqual(["portal:reclaimed", "api:reclaimed"]);
+    expect(phases.some(p => p.includes("stopping"))).toBe(false);
+    // The network the caller just created must survive.
+    expect(networkRemove).not.toHaveBeenCalled();
+  });
+
+  it("stays silent when there is nothing to reclaim", async () => {
+    const docker = {
+      listContainers: vi.fn().mockResolvedValue([]),
+      getContainer: vi.fn(),
+      getNetwork: vi.fn(),
+    };
+    const phases: string[] = [];
+    await new Orchestrator(
+      docker as unknown as Docker, "scope-user", event => phases.push(event.phase),
+    ).reclaim();
+    expect(phases).toEqual([]);
+  });
+
   it("bounds graceful shutdown and force-removes only the inspected owned container", async () => {
     vi.useFakeTimers();
     try {

@@ -455,13 +455,15 @@ async function handleNonStartCommand(
   return launch;
 }
 
-/** Connect Docker and remove stale owned containers from previous launcher runs. */
+/** Connect Docker and drop containers left by a launcher that exited uncleanly. */
 async function connectEngine(runtime: Orchestrator): Promise<void> {
   // The initial Docker ping is bounded inside Orchestrator.connect so a stale socket cannot hang startup forever.
   await runtime.connect();
-  // Ownership labels let startup remove only this launcher's stale containers while preserving host-backed data.
-  await runtime.stop();
-  await runtime.connect();
+  // Ownership labels keep this to our own leftovers, never another user's services.
+  // `reclaim` deliberately replaces a full `stop()` here: stop() would tear down
+  // the network connect() just created, and would report every container as
+  // "stopping" immediately after the user typed `start`.
+  await runtime.reclaim();
 }
 
 /** Assert stack options have been initialized before Docker-only setup paths use them. */

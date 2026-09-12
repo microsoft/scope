@@ -42,7 +42,7 @@ export interface Service {
 /** Progress event emitted while images and services are prepared or stopped. */
 export interface Progress {
   service: string;
-  phase: "image" | "starting" | "ready" | "stopping";
+  phase: "image" | "starting" | "ready" | "stopping" | "reclaimed";
   message?: string;
 }
 
@@ -405,6 +405,34 @@ export class Orchestrator {
     this.progress({ service: name, phase: "stopping" });
     await this.removeOwned(name);
     this.containers.delete(name);
+  }
+
+  /**
+   * Drop containers left behind by an earlier launcher that exited without
+   * cleaning up, before this run starts its own.
+   *
+   * This is deliberately not `stop()`: that also removes the network, which a
+   * starting launcher has just created, and it reports every container as
+   * "stopping" — alarming output directly after a `start` command. Reclaimed
+   * containers are reported as such, and only when there was actually something
+   * to reclaim, so a clean start stays silent.
+   *
+   * `startService` removes its own stale container anyway, so this exists for
+   * containers that are *not* part of the run about to begin — for example a
+   * coding worker that was enabled last time but is not selected now.
+   */
+  async reclaim(): Promise<void> {
+    const owned = await this.docker.listContainers({
+      all: true, filters: { label: [`${label}=${this.owner}`] },
+    });
+    const names = [...new Set(owned
+      .map(container => container.Labels["dev.scope.server.service"])
+      .filter((name): name is string => Boolean(name)))];
+    for (const name of names.reverse()) {
+      await this.removeOwned(name);
+      this.containers.delete(name);
+      this.progress({ service: name, phase: "reclaimed" });
+    }
   }
 
   /** Cancel in-flight engine probes or image transfers and make future waits fail fast. */
