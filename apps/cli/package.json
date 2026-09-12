@@ -24,7 +24,7 @@
     "pack:standalone": "pnpm build && tsx package.ts && npm pack ./dist/npm --pack-destination ./dist",
     "dev": "tsx src/index.ts",
     "start": "node dist/scope.mjs",
-    "test": "vitest run",
+    "test": "vitest run --root ../.. apps/cli/src",
     "test:integration": "vitest run --config ../../vitest.integration.config.ts"
   },
   "dependencies": {
