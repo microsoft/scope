@@ -102,12 +102,24 @@ export function signalHostProcess(
 }
 
 /**
- * Resolve the legacy capture toggle for host workers.
+ * Resolve the capture toggle for host workers.
  *
- * The gateway backend still reuses DEV_PROXY_ENABLED/DEV_PROXY_API_URL, and the
- * worker treats any nonempty DEV_PROXY_ENABLED value as enabled.
+ * The gateway backend reuses DEV_PROXY_ENABLED/DEV_PROXY_API_URL, and the worker
+ * treats any nonempty DEV_PROXY_ENABLED value as enabled.
+ *
+ * Host capture is OFF unless the operator opts in with SCOPE_HOST_CAPTURE=1.
+ * Docker workers are unaffected and always capture. The reason is that the
+ * worker routes a subprocess through the gateway using Node-only mechanisms
+ * (`NODE_OPTIONS=--use-env-proxy`, `NODE_TLS_REJECT_UNAUTHORIZED`,
+ * `NODE_EXTRA_CA_CERTS`), but a host worker ultimately spawns the user's own
+ * installed CLI, which is a natively compiled binary. It honours none of those,
+ * and does not trust the gateway's interception CA, so a real Claude Code host
+ * run fails with "Unable to connect to API (FailedToOpenSocket)" and records an
+ * empty HAR. Forcing capture on would break the working host path to collect
+ * evidence it cannot actually collect.
  */
 export function hostCaptureSetting(env: NodeJS.ProcessEnv): string {
+  if (env.SCOPE_HOST_CAPTURE !== "1") return "";
   // Existing workers enable capture for any nonempty value, including "false".
   return env.DEV_PROXY_ENABLED ?? (env.DEV_PROXY_API_URL ? "true" : "");
 }

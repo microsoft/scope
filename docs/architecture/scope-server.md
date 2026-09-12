@@ -164,12 +164,24 @@ same report from the Portal run. If HAR capture fails, reports may lack raw
 tool transcripts; execution of the downloaded artifact remains an independent
 check, but missing capture is a setup failure rather than an expected
 local-server mode.
-Docker and host coding agents now use the local gateway proxy for capture by
-default, while the Compose-only ACP Claude Code path remains explicitly pinned
-to its DevProxy sidecar until Phase 4 of the gateway migration. The worker env
-keeps the legacy `DEV_PROXY_ENABLED` and `DEV_PROXY_API_URL` names because both
-gateway and DevProxy clients still read them; only `PROXY_BACKEND` selects the
-backend.
+Docker coding agents use the local gateway proxy for capture by default, while
+the Compose-only ACP Claude Code path remains explicitly pinned to its DevProxy
+sidecar until Phase 4 of the gateway migration. The worker env keeps the legacy
+`DEV_PROXY_ENABLED` and `DEV_PROXY_API_URL` names because both gateway and
+DevProxy clients still read them; only `PROXY_BACKEND` selects the backend.
+
+**Host agents do not capture by default.** Opt in with `SCOPE_HOST_CAPTURE=1`,
+and expect it to fail with current CLIs. The worker routes its subprocess
+through the gateway using Node-only mechanisms — `NODE_OPTIONS=--use-env-proxy`,
+`NODE_TLS_REJECT_UNAUTHORIZED` and `NODE_EXTRA_CA_CERTS` — but a host worker
+ultimately spawns the user's own installed CLI, which is a natively compiled
+binary. It honours none of those and does not trust the gateway's interception
+CA. A real Claude Code host run with capture forced on fails with
+`Unable to connect to API (FailedToOpenSocket)` and records an empty HAR, so
+forcing it on would break the working host path to collect evidence it cannot
+actually collect. Host runs therefore rely on snapshots, evaluation and
+downloaded-artifact execution rather than a raw HTTP transcript. Making this
+work needs a CA-trust and proxy mechanism the native CLIs actually honour.
 
 ## Local agent setup
 
@@ -203,13 +215,12 @@ The Portal's Agents page only shows **Set up local agents** when local setup is
 enabled. The dialog supports host executable selection, explicit per-target
 host consent, Docker setup, stopping targets, and progress/error display.
 Host execution uses the user's machine and is not sandboxed by a workspace.
-Host-agent consent must also state that Scope installs a local
-TLS-intercepting gateway CA and routes the installed CLI's model traffic through
-that gateway for HAR/ATIF capture. The intercepted traffic runs under the user's
-own installed CLI login; Scope does not weaken TLS validation globally or copy
-the host login into Token Manager. If the launching shell already has
-`HTTP_PROXY`, `HTTPS_PROXY`, or `ALL_PROXY` set, host startup fails with an
-actionable error instead of silently disabling capture.
+Host-agent consent states that the agent runs as the user with their existing
+CLI login, that its personal MCP servers and agent settings are disabled for
+reproducibility, and that its traffic is decrypted by the local gateway CA when
+host capture is opted into. The intercepted traffic runs under the user's own
+installed CLI login; Scope does not weaken TLS validation globally or copy the
+host login into Token Manager.
 
 ## Worker identities
 

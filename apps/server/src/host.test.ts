@@ -47,13 +47,22 @@ describe("owned host process groups", () => {
   });
 
   describe("host proxy configuration", () => {
-    it("enables capture when the local gateway API is configured", () => {
+    it("keeps capture off for host workers unless explicitly opted in", () => {
+      // The installed CLI is a native binary that ignores Node proxy/TLS env vars
+      // and does not trust the gateway CA, so forcing capture breaks real runs.
       expect(Boolean(hostCaptureSetting({}))).toBe(false);
-      expect(hostCaptureSetting({ DEV_PROXY_ENABLED: "true" })).toBe("true");
-      expect(hostCaptureSetting({ DEV_PROXY_API_URL: "http://127.0.0.1:18000" })).toBe("true");
-      expect(hostCaptureSetting({ DEV_PROXY_ENABLED: "false", DEV_PROXY_API_URL: "http://127.0.0.1:18000" })).toBe("false");
-      expect(hostCaptureSetting({ DEV_PROXY_ENABLED: "0" })).toBe("0");
-      expect(Boolean(hostCaptureSetting({ DEV_PROXY_ENABLED: "" }))).toBe(false);
+      expect(Boolean(hostCaptureSetting({ DEV_PROXY_ENABLED: "true" }))).toBe(false);
+      expect(Boolean(hostCaptureSetting({ DEV_PROXY_API_URL: "http://127.0.0.1:18000" }))).toBe(false);
+    });
+
+    it("honours the explicit host capture opt-in", () => {
+      const optIn = { SCOPE_HOST_CAPTURE: "1" };
+      expect(hostCaptureSetting({ ...optIn, DEV_PROXY_ENABLED: "true" })).toBe("true");
+      expect(hostCaptureSetting({ ...optIn, DEV_PROXY_API_URL: "http://127.0.0.1:18000" })).toBe("true");
+      expect(hostCaptureSetting({ ...optIn, DEV_PROXY_ENABLED: "false", DEV_PROXY_API_URL: "http://127.0.0.1:18000" })).toBe("false");
+      expect(hostCaptureSetting({ ...optIn, DEV_PROXY_ENABLED: "0" })).toBe("0");
+      expect(Boolean(hostCaptureSetting({ ...optIn, DEV_PROXY_ENABLED: "" }))).toBe(false);
+      expect(Boolean(hostCaptureSetting(optIn))).toBe(false);
     });
   });
 
@@ -130,6 +139,9 @@ describe("owned host process groups", () => {
         expect(JSON.parse(await readFile(join(workspace, "runtime-env.json"), "utf8")) as unknown).toEqual({
           TMPDIR: runtime, TMP: runtime, TEMP: runtime,
           ...backend,
+          // Host capture is opt-in: the gateway vars pass through, but capture
+          // stays off because the installed CLI cannot trust the interception CA.
+          DEV_PROXY_ENABLED: "",
         });
         expect((await stat(runtime)).isDirectory()).toBe(true);
         if (cancel) expect(failures).toEqual([]);
