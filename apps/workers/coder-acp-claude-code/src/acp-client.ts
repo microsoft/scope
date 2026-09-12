@@ -141,7 +141,7 @@ export type ClaudeCodeIsolationMeta = {
   claudeCode: {
     options: {
       settingSources: [];
-      extraArgs: ["--strict-mcp-config"];
+      extraArgs: Record<string, string | null>;
     };
   };
 };
@@ -156,7 +156,8 @@ export function buildClaudeCodeIsolationMeta(): ClaudeCodeIsolationMeta {
     claudeCode: {
       options: {
         settingSources: [],
-        extraArgs: ["--strict-mcp-config"],
+        // Claude Agent SDK extraArgs keys omit "--"; null represents boolean flags.
+        extraArgs: { "strict-mcp-config": null },
       },
     },
   };

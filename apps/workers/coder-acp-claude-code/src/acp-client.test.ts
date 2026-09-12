@@ -230,18 +230,32 @@ describe("ACPClientHandler tool call logging", () => {
 
 describe("buildClaudeCodeNewSessionRequest", () => {
   it("adds Claude Code isolation metadata when host isolation is enabled", () => {
-    expect(buildClaudeCodeNewSessionRequest("/workspace", [], true)).toEqual({
+    const request = buildClaudeCodeNewSessionRequest("/workspace", [], true);
+
+    expect(request).toEqual({
       _meta: {
         claudeCode: {
           options: {
             settingSources: [],
-            extraArgs: ["--strict-mcp-config"],
+            extraArgs: { "strict-mcp-config": null },
           },
         },
       },
       cwd: "/workspace",
       mcpServers: [],
     });
+
+    const meta = request._meta as {
+      claudeCode?: {
+        options?: {
+          extraArgs?: Record<string, string | null>;
+        };
+      };
+    } | null | undefined;
+    const extraArgs = meta?.claudeCode?.options?.extraArgs;
+    expect(extraArgs?.["strict-mcp-config"]).toBeNull();
+    expect(extraArgs).not.toHaveProperty("0");
+    expect(Array.isArray(extraArgs)).toBe(false);
   });
 
   it("omits Claude Code isolation metadata for Docker workers", () => {
