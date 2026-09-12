@@ -4,7 +4,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type Docker from "dockerode";
 import { PassThrough, type Readable } from "node:stream";
-import { containerOptions, Orchestrator, startupOrder, type Service } from "./index.js";
+import { createServer } from "node:http";
+import { containerOptions, Docker as DockerClient, Orchestrator, startupOrder, type Service } from "./index.js";
 
 const service = (name: string, extra: Partial<Service> = {}): Service => ({
   name, image: { name: "redis:7.4.2-alpine" }, memoryMb: 128, ...extra,
@@ -179,6 +180,49 @@ describe("small service/job DSL", () => {
     expect(docker.buildImage).toHaveBeenCalledTimes(2);
     expect(contexts[0]).not.toBe(contexts[1]);
     expect(docker.createContainer).toHaveBeenCalledOnce();
+  });
+
+  it("lets an image build stay silent longer than the management-request timeout", async () => {
+    let completedBuild = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const server = createServer((request, response) => {
+      request.resume();
+      if (request.url?.startsWith("/build?")) {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.write(`${JSON.stringify({ stream: "Committing a large layer" })}\n`);
+        timer = setTimeout(() => {
+          completedBuild = true;
+          response.end(`${JSON.stringify({ stream: "Successfully built" })}\n`);
+        }, 250);
+      } else if (request.url?.startsWith("/containers/create")) {
+        response.writeHead(201, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ Id: "job" }));
+      } else if (request.url === "/containers/job/start") {
+        response.writeHead(204);
+        response.end();
+      } else if (request.url === "/containers/job/json") {
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify({ State: { Status: "exited", ExitCode: 0 } }));
+      } else {
+        response.writeHead(404, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ message: "Not found" }));
+      }
+    });
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Missing test server address");
+      const docker = new DockerClient({ host: "127.0.0.1", port: address.port, protocol: "http", timeout: 50 });
+      await new Orchestrator(docker, "scope-user").startService(service("job", {
+        kind: "job",
+        image: { name: "scope-local/job:test", build: { context: import.meta.dirname, dockerfile: "Dockerfile" } },
+      }));
+      expect(completedBuild).toBe(true);
+    } finally {
+      clearTimeout(timer);
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
   });
 
   it("refuses to replace a container it does not own", async () => {

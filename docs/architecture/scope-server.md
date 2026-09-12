@@ -75,8 +75,10 @@ Ctrl+C or `scope-server stop` stops owned services without deleting data.
 Signal handlers remain active until cleanup finishes, including when npx
 forwards another terminal signal. An unresponsive initial engine probe fails
 after 15 seconds and can be cancelled rather than hanging startup.
-Other Docker API requests have a two-minute socket inactivity timeout;
-streaming image builds continue while the engine sends progress.
+Ordinary Docker API requests have a two-minute socket inactivity timeout.
+Once an image build or pull starts streaming, that inactivity timeout is
+disabled: committing or decompressing large layers can legitimately be silent
+for several minutes. Ctrl+C still cancels the active image stream.
 Container shutdown allows a 20-second graceful stop and aborts an unresponsive
 stop request after 30 seconds. If that stop fails, the launcher reports the
 failure and force-removes only the container whose ownership it already

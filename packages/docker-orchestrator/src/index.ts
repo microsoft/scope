@@ -5,6 +5,7 @@ import Docker from "dockerode";
 import { setTimeout as sleep } from "node:timers/promises";
 import { PassThrough, Readable } from "node:stream";
 import { isIP } from "node:net";
+import { IncomingMessage } from "node:http";
 import { create as tar } from "tar";
 
 export interface Image {
@@ -258,6 +259,8 @@ export class Orchestrator {
   }
 
   private follow(stream: NodeJS.ReadableStream, service: string): Promise<void> {
+    // Layer compression can stay silent well beyond ordinary Docker request timeouts.
+    if (stream instanceof IncomingMessage) stream.setTimeout(0);
     return new Promise((resolve, reject) => {
       let progressError: Error | undefined;
       const cancel = (): void => { (stream as Readable).destroy(new Error("Scope startup cancelled")); };
