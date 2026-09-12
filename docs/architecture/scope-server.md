@@ -216,24 +216,31 @@ The private artifacts were exercised outside the checkout on macOS arm64 with
 Node.js 24.18 and a local Podman Docker-compatible Unix socket. The packaged
 platform retained its project, criterion, provider settings, completed request
 and report across a package restart. Both API and Portal displayed the same
-valid build timestamp. A fresh artifact download after the final package restart
-still produced the exact expected output. Its final Ctrl+C shutdown took about
-four minutes, left no owned containers, and released the runtime record without
-manual cleanup. No live Linux or native Windows acceptance is claimed.
+valid build timestamp. A fresh artifact download after restart still produced
+the exact expected output. That Ctrl+C shutdown took about four minutes, left
+no owned containers, and released the runtime record without manual cleanup.
+The later image-stream fix was also exercised through packaged startup, the
+Claude Docker benchmark, and normal shutdown with no owned containers remaining.
+Validation-only credential stores were removed after their containers stopped;
+original vault entries and host logins were retained. No live Linux or native
+Windows acceptance is claimed.
 
 | Path | Observed result |
 | --- | --- |
 | Claude Code host, installed 2.1.193 | Real coding, passing Judge evaluation, downloaded artifact producing exactly `Hello Scope!` plus a newline, and completed normal report. Setup worked through Portal and CLI. |
 | Copilot Docker, 1.0.65 | Real coding and exact downloaded-artifact output. The Judge rejected missing captured execution history, and the completed report retained that failed verdict; it was not counted as a passing evaluation. |
 | Copilot host | ACP initialization worked, but session creation was blocked by the installed CLI's personal MCP startup. No corrected host benchmark completed. |
-| Claude Code Docker | Image-layer commit failed with `no space left on device` on the shared engine. No benchmark was submitted; the target was disabled through the CLI. |
+| Claude Code Docker, ACP 0.52.0 / SDK 0.3.191 | After storage recovery and the image-stream timeout fix, one real `claude-haiku-4-5-20251001` benchmark completed coding in 18 seconds and passed Judge evaluation. The downloaded artifact produced exactly `Hello Scope!` plus a newline, exit 0; its normal report completed. |
 | Portal AI | Real authoring passed with OpenAI, Anthropic's default `claude-sonnet-5`, OpenRouter and Foundry's configured `gpt-5.4-mini`. Compatible mode was exercised against an OpenAI endpoint, not every compatible server. |
 | CLI connections | Named environments reached the running instance, and an explicit API URL overrode an intentionally unreachable named-environment URL. |
 
-The validation engine reached 98% disk usage with 3.9 GB available. A stalled
-control connection was recovered by refreshing only the validation-owned
-connection; the shared engine was not restarted or globally pruned. These are
-environment limitations, not successful acceptance of the two blocked agent
-paths. Repair the installed CLI's own ACP/MCP setup or provide engine storage
-before repeating the affected path. Scope does not silently change personal
-CLI configuration or delete unrelated engine resources.
+The first Claude Docker build exhausted the shared engine's disk. After the
+operator freed storage, the retry exposed an image-stream timeout during silent
+layer commits; the stream-specific fix above resolved it. The original failed
+builds remain distinct from the subsequent successful benchmark. Stalled
+management access was recovered through a validation-owned connection, without
+restarting or globally pruning the shared engine.
+
+Copilot host remains blocked by the installed CLI's own ACP/MCP setup. Scope
+does not silently change personal CLI configuration or delete unrelated engine
+resources.
