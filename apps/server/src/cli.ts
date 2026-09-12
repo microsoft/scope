@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { Command, CommanderError } from "commander";
 import { Docker, Orchestrator } from "docker-orchestrator";
-import { banner, errorText, label, styleText, value } from "shared/style";
+import { banner, errorText, label, styleText, value, warnBanner } from "shared/style";
 import { AgentManager, type AgentSettings } from "./agents.js";
 import { parseScannerModels, registerAgent, registerModels, setAgentAvailable } from "./api.js";
 import { startControl, type ServerStatus } from "./control.js";
@@ -310,9 +310,14 @@ async function firstRun(agents: AgentManager, nonInteractive: boolean): Promise<
       for (const id of new Set(ids)) {
         let consent = false;
         if (id.endsWith("-host")) {
-          const question = `${id} runs with YOUR files, permissions and existing CLI login. ` +
-            "Allow this target? [y/N] ";
-          consent = (await prompt.question(question)).trim().toLowerCase() === "y";
+          // Host targets are materially more invasive than Docker ones, so spell out
+          // both dimensions before asking: the agent runs as the user, and its network
+          // traffic is intercepted by the capture gateway's own CA for HAR evidence.
+          console.log(`\n${warnBanner(`${id} runs directly on this machine.`)}`);
+          console.log(`  ${label("Files and permissions:")} ${value("runs as you, with your files and your existing CLI login")}`);
+          console.log(`  ${label("Network capture:")} ${value("its HTTPS traffic is decrypted by the local gateway, which uses its own CA")}`);
+          console.log(`  ${label("Personal config:")} ${value("your personal MCP servers and agent settings are disabled for reproducibility")}`);
+          consent = (await prompt.question("Allow this target? [y/N] ")).trim().toLowerCase() === "y";
           if (!consent) continue;
         }
         agents.choose(id, consent);
