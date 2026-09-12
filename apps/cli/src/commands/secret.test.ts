@@ -151,6 +151,29 @@ describe("secret CLI", () => {
     expect(stdout).not.toContain("input-secret-value");
   });
 
+  it("never prints a secret value in any output format, even if the API returns one", async () => {
+    // Defence in depth: KeyDocument stores only a Key Vault secretName, the CLI
+    // projects a fixed metadata allowlist, and formatAsJSON rebuilds rows from
+    // that allowlist. Pin the guarantee so a future field addition cannot leak a
+    // credential through an output formatter.
+    const leaked = "sk-SHOULD-NEVER-BE-PRINTED";
+    const withValue = { ...metadata, value: leaked, secretName: "token-azure-ai-foundry-key-id" };
+    const formats: OutputFormat[] = ["table", "json", "yaml", "tsv"];
+    for (const format of formats) {
+      reply = () => json([withValue]);
+      await run("secret", "list", "-o", format);
+      reply = () => json(withValue);
+      await run("secret", "get", "key-id", "-o", format);
+      reply = () => json(withValue);
+      await run("secret", "validate", "key-id", "-o", format);
+    }
+    const printed = vi.mocked(console.log).mock.calls.map((call) => String(call[0])).join("\n");
+    expect(printed).not.toContain(leaked);
+    expect(printed).not.toContain("secretName");
+    // The commands still produced real output rather than silently printing nothing.
+    expect(printed).toContain("key-id");
+  });
+
   it("lists/gets metadata, updates metadata, previews/validates and deletes through the same API", async () => {
     reply = () => json([metadata]);
     await run("secret", "list", "--capability", "azure-ai-inference", "-o", "json");
