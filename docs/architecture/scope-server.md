@@ -82,6 +82,8 @@ stop request after 30 seconds. If that stop fails, the launcher reports the
 failure and force-removes only the container whose ownership it already
 verified. This also applies when replacing or disabling an owned service.
 It does not remove host-backed data; failure of forced removal is still an error.
+Shutdown follows reverse service order and can take several minutes when
+services use their full grace period.
 `scope-server status` reports the current instance; `scope-server restart`
 stops and starts that instance. The launcher prints actual Portal/API URLs and
 explicit `scope env add`/`scope env use` instructions. It never changes CLI
@@ -212,7 +214,10 @@ The private artifacts were exercised outside the checkout on macOS arm64 with
 Node.js 24.18 and a local Podman Docker-compatible Unix socket. The packaged
 platform retained its project, criterion, provider settings, completed request
 and report across a package restart. Both API and Portal displayed the same
-valid build timestamp. No live Linux or native Windows acceptance is claimed.
+valid build timestamp. A fresh artifact download after the final package restart
+still produced the exact expected output. Its final Ctrl+C shutdown took about
+four minutes, left no owned containers, and released the runtime record without
+manual cleanup. No live Linux or native Windows acceptance is claimed.
 
 | Path | Observed result |
 | --- | --- |
