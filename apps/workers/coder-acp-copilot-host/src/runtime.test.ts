@@ -48,12 +48,19 @@ describe("installed Copilot host runtime", () => {
     expect(() => detectCopilot({ SCOPE_HOST_EXECUTABLE: "/bin/copilot" })).toThrow("must support native --acp");
   });
 
-  it("uses a distinct worker identity and preserves host login/proxy settings", () => {
+  it("uses a distinct worker identity and preserves host login settings with capture enabled", () => {
     const detected = detectCopilot({ SCOPE_HOST_EXECUTABLE: "/bin/copilot" });
-    const runtime = copilotRuntime(detected, { SCOPE_HOST_WORKSPACE_ROOT: "/data/copilot", HTTP_PROXY: "http://company:8888" });
-    expect(runtime).toMatchObject({ workerName: WORKER_TYPE, command: "/bin/copilot", hostLogin: true, isolateHostConfig: true, captureProxy: false, workspaceRoot: "/data/copilot" });
+    const runtime = copilotRuntime(detected, { SCOPE_HOST_WORKSPACE_ROOT: "/data/copilot" });
+    expect(runtime).toMatchObject({ workerName: WORKER_TYPE, command: "/bin/copilot", hostLogin: true, isolateHostConfig: true, captureProxy: true, workspaceRoot: "/data/copilot" });
     expect(runtime).not.toHaveProperty("env");
-    expect(copilotRuntime(detected, { SCOPE_HOST_WORKSPACE_ROOT: "/data/copilot" }).captureProxy).toBe(true);
+  });
+
+  it("fails loudly instead of silently bypassing capture when an upstream proxy is inherited", () => {
+    const detected = detectCopilot({ SCOPE_HOST_EXECUTABLE: "/bin/copilot" });
+    expect(() => copilotRuntime(detected, {
+      SCOPE_HOST_WORKSPACE_ROOT: "/data/copilot",
+      HTTP_PROXY: "http://company:8888",
+    })).toThrow("Scope host HAR capture cannot run while HTTP_PROXY is already set");
   });
 
   it("requires a dedicated absolute workspace root", () => {

@@ -38,6 +38,11 @@ ISO-8601 build timestamp; that timestamp and a metadata-derived local commit
 stamp are reused in image build arguments, runtime environments, and worker
 registrations. Image cache keys include sources/generated build recipes,
 package version, build timestamp, and component versions.
+Scope Server also builds the Rust gateway proxy from source. Its first build
+compiles hundreds of crates and can take materially longer than the Node.js
+images while consuming several gigabytes of Docker engine storage. Startup
+streams Docker build progress and turns gateway `ENOSPC` failures into an
+actionable prompt to free or move Docker storage before retrying.
 An interrupted Docker build transport is retried once using cached layers;
 recipe/compiler failures are surfaced without retry. Cancelling startup also
 cancels active image transfers and prevents another retry.
@@ -138,9 +143,16 @@ For automatic reports, create an enabled project report template under
 report generator's credential. Inspect it with
 `scope --env local report list --run <request-id>` and
 `scope --env local report get --id <report-id> --output markdown`, or open the
-same report from the Portal run. Without optional HAR capture, reports may lack
-raw tool transcripts; execution of the downloaded artifact is an independent
-check, not something to infer solely from a report's verdict.
+same report from the Portal run. If HAR capture fails, reports may lack raw
+tool transcripts; execution of the downloaded artifact remains an independent
+check, but missing capture is a setup failure rather than an expected
+local-server mode.
+Docker and host coding agents now use the local gateway proxy for capture by
+default, while the Compose-only ACP Claude Code path remains explicitly pinned
+to its DevProxy sidecar until Phase 4 of the gateway migration. The worker env
+keeps the legacy `DEV_PROXY_ENABLED` and `DEV_PROXY_API_URL` names because both
+gateway and DevProxy clients still read them; only `PROXY_BACKEND` selects the
+backend.
 
 ## Local agent setup
 
@@ -174,6 +186,13 @@ The Portal's Agents page only shows **Set up local agents** when local setup is
 enabled. The dialog supports host executable selection, explicit per-target
 host consent, Docker setup, stopping targets, and progress/error display.
 Host execution uses the user's machine and is not sandboxed by a workspace.
+Host-agent consent must also state that Scope installs a local
+TLS-intercepting gateway CA and routes the installed CLI's model traffic through
+that gateway for HAR/ATIF capture. The intercepted traffic runs under the user's
+own installed CLI login; Scope does not weaken TLS validation globally or copy
+the host login into Token Manager. If the launching shell already has
+`HTTP_PROXY`, `HTTPS_PROXY`, or `ALL_PROXY` set, host startup fails with an
+actionable error instead of silently disabling capture.
 
 ## Worker identities
 

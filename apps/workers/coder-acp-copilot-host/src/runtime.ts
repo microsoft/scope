@@ -7,6 +7,17 @@ import { delimiter, isAbsolute, join, resolve } from "node:path";
 import type { CopilotWorkerRuntime } from "coder-acp-copilot/worker";
 
 export const WORKER_TYPE = "coder-acp-copilot-host";
+const inheritedProxyKeys = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"] as const;
+
+function assertNoInheritedProxyConflict(env: NodeJS.ProcessEnv): void {
+  const key = inheritedProxyKeys.find((candidate) => env[candidate]);
+  if (!key) return;
+  throw new Error(
+    `Scope host HAR capture cannot run while ${key} is already set. ` +
+    "Start Scope Server from a shell without HTTP_PROXY/HTTPS_PROXY/ALL_PROXY, " +
+    "or configure that upstream proxy outside Scope; the local gateway proxy cannot be silently bypassed.",
+  );
+}
 
 export function detectCopilot(env: NodeJS.ProcessEnv = process.env) {
   const command = env.SCOPE_HOST_EXECUTABLE || "copilot";
@@ -47,7 +58,7 @@ export function copilotRuntime(
   if (!workspaceRoot || !isAbsolute(workspaceRoot)) {
     throw new Error("SCOPE_HOST_WORKSPACE_ROOT must be an absolute, dedicated directory for this host worker.");
   }
-  const inheritedProxy = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"].some((key) => env[key]);
+  assertNoInheritedProxyConflict(env);
   return {
     workerName: WORKER_TYPE,
     command: detected.executable,
@@ -56,6 +67,6 @@ export function copilotRuntime(
     workspaceRoot,
     hostLogin: true,
     isolateHostConfig: true,
-    captureProxy: !inheritedProxy,
+    captureProxy: true,
   };
 }

@@ -75,9 +75,14 @@ export function signalHostProcess(
   }
 }
 
+/**
+ * Resolve the legacy capture toggle for host workers.
+ *
+ * The gateway backend still reuses DEV_PROXY_ENABLED/DEV_PROXY_API_URL, and the
+ * worker treats any nonempty DEV_PROXY_ENABLED value as enabled.
+ */
 export function hostCaptureSetting(env: NodeJS.ProcessEnv): string {
   // Existing workers enable capture for any nonempty value, including "false".
-  if (env.DEV_PROXY_ENABLED === "false" || env.DEV_PROXY_ENABLED === "0") return "";
   return env.DEV_PROXY_ENABLED ?? (env.DEV_PROXY_API_URL ? "true" : "");
 }
 
@@ -98,6 +103,7 @@ export class HostWorkers {
   ) {}
 
   private environment(id: TargetId, settings: AgentSettings, backend: Record<string, string>): NodeJS.ProcessEnv {
+    const captureEnv = { ...process.env, ...backend };
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       ...backend,
@@ -107,7 +113,7 @@ export class HostWorkers {
       TEMP: join(this.data, "runtime", id),
       ...(settings.executable ? { SCOPE_HOST_EXECUTABLE: settings.executable } : {}),
       NODE_ENV: "development",
-      DEV_PROXY_ENABLED: hostCaptureSetting(process.env),
+      DEV_PROXY_ENABLED: hostCaptureSetting(captureEnv),
     };
     // Container-only emulation flags must not weaken TLS for the user's installed CLI.
     delete env.NODE_TLS_REJECT_UNAUTHORIZED;

@@ -47,12 +47,12 @@ describe("owned host process groups", () => {
   });
 
   describe("host proxy configuration", () => {
-    it("does not require an unconfigured gateway, but honors explicit capture settings", () => {
+    it("enables capture when the local gateway API is configured", () => {
       expect(Boolean(hostCaptureSetting({}))).toBe(false);
       expect(hostCaptureSetting({ DEV_PROXY_ENABLED: "true" })).toBe("true");
       expect(hostCaptureSetting({ DEV_PROXY_API_URL: "http://127.0.0.1:18000" })).toBe("true");
-      expect(Boolean(hostCaptureSetting({ DEV_PROXY_ENABLED: "false", DEV_PROXY_API_URL: "http://127.0.0.1:18000" }))).toBe(false);
-      expect(Boolean(hostCaptureSetting({ DEV_PROXY_ENABLED: "0" }))).toBe(false);
+      expect(hostCaptureSetting({ DEV_PROXY_ENABLED: "false", DEV_PROXY_API_URL: "http://127.0.0.1:18000" })).toBe("false");
+      expect(hostCaptureSetting({ DEV_PROXY_ENABLED: "0" })).toBe("0");
       expect(Boolean(hostCaptureSetting({ DEV_PROXY_ENABLED: "" }))).toBe(false);
     });
   });
@@ -81,6 +81,11 @@ describe("owned host process groups", () => {
         await mkdir(data, { recursive: true });
         await writeFile(join(root, "package.json"), '{"type":"module"}');
         await copyFile(resolve("apps/server/src/host-lifecycle.ts"), join(dist, "host-lifecycle.js"));
+        const backend = {
+          PROXY_BACKEND: "gateway",
+          DEV_PROXY_ENABLED: "true",
+          DEV_PROXY_API_URL: "http://127.0.0.1:18900",
+        };
         await writeFile(join(dist, `${id}.js`), `
           import { readFileSync, writeFileSync } from 'node:fs';
           import { join } from 'node:path';
@@ -90,7 +95,10 @@ describe("owned host process groups", () => {
           try { count = Number(readFileSync(file, 'utf8')); } catch {}
           writeFileSync(file, String(count + 1));
           writeFileSync(join(root, 'runtime-env.json'), JSON.stringify({
-            TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP
+            TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP,
+            PROXY_BACKEND: process.env.PROXY_BACKEND,
+            DEV_PROXY_ENABLED: process.env.DEV_PROXY_ENABLED,
+            DEV_PROXY_API_URL: process.env.DEV_PROXY_API_URL
           }));
           console.log('[${id}] Ensured queue exists: queue-${id}');
           console.log('[${id}] Connected to MongoDB');
@@ -110,7 +118,7 @@ describe("owned host process groups", () => {
             setInterval(() => {}, 1000);
           }
         `);
-        await workers.start(id, { enabled: true, consent: true }, {});
+        await workers.start(id, { enabled: true, consent: true }, backend);
         const workspace = join(data, "workspaces", id);
         if (cancel) {
           await vi.waitFor(async () => expect(await readFile(join(workspace, "starts"), "utf8")).toBe("2"), { timeout: 4000 });
@@ -121,6 +129,7 @@ describe("owned host process groups", () => {
         const runtime = join(data, "runtime", id);
         expect(JSON.parse(await readFile(join(workspace, "runtime-env.json"), "utf8")) as unknown).toEqual({
           TMPDIR: runtime, TMP: runtime, TEMP: runtime,
+          ...backend,
         });
         expect((await stat(runtime)).isDirectory()).toBe(true);
         if (cancel) expect(failures).toEqual([]);

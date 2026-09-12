@@ -84,13 +84,42 @@ describe("packaged backend", () => {
     expect(startupOrder(services)).toHaveLength(services.length);
     expect(services.map(item => item.name)).toEqual(expect.arrayContaining([
       "mongodb", "redis", "azurite", "db-migrate", "storage-init", "api",
-      "judge", "scheduler", "token-manager", "portal", "post-processor", "report-generator",
+      "judge", "scheduler", "token-manager", "gateway", "portal", "post-processor", "report-generator",
     ]));
     expect(services.some(item => targetIds.includes(item.name as typeof targetIds[number]))).toBe(false);
     const migration = services.find(item => item.name === "db-migrate")!;
     expect(migration.kind).toBe("job");
     expect(migration.image.build?.dockerfile).toBe("packages/db-migrations/Dockerfile.scope");
     expect(services.find(item => item.name === "api")?.dependsOn).toContain("db-migrate");
+  });
+
+  it("runs the gateway as a first-class local service with persistent certs", () => {
+    const gateway = backendServices(options).find(item => item.name === "gateway");
+    expect(gateway).toBeDefined();
+    expect(gateway?.image.name).toBe(`scope-local/gateway:${imageTag(options.manifest)}`);
+    expect(gateway?.image.build).toMatchObject({
+      context: "/package/assets/source/apps/gateway",
+      dockerfile: "Dockerfile.scope",
+    });
+    expect(gateway?.memoryMb).toBe(512);
+    expect(gateway?.ports).toEqual([{ container: 18000 }]);
+    expect(gateway?.mounts).toEqual([{ source: "/home/person/.local/share/scope-server/gateway-cert", target: "/certs" }]);
+    expect(gateway?.command).toEqual(["--config", "/config/default.yaml", "--cert-dir", "/certs"]);
+    expect(gateway?.healthcheck).toEqual(["wget", "-qO-", "http://127.0.0.1:18000/health"]);
+    expect(gateway?.dependsOn).toEqual(expect.arrayContaining(["storage-init", "redis", "token-manager"]));
+    expect(gateway?.env).toMatchObject({
+      RUST_LOG: "debug,gateway::internal=info,azure_core::policies::transport=info",
+      AZURE_STORAGE_USE_EMULATOR: "true",
+      AZURITE_BLOB_HOST: "azurite",
+      AZURITE_BLOB_PORT: "10000",
+      BLOB_STORAGE_URL: "http://azurite:10000/devstoreaccount1",
+      STORAGE_CONNECTION_STRING: storageConnection("azurite", 10000, 10001),
+      REDIS_HOST: "redis",
+      REDIS_PORT: "6379",
+      REDIS_PASSWORD: "",
+      TOKEN_MANAGER_URL: "http://token-manager:80",
+      ...buildEnvironment(options.manifest),
+    });
   });
 
   it("uses the genuine Compose infrastructure image versions", () => {
@@ -106,8 +135,19 @@ describe("packaged backend", () => {
     expect(worker.image.build?.dockerfile).toBe("apps/workers/coder-acp-copilot/Dockerfile.scope");
     expect(worker.image.build?.args?.COPILOT_CLI_VERSION).toBe("1.0.65");
     expect(worker.image.build?.args?.NPM_CONFIG_REGISTRY).toBe(options.registry);
-    expect(worker.env?.DEV_PROXY_ENABLED).toBe("");
-    expect(Boolean(worker.env?.DEV_PROXY_ENABLED)).toBe(false);
+    expect(worker.env).toMatchObject({
+      PROXY_BACKEND: "gateway",
+      DEV_PROXY_ENABLED: "true",
+      DEV_PROXY_API_URL: "http://gateway:18000",
+      GATEWAY_TOKEN_PLUGIN_ENABLED: "false",
+    });
+    const claudeWorker = dockerWorker("coder-acp-claude-code", options);
+    expect(claudeWorker.env).toMatchObject({
+      PROXY_BACKEND: "gateway",
+      DEV_PROXY_ENABLED: "true",
+      DEV_PROXY_API_URL: "http://gateway:18000",
+    });
+    expect(claudeWorker.env).not.toHaveProperty("GATEWAY_TOKEN_PLUGIN_ENABLED");
     expect(() => dockerWorker("coder-acp-copilot-host", options)).toThrow("Not a Docker target");
   });
 

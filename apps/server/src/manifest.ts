@@ -104,12 +104,13 @@ function httpHealth(port = 80, path = "/health"): string[] {
   return ["node", "-e", `require('http').get('http://127.0.0.1:${port}${path}',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))`];
 }
 
-export function applicationImage(name: string, dockerfile: string, options: StackOptions): Image {
+/** Build an immutable local image from the packaged source asset bundle. */
+export function applicationImage(name: string, dockerfile: string, options: StackOptions, context = options.source): Image {
   const env = options.env ?? process.env;
   return {
     name: `scope-local/${name}:${imageTag(options.manifest)}`,
     build: {
-      context: options.source,
+      context,
       dockerfile: `${dockerfile}.scope`,
       args: {
         NPM_CONFIG_REGISTRY: options.registry,
@@ -178,6 +179,29 @@ export function backendServices(options: StackOptions): Service[] {
       healthcheck: httpHealth(),
     },
     {
+      name: "gateway",
+      image: applicationImage("gateway", "Dockerfile", options, join(options.source, "apps/gateway")),
+      memoryMb: 512,
+      dependsOn: ["storage-init", "redis", "token-manager"],
+      ports: [{ container: 18000 }],
+      env: {
+        RUST_LOG: "debug,gateway::internal=info,azure_core::policies::transport=info",
+        AZURE_STORAGE_USE_EMULATOR: "true",
+        AZURITE_BLOB_HOST: "azurite",
+        AZURITE_BLOB_PORT: "10000",
+        BLOB_STORAGE_URL: "http://azurite:10000/devstoreaccount1",
+        STORAGE_CONNECTION_STRING: storageConnection("azurite", 10000, 10001),
+        REDIS_HOST: "redis",
+        REDIS_PORT: "6379",
+        REDIS_PASSWORD: "",
+        TOKEN_MANAGER_URL: "http://token-manager:80",
+        ...buildEnvironment(options.manifest),
+      },
+      mounts: mount("gateway-cert", "/certs"),
+      command: ["--config", "/config/default.yaml", "--cert-dir", "/certs"],
+      healthcheck: ["wget", "-qO-", "http://127.0.0.1:18000/health"],
+    },
+    {
       name: "api", image: image("api"), memoryMb: 768,
       dependsOn: ["db-migrate", "storage-init", "redis", "token-manager"],
       ports: [{ container: 80, host: options.apiPort }],
@@ -232,7 +256,12 @@ export function dockerWorker(id: TargetId, options: StackOptions): Service {
     env: {
       ...commonEnv(), ...providerEnv(options.env ?? process.env),
       ...buildEnvironment(options.manifest),
-      DEV_PROXY_ENABLED: "",
+      // Legacy variable names are retained because both proxy clients still use
+      // DEV_PROXY_ENABLED/DEV_PROXY_API_URL even when PROXY_BACKEND selects the gateway.
+      PROXY_BACKEND: "gateway",
+      DEV_PROXY_ENABLED: "true",
+      DEV_PROXY_API_URL: "http://gateway:18000",
+      ...(id === "coder-acp-copilot" ? { GATEWAY_TOKEN_PLUGIN_ENABLED: "false" } : {}),
       WORKER_NAME: id,
       NPM_CONFIG_REGISTRY: options.registry,
     },

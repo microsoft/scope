@@ -53,9 +53,9 @@ describe("installed Claude Code host runtime", () => {
     expect(() => detectClaudeCode({ SCOPE_HOST_EXECUTABLE: "/bin/claude" })).toThrow("must support stream-json");
   });
 
-  it("points the adapter to the installed executable without modifying HOME or credentials", () => {
+  it("points the adapter to the installed executable without modifying HOME or credentials and keeps capture enabled", () => {
     const detected = detectClaudeCode({ CLAUDE_CODE_EXECUTABLE: "/bin/claude" });
-    const runtime = claudeCodeRuntime(detected, { SCOPE_HOST_WORKSPACE_ROOT: "/data/claude", https_proxy: "http://company:8888", HOME: "/home/user" });
+    const runtime = claudeCodeRuntime(detected, { SCOPE_HOST_WORKSPACE_ROOT: "/data/claude", HOME: "/home/user" });
     expect(runtime).toMatchObject({
       workerName: WORKER_TYPE,
       command: process.execPath,
@@ -63,9 +63,17 @@ describe("installed Claude Code host runtime", () => {
       env: { CLAUDE_CODE_EXECUTABLE: "/bin/claude", DISABLE_AUTOUPDATER: "1" },
       hostLogin: true,
       isolateHostConfig: true,
-      captureProxy: false,
+      captureProxy: true,
     });
     expect(Object.keys(runtime.env!)).toEqual(["CLAUDE_CODE_EXECUTABLE", "DISABLE_AUTOUPDATER"]);
+  });
+
+  it("fails loudly instead of silently bypassing capture when an upstream proxy is inherited", () => {
+    const detected = detectClaudeCode({ CLAUDE_CODE_EXECUTABLE: "/bin/claude" });
+    expect(() => claudeCodeRuntime(detected, {
+      SCOPE_HOST_WORKSPACE_ROOT: "/data/claude",
+      https_proxy: "http://company:8888",
+    })).toThrow("Scope host HAR capture cannot run while https_proxy is already set");
   });
 
   it("requires an absolute dedicated workspace root", () => {

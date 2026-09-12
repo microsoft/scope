@@ -56,6 +56,15 @@ function isTransportError(error: unknown): boolean {
     ["ECONNREFUSED", "ECONNRESET", "EPIPE", "ETIMEDOUT"].includes(error.code);
 }
 
+function imageBuildFailureMessage(service: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (service === "gateway" && /\bENOSPC\b|no space left on device/i.test(message)) {
+    return "Image build for gateway failed: Docker ran out of disk while building the Rust gateway from source. " +
+      "Free Docker engine storage or move the Scope Server data/build cache to a larger disk, then retry startup.";
+  }
+  return `Image build for ${service} failed: ${message}`;
+}
+
 export function startupOrder(services: readonly Service[]): Service[] {
   const byName = new Map(services.map(service => [service.name, service]));
   if (byName.size !== services.length) throw new Error("Duplicate service name");
@@ -233,9 +242,7 @@ export class Orchestrator {
           break;
         } catch (error) {
           this.checkCancelled();
-          if (attempt === 1 || !isTransportError(error)) {
-            throw new Error(`Image build for ${service.name} failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
-          }
+          if (attempt === 1 || !isTransportError(error)) throw new Error(imageBuildFailureMessage(service.name, error), { cause: error });
           this.progress({ service: service.name, phase: "image", message: "Docker transport interrupted; retrying the build from cached layers" });
           await sleep(1000);
         }

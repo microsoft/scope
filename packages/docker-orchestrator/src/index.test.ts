@@ -147,6 +147,28 @@ describe("small service/job DSL", () => {
     expect(docker.createContainer).not.toHaveBeenCalled();
   });
 
+  it("explains gateway build disk exhaustion instead of surfacing raw ENOSPC", async () => {
+    const docker = {
+      getImage: vi.fn(() => ({ inspect: vi.fn().mockRejectedValue(missing()) })),
+      buildImage: vi.fn(async (context: Readable) => {
+        for await (const chunk of context) expect(Buffer.isBuffer(chunk)).toBe(true);
+        return new PassThrough();
+      }),
+      createContainer: vi.fn(),
+      modem: {
+        followProgress: (_stream: NodeJS.ReadableStream, done: (error: Error | null) => void, progress: (event: unknown) => void) => {
+          progress({ errorDetail: { message: "ENOSPC: no space left on device" } });
+          done(null);
+        },
+      },
+    };
+    const orchestrator = new Orchestrator(docker as unknown as Docker, "scope-user");
+    await expect(orchestrator.startService(service("gateway", {
+      image: { name: "scope-local/gateway:test", build: { context: import.meta.dirname, dockerfile: "Dockerfile" } },
+    }))).rejects.toThrow("Free Docker engine storage");
+    expect(docker.createContainer).not.toHaveBeenCalled();
+  });
+
   it("recreates the source stream when retrying an interrupted build", async () => {
     const contexts: Readable[] = [];
     const docker = {

@@ -323,7 +323,7 @@ async function firstRun(agents: AgentManager, nonInteractive: boolean): Promise<
 }
 
 async function initializeData(data: string): Promise<void> {
-  for (const directory of ["mongodb", "redis", "azurite", "vault", ...targetIds.map(id => `workspaces/${id}`)]) {
+  for (const directory of ["mongodb", "redis", "azurite", "vault", "gateway-cert", ...targetIds.map(id => `workspaces/${id}`)]) {
     const path = join(data, directory);
     await mkdir(path, { recursive: true, mode: 0o700 });
     // The parent is user-private. Non-root container users need access to these bind roots.
@@ -457,6 +457,7 @@ async function startBackend(
   const azuriteQueuePort = await runtime.hostPort("azurite", 10001);
   const judgePort = await runtime.hostPort("judge", 80);
   const tokenManagerPort = await runtime.hostPort("token-manager", 80);
+  const gatewayPort = await runtime.hostPort("gateway", 18000);
 
   await writeJson(join(paths.config, "ports.json"), { api: apiPort, portal: portalPort });
   const apiUrl = `http://127.0.0.1:${apiPort}`;
@@ -476,6 +477,9 @@ async function startBackend(
       SCOPE_MT_API_URL: apiUrl,
       JUDGE_SERVICE_URL: `http://127.0.0.1:${judgePort}`,
       TOKEN_MANAGER_URL: `http://127.0.0.1:${tokenManagerPort}`,
+      PROXY_BACKEND: "gateway",
+      DEV_PROXY_ENABLED: "true",
+      DEV_PROXY_API_URL: `http://127.0.0.1:${gatewayPort}`,
       AZURE_STORAGE_QUEUE_POSTPROCESSOR: "post-processor-queue",
       ...buildEnvironment(options.manifest),
     },
