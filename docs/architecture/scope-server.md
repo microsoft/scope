@@ -186,6 +186,15 @@ schemas does not enable a host runtime. Host submission requires an agent
 explicitly marked available; the launcher is responsible for actual setup and
 registration.
 
+Host workers reuse installed CLI logins without relocating `HOME` or
+`CLAUDE_CONFIG_DIR`, but they must not inherit personal agent configuration that
+would make benchmark results machine-dependent. Copilot host starts the CLI with
+`--disable-builtin-mcps` and one `--disable-mcp-server <name>` per server listed
+in `~/.copilot/mcp-config.json` (read-only). Claude host sends ACP metadata with
+`claudeCode.options.settingSources: []` and adapter `extraArgs:
+["--strict-mcp-config"]`. Docker workers keep their existing clean-container
+behavior.
+
 Host `--discover` initializes ACP and creates a session without sending a prompt
 or authentication RPC. Native advertised model IDs and defaults are registered
 through the existing agent/model APIs before the queue worker becomes available.

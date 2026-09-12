@@ -20,7 +20,7 @@ vi.mock("node:module", () => ({
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(statSync).mockReturnValue({ isFile: () => true } as ReturnType<typeof statSync>);
-  vi.mocked(execFileSync).mockReturnValueOnce("2.1.153 (Claude Code)\n").mockReturnValueOnce("--input-format --output-format --permission-mode stream-json");
+  vi.mocked(execFileSync).mockReturnValueOnce("2.1.153 (Claude Code)\n").mockReturnValueOnce("--input-format --output-format --permission-mode stream-json --strict-mcp-config");
   vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
     version: "0.52.0",
     bin: { "claude-agent-acp": "dist/index.js" },
@@ -62,6 +62,7 @@ describe("installed Claude Code host runtime", () => {
       args: ["/packages/claude-agent-acp/dist/index.js"],
       env: { CLAUDE_CODE_EXECUTABLE: "/bin/claude", DISABLE_AUTOUPDATER: "1" },
       hostLogin: true,
+      isolateHostConfig: true,
       captureProxy: false,
     });
     expect(Object.keys(runtime.env!)).toEqual(["CLAUDE_CODE_EXECUTABLE", "DISABLE_AUTOUPDATER"]);

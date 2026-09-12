@@ -127,11 +127,80 @@ export interface ACPClientOptions {
   mcpServers?: McpServerConfig[];
   /** Reasoning effort level to apply via ACP config option (e.g. "low", "medium", "high"). */
   reasoningEffort?: string;
+  /** Host-only isolation keeps HOME for login reuse while suppressing personal Claude settings/MCP config for reproducible benchmarks. */
+  isolateHostConfig?: boolean;
 }
 
 export interface ACPSessionResult {
   response: string;
   stopReason: string;
+}
+
+export type ClaudeCodeIsolationMeta = {
+  [key: string]: unknown;
+  claudeCode: {
+    options: {
+      settingSources: [];
+      extraArgs: ["--strict-mcp-config"];
+    };
+  };
+};
+
+/**
+ * Build the Claude Code ACP adapter metadata that isolates host runs from
+ * personal settings and MCP files without relocating HOME/CLAUDE_CONFIG_DIR,
+ * preserving the installed CLI login that host workers intentionally reuse.
+ */
+export function buildClaudeCodeIsolationMeta(): ClaudeCodeIsolationMeta {
+  return {
+    claudeCode: {
+      options: {
+        settingSources: [],
+        extraArgs: ["--strict-mcp-config"],
+      },
+    },
+  };
+}
+
+function toAcpMcpServer(server: McpServerConfig): acp.McpServer {
+  if (server.type === "stdio") {
+    if (!server.command) {
+      throw new Error(`MCP server "${server.name}" is missing a command`);
+    }
+    return {
+      name: server.name,
+      command: server.command,
+      args: server.args ?? [],
+      env: server.env ? Object.entries(server.env).map(([name, value]) => ({ name, value })) : [],
+    };
+  }
+
+  if (!server.url) {
+    throw new Error(`MCP server "${server.name}" is missing a URL`);
+  }
+  return {
+    type: server.type,
+    name: server.name,
+    url: server.url,
+    headers: server.headers?.map((h) => ({ name: h.name, value: h.value })) ?? [],
+  };
+}
+
+/**
+ * Build the ACP session/new request, optionally adding Claude Code host
+ * isolation metadata so benchmark behavior does not depend on personal agent
+ * configuration.
+ */
+export function buildClaudeCodeNewSessionRequest(
+  cwd: string,
+  mcpServers: McpServerConfig[],
+  isolateHostConfig = false,
+): acp.NewSessionRequest {
+  return {
+    ...(isolateHostConfig ? { _meta: buildClaudeCodeIsolationMeta() } : {}),
+    cwd,
+    mcpServers: mcpServers.map(toAcpMcpServer),
+  };
 }
 
 /**
@@ -315,7 +384,7 @@ export async function runACPSession(
   prompt: string,
   options: ACPClientOptions
 ): Promise<ACPSessionResult> {
-  const { command, args = [], env = {}, cwd, onLog = console.log, mcpServers = [], reasoningEffort } = options;
+  const { command, args = [], env = {}, cwd, onLog = console.log, mcpServers = [], reasoningEffort, isolateHostConfig = false } = options;
 
   onLog(`Starting ACP agent: ${command} ${args.join(" ")}`);
 
@@ -389,15 +458,7 @@ export async function runACPSession(
     } else {
       onLog(`No MCP servers configured for this session`);
     }
-    const sessionResult = await connection.newSession({
-      cwd,
-      mcpServers: mcpServers.map((s) => ({
-        type: s.type,
-        name: s.name,
-        url: s.url,
-        headers: s.headers?.map((h) => ({ name: h.name, value: h.value })) ?? [],
-      })),
-    });
+    const sessionResult = await connection.newSession(buildClaudeCodeNewSessionRequest(cwd, mcpServers, isolateHostConfig));
 
     onLog(`Created session: ${sessionResult.sessionId}`);
     if (sessionResult._meta) {

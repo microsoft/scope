@@ -15,9 +15,9 @@ startup, token acquisition and queue defaults remain unchanged.
 ## Launch contract
 
 Requires Node.js 22+, an installed Claude Code CLI supporting stream-json
-input/output and permission modes, and an existing login. The launcher must
-obtain explicit consent **for this host target**: agent tasks run with the user's
-account and access, not in a sandbox.
+input/output, permission modes, and `--strict-mcp-config`, plus an existing
+login. The launcher must obtain explicit consent **for this host target**:
+agent tasks run with the user's account and access, not in a sandbox.
 
 ```sh
 pnpm --filter coder-acp-claude-code-host... build
@@ -66,13 +66,21 @@ MongoDB, queue/blob storage, Redis, Scope API, Judge and existing Token Manager
 helpers need host-reachable endpoints. Judge downloads blob snapshots and does
 not need a host-workspace mount.
 
-## Existing login
+## Existing login and config isolation
 
 No Token Manager agent credential is acquired or injected. The adapter inherits
-the user's `HOME`, credential environment and normal Claude configuration; only
-the installed executable and session auto-updater setting are supplied.
-`ANTHROPIC_MODEL` is set when a run explicitly requests a model. The worker does
-not read a repository `.env` or install a replacement authentication policy.
+the user's `HOME` and credential environment; only the installed executable and
+session auto-updater setting are supplied. `ANTHROPIC_MODEL` is set when a run
+explicitly requests a model. The worker does not read a repository `.env` or
+install a replacement authentication policy.
+
+Host runs always isolate personal Claude Code settings and MCP configuration
+for benchmark reproducibility while keeping `HOME`/`CLAUDE_CONFIG_DIR` in place
+for login reuse. The ACP session metadata sets
+`claudeCode.options.settingSources` to `[]` and passes
+`--strict-mcp-config` through the adapter's `extraArgs`, so user, project,
+local, and project `.mcp.json` sources are ignored. Docker startup and token
+acquisition remain unchanged.
 
 Inherited HTTP(S)/ALL proxy variables and trust settings are preserved. If an
 inherited proxy exists, Scope does not replace it with a HAR proxy. Otherwise,

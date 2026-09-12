@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { CopilotProcessor, startCopilotWorker } from "./worker.js";
+import { buildCopilotHostMcpIsolation, CopilotProcessor, startCopilotWorker } from "./worker.js";
 import { runACPSession } from "./acp-client.js";
 
 const mocks = vi.hoisted(() => ({
@@ -62,12 +62,20 @@ describe("Copilot shared host pipeline", () => {
   it("runs the installed CLI without acquiring credentials or replacing inherited environment", async () => {
     vi.stubEnv("HTTP_PROXY", "http://company-proxy:8080");
     mocks.proxyEnabled.mockReturnValue(true);
-    const processor = new CopilotProcessor({ workerName: "coder-acp-copilot-host", command: "/opt/copilot", hostLogin: true, captureProxy: false });
+    const processor = new CopilotProcessor({
+      workerName: "coder-acp-copilot-host",
+      command: "/opt/copilot",
+      hostLogin: true,
+      isolateHostConfig: true,
+      personalMcpConfigPath: resolve(workspaceRoot, "missing-mcp-config.json"),
+      captureProxy: false,
+    });
     await processor.processMessage("task", log, { model: "gpt-5.4" });
     expect(mocks.acquireToken).not.toHaveBeenCalled();
     expect(mocks.createProxy).not.toHaveBeenCalled();
     expect(runACPSession).toHaveBeenCalledWith("task", expect.objectContaining({
       command: "/opt/copilot",
+      args: ["--acp", "--yolo", "--no-auto-update", "--model", "gpt-5.4", "--disable-builtin-mcps"],
       env: { COPILOT_AUTO_UPDATE: "false" },
       authenticate: false,
       model: "gpt-5.4",
@@ -96,5 +104,76 @@ describe("Copilot shared host pipeline", () => {
     expect(processor.getAgentVersion()).toBe("copilot-0.0.451");
     expect(processor.getComponentVersions()).toEqual({ COPILOT_CLI_VERSION: "0.0.451" });
     expect(mocks.start).toHaveBeenCalledOnce();
+  });
+});
+
+describe("buildCopilotHostMcpIsolation", () => {
+  let configDir: string;
+  let configPath: string;
+
+  beforeEach(() => {
+    configDir = resolve("apps/workers/coder-acp-copilot", `.test-mcp-config-${randomUUID()}`);
+    configPath = resolve(configDir, "mcp-config.json");
+    mkdirSync(configDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it("builds one disable flag per personal MCP server", async () => {
+    writeFileSync(configPath, JSON.stringify({
+      mcpServers: {
+        "m365-copilot": { type: "http", url: "https://example.invalid" },
+        raindrop: { command: "raindrop-mcp" },
+      },
+    }));
+
+    await expect(buildCopilotHostMcpIsolation(log, configPath)).resolves.toEqual({
+      args: [
+        "--disable-builtin-mcps",
+        "--disable-mcp-server",
+        "m365-copilot",
+        "--disable-mcp-server",
+        "raindrop",
+      ],
+      disabledServers: ["m365-copilot", "raindrop"],
+    });
+    expect(log).toHaveBeenCalledWith("info", "Disabling personal Copilot MCP servers for reproducible host run", expect.objectContaining({
+      disabledServers: ["m365-copilot", "raindrop"],
+    }));
+  });
+
+  it("keeps built-in MCPs disabled when the config has no servers", async () => {
+    writeFileSync(configPath, JSON.stringify({ mcpServers: {} }));
+
+    await expect(buildCopilotHostMcpIsolation(log, configPath)).resolves.toEqual({
+      args: ["--disable-builtin-mcps"],
+      disabledServers: [],
+    });
+  });
+
+  it("keeps built-in MCPs disabled when the config file is missing", async () => {
+    rmSync(configPath, { force: true });
+
+    await expect(buildCopilotHostMcpIsolation(log, configPath)).resolves.toEqual({
+      args: ["--disable-builtin-mcps"],
+      disabledServers: [],
+    });
+    expect(log).toHaveBeenCalledWith("info", "Personal Copilot MCP config could not be loaded; continuing with built-in MCPs disabled", expect.objectContaining({
+      status: "missing",
+    }));
+  });
+
+  it("keeps built-in MCPs disabled when the config file contains malformed JSON", async () => {
+    writeFileSync(configPath, "{not json");
+
+    await expect(buildCopilotHostMcpIsolation(log, configPath)).resolves.toEqual({
+      args: ["--disable-builtin-mcps"],
+      disabledServers: [],
+    });
+    expect(log).toHaveBeenCalledWith("warn", "Personal Copilot MCP config could not be loaded; continuing with built-in MCPs disabled", expect.objectContaining({
+      status: "malformed",
+    }));
   });
 });

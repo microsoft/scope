@@ -16,7 +16,7 @@ vi.mock("node:fs", () => ({
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(statSync).mockReturnValue({ isFile: () => true } as ReturnType<typeof statSync>);
-  vi.mocked(execFileSync).mockReturnValueOnce("GitHub Copilot 0.0.451\n").mockReturnValueOnce("--acp --yolo --no-auto-update");
+  vi.mocked(execFileSync).mockReturnValueOnce("GitHub Copilot 0.0.451\n").mockReturnValueOnce("--acp --yolo --no-auto-update --disable-builtin-mcps --disable-mcp-server --additional-mcp-config");
 });
 
 describe("installed Copilot host runtime", () => {
@@ -51,7 +51,7 @@ describe("installed Copilot host runtime", () => {
   it("uses a distinct worker identity and preserves host login/proxy settings", () => {
     const detected = detectCopilot({ SCOPE_HOST_EXECUTABLE: "/bin/copilot" });
     const runtime = copilotRuntime(detected, { SCOPE_HOST_WORKSPACE_ROOT: "/data/copilot", HTTP_PROXY: "http://company:8888" });
-    expect(runtime).toMatchObject({ workerName: WORKER_TYPE, command: "/bin/copilot", hostLogin: true, captureProxy: false, workspaceRoot: "/data/copilot" });
+    expect(runtime).toMatchObject({ workerName: WORKER_TYPE, command: "/bin/copilot", hostLogin: true, isolateHostConfig: true, captureProxy: false, workspaceRoot: "/data/copilot" });
     expect(runtime).not.toHaveProperty("env");
     expect(copilotRuntime(detected, { SCOPE_HOST_WORKSPACE_ROOT: "/data/copilot" }).captureProxy).toBe(true);
   });

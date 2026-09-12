@@ -8,11 +8,12 @@ The Docker worker keeps its existing defaults and separate queue.
 
 ## Launch contract
 
-Requires Node.js 22+, an installed Copilot CLI supporting `--acp`, `--yolo` and
-`--no-auto-update`, and an existing CLI login. Scope does not install or upgrade
-the host CLI. The launcher must obtain consent **for this host target** before
-starting it: tasks run with the user's account and filesystem/network access,
-not in a sandbox.
+Requires Node.js 22+, an installed Copilot CLI supporting `--acp`, `--yolo`,
+`--no-auto-update`, `--disable-builtin-mcps`, `--disable-mcp-server`, and
+`--additional-mcp-config`, plus an existing CLI login. Scope does not install or
+upgrade the host CLI. The launcher must obtain consent **for this host target**
+before starting it: tasks run with the user's account and filesystem/network
+access, not in a sandbox.
 
 Build from the workspace root:
 
@@ -83,6 +84,16 @@ The host entry does not read a repository `.env` or replace `HOME`, auth files,
 or inherited credentials. It skips Token Manager acquisition for Copilot and
 does not invoke the ACP authentication RPC. Log in with the installed CLI
 before enabling the target. Auto-update is disabled for the Scope session.
+
+Host runs always isolate personal MCP configuration for benchmark
+reproducibility while keeping `HOME` in place for login reuse. The worker reads
+`~/.copilot/mcp-config.json` read-only, logs the configured server names, starts
+the CLI with `--disable-builtin-mcps`, and adds one
+`--disable-mcp-server <name>` flag per personal server. Missing, unreadable,
+empty, or malformed MCP config files are logged and do not stop the run. If the
+Scope MCP gateway is configured, it is still supplied through
+`--additional-mcp-config`; the Docker worker's existing gateway behavior is
+unchanged.
 
 Existing `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and lowercase equivalents take
 precedence: when any is set, Scope leaves the CLI's proxy and trust environment

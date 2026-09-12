@@ -16,6 +16,8 @@ export interface ClaudeCodeWorkerRuntime {
   componentVersions?: Record<string, string>;
   /** Reuse the installed CLI's login and inherited proxy settings. */
   hostLogin?: boolean;
+  /** Host-only isolation preserves HOME login reuse while excluding personal Claude settings/MCP config for reproducible benchmarks. */
+  isolateHostConfig?: boolean;
   workspaceRoot?: string;
   captureProxy?: boolean;
 }
@@ -260,6 +262,7 @@ export class ClaudeCodeProcessor implements WorkerProcessor {
           ? [{ type: "http" as const, slug: "mcp-gateway", name: "mcp-gateway", url: this.gateway.mcpEndpoint }]
           : [],
         reasoningEffort: options?.reasoningEffort,
+        ...(this.runtime.isolateHostConfig ? { isolateHostConfig: true } : {}),
       });
 
       await log("info", "Claude Code processing complete", {

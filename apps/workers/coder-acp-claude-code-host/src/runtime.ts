@@ -29,8 +29,8 @@ export function detectClaudeCode(env: NodeJS.ProcessEnv = process.env) {
   const versionOutput = execFileSync(executable, ["--version"], options);
   const help = execFileSync(executable, ["--help"], options);
   const version = versionOutput.match(/\b(\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?)\b/)?.[1];
-  if (!version || !versionOutput.includes("Claude Code") || !["--input-format", "--output-format", "--permission-mode", "stream-json"].every((flag) => help.includes(flag))) {
-    throw new Error("Installed Claude Code must support stream-json input/output and permission modes. Update it yourself; Scope does not install or upgrade host CLIs.");
+  if (!version || !versionOutput.includes("Claude Code") || !["--input-format", "--output-format", "--permission-mode", "stream-json", "--strict-mcp-config"].every((flag) => help.includes(flag))) {
+    throw new Error("Installed Claude Code must support stream-json input/output, permission modes, and --strict-mcp-config. Update it yourself; Scope does not install or upgrade host CLIs.");
   }
 
   const packagePath = require.resolve("@agentclientprotocol/claude-agent-acp/package.json");
@@ -69,6 +69,7 @@ export function claudeCodeRuntime(
     componentVersions: detected.componentVersions,
     workspaceRoot,
     hostLogin: true,
+    isolateHostConfig: true,
     captureProxy: !inheritedProxy,
   };
 }

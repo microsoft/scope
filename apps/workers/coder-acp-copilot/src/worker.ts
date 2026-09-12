@@ -4,7 +4,8 @@
 import { CodingAgentQueueProcessor, WorkerProcessor, WorkerProcessorOptions, WorkerResult, QueueProcessorConfig, LogEvent, WorkerLogFn, TokenManagerClient, createProxyClient, isProxyEnabled, type ProxyClient, McpGatewayClient, McpServerConfig, KubedockClient, createFreshWorkspace, cleanupWorkspaces } from "shared";
 import { initTelemetry, trackMetric, trackTrace, trackEvent } from "telemetry";
 import { runACPSession } from "./acp-client.js";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 export interface CopilotWorkerRuntime {
@@ -14,8 +15,111 @@ export interface CopilotWorkerRuntime {
   componentVersions?: Record<string, string>;
   /** Reuse the installed CLI's login and inherited proxy settings. */
   hostLogin?: boolean;
+  /** Host-only isolation preserves HOME login reuse while disabling personal MCP servers for reproducible benchmarks. */
+  isolateHostConfig?: boolean;
+  /** Optional test override; production host isolation reads ~/.copilot/mcp-config.json read-only. */
+  personalMcpConfigPath?: string;
   workspaceRoot?: string;
   captureProxy?: boolean;
+}
+
+export interface CopilotHostMcpIsolation {
+  args: string[];
+  disabledServers: string[];
+}
+
+type PersonalMcpConfigReadResult = {
+  disabledServers: string[];
+  status: "loaded" | "missing" | "unreadable" | "empty" | "malformed" | "no-servers";
+  error?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readPersonalCopilotMcpServers(configPath: string): PersonalMcpConfigReadResult {
+  let raw: string;
+  try {
+    raw = readFileSync(configPath, "utf8");
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? String((error as NodeJS.ErrnoException).code) : undefined;
+    return {
+      disabledServers: [],
+      status: code === "ENOENT" ? "missing" : "unreadable",
+      ...(error instanceof Error ? { error: error.message } : { error: String(error) }),
+    };
+  }
+
+  if (raw.trim().length === 0) {
+    return { disabledServers: [], status: "empty" };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    return {
+      disabledServers: [],
+      status: "malformed",
+      ...(error instanceof Error ? { error: error.message } : { error: String(error) }),
+    };
+  }
+
+  const mcpServers = isRecord(parsed) && isRecord(parsed.mcpServers)
+    ? parsed.mcpServers
+    : undefined;
+  if (!mcpServers) {
+    return { disabledServers: [], status: "no-servers" };
+  }
+
+  return {
+    disabledServers: Object.keys(mcpServers).sort(),
+    status: "loaded",
+  };
+}
+
+/**
+ * Build Copilot CLI flags that isolate host runs from personal MCP config while
+ * leaving HOME untouched so the host worker can reuse the user's existing
+ * Copilot login for reproducible benchmark execution.
+ */
+export async function buildCopilotHostMcpIsolation(
+  log: WorkerLogFn,
+  configPath = join(homedir(), ".copilot", "mcp-config.json"),
+): Promise<CopilotHostMcpIsolation> {
+  const readResult = readPersonalCopilotMcpServers(configPath);
+  if (readResult.status !== "loaded") {
+    const level: LogEvent["level"] = readResult.status === "malformed" || readResult.status === "unreadable" ? "warn" : "info";
+    await log(level, "Personal Copilot MCP config could not be loaded; continuing with built-in MCPs disabled", {
+      configPath,
+      status: readResult.status,
+      ...(readResult.error ? { error: readResult.error } : {}),
+    });
+  }
+
+  await log("info", "Disabling personal Copilot MCP servers for reproducible host run", {
+    configPath,
+    disabledServers: readResult.disabledServers,
+  });
+
+  return {
+    args: [
+      "--disable-builtin-mcps",
+      ...readResult.disabledServers.flatMap((name) => ["--disable-mcp-server", name]),
+    ],
+    disabledServers: readResult.disabledServers,
+  };
+}
+
+function chooseCopilotGatewayServerName(disabledServerNames: readonly string[]): string {
+  const disabled = new Set(disabledServerNames);
+  if (!disabled.has("mcp-gateway")) return "mcp-gateway";
+  let index = 1;
+  while (disabled.has(`scope-mcp-gateway-${index}`)) {
+    index += 1;
+  }
+  return `scope-mcp-gateway-${index}`;
 }
 
 /**
@@ -302,12 +406,17 @@ export class CopilotProcessor implements WorkerProcessor {
       if (options?.reasoningEffort) {
         args.push("--reasoning-effort", options.reasoningEffort);
       }
+      const hostMcpIsolation = this.runtime.isolateHostConfig
+        ? await buildCopilotHostMcpIsolation(log, this.runtime.personalMcpConfigPath)
+        : { args: [], disabledServers: [] };
+      args.push(...hostMcpIsolation.args);
       // The Copilot CLI does not support MCP servers via ACP newSession.mcpServers
       // (agentCapabilities.mcpCapabilities is undefined). Instead, pass the gateway
       // endpoint via --additional-mcp-config so the CLI initializes it at startup.
       if (this.gateway && this.mcpConfigs.length > 0) {
+        const gatewayServerName = chooseCopilotGatewayServerName(hostMcpIsolation.disabledServers);
         const mcpConfigJson = JSON.stringify({
-          mcpServers: { "mcp-gateway": { type: "http", url: this.gateway.mcpEndpoint } },
+          mcpServers: { [gatewayServerName]: { type: "http", url: this.gateway.mcpEndpoint } },
         });
         args.push("--additional-mcp-config", mcpConfigJson);
       }

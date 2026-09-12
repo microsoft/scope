@@ -56,6 +56,7 @@ describe("Claude Code shared host pipeline", () => {
       args: [],
       env: expect.objectContaining({ CLAUDE_CODE_OAUTH_TOKEN: "oauth-from-manager", HTTP_PROXY: "", NODE_EXTRA_CA_CERTS: "" }),
     }));
+    expect(vi.mocked(runACPSession).mock.calls[0][1]).not.toHaveProperty("isolateHostConfig");
   });
 
   it("runs the packaged adapter against the installed CLI using existing login and proxy", async () => {
@@ -67,6 +68,7 @@ describe("Claude Code shared host pipeline", () => {
       args: ["/packages/adapter/index.js"],
       env: { CLAUDE_CODE_EXECUTABLE: "/opt/claude" },
       hostLogin: true,
+      isolateHostConfig: true,
       captureProxy: false,
     });
     await processor.processMessage("task", log, { model: "claude-sonnet-4-6" });
@@ -76,6 +78,7 @@ describe("Claude Code shared host pipeline", () => {
       command: process.execPath,
       args: ["/packages/adapter/index.js"],
       env: expect.objectContaining({ CLAUDE_CODE_EXECUTABLE: "/opt/claude", ANTHROPIC_MODEL: "claude-sonnet-4-6" }),
+      isolateHostConfig: true,
     }));
     const env = vi.mocked(runACPSession).mock.calls[0][1].env!;
     for (const key of ["HOME", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "HTTPS_PROXY", "NODE_EXTRA_CA_CERTS"]) {

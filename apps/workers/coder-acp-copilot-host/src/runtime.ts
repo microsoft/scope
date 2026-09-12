@@ -27,8 +27,8 @@ export function detectCopilot(env: NodeJS.ProcessEnv = process.env) {
   const versionOutput = execFileSync(executable, ["--version"], options);
   const help = execFileSync(executable, ["--help"], options);
   const version = versionOutput.match(/\b(\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?)\b/)?.[1];
-  if (!version || !["--acp", "--yolo", "--no-auto-update"].every((flag) => help.includes(flag))) {
-    throw new Error("Installed Copilot CLI must support native --acp, --yolo and --no-auto-update. Update it yourself; Scope does not install or upgrade host CLIs.");
+  if (!version || !["--acp", "--yolo", "--no-auto-update", "--disable-builtin-mcps", "--disable-mcp-server", "--additional-mcp-config"].every((flag) => help.includes(flag))) {
+    throw new Error("Installed Copilot CLI must support native --acp, --yolo, --no-auto-update, MCP disabling flags, and --additional-mcp-config. Update it yourself; Scope does not install or upgrade host CLIs.");
   }
   return {
     workerType: WORKER_TYPE,
@@ -55,6 +55,7 @@ export function copilotRuntime(
     componentVersions: detected.componentVersions,
     workspaceRoot,
     hostLogin: true,
+    isolateHostConfig: true,
     captureProxy: !inheritedProxy,
   };
 }
