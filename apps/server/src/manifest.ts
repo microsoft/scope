@@ -7,15 +7,21 @@ import { join } from "node:path";
 import type { Image, Service } from "docker-orchestrator";
 
 export const targetIds = [
-  "coder-acp-copilot", "coder-acp-claude-code",
-  "coder-acp-copilot-host", "coder-acp-claude-code-host",
+  "coder-acp-copilot",
+  "coder-acp-claude-code",
+  "coder-acp-copilot-host",
+  "coder-acp-claude-code-host",
 ] as const;
+
+/** Worker IDs the packaged server can build or supervise locally. */
 export type TargetId = typeof targetIds[number];
 
+/** Narrow user/config input to one of the local server's supported worker targets. */
 export function isTargetId(value: string): value is TargetId {
   return targetIds.some(id => id === value);
 }
 
+/** Build metadata emitted with the package and folded into immutable image tags. */
 export interface AssetManifest {
   version: string;
   buildTime: string;
@@ -23,21 +29,39 @@ export interface AssetManifest {
   versions: Record<string, string>;
 }
 
+/**
+ * Read and validate the packaged asset manifest before deriving Docker tags.
+ *
+ * The manifest is part of the trust boundary between the npx package and Docker
+ * builds, so malformed timestamps or digests are rejected before they can create
+ * ambiguous local image/cache keys.
+ */
 export async function readAssetManifest(assets: string): Promise<AssetManifest> {
   const value: unknown = JSON.parse(await readFile(join(assets, "manifest.json"), "utf8"));
-  if (typeof value !== "object" || value === null || !("version" in value) ||
-    typeof value.version !== "string" || !("buildTime" in value) ||
-    typeof value.buildTime !== "string" ||
+  if (
+    typeof value !== "object" || value === null ||
+    !("version" in value) || typeof value.version !== "string" ||
+    !("buildTime" in value) || typeof value.buildTime !== "string" ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.buildTime) ||
-    !Number.isFinite(Date.parse(value.buildTime)) || !("digest" in value) ||
-    typeof value.digest !== "string" || !/^[a-f0-9]{64}$/.test(value.digest) ||
-    !("versions" in value) || typeof value.versions !== "object" || value.versions === null ||
-    !Object.values(value.versions).every(version => typeof version === "string")) {
+    !Number.isFinite(Date.parse(value.buildTime)) ||
+    !("digest" in value) || typeof value.digest !== "string" ||
+    !/^[a-f0-9]{64}$/.test(value.digest) ||
+    !("versions" in value) || typeof value.versions !== "object" ||
+    value.versions === null ||
+    !Object.values(value.versions).every(version => typeof version === "string")
+  ) {
     throw new Error("Invalid bundled server assets. Rebuild/reinstall @scope/server.");
   }
   return value as AssetManifest;
 }
 
+/**
+ * Compute the short immutable tag shared by all images from this asset bundle.
+ *
+ * The source digest and component versions are sorted into the hash so two
+ * packages with the same npm version but different build contents cannot collide
+ * in a user's local Docker cache.
+ */
 export function imageTag(manifest: AssetManifest): string {
   return createHash("sha256").update(JSON.stringify({
     digest: manifest.digest,
@@ -47,6 +71,7 @@ export function imageTag(manifest: AssetManifest): string {
   })).digest("hex").slice(0, 16);
 }
 
+/** Convert manifest metadata into the build/version environment expected by Scope apps. */
 export function buildEnvironment(manifest: AssetManifest): { BUILD_TIME: string; GIT_COMMIT: string } {
   return {
     BUILD_TIME: manifest.buildTime,
@@ -56,10 +81,19 @@ export function buildEnvironment(manifest: AssetManifest): { BUILD_TIME: string;
 
 // Public emulator key, as shipped by Azurite and docker-compose.yml; not a credential.
 const emulatorKey = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
+
+/** Build an Azurite connection string for containers or host workers. */
 export function storageConnection(host: string, blobPort: number, queuePort: number): string {
-  return `DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=${emulatorKey};BlobEndpoint=http://${host}:${blobPort}/devstoreaccount1;QueueEndpoint=http://${host}:${queuePort}/devstoreaccount1;`;
+  return [
+    "DefaultEndpointsProtocol=http",
+    "AccountName=devstoreaccount1",
+    `AccountKey=${emulatorKey}`,
+    `BlobEndpoint=http://${host}:${blobPort}/devstoreaccount1`,
+    `QueueEndpoint=http://${host}:${queuePort}/devstoreaccount1`,
+  ].join(";") + ";";
 }
 
+/** Inputs needed to materialize the local Docker stack from packaged assets. */
 export interface StackOptions {
   source: string;
   data: string;
@@ -71,6 +105,7 @@ export interface StackOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+/** Provider/model environment variables safe to forward into local services. */
 const forwarded = [
   "GITHUB_TOKEN", "GITHUB_MODELS_API_KEY", "ANTHROPIC_API_KEY",
   "AZURE_AI_INFERENCE_ENDPOINT", "AZURE_AI_INFERENCE_API_KEY",
@@ -78,10 +113,12 @@ const forwarded = [
   "JUDGE_STRATEGY", "JUDGE_MAX_PARALLELISM",
 ] as const;
 
+/** Pick only provider credentials and model overrides needed by benchmark services. */
 export function providerEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   return Object.fromEntries(forwarded.flatMap(key => env[key] ? [[key, env[key]]] : []));
 }
 
+/** Environment shared by backend containers in the single-host local deployment. */
 export function commonEnv(): Record<string, string> {
   return {
     MONGO_CONNECTION_STRING: "mongodb://mongodb:27017",
@@ -101,11 +138,19 @@ export function commonEnv(): Record<string, string> {
 }
 
 function httpHealth(port = 80, path = "/health"): string[] {
-  return ["node", "-e", `require('http').get('http://127.0.0.1:${port}${path}',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))`];
+  const script = "require('http')" +
+    `.get('http://127.0.0.1:${port}${path}',r=>process.exit(r.statusCode===200?0:1))` +
+    ".on('error',()=>process.exit(1))";
+  return ["node", "-e", script];
 }
 
 /** Build an immutable local image from the packaged source asset bundle. */
-export function applicationImage(name: string, dockerfile: string, options: StackOptions, context = options.source): Image {
+export function applicationImage(
+  name: string,
+  dockerfile: string,
+  options: StackOptions,
+  context = options.source,
+): Image {
   const env = options.env ?? process.env;
   return {
     name: `scope-local/${name}:${imageTag(options.manifest)}`,
@@ -117,16 +162,57 @@ export function applicationImage(name: string, dockerfile: string, options: Stac
         ...options.manifest.versions,
         ...buildEnvironment(options.manifest),
         ...Object.fromEntries(["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"].flatMap(key =>
-          env[key] || env[key.toLowerCase()] ? [[key, env[key] ?? env[key.toLowerCase()]!]] : [])),
+          env[key] || env[key.toLowerCase()]
+            ? [[key, env[key] ?? env[key.toLowerCase()]!]]
+            : [])),
       },
     },
   };
 }
 
+/**
+ * Describe the always-on backend services for a packaged local Scope Server.
+ *
+ * Persistent service state is bind-mounted under the configured data directory,
+ * which is why shutdown can safely replace containers without deleting Mongo,
+ * Redis, Azurite, vault, gateway certificate or workspace data.
+ */
 export function backendServices(options: StackOptions): Service[] {
-  const env = { ...commonEnv(), ...providerEnv(options.env ?? process.env), ...buildEnvironment(options.manifest) };
-  const image = (name: string, dockerfile = `apps/${name}/Dockerfile`): Image => applicationImage(name, dockerfile, options);
+  const env = {
+    ...commonEnv(),
+    ...providerEnv(options.env ?? process.env),
+    ...buildEnvironment(options.manifest),
+  };
+  const image = (name: string, dockerfile = `apps/${name}/Dockerfile`): Image =>
+    applicationImage(name, dockerfile, options);
   const mount = (name: string, target: string) => [{ source: join(options.data, name), target }];
+  const azuriteHealthcheck = "require('http')" +
+    ".get('http://localhost:10001',r=>process.exit(r.statusCode===400?0:1))" +
+    ".on('error',()=>process.exit(1))";
+  const lowkeyArgs = [
+    "--server.port=8443",
+    "--spring.main.banner-mode=off",
+    "--LOWKEY_DEBUG_REQUEST_LOG=false",
+    "--LOWKEY_VAULT_NAMES=-",
+    "--LOWKEY_IMPORT_LOCATION=/import/export.json",
+    "--LOWKEY_EXPORT_LOCATION=/import/export.json",
+  ].join(" ");
+  const queueNames = [
+    ...targetIds.map(id => `queue-${id}`),
+    "report-queue",
+    "post-processor-queue",
+  ];
+  const storageInitScript = `
+const {BlobServiceClient}=require('@azure/storage-blob');
+const {QueueServiceClient}=require('@azure/storage-queue');
+(async()=>{
+  const c=process.env.STORAGE_CONNECTION_STRING;
+  const b=BlobServiceClient.fromConnectionString(c);
+  for(const n of ['snapshots','logs','har'])await b.getContainerClient(n).createIfNotExists();
+  const q=QueueServiceClient.fromConnectionString(c);
+  for(const n of ${JSON.stringify(queueNames)})await q.getQueueClient(n).createIfNotExists();
+})().catch(e=>{console.error(e);process.exit(1)});
+`.trim();
   return [
     {
       name: "mongodb", image: { name: "mongo:7.0" }, memoryMb: 768,
@@ -147,11 +233,11 @@ export function backendServices(options: StackOptions): Service[] {
         "--queueHost", "0.0.0.0", "--tableHost", "0.0.0.0", "--silent", "--location", "/data"],
       mounts: mount("azurite", "/data"),
       ports: [{ container: 10000 }, { container: 10001 }],
-      healthcheck: ["node", "-e", "require('http').get('http://localhost:10001',r=>process.exit(r.statusCode===400?0:1)).on('error',()=>process.exit(1))"],
+      healthcheck: ["node", "-e", azuriteHealthcheck],
     },
     {
       name: "lowkey-vault", image: { name: "nagyesta/lowkey-vault:7.2.0-ubi10-minimal" }, memoryMb: 512,
-      env: { LOWKEY_ARGS: "--server.port=8443 --spring.main.banner-mode=off --LOWKEY_DEBUG_REQUEST_LOG=false --LOWKEY_VAULT_NAMES=- --LOWKEY_IMPORT_LOCATION=/import/export.json --LOWKEY_EXPORT_LOCATION=/import/export.json" },
+      env: { LOWKEY_ARGS: lowkeyArgs },
       mounts: mount("vault", "/import"),
       healthcheck: ["curl", "-fk", "https://localhost:8443/ping"],
     },
@@ -161,11 +247,13 @@ export function backendServices(options: StackOptions): Service[] {
       readinessTimeoutMs: 300_000,
     },
     {
+      // This one-shot job mirrors the Compose bootstrap and keeps queue/container
+      // creation inside Docker so a packaged install needs no Azure CLI.
       name: "storage-init", kind: "job", image: image("api"), memoryMb: 256,
       dependsOn: ["azurite"], env,
       workingDir: "/app/packages/shared",
       entrypoint: ["node"],
-      command: ["-e", `const {BlobServiceClient}=require('@azure/storage-blob');const {QueueServiceClient}=require('@azure/storage-queue');(async()=>{const c=process.env.STORAGE_CONNECTION_STRING;const b=BlobServiceClient.fromConnectionString(c);for(const n of ['snapshots','logs','har'])await b.getContainerClient(n).createIfNotExists();const q=QueueServiceClient.fromConnectionString(c);for(const n of ${JSON.stringify([...targetIds.map(id => `queue-${id}`), "report-queue", "post-processor-queue"])})await q.getQueueClient(n).createIfNotExists()})().catch(e=>{console.error(e);process.exit(1)})`],
+      command: ["-e", storageInitScript],
     },
     {
       name: "token-manager", image: image("token-manager"), memoryMb: 512,
@@ -220,7 +308,12 @@ export function backendServices(options: StackOptions): Service[] {
     {
       name: "scheduler", image: image("scheduler"), memoryMb: 256,
       dependsOn: ["api"],
-      env: { ...env, PORT: "8080", SCHEDULER_WORKER_TYPES: targetIds.join(","), SCHEDULER_POLL_INTERVAL_MS: "2000" },
+      env: {
+        ...env,
+        PORT: "8080",
+        SCHEDULER_WORKER_TYPES: targetIds.join(","),
+        SCHEDULER_POLL_INTERVAL_MS: "2000",
+      },
       healthcheck: httpHealth(8080),
     },
     {
@@ -246,6 +339,7 @@ export function backendServices(options: StackOptions): Service[] {
   ];
 }
 
+/** Build the service definition for an explicitly enabled Docker coding worker. */
 export function dockerWorker(id: TargetId, options: StackOptions): Service {
   if (id.endsWith("-host")) throw new Error(`Not a Docker target: ${id}`);
   return {
@@ -256,6 +350,9 @@ export function dockerWorker(id: TargetId, options: StackOptions): Service {
     env: {
       ...commonEnv(), ...providerEnv(options.env ?? process.env),
       ...buildEnvironment(options.manifest),
+      // Local server runs use the gateway by default. Compose-only ACP Claude
+      // Code still pins PROXY_BACKEND=devproxy explicitly, so removing that pin
+      // cannot silently choose the old sidecar in new server deployments.
       // Legacy variable names are retained because both proxy clients still use
       // DEV_PROXY_ENABLED/DEV_PROXY_API_URL even when PROXY_BACKEND selects the gateway.
       PROXY_BACKEND: "gateway",
@@ -269,6 +366,7 @@ export function dockerWorker(id: TargetId, options: StackOptions): Service {
   };
 }
 
+/** Model scanner job for Docker workers; host workers discover models through ACP. */
 export function modelScanner(id: TargetId, options: StackOptions): Service {
   if (id.endsWith("-host")) throw new Error("Host targets discover models through their installed ACP client");
   const provider = id === "coder-acp-copilot" ? "copilot" : "anthropic";
@@ -279,6 +377,11 @@ export function modelScanner(id: TargetId, options: StackOptions): Service {
     memoryMb: 256,
     readinessTimeoutMs: 180_000,
     command: ["node", "--import", "telemetry/register", "dist/index.js", "--dry-run"],
-    env: { ...commonEnv(), ...providerEnv(options.env ?? process.env), ...buildEnvironment(options.manifest), API_URL: "http://api:80" },
+    env: {
+      ...commonEnv(),
+      ...providerEnv(options.env ?? process.env),
+      ...buildEnvironment(options.manifest),
+      API_URL: "http://api:80",
+    },
   };
 }

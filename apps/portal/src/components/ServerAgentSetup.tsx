@@ -17,6 +17,7 @@ import {
   DialogHeader, DialogTitle, DialogTrigger, DialogClose,
 } from "@/components/ui/dialog";
 
+/** Props for the local-agent setup dialog's presentational view. */
 export interface ServerAgentSetupViewProps {
   agents: ServerAgentStatus[];
   busy?: boolean;
@@ -24,11 +25,29 @@ export interface ServerAgentSetupViewProps {
   onConfigure: (workerType: ServerWorkerType, input: ConfigureServerAgent) => void;
 }
 
-function AgentSetupCard({ agent, busy, onConfigure }: {
+interface AgentSetupCardProps {
   agent: ServerAgentStatus;
   busy: boolean;
   onConfigure: ServerAgentSetupViewProps["onConfigure"];
-}) {
+}
+
+function configureInput(
+  agent: ServerAgentStatus,
+  consent: boolean,
+  executable: string,
+): ConfigureServerAgent {
+  if (agent.enabled) return { enabled: false };
+  if (agent.runtime !== "host") return { enabled: true };
+
+  const trimmedExecutable = executable.trim();
+  return {
+    enabled: true,
+    consent,
+    ...(trimmedExecutable ? { executable: trimmedExecutable } : {}),
+  };
+}
+
+function AgentSetupCard({ agent, busy, onConfigure }: AgentSetupCardProps) {
   const [executable, setExecutable] = useState(agent.executable ?? "");
   const [consent, setConsent] = useState(false);
   const host = agent.runtime === "host";
@@ -55,8 +74,12 @@ function AgentSetupCard({ agent, busy, onConfigure }: {
           />
           {!agent.enabled && (
             <div className="flex items-start gap-2">
-              <Checkbox id={`consent-${agent.workerType}`} checked={consent}
-                onCheckedChange={value => setConsent(value === true)} disabled={busy} />
+              <Checkbox
+                id={`consent-${agent.workerType}`}
+                checked={consent}
+                onCheckedChange={value => setConsent(value === true)}
+                disabled={busy}
+              />
               <Label htmlFor={`consent-${agent.workerType}`} className="text-sm leading-relaxed">
                 Allow this agent to run unattended on my computer. Its workspace is not a sandbox.
               </Label>
@@ -68,9 +91,7 @@ function AgentSetupCard({ agent, busy, onConfigure }: {
       <Button
         variant={agent.enabled ? "outline" : "default"}
         disabled={busy || (!agent.enabled && host && !consent)}
-        onClick={() => onConfigure(agent.workerType, agent.enabled
-          ? { enabled: false }
-          : { enabled: true, ...(host ? { consent, ...(executable.trim() ? { executable: executable.trim() } : {}) } : {}) })}
+        onClick={() => onConfigure(agent.workerType, configureInput(agent, consent, executable))}
       >
         {agent.enabled ? "Stop" : "Enable"} {agent.label}
       </Button>
@@ -78,6 +99,7 @@ function AgentSetupCard({ agent, busy, onConfigure }: {
   );
 }
 
+/** Presentational dialog for enabling/disabling local host or Docker workers. */
 export function ServerAgentSetupView({ agents, busy = false, error, onConfigure }: ServerAgentSetupViewProps) {
   return (
     <Dialog>
@@ -87,13 +109,19 @@ export function ServerAgentSetupView({ agents, busy = false, error, onConfigure 
       <DialogContent className="grid max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Local agents</DialogTitle>
-          <DialogDescription>Choose host or Docker workers. Only selected Docker workers need to be built.</DialogDescription>
+          <DialogDescription>
+            Choose host or Docker workers. Only selected Docker workers need to be built.
+          </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           {agents.map(agent => (
-            <AgentSetupCard key={`${agent.workerType}:${agent.enabled}:${agent.executable ?? ""}`}
-              agent={agent} busy={busy} onConfigure={onConfigure} />
+            <AgentSetupCard
+              key={`${agent.workerType}:${agent.enabled}:${agent.executable ?? ""}`}
+              agent={agent}
+              busy={busy}
+              onConfigure={onConfigure}
+            />
           ))}
         </div>
         <DialogFooter>
@@ -104,6 +132,12 @@ export function ServerAgentSetupView({ agents, busy = false, error, onConfigure 
   );
 }
 
+/**
+ * Query-backed entry point shown on the Agents page when a local launcher is present.
+ *
+ * Server setup mutates the scheduler-visible agent catalog, so successful status
+ * reads and setup changes invalidate the ordinary agent queries as well.
+ */
 export function ServerAgentSetup() {
   const client = useQueryClient();
   const status = useQuery({
@@ -129,12 +163,19 @@ export function ServerAgentSetup() {
     },
   });
   if (status.isError) {
-    return <Button variant="outline" title={status.error.message} onClick={() => void status.refetch()}>
-      Retry local agent setup
-    </Button>;
+    return (
+      <Button variant="outline" title={status.error.message} onClick={() => void status.refetch()}>
+        Retry local agent setup
+      </Button>
+    );
   }
   if (!status.data?.enabled) return null;
-  return <ServerAgentSetupView agents={status.data.agents} busy={configure.isPending}
-    error={configure.error?.message}
-    onConfigure={(workerType, input) => configure.mutate({ workerType, input })} />;
+  return (
+    <ServerAgentSetupView
+      agents={status.data.agents}
+      busy={configure.isPending}
+      error={configure.error?.message}
+      onConfigure={(workerType, input) => configure.mutate({ workerType, input })}
+    />
+  );
 }

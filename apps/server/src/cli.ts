@@ -87,11 +87,14 @@ interface CleanupContext {
   startupError?: unknown;
 }
 
+/** Parse and validate the saved runtime file used by stop/status/restart. */
 function runningServer(value: unknown): RunningServer {
-  if (typeof value !== "object" || value === null ||
+  if (
+    typeof value !== "object" || value === null ||
     !("pid" in value) || typeof value.pid !== "number" ||
     !("controlUrl" in value) || typeof value.controlUrl !== "string" ||
-    !("dataDir" in value) || typeof value.dataDir !== "string") {
+    !("dataDir" in value) || typeof value.dataDir !== "string"
+  ) {
     throw new Error("Invalid local server runtime file");
   }
   const url = new URL(value.controlUrl);
@@ -101,6 +104,7 @@ function runningServer(value: unknown): RunningServer {
   return value as RunningServer;
 }
 
+/** Parse an optional port flag; 0 intentionally requests an ephemeral host port. */
 function parsePort(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   const port = Number(value);
@@ -110,18 +114,21 @@ function parsePort(value: string | undefined): number | undefined {
   return port;
 }
 
+/** Extract and type-check a string Commander option from unknown option bags. */
 function stringOption(valueToCheck: unknown, name: string): string | undefined {
   if (valueToCheck === undefined) return undefined;
   if (typeof valueToCheck !== "string") throw new Error(`Expected ${name} to be a string`);
   return valueToCheck;
 }
 
+/** Extract and type-check a boolean Commander option from unknown option bags. */
 function booleanOption(valueToCheck: unknown, name: string): boolean | undefined {
   if (valueToCheck === undefined) return undefined;
   if (typeof valueToCheck !== "boolean") throw new Error(`Expected ${name} to be a boolean`);
   return valueToCheck;
 }
 
+/** Merge root and subcommand options; Commander keeps them on different objects. */
 function collectOptions(command: Command): ServerCliOptions {
   const raw = { ...command.parent?.opts(), ...command.opts() } as RawCliOptions;
   return {
@@ -132,6 +139,7 @@ function collectOptions(command: Command): ServerCliOptions {
   };
 }
 
+/** Add launcher options accepted by both the root action and all subcommands. */
 function addServerOptions(command: Command): Command {
   return command
     .option("--data-dir <path>", "persistent service data directory")
@@ -165,6 +173,7 @@ function getAllCommands(command: Command, prefix = ""): CommandHelpEntry[] {
   return commands;
 }
 
+/** Apply the same styled help conventions used by the standalone Scope CLI. */
 function configureServerHelp(program: Command): void {
   program.configureHelp({
     styleTitle: str => styleText("bold", str),
@@ -186,7 +195,11 @@ function configureServerHelp(program: Command): void {
         output += styleText("bold", "Global Options:") + "\n";
         for (const option of visibleOptions) {
           const term = helper.optionTerm(option);
-          output += "  " + styleText("green", term.padEnd(termWidth)) + "  " + helper.optionDescription(option) + "\n";
+          output += "  " +
+            styleText("green", term.padEnd(termWidth)) +
+            "  " +
+            helper.optionDescription(option) +
+            "\n";
         }
         output += "\n";
       }
@@ -207,6 +220,7 @@ function configureServerHelp(program: Command): void {
   });
 }
 
+/** Register a Commander subcommand that shares the launcher's global options. */
 function createSubcommand(program: Command, command: ServerCommandName, execute: ExecuteServerCommand): void {
   const descriptions: Record<ServerCommandName, string> = {
     start: "Start the local Scope API and Portal",
@@ -252,6 +266,7 @@ export function createServerProgram(execute: ExecuteServerCommand = executeServe
   return program;
 }
 
+/** Resolve a local Unix-socket Docker endpoint from DOCKER_HOST or the current Docker context. */
 async function dockerClient(): Promise<InstanceType<typeof Docker>> {
   let endpoint = process.env.DOCKER_HOST;
   if (!endpoint || process.env.DOCKER_CONTEXT) {
@@ -280,6 +295,7 @@ async function dockerClient(): Promise<InstanceType<typeof Docker>> {
   return new Docker({ socketPath, timeout: 120_000 });
 }
 
+/** Resolve the npm registry used for package installs inside built images. */
 async function npmRegistry(): Promise<string> {
   const configured = process.env.npm_config_registry ?? process.env.NPM_CONFIG_REGISTRY;
   const registry = configured || (await exec("npm", ["config", "get", "registry"], { timeout: 10_000 })).stdout.trim();
@@ -293,6 +309,7 @@ async function npmRegistry(): Promise<string> {
   return registry;
 }
 
+/** Prompt for first-run worker choices without making setup mandatory. */
 async function firstRun(agents: AgentManager, nonInteractive: boolean): Promise<void> {
   if (!nonInteractive && process.stdin.isTTY && process.stdout.isTTY) {
     const prompt = createInterface({ input: process.stdin, output: process.stdout });
@@ -314,9 +331,18 @@ async function firstRun(agents: AgentManager, nonInteractive: boolean): Promise<
           // both dimensions before asking: the agent runs as the user, and its network
           // traffic is intercepted by the capture gateway's own CA for HAR evidence.
           console.log(`\n${warnBanner(`${id} runs directly on this machine.`)}`);
-          console.log(`  ${label("Files and permissions:")} ${value("runs as you, with your files and your existing CLI login")}`);
-          console.log(`  ${label("Network capture:")} ${value("its HTTPS traffic is decrypted by the local gateway, which uses its own CA")}`);
-          console.log(`  ${label("Personal config:")} ${value("your personal MCP servers and agent settings are disabled for reproducibility")}`);
+          console.log(
+            `  ${label("Files and permissions:")} ` +
+            value("runs as you, with your files and your existing CLI login"),
+          );
+          console.log(
+            `  ${label("Network capture:")} ` +
+            value("its HTTPS traffic is decrypted by the local gateway, which uses its own CA"),
+          );
+          console.log(
+            `  ${label("Personal config:")} ` +
+            value("your personal MCP servers and agent settings are disabled for reproducibility"),
+          );
           consent = (await prompt.question("Allow this target? [y/N] ")).trim().toLowerCase() === "y";
           if (!consent) continue;
         }
@@ -327,11 +353,22 @@ async function firstRun(agents: AgentManager, nonInteractive: boolean): Promise<
   await agents.persist();
 }
 
+/** Prepare persistent service data roots before Docker receives bind mounts. */
 async function initializeData(data: string): Promise<void> {
-  for (const directory of ["mongodb", "redis", "azurite", "vault", "gateway-cert", ...targetIds.map(id => `workspaces/${id}`)]) {
+  const directories = [
+    "mongodb",
+    "redis",
+    "azurite",
+    "vault",
+    "gateway-cert",
+    ...targetIds.map(id => `workspaces/${id}`),
+  ];
+  for (const directory of directories) {
     const path = join(data, directory);
     await mkdir(path, { recursive: true, mode: 0o700 });
-    // The parent is user-private. Non-root container users need access to these bind roots.
+    // The data-dir parent is owner-only, but Lowkey Vault and coding workers run
+    // as non-root users inside containers. These bind roots need broad container
+    // access while the containing host directory still keeps other OS users out.
     if (directory === "vault" || (directory.startsWith("workspaces/") && !directory.endsWith("-host"))) {
       await chmod(path, 0o777);
     }
@@ -351,17 +388,20 @@ async function initializeData(data: string): Promise<void> {
   }
 }
 
+/** Resolve and create config/data/runtime paths for this invocation. */
 async function resolveLaunchPaths(options: ServerCliOptions): Promise<LaunchPaths> {
   const paths = serverPaths(options.dataDir);
   await preparePaths(paths);
   return { paths, runtimeFile: join(paths.runtime, "server.json") };
 }
 
+/** Read the current launcher's control address from the runtime file. */
 async function readRunningServer(runtimeFile: string): Promise<RunningServer> {
   const parsed: unknown = JSON.parse(await readFile(runtimeFile, "utf8"));
   return runningServer(parsed);
 }
 
+/** Send stop/status to the private launcher control API. */
 async function requestControl(command: Exclude<ServerCommandName, "start">, running: RunningServer): Promise<void> {
   const response = await fetch(new URL(command === "status" ? "health" : "stop", running.controlUrl), {
     method: command === "status" ? "GET" : "POST",
@@ -372,6 +412,7 @@ async function requestControl(command: Exclude<ServerCommandName, "start">, runn
   console.log(JSON.stringify(status, null, 2));
 }
 
+/** Wait for another launcher process to release the per-user lock after stop. */
 async function waitForLauncherStop(paths: ServerPaths): Promise<void> {
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
@@ -384,6 +425,7 @@ async function waitForLauncherStop(paths: ServerPaths): Promise<void> {
   }
 }
 
+/** Handle stop/status/restart before startLauncher takes the lock. */
 async function handleNonStartCommand(
   invocation: ServerCliInvocation,
   launch: LaunchPaths,
@@ -413,6 +455,7 @@ async function handleNonStartCommand(
   return launch;
 }
 
+/** Connect Docker and remove stale owned containers from previous launcher runs. */
 async function connectEngine(runtime: Orchestrator): Promise<void> {
   // The initial Docker ping is bounded inside Orchestrator.connect so a stale socket cannot hang startup forever.
   await runtime.connect();
@@ -421,11 +464,13 @@ async function connectEngine(runtime: Orchestrator): Promise<void> {
   await runtime.connect();
 }
 
+/** Assert stack options have been initialized before Docker-only setup paths use them. */
 function requireStackOptions(options: StackOptions | undefined): StackOptions {
   if (!options) throw new Error("Server stack options are not initialized");
   return options;
 }
 
+/** Build the manifest-derived options used by all local Docker service specs. */
 async function createStackOptions(
   paths: ServerPaths,
   assets: string,
@@ -445,6 +490,7 @@ async function createStackOptions(
   };
 }
 
+/** Start the backend stack and derive host-worker connection settings from its published ports. */
 async function startBackend(
   runtime: Orchestrator,
   paths: ServerPaths,
@@ -482,6 +528,9 @@ async function startBackend(
       SCOPE_MT_API_URL: apiUrl,
       JUDGE_SERVICE_URL: `http://127.0.0.1:${judgePort}`,
       TOKEN_MANAGER_URL: `http://127.0.0.1:${tokenManagerPort}`,
+      // Host and Docker workers use the gateway backend by default in Scope
+      // Server. The legacy DEV_PROXY_* names stay because the shared proxy
+      // client still reads them while PROXY_BACKEND selects the implementation.
       PROXY_BACKEND: "gateway",
       DEV_PROXY_ENABLED: "true",
       DEV_PROXY_API_URL: `http://127.0.0.1:${gatewayPort}`,
@@ -491,6 +540,7 @@ async function startBackend(
   };
 }
 
+/** Print successful startup details and any non-fatal agent setup failures. */
 async function publishReadyStatus(status: ServerStatus, paths: ServerPaths, agents: AgentManager): Promise<void> {
   status.status = "ready";
   console.log(`\n${banner("Scope Server is ready.")}\n` +
@@ -506,6 +556,7 @@ async function publishReadyStatus(status: ServerStatus, paths: ServerPaths, agen
   }
 }
 
+/** Release runtime resources on normal shutdown, failed startup, or Ctrl+C. */
 async function shutDown(context: CleanupContext): Promise<void> {
   const errors: unknown[] = [];
   try { if (context.backendReady) await context.agents?.close(); } catch (error) { errors.push(error); }
@@ -521,6 +572,7 @@ async function shutDown(context: CleanupContext): Promise<void> {
   }
 }
 
+/** Dispatch the parsed command, performing pre-start routing for stop/status/restart. */
 async function executeServerCommand(invocation: ServerCliInvocation): Promise<void> {
   const initialLaunch = await resolveLaunchPaths(invocation.options);
   const launch = await handleNonStartCommand(invocation, initialLaunch);
@@ -528,6 +580,7 @@ async function executeServerCommand(invocation: ServerCliInvocation): Promise<vo
   await startLauncher(launch, invocation.options);
 }
 
+/** Main launcher lifecycle: lock, start control/backend/agents, wait, then clean up. */
 async function startLauncher(launch: LaunchPaths, cliOptions: ServerCliOptions): Promise<void> {
   const release = await acquireLock(launch.paths);
   const dist = dirname(fileURLToPath(import.meta.url));
@@ -544,6 +597,9 @@ async function startLauncher(launch: LaunchPaths, cliOptions: ServerCliOptions):
   const stopped = new Promise<void>(resolve => {
     requestStop = () => { closing = true; orchestrator?.cancel(); resolve(); };
   });
+  // Signal handlers stay registered throughout async cleanup. npx can forward a
+  // second Ctrl+C/SIGTERM while we are stopping containers; re-entering only sets
+  // the same closing flag and cancels in-flight Docker transfers again.
   process.on("SIGINT", requestStop);
   process.on("SIGTERM", requestStop);
   try {
@@ -580,10 +636,13 @@ async function startLauncher(launch: LaunchPaths, cliOptions: ServerCliOptions):
         await setAgentAvailable(status.apiUrl, id, true);
         return { executable: detected.executable, version: detected.version };
       }
-      const version = id === "coder-acp-copilot"
-        ? `copilot-${manifest.versions.COPILOT_CLI_VERSION}`
-        : `claude-agent-acp-${manifest.versions.CLAUDE_CODE_ACP_VERSION}` +
+      let version: string;
+      if (id === "coder-acp-copilot") {
+        version = `copilot-${manifest.versions.COPILOT_CLI_VERSION}`;
+      } else {
+        version = `claude-agent-acp-${manifest.versions.CLAUDE_CODE_ACP_VERSION}` +
           `-sdk-${manifest.versions.CLAUDE_AGENT_SDK_VERSION}`;
+      }
       await registerAgent(status.apiUrl, assets, id, manifest, version, manifest.versions);
       const scanner = modelScanner(id, requireStackOptions(stackOptions));
       await runtime.startService(scanner);

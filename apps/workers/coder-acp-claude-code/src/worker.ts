@@ -1,12 +1,30 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CodingAgentQueueProcessor, WorkerProcessor, WorkerProcessorOptions, WorkerResult, QueueProcessorConfig, LogEvent, WorkerLogFn, TokenManagerClient, createProxyClient, isProxyEnabled, type ProxyClient, McpGatewayClient, McpServerConfig, KubedockClient, createFreshWorkspace, cleanupWorkspaces } from "shared";
+import {
+  CodingAgentQueueProcessor,
+  WorkerProcessor,
+  WorkerProcessorOptions,
+  WorkerResult,
+  QueueProcessorConfig,
+  LogEvent,
+  WorkerLogFn,
+  TokenManagerClient,
+  createProxyClient,
+  isProxyEnabled,
+  type ProxyClient,
+  McpGatewayClient,
+  McpServerConfig,
+  KubedockClient,
+  createFreshWorkspace,
+  cleanupWorkspaces,
+} from "shared";
 import { initTelemetry, trackMetric, trackTrace, trackEvent } from "telemetry";
 import { runACPSession } from "./acp-client.js";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
+/** Runtime overrides used by tests and by the local host-worker wrapper. */
 export interface ClaudeCodeWorkerRuntime {
   workerName?: string;
   command?: string;
@@ -16,14 +34,28 @@ export interface ClaudeCodeWorkerRuntime {
   componentVersions?: Record<string, string>;
   /** Reuse the installed CLI's login and inherited proxy settings. */
   hostLogin?: boolean;
-  /** Host-only isolation preserves HOME login reuse while excluding personal Claude settings/MCP config for reproducible benchmarks. */
+  /**
+   * Host-only isolation preserves HOME/CLAUDE_CONFIG_DIR login reuse while
+   * excluding personal Claude settings/MCP config for reproducible benchmarks.
+   */
   isolateHostConfig?: boolean;
   workspaceRoot?: string;
   captureProxy?: boolean;
 }
 
 const WORKER_NAME = process.env.WORKER_NAME || "coder-acp-claude-code";
-const AGENT_VERSION = `claude-agent-acp-${process.env.CLAUDE_CODE_ACP_VERSION || "unknown"}-sdk-${process.env.CLAUDE_AGENT_SDK_VERSION || "unknown"}`;
+const AGENT_VERSION =
+  `claude-agent-acp-${process.env.CLAUDE_CODE_ACP_VERSION || "unknown"}` +
+  `-sdk-${process.env.CLAUDE_AGENT_SDK_VERSION || "unknown"}`;
+
+interface WorkerErrorMetadata {
+  harFilePath?: string;
+  aiCallCount?: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 /**
  * Detect the first structured "AI turn" signal from a subprocess log line.
@@ -33,8 +65,8 @@ function isFirstAiCallSignal(msg: string): boolean {
   const trimmed = msg.trim();
   if (trimmed.startsWith("{")) {
     try {
-      const parsed = JSON.parse(trimmed);
-      return typeof parsed === "object" && parsed !== null && typeof parsed.type === "string";
+      const parsed: unknown = JSON.parse(trimmed);
+      return isRecord(parsed) && typeof parsed.type === "string";
     } catch {
       return false;
     }
@@ -42,6 +74,7 @@ function isFirstAiCallSignal(msg: string): boolean {
   return false;
 }
 
+/** Queue processor that runs one Claude Code ACP benchmark attempt per message. */
 export class ClaudeCodeProcessor implements WorkerProcessor {
   readonly workerName: string;
   workspacePath: string | undefined = undefined;
@@ -54,18 +87,23 @@ export class ClaudeCodeProcessor implements WorkerProcessor {
     this.workerName = runtime.workerName ?? WORKER_NAME;
   }
 
+  /** Return the exact worker/adapter version recorded on run output. */
   getAgentVersion(): string {
     return this.runtime.agentVersion ?? AGENT_VERSION;
   }
 
+  /** Return component versions used by reports and agent registration. */
   getComponentVersions(): Record<string, string> {
     if (this.runtime.componentVersions) return this.runtime.componentVersions;
     return {
       ...(process.env.CLAUDE_CODE_ACP_VERSION ? { CLAUDE_CODE_ACP_VERSION: process.env.CLAUDE_CODE_ACP_VERSION } : {}),
-      ...(process.env.CLAUDE_AGENT_SDK_VERSION ? { CLAUDE_AGENT_SDK_VERSION: process.env.CLAUDE_AGENT_SDK_VERSION } : {}),
+      ...(process.env.CLAUDE_AGENT_SDK_VERSION
+        ? { CLAUDE_AGENT_SDK_VERSION: process.env.CLAUDE_AGENT_SDK_VERSION }
+        : {}),
     };
   }
 
+  /** Create the run workspace and register requested MCP servers with the gateway. */
   async setup(log: WorkerLogFn, options?: WorkerProcessorOptions): Promise<void> {
     if (this.runtime.workspaceRoot) {
       mkdirSync(this.runtime.workspaceRoot, { recursive: true });
@@ -92,12 +130,16 @@ export class ClaudeCodeProcessor implements WorkerProcessor {
         throw new Error("MCP servers configured but MCP_GATEWAY_URL is not set — cannot proceed without gateway");
       }
       this.gateway = new McpGatewayClient();
-      await log("info", "Registering MCP servers with gateway", { count: this.mcpConfigs.length, servers: this.mcpConfigs.map((s) => s.name) });
+      await log("info", "Registering MCP servers with gateway", {
+        count: this.mcpConfigs.length,
+        servers: this.mcpConfigs.map((s) => s.name),
+      });
       await this.gateway.purgeAll();
       for (const config of this.mcpConfigs) await this.gateway.registerServer(config);
     }
   }
 
+  /** Deregister run-scoped MCP servers and remove workspaces created in setup(). */
   async teardown(log: WorkerLogFn): Promise<void> {
     // Clean up containers spawned during this run
     if (this.kubedock) {
@@ -113,7 +155,11 @@ export class ClaudeCodeProcessor implements WorkerProcessor {
     if (this.gateway && this.mcpConfigs.length > 0) {
       await Promise.all(this.mcpConfigs.map((c) =>
         this.gateway!.deregisterServer(c.slug).catch((err) => {
-          log("warn", `Failed to deregister MCP server "${c.name}" (${c.slug}) — will be purged on next run`, { error: String(err) });
+          log(
+            "warn",
+            `Failed to deregister MCP server "${c.name}" (${c.slug}) — will be purged on next run`,
+            { error: String(err) },
+          );
         })
       ));
       this.gateway = null;
@@ -126,7 +172,10 @@ export class ClaudeCodeProcessor implements WorkerProcessor {
       }
       await log("info", "Workspaces directory cleaned");
     } catch (error) {
-      await log("warn", `Failed to clean workspaces directory: ${error instanceof Error ? error.message : String(error)}`);
+      await log(
+        "warn",
+        `Failed to clean workspaces directory: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
     this.workspacePath = undefined;
     this.mcpConfigs = [];
@@ -202,7 +251,9 @@ export class ClaudeCodeProcessor implements WorkerProcessor {
       };
       if (!this.runtime.hostLogin) {
         const tokenResponse = await new TokenManagerClient().acquireTokenFull("claude-code-cli", "anthropic-oauth");
-        const envVarName = tokenResponse.keyType === "anthropic-oauth" ? "CLAUDE_CODE_OAUTH_TOKEN" : "ANTHROPIC_API_KEY";
+        const envVarName = tokenResponse.keyType === "anthropic-oauth"
+          ? "CLAUDE_CODE_OAUTH_TOKEN"
+          : "ANTHROPIC_API_KEY";
         env[envVarName] = tokenResponse.value;
         await log("info", `Acquired ${envVarName}`, {
           preview: `${tokenResponse.value.substring(0, 7)}...(${tokenResponse.value.length} chars)`,
@@ -235,7 +286,10 @@ export class ClaudeCodeProcessor implements WorkerProcessor {
         env.https_proxy = "";
         env.NODE_EXTRA_CA_CERTS = "";
       }
-      // MCP gateway lifecycle is handled in setup()/teardown() — servers are already registered
+      // MCP gateway lifecycle is handled in setup()/teardown() — servers are already registered.
+      // Host isolation is passed as ACP metadata so Claude Code ignores personal
+      // setting sources/MCP config while HOME and CLAUDE_CONFIG_DIR stay intact
+      // for installed-login reuse.
       const result = await runACPSession(message, {
         command: this.runtime.command ?? "claude-agent-acp",
         args: this.runtime.args ?? [],
@@ -259,7 +313,12 @@ export class ClaudeCodeProcessor implements WorkerProcessor {
           await log("debug", msg);
         },
         mcpServers: this.gateway && this.mcpConfigs.length > 0
-          ? [{ type: "http" as const, slug: "mcp-gateway", name: "mcp-gateway", url: this.gateway.mcpEndpoint }]
+          ? [{
+            type: "http" as const,
+            slug: "mcp-gateway",
+            name: "mcp-gateway",
+            url: this.gateway.mcpEndpoint,
+          }]
           : [],
         reasoningEffort: options?.reasoningEffort,
         ...(this.runtime.isolateHostConfig ? { isolateHostConfig: true } : {}),
@@ -299,15 +358,21 @@ export class ClaudeCodeProcessor implements WorkerProcessor {
       const { harFilePath, tokenUsage, aiCallCount } = devProxy
         ? await devProxy.stopAndCollectHar(log)
         : { harFilePath: null, tokenUsage: undefined, aiCallCount: undefined };
-      return { response, ...(harFilePath && { harFilePath }), ...(tokenUsage && { tokenUsage }), ...(aiCallCount !== undefined && { aiCallCount }) };
+      return {
+        response,
+        ...(harFilePath && { harFilePath }),
+        ...(tokenUsage && { tokenUsage }),
+        ...(aiCallCount !== undefined && { aiCallCount }),
+      };
     } catch (error) {
       if (devProxy) {
         const { harFilePath, aiCallCount } = await devProxy.stopAndCollectHar(log);
+        const errorWithMetadata = error as Error & WorkerErrorMetadata;
         if (harFilePath) {
-          (error as any).harFilePath = harFilePath;
+          errorWithMetadata.harFilePath = harFilePath;
         }
         if (aiCallCount !== undefined) {
-          (error as any).aiCallCount = aiCallCount;
+          errorWithMetadata.aiCallCount = aiCallCount;
         }
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -318,6 +383,7 @@ export class ClaudeCodeProcessor implements WorkerProcessor {
   }
 }
 
+/** Start the queue processor with environment-derived storage, Redis and API settings. */
 export async function startClaudeCodeWorker(runtime: ClaudeCodeWorkerRuntime = {}): Promise<void> {
   initTelemetry(runtime.workerName ?? WORKER_NAME);
   // K8s: MONGO_CONNECTION_STRING from secret, STORAGE_CONNECTION_STRING from secret, QUEUE_NAME from deployment env
@@ -327,7 +393,9 @@ export async function startClaudeCodeWorker(runtime: ClaudeCodeWorkerRuntime = {
     mongoCollection: process.env.MONGO_COLLECTION || "requests",
     storageAccountName: process.env.AZURE_STORAGE_ACCOUNT_NAME || "",
     storageConnectionString: process.env.STORAGE_CONNECTION_STRING || process.env.AZURE_STORAGE_CONNECTION_STRING,
-    queueName: runtime.workerName ? `queue-${runtime.workerName}` : process.env.QUEUE_NAME || process.env.AZURE_STORAGE_QUEUE_NAME || "queue-coder-acp-claude-code",
+    queueName: runtime.workerName
+      ? `queue-${runtime.workerName}`
+      : process.env.QUEUE_NAME || process.env.AZURE_STORAGE_QUEUE_NAME || "queue-coder-acp-claude-code",
     batchSize: parseInt(process.env.BATCH_SIZE || "1", 10),
     pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || "1000", 10),
     redisHost: process.env.REDIS_HOST || "",

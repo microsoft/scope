@@ -6,6 +6,7 @@ import { isIP, type AddressInfo } from "node:net";
 import { AgentManager, parseAgentUpdate, SetupError } from "./agents.js";
 import { isTargetId } from "./manifest.js";
 
+/** Health payload for the launcher-owned control listener. */
 export interface ServerStatus {
   status: "starting" | "ready" | "stopping";
   apiUrl?: string;
@@ -28,6 +29,12 @@ async function body(request: IncomingMessage): Promise<unknown> {
   catch { throw new SetupError("Invalid JSON"); }
 }
 
+/**
+ * Start the private launcher control API used by containers and CLI commands.
+ *
+ * The listener is restricted to loopback or an explicit Docker bridge address;
+ * it is not an authentication boundary and must never bind a wildcard address.
+ */
 export async function startControl(
   agents: AgentManager,
   status: () => ServerStatus,

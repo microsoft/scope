@@ -1,13 +1,31 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CodingAgentQueueProcessor, WorkerProcessor, WorkerProcessorOptions, WorkerResult, QueueProcessorConfig, LogEvent, WorkerLogFn, TokenManagerClient, createProxyClient, isProxyEnabled, type ProxyClient, McpGatewayClient, McpServerConfig, KubedockClient, createFreshWorkspace, cleanupWorkspaces } from "shared";
+import {
+  CodingAgentQueueProcessor,
+  WorkerProcessor,
+  WorkerProcessorOptions,
+  WorkerResult,
+  QueueProcessorConfig,
+  LogEvent,
+  WorkerLogFn,
+  TokenManagerClient,
+  createProxyClient,
+  isProxyEnabled,
+  type ProxyClient,
+  McpGatewayClient,
+  McpServerConfig,
+  KubedockClient,
+  createFreshWorkspace,
+  cleanupWorkspaces,
+} from "shared";
 import { initTelemetry, trackMetric, trackTrace, trackEvent } from "telemetry";
 import { runACPSession } from "./acp-client.js";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+/** Runtime overrides used by tests and by the local host-worker wrapper. */
 export interface CopilotWorkerRuntime {
   workerName?: string;
   command?: string;
@@ -15,7 +33,10 @@ export interface CopilotWorkerRuntime {
   componentVersions?: Record<string, string>;
   /** Reuse the installed CLI's login and inherited proxy settings. */
   hostLogin?: boolean;
-  /** Host-only isolation preserves HOME login reuse while disabling personal MCP servers for reproducible benchmarks. */
+  /**
+   * Host-only isolation preserves HOME login reuse while disabling personal MCP
+   * servers/settings for reproducible benchmarks.
+   */
   isolateHostConfig?: boolean;
   /** Optional test override; production host isolation reads ~/.copilot/mcp-config.json read-only. */
   personalMcpConfigPath?: string;
@@ -23,6 +44,7 @@ export interface CopilotWorkerRuntime {
   captureProxy?: boolean;
 }
 
+/** CLI arguments generated to neutralize personal MCP configuration on host runs. */
 export interface CopilotHostMcpIsolation {
   args: string[];
   disabledServers: string[];
@@ -33,6 +55,11 @@ type PersonalMcpConfigReadResult = {
   status: "loaded" | "missing" | "unreadable" | "empty" | "malformed" | "no-servers";
   error?: string;
 };
+
+interface WorkerErrorMetadata {
+  harFilePath?: string;
+  aiCallCount?: number;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -57,7 +84,7 @@ function readPersonalCopilotMcpServers(configPath: string): PersonalMcpConfigRea
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(raw) as unknown;
   } catch (error) {
     return {
       disabledServers: [],
@@ -90,7 +117,8 @@ export async function buildCopilotHostMcpIsolation(
 ): Promise<CopilotHostMcpIsolation> {
   const readResult = readPersonalCopilotMcpServers(configPath);
   if (readResult.status !== "loaded") {
-    const level: LogEvent["level"] = readResult.status === "malformed" || readResult.status === "unreadable" ? "warn" : "info";
+    const level: LogEvent["level"] =
+      readResult.status === "malformed" || readResult.status === "unreadable" ? "warn" : "info";
     await log(level, "Personal Copilot MCP config could not be loaded; continuing with built-in MCPs disabled", {
       configPath,
       status: readResult.status,
@@ -112,6 +140,7 @@ export async function buildCopilotHostMcpIsolation(
   };
 }
 
+/** Choose a gateway server name that cannot be disabled by copied personal MCP flags. */
 function chooseCopilotGatewayServerName(disabledServerNames: readonly string[]): string {
   const disabled = new Set(disabledServerNames);
   if (!disabled.has("mcp-gateway")) return "mcp-gateway";
@@ -133,8 +162,8 @@ export function isFirstAiCallSignal(msg: string): boolean {
   const trimmed = msg.trim();
   if (trimmed.startsWith("{")) {
     try {
-      const parsed = JSON.parse(trimmed);
-      return typeof parsed === "object" && parsed !== null && typeof parsed.type === "string";
+      const parsed: unknown = JSON.parse(trimmed);
+      return isRecord(parsed) && typeof parsed.type === "string";
     } catch {
       return false;
     }
@@ -221,6 +250,7 @@ export function buildSubprocessEnv(
 const WORKER_NAME = process.env.WORKER_NAME || "coder-acp-copilot";
 const AGENT_VERSION = `copilot-${process.env.COPILOT_CLI_VERSION || "unknown"}`;
 
+/** Queue processor that runs one Copilot ACP benchmark attempt per message. */
 export class CopilotProcessor implements WorkerProcessor {
   static coldStartTracked = false;
   readonly workerName: string;
@@ -233,10 +263,12 @@ export class CopilotProcessor implements WorkerProcessor {
     this.workerName = runtime.workerName ?? WORKER_NAME;
   }
 
+  /** Return the exact worker/CLI version recorded on run output. */
   getAgentVersion(): string {
     return this.runtime.agentVersion ?? AGENT_VERSION;
   }
 
+  /** Return component versions used by reports and agent registration. */
   getComponentVersions(): Record<string, string> {
     if (this.runtime.componentVersions) return this.runtime.componentVersions;
     return {
@@ -244,6 +276,7 @@ export class CopilotProcessor implements WorkerProcessor {
     };
   }
 
+  /** Create the run workspace and register requested MCP servers with the gateway. */
   async setup(log: WorkerLogFn, options?: WorkerProcessorOptions): Promise<void> {
     if (this.runtime.workspaceRoot) {
       mkdirSync(this.runtime.workspaceRoot, { recursive: true });
@@ -270,12 +303,16 @@ export class CopilotProcessor implements WorkerProcessor {
         throw new Error("MCP servers configured but MCP_GATEWAY_URL is not set — cannot proceed without gateway");
       }
       this.gateway = new McpGatewayClient();
-      await log("info", "Registering MCP servers with gateway", { count: this.mcpConfigs.length, servers: this.mcpConfigs.map((s) => s.name) });
+      await log("info", "Registering MCP servers with gateway", {
+        count: this.mcpConfigs.length,
+        servers: this.mcpConfigs.map((s) => s.name),
+      });
       await this.gateway.purgeAll();
       for (const config of this.mcpConfigs) await this.gateway.registerServer(config);
     }
   }
 
+  /** Deregister run-scoped MCP servers and remove workspaces created in setup(). */
   async teardown(log: WorkerLogFn): Promise<void> {
     // Clean up containers spawned during this run
     if (this.kubedock) {
@@ -291,7 +328,11 @@ export class CopilotProcessor implements WorkerProcessor {
     if (this.gateway && this.mcpConfigs.length > 0) {
       await Promise.all(this.mcpConfigs.map((c) =>
         this.gateway!.deregisterServer(c.slug).catch((err) => {
-          log("warn", `Failed to deregister MCP server "${c.name}" (${c.slug}) — will be purged on next run`, { error: String(err) });
+          log(
+            "warn",
+            `Failed to deregister MCP server "${c.name}" (${c.slug}) — will be purged on next run`,
+            { error: String(err) },
+          );
         })
       ));
       this.gateway = null;
@@ -304,7 +345,10 @@ export class CopilotProcessor implements WorkerProcessor {
       }
       await log("info", "Workspaces directory cleaned");
     } catch (error) {
-      await log("warn", `Failed to clean workspaces directory: ${error instanceof Error ? error.message : String(error)}`);
+      await log(
+        "warn",
+        `Failed to clean workspaces directory: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
     this.workspacePath = undefined;
     this.mcpConfigs = [];
@@ -394,7 +438,14 @@ export class CopilotProcessor implements WorkerProcessor {
       }
       const env = this.runtime.hostLogin && !devProxy
         ? { COPILOT_AUTO_UPDATE: "false" }
-        : buildSubprocessEnv(githubToken, !!devProxy, process.env.NODE_OPTIONS, process.env.MCP_GATEWAY_URL, devProxy?.proxyUrl, caCertBundlePath);
+        : buildSubprocessEnv(
+          githubToken,
+          !!devProxy,
+          process.env.NODE_OPTIONS,
+          process.env.MCP_GATEWAY_URL,
+          devProxy?.proxyUrl,
+          caCertBundlePath,
+        );
       if (this.runtime.hostLogin) delete env.GITHUB_TOKEN;
 
       // Run ACP session with GitHub Copilot
@@ -489,16 +540,22 @@ export class CopilotProcessor implements WorkerProcessor {
       const { harFilePath, tokenUsage, aiCallCount } = devProxy
         ? await devProxy.stopAndCollectHar(log)
         : { harFilePath: null, tokenUsage: undefined, aiCallCount: undefined };
-      return { response, ...(harFilePath && { harFilePath }), ...(tokenUsage && { tokenUsage }), ...(aiCallCount !== undefined && { aiCallCount }) };
+      return {
+        response,
+        ...(harFilePath && { harFilePath }),
+        ...(tokenUsage && { tokenUsage }),
+        ...(aiCallCount !== undefined && { aiCallCount }),
+      };
     } catch (error) {
       clearInterval(idleMonitor);
       if (devProxy) {
         const { harFilePath, aiCallCount } = await devProxy.stopAndCollectHar(log);
+        const errorWithMetadata = error as Error & WorkerErrorMetadata;
         if (harFilePath) {
-          (error as any).harFilePath = harFilePath;
+          errorWithMetadata.harFilePath = harFilePath;
         }
         if (aiCallCount !== undefined) {
-          (error as any).aiCallCount = aiCallCount;
+          errorWithMetadata.aiCallCount = aiCallCount;
         }
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -508,6 +565,7 @@ export class CopilotProcessor implements WorkerProcessor {
   }
 }
 
+/** Start the queue processor with environment-derived storage, Redis and API settings. */
 export async function startCopilotWorker(runtime: CopilotWorkerRuntime = {}): Promise<void> {
   initTelemetry(runtime.workerName ?? WORKER_NAME);
   // K8s: MONGO_CONNECTION_STRING from secret, STORAGE_CONNECTION_STRING from secret, QUEUE_NAME from deployment env
@@ -517,7 +575,9 @@ export async function startCopilotWorker(runtime: CopilotWorkerRuntime = {}): Pr
     mongoCollection: process.env.MONGO_COLLECTION || "requests",
     storageAccountName: process.env.AZURE_STORAGE_ACCOUNT_NAME || "",
     storageConnectionString: process.env.STORAGE_CONNECTION_STRING || process.env.AZURE_STORAGE_CONNECTION_STRING,
-    queueName: runtime.workerName ? `queue-${runtime.workerName}` : process.env.QUEUE_NAME || process.env.AZURE_STORAGE_QUEUE_NAME || "queue-coder-acp-copilot",
+    queueName: runtime.workerName
+      ? `queue-${runtime.workerName}`
+      : process.env.QUEUE_NAME || process.env.AZURE_STORAGE_QUEUE_NAME || "queue-coder-acp-copilot",
     batchSize: parseInt(process.env.BATCH_SIZE || "1", 10),
     pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || "1000", 10),
     redisHost: process.env.REDIS_HOST || "",

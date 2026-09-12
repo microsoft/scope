@@ -8,6 +8,7 @@ import { isIP } from "node:net";
 import { IncomingMessage } from "node:http";
 import { create as tar } from "tar";
 
+/** Docker image reference plus optional build recipe for a Scope service. */
 export interface Image {
   name: string;
   build?: {
@@ -18,6 +19,7 @@ export interface Image {
   };
 }
 
+/** Declarative container/job spec for the small local Scope Server stack. */
 export interface Service {
   name: string;
   image: Image;
@@ -37,12 +39,21 @@ export interface Service {
   restart?: boolean;
 }
 
+/** Progress event emitted while images and services are prepared or stopped. */
 export interface Progress {
   service: string;
   phase: "image" | "starting" | "ready" | "stopping";
   message?: string;
 }
 
+/**
+ * Ownership label applied to every launcher-created container and network.
+ *
+ * It gates destructive cleanup: shutdown may stop/remove only containers and the
+ * network whose label exactly matches this launcher's per-user owner value. It
+ * never deletes the persistent host bind-mounted data roots; those paths are
+ * outside Docker resource cleanup and remain on disk across Ctrl+C/restart.
+ */
 const label = "dev.scope.server.owner";
 
 function hasStatus(error: unknown, status: number): boolean {
@@ -65,6 +76,7 @@ function imageBuildFailureMessage(service: string, error: unknown): string {
   return `Image build for ${service} failed: ${message}`;
 }
 
+/** Topologically order services and validate names, dependencies and memory limits. */
 export function startupOrder(services: readonly Service[]): Service[] {
   const byName = new Map(services.map(service => [service.name, service]));
   if (byName.size !== services.length) throw new Error("Duplicate service name");
@@ -90,6 +102,7 @@ export function startupOrder(services: readonly Service[]): Service[] {
   return result;
 }
 
+/** Convert a service spec into Dockerode createContainer options. */
 export function containerOptions(service: Service, owner: string, network: string): Docker.ContainerCreateOptions {
   const ports = service.ports ?? [];
   return {
@@ -131,7 +144,14 @@ export function containerOptions(service: Service, owner: string, network: strin
   };
 }
 
-/** Deliberately limited to this launcher's named services, jobs and Docker labels. */
+/**
+ * Starts and stops a labeled local Docker stack for Scope Server.
+ *
+ * The orchestrator is intentionally small: it knows service dependencies,
+ * readiness checks, bounded Docker operations and owner-scoped cleanup, but not
+ * Scope business state. Persistent data is always carried by bind mounts owned
+ * by the launcher, not by Docker volumes the orchestrator might remove.
+ */
 export class Orchestrator {
   private readonly containers = new Map<string, Docker.Container>();
   private readonly preparedImages = new Set<string>();
@@ -148,6 +168,7 @@ export class Orchestrator {
     this.network = `${owner}-network`;
   }
 
+  /** Verify the Docker engine is responsive and ensure the owner-labeled network exists. */
   async connect(): Promise<void> {
     for (let attempt = 0; ; attempt++) {
       this.checkCancelled();
@@ -187,15 +208,20 @@ export class Orchestrator {
     }
   }
 
+  /** Return the bridge gateway used by Linux containers to reach the host control API. */
   async bridgeGateway(): Promise<string | undefined> {
     const network = await this.docker.getNetwork(this.network).inspect();
-    return network.IPAM?.Config?.find(config => typeof config.Gateway === "string" && isIP(config.Gateway) === 4)?.Gateway;
+    return network.IPAM?.Config?.find(config =>
+      typeof config.Gateway === "string" &&
+      isIP(config.Gateway) === 4)?.Gateway;
   }
 
+  /** Start a dependency-ordered set of service specs. */
   async start(services: readonly Service[]): Promise<void> {
     for (const service of startupOrder(services)) await this.startService(service);
   }
 
+  /** Build/pull, replace and wait for one service or job. */
   async startService(service: Service): Promise<void> {
     this.checkCancelled();
     await this.ensureImage(service);
@@ -242,8 +268,14 @@ export class Orchestrator {
           break;
         } catch (error) {
           this.checkCancelled();
-          if (attempt === 1 || !isTransportError(error)) throw new Error(imageBuildFailureMessage(service.name, error), { cause: error });
-          this.progress({ service: service.name, phase: "image", message: "Docker transport interrupted; retrying the build from cached layers" });
+          if (attempt === 1 || !isTransportError(error)) {
+            throw new Error(imageBuildFailureMessage(service.name, error), { cause: error });
+          }
+          this.progress({
+            service: service.name,
+            phase: "image",
+            message: "Docker transport interrupted; retrying the build from cached layers",
+          });
           await sleep(1000);
         }
       }
@@ -266,7 +298,11 @@ export class Orchestrator {
   }
 
   private follow(stream: NodeJS.ReadableStream, service: string): Promise<void> {
-    // Layer compression can stay silent well beyond ordinary Docker request timeouts.
+    // Keep Dockerode's ordinary 120s modem timeout for management calls so a
+    // wedged engine does not hang startup. Once an image build/pull stream is
+    // established, disable the IncomingMessage inactivity timeout: quiet layer
+    // compression, commit or decompression phases can exceed 120s, and Dockerode
+    // otherwise destroys the request even though the engine is still progressing.
     if (stream instanceof IncomingMessage) stream.setTimeout(0);
     return new Promise((resolve, reject) => {
       let progressError: Error | undefined;
@@ -279,12 +315,20 @@ export class Orchestrator {
         if (typeof event !== "object" || event === null) return;
         if ("error" in event && typeof event.error === "string") {
           progressError = new Error(event.error);
-        } else if ("errorDetail" in event && typeof event.errorDetail === "object"
-          && event.errorDetail !== null && "message" in event.errorDetail
-          && typeof event.errorDetail.message === "string") {
+        } else if (
+          "errorDetail" in event &&
+          typeof event.errorDetail === "object" &&
+          event.errorDetail !== null &&
+          "message" in event.errorDetail &&
+          typeof event.errorDetail.message === "string"
+        ) {
           progressError = new Error(event.errorDetail.message);
         }
-        const message = "stream" in event ? event.stream : "status" in event ? event.status : undefined;
+        const message = "stream" in event
+          ? event.stream
+          : "status" in event
+            ? event.status
+            : undefined;
         if (typeof message === "string") this.progress({ service, phase: "image", message: message.trim() });
       });
       if (this.cancelled) cancel();
@@ -302,7 +346,13 @@ export class Orchestrator {
           throw await this.failure(service.name, container, `exited with ${state.ExitCode}`);
         }
       } else {
-        if (!state.Running) throw await this.failure(service.name, container, state.Error || `exited with ${state.ExitCode}`);
+        if (!state.Running) {
+          throw await this.failure(
+            service.name,
+            container,
+            state.Error || `exited with ${state.ExitCode}`,
+          );
+        }
         if (service.readyLog) {
           const logs = await container.logs({ stdout: true, stderr: true, tail: 100 });
           if (logs.toString().includes(service.readyLog)) return;
@@ -321,6 +371,7 @@ export class Orchestrator {
     return new Error(`${name}: ${reason}\n${output.toString()}`);
   }
 
+  /** Resolve the actual host port Docker assigned to a published container port. */
   async hostPort(service: string, port: number): Promise<number> {
     const container = this.containers.get(service);
     if (!container) throw new Error(`Service not started: ${service}`);
@@ -330,6 +381,7 @@ export class Orchestrator {
     return Number(binding.HostPort);
   }
 
+  /** Return stdout logs from a started service, demultiplexing Docker's log stream framing. */
   async output(service: string): Promise<string> {
     const container = this.containers.get(service);
     if (!container) throw new Error(`Service not started: ${service}`);
@@ -348,12 +400,14 @@ export class Orchestrator {
     return Buffer.concat(chunks).toString("utf8");
   }
 
+  /** Stop one named service only if the existing container carries this owner label. */
   async stopService(name: string): Promise<void> {
     this.progress({ service: name, phase: "stopping" });
     await this.removeOwned(name);
     this.containers.delete(name);
   }
 
+  /** Cancel in-flight engine probes or image transfers and make future waits fail fast. */
   cancel(): void {
     this.cancelled = true;
     this.cancelConnection?.();
@@ -381,8 +435,10 @@ export class Orchestrator {
           if (!hasStatus(error, 304)) {
             stopFailure = { error };
             this.progress({
-              service: name, phase: "stopping",
-              message: `Graceful stop failed; forcing removal of owned container: ${error instanceof Error ? error.message : String(error)}`,
+              service: name,
+              phase: "stopping",
+              message: "Graceful stop failed; forcing removal of owned container: " +
+                `${error instanceof Error ? error.message : String(error)}`,
             });
           }
         } finally { clearTimeout(timer); }
@@ -391,7 +447,10 @@ export class Orchestrator {
         try { await container.remove({ force: true }); }
         catch (error) {
           if (!hasStatus(error, 404)) {
-            throw new AggregateError([stopFailure.error, error], `Could not remove owned container ${name} after graceful stop failed`);
+            throw new AggregateError(
+              [stopFailure.error, error],
+              `Could not remove owned container ${name} after graceful stop failed`,
+            );
           }
         }
       } else {
@@ -402,6 +461,7 @@ export class Orchestrator {
     }
   }
 
+  /** Stop every owner-labeled container and remove the matching owner-labeled network. */
   async stop(): Promise<void> {
     const errors: unknown[] = [];
     // Also collect containers left by an interrupted launcher, but never other users' services.

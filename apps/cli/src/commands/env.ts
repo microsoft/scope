@@ -11,13 +11,20 @@ import { formatData } from "../utils/formatters.js";
 import type { DisplayField, OutputFormat } from "../utils/types.js";
 
 interface EnvironmentRow { name: string; active: boolean; url: string; project: string; token: string }
+
 const fields: DisplayField<EnvironmentRow>[] = [
   { key: "name", label: "Name" }, { key: "active", label: "Active" },
   { key: "url", label: "URL" }, { key: "project", label: "Project" }, { key: "token", label: "Token" },
 ];
 
 function row(environment: ScopeEnvironment, active?: string): EnvironmentRow {
-  return { name: environment.name, active: environment.name === active, url: environment.url, project: environment.project ?? "", token: environment.token ? "[REDACTED]" : "" };
+  return {
+    name: environment.name,
+    active: environment.name === active,
+    url: environment.url,
+    project: environment.project ?? "",
+    token: environment.token ? "[REDACTED]" : "",
+  };
 }
 
 function selected(command: Command, store: EnvironmentStore): string {
@@ -26,8 +33,11 @@ function selected(command: Command, store: EnvironmentStore): string {
   return name;
 }
 
+/** Register `scope env` commands for named API URL/token/project profiles. */
 export function registerEnvCommands(program: Command): void {
-  const env = program.command("env").description("Manage named CLI connections (separate from process environment variables)");
+  const env = program
+    .command("env")
+    .description("Manage named CLI connections (separate from process environment variables)");
   configureHelp(env);
   env.action(() => { env.help(); });
   env.command("add").argument("<name>").requiredOption("--url <url>", "Scope API URL")
@@ -41,10 +51,15 @@ export function registerEnvCommands(program: Command): void {
       const store = new EnvironmentStore();
       console.log(formatData(store.list().map((entry) => row(entry, store.active())), fields, options.output));
     });
-  withOutputOption(env.command("show").argument("[name]").description("Show a named or selected environment (token redacted)"))
+  withOutputOption(
+    env.command("show")
+      .argument("[name]")
+      .description("Show a named or selected environment (token redacted)"),
+  )
     .action((name: string | undefined, options: { output: OutputFormat }, command: Command) => {
       const store = new EnvironmentStore();
-      console.log(formatData([row(store.read(name ?? selected(command, store)), store.active())], fields, options.output));
+      const environment = store.read(name ?? selected(command, store));
+      console.log(formatData([row(environment, store.active())], fields, options.output));
     });
   env.command("use").argument("[name]").option("--clear", "Clear selection and return to legacy configuration")
     .action((name: string | undefined, options: { clear?: boolean }) => {

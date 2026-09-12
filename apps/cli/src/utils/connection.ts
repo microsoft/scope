@@ -7,19 +7,23 @@ import { EnvironmentStore, type ScopeEnvironment } from "./environments.js";
 
 const connections = new AsyncLocalStorage<Readonly<ScopeEnvironment> | undefined>();
 
+/** Return the named environment selected for the current command action, if any. */
 export function currentEnvironment(): Readonly<ScopeEnvironment> | undefined {
   return connections.getStore();
 }
 
+/** Prefer the action-scoped named URL over the legacy URL passed by older commands. */
 export function resolveApiUrl(legacyUrl: string): string {
   return currentEnvironment()?.url ?? legacyUrl;
 }
 
+/** Walk from a subcommand to the root program where global options live. */
 export function rootCommand(command: Command): Command {
   while (command.parent) command = command.parent;
   return command;
 }
 
+/** Resolve the root --env selection, falling back to the saved active environment. */
 export function selectedEnvironmentName(command: Command, store = new EnvironmentStore()): string | undefined {
   const root = rootCommand(command);
   // Never read optsWithGlobals(): MCP owns a distinct, variadic --env option.
@@ -27,7 +31,16 @@ export function selectedEnvironmentName(command: Command, store = new Environmen
   return typeof flag === "string" ? flag : store.active();
 }
 
-export function resolveCommandEnvironment(command: Command, store = new EnvironmentStore()): ScopeEnvironment | undefined {
+/**
+ * Resolve the named environment a command should run under.
+ *
+ * Commands with an explicit API selector keep legacy behavior, and `env` itself
+ * must never be scoped by the environment it is editing.
+ */
+export function resolveCommandEnvironment(
+  command: Command,
+  store = new EnvironmentStore(),
+): ScopeEnvironment | undefined {
   let group = command;
   while (group.parent?.parent) group = group.parent;
   if (group.name() === "env" || group.name() === "update" || command === rootCommand(command)) return undefined;
@@ -59,10 +72,12 @@ export class ScopeCommand extends Command {
     return new ScopeCommand(name);
   }
 
+  /** Wrap actions in AsyncLocalStorage so all async API calls share the selection. */
   override action(handler: Parameters<Command["action"]>[0]): this {
     return super.action(function (this: Command, ...args: unknown[]) {
       const environment = resolveCommandEnvironment(this);
-      return connections.run(environment ? Object.freeze(environment) : undefined, () => handler.apply(this, args));
+      const scopedEnvironment = environment ? Object.freeze(environment) : undefined;
+      return connections.run(scopedEnvironment, () => handler.apply(this, args));
     });
   }
 }

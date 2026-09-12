@@ -10,6 +10,7 @@ import type { TargetId } from "./manifest.js";
 
 const exec = promisify(execFile);
 
+/** Host executable metadata returned by a worker's cheap --detect probe. */
 export interface DetectedHost {
   workerType: string;
   executable: string;
@@ -18,40 +19,58 @@ export interface DetectedHost {
   componentVersions: Record<string, string>;
 }
 
+/** Full ACP model catalog returned by --discover before a host worker is enabled. */
 export interface DiscoveredHost extends DetectedHost {
   supportedModels: string[];
   models: Array<{ id: string; name?: string }>;
   defaultModel?: string;
 }
 
+/** Validate the --detect JSON emitted by a packaged host worker. */
 export function parseDetectedHost(value: unknown): DetectedHost {
-  if (typeof value !== "object" || value === null ||
-    !["workerType", "executable", "version", "agentVersion"].every(key => key in value && typeof Reflect.get(value, key) === "string") ||
-    !("componentVersions" in value) || typeof value.componentVersions !== "object" || value.componentVersions === null ||
-    !Object.values(value.componentVersions).every(version => typeof version === "string")) {
+  if (
+    typeof value !== "object" || value === null ||
+    !["workerType", "executable", "version", "agentVersion"].every(key =>
+      key in value && typeof Reflect.get(value, key) === "string") ||
+    !("componentVersions" in value) ||
+    typeof value.componentVersions !== "object" ||
+    value.componentVersions === null ||
+    !Object.values(value.componentVersions).every(version => typeof version === "string")
+  ) {
     throw new Error("Host worker returned invalid detection output");
   }
   return value as DetectedHost;
 }
 
+/** Validate model discovery and fill legacy model metadata when ACP only returns IDs. */
 export function parseDiscoveredHost(value: unknown): DiscoveredHost {
   const detected = parseDetectedHost(value);
-  if (typeof value !== "object" || value === null ||
-    !("supportedModels" in value) || !Array.isArray(value.supportedModels) || value.supportedModels.length === 0 ||
-    !value.supportedModels.every((id: unknown) => typeof id === "string" && id.length > 0)) {
+  if (
+    typeof value !== "object" || value === null ||
+    !("supportedModels" in value) ||
+    !Array.isArray(value.supportedModels) ||
+    value.supportedModels.length === 0 ||
+    !value.supportedModels.every((id: unknown) => typeof id === "string" && id.length > 0)
+  ) {
     throw new Error("Host worker did not advertise a valid ACP model catalog");
   }
   const supportedModels = value.supportedModels as string[];
-  if ("defaultModel" in value && (typeof value.defaultModel !== "string" || !supportedModels.includes(value.defaultModel))) {
+  if (
+    "defaultModel" in value &&
+    (typeof value.defaultModel !== "string" || !supportedModels.includes(value.defaultModel))
+  ) {
     throw new Error("Host worker did not advertise a valid ACP model catalog");
   }
   if (!("models" in value)) {
     return { ...detected, ...value, models: supportedModels.map(id => ({ id })) } as DiscoveredHost;
   }
-  if (!Array.isArray(value.models) || value.models.length === 0 ||
+  if (
+    !Array.isArray(value.models) ||
+    value.models.length === 0 ||
     !value.models.every((model: unknown) => typeof model === "object" && model !== null &&
       "id" in model && typeof model.id === "string" && supportedModels.includes(model.id) &&
-      (!("name" in model) || typeof model.name === "string"))) {
+      (!("name" in model) || typeof model.name === "string"))
+  ) {
     throw new Error("Host worker did not advertise a valid ACP model catalog");
   }
   const models = value.models as Array<{ id: string; name?: string }>;
@@ -61,6 +80,13 @@ export function parseDiscoveredHost(value: unknown): DiscoveredHost {
   return { ...detected, ...value } as DiscoveredHost;
 }
 
+/**
+ * Signal the host worker process group so child CLIs do not keep consuming queues.
+ *
+ * Host workers spawn installed tools that may themselves create process trees.
+ * On Unix the supervisor starts a process group and signals it as a unit; on
+ * Windows it falls back to the direct child because negative PIDs are unsupported.
+ */
 export function signalHostProcess(
   child: Pick<ChildProcess, "pid" | "kill">,
   signal: NodeJS.Signals,
@@ -86,6 +112,7 @@ export function hostCaptureSetting(env: NodeJS.ProcessEnv): string {
   return env.DEV_PROXY_ENABLED ?? (env.DEV_PROXY_API_URL ? "true" : "");
 }
 
+/** Detect the explicit cancellation markers that should be restarted quietly. */
 export function isHostCancellation(output: string, id: TargetId): boolean {
   return output.split("\n").some(line => line.includes(`[${id}] Run `) && (
     line.trimEnd().endsWith(" cancelled via pub/sub — exiting process") ||
@@ -93,8 +120,16 @@ export function isHostCancellation(output: string, id: TargetId): boolean {
   ));
 }
 
+/** Supervises host workers that run installed CLIs outside Docker. */
 export class HostWorkers {
   private readonly children = new Map<TargetId, ChildProcess>();
+  /**
+   * Monotonic start generation per worker.
+   *
+   * A slow detect/start sequence can finish after the user disabled the target,
+   * or after a newer setup attempt has begun. The generation check makes those
+   * stale continuations fail instead of re-registering an older process.
+   */
   private readonly generations = new Map<TargetId, number>();
   constructor(
     private readonly dist: string,
@@ -115,11 +150,14 @@ export class HostWorkers {
       NODE_ENV: "development",
       DEV_PROXY_ENABLED: hostCaptureSetting(captureEnv),
     };
-    // Container-only emulation flags must not weaken TLS for the user's installed CLI.
+    // The server containers set NODE_TLS_REJECT_UNAUTHORIZED=0 for Lowkey Vault
+    // emulation. Host workers run the user's installed CLI, so that container-only
+    // relaxation must never weaken TLS for their normal workstation traffic.
     delete env.NODE_TLS_REJECT_UNAUTHORIZED;
     return env;
   }
 
+  /** Run the cheap executable/version probe for a host target. */
   async detect(id: TargetId, settings: AgentSettings, backend: Record<string, string>): Promise<DetectedHost> {
     await mkdir(join(this.data, "runtime", id), { recursive: true, mode: 0o700 });
     const { stdout } = await exec(process.execPath, [join(this.dist, `${id}.js`), "--detect"], {
@@ -129,10 +167,13 @@ export class HostWorkers {
     });
     const value: unknown = JSON.parse(stdout);
     const detected = parseDetectedHost(value);
-    if (detected.workerType !== id) throw new Error(`Host detection returned the wrong worker type: ${detected.workerType}`);
+    if (detected.workerType !== id) {
+      throw new Error(`Host detection returned the wrong worker type: ${detected.workerType}`);
+    }
     return detected;
   }
 
+  /** Probe ACP model metadata before registering the host worker as available. */
   async discover(id: TargetId, settings: AgentSettings, backend: Record<string, string>): Promise<DiscoveredHost> {
     await mkdir(join(this.data, "runtime", id), { recursive: true, mode: 0o700 });
     const { stdout } = await exec(process.execPath, [join(this.dist, `${id}.js`), "--discover"], {
@@ -141,19 +182,29 @@ export class HostWorkers {
       maxBuffer: 1024 * 1024,
     });
     const discovered = parseDiscoveredHost(JSON.parse(stdout) as unknown);
-    if (discovered.workerType !== id) throw new Error(`Host discovery returned the wrong worker type: ${discovered.workerType}`);
+    if (discovered.workerType !== id) {
+      throw new Error(`Host discovery returned the wrong worker type: ${discovered.workerType}`);
+    }
     return discovered;
   }
 
+  /** Start a queue worker and wait for the same readiness markers used by Docker workers. */
   async start(id: TargetId, settings: AgentSettings, backend: Record<string, string>): Promise<void> {
     const generation = (this.generations.get(id) ?? 0) + 1;
     this.generations.set(id, generation);
     await mkdir(join(this.data, "workspaces", id), { recursive: true, mode: 0o700 });
     await mkdir(join(this.data, "runtime", id), { recursive: true, mode: 0o700 });
     if (this.generations.get(id) !== generation) throw new Error(`${id} startup cancelled`);
-    const child = spawn(process.execPath, ["--import", join(this.dist, "host-lifecycle.js"), join(this.dist, `${id}.js`)], {
+    const child = spawn(process.execPath, [
+      "--import",
+      join(this.dist, "host-lifecycle.js"),
+      join(this.dist, `${id}.js`),
+    ], {
       cwd: this.data,
-      env: { ...this.environment(id, settings, backend), SCOPE_HOST_PROCESS_GROUP: String(process.platform !== "win32") },
+      env: {
+        ...this.environment(id, settings, backend),
+        SCOPE_HOST_PROCESS_GROUP: String(process.platform !== "win32"),
+      },
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe", "ipc"],
     });
@@ -183,7 +234,10 @@ export class HostWorkers {
         child.stdout?.off("data", checkStartup);
       };
       const failed = (error: Error): void => { cleanup(); reject(error); };
-      const exited = (code: number | null): void => { cleanup(); reject(new Error(`${id} exited (${code}).\n${output}`)); };
+      const exited = (code: number | null): void => {
+        cleanup();
+        reject(new Error(`${id} exited (${code}).\n${output}`));
+      };
       // Existing workers log both messages after queue creation and the database connection.
       const checkStartup = (): void => {
         if (stdout.includes(`[${id}] Ensured queue exists:`) && stdout.includes(`[${id}] Connected to MongoDB`)) {
@@ -200,7 +254,10 @@ export class HostWorkers {
         try { signalHostProcess(child, "SIGKILL"); }
         catch (error) {
           this.children.delete(id);
-          this.onFailure(id, `Failed to stop ${id} subprocesses: ${error instanceof Error ? error.message : String(error)}`);
+          this.onFailure(
+            id,
+            `Failed to stop ${id} subprocesses: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       }
     });
@@ -222,6 +279,7 @@ export class HostWorkers {
     });
   }
 
+  /** Stop a host worker and then kill any descendants left by the installed CLI. */
   async stop(id: TargetId): Promise<void> {
     this.generations.set(id, (this.generations.get(id) ?? 0) + 1);
     const child = this.children.get(id);

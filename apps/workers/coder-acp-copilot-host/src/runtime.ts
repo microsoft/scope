@@ -6,8 +6,26 @@ import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
 import type { CopilotWorkerRuntime } from "coder-acp-copilot/worker";
 
+/** Worker ID registered by the local server for host-side Copilot execution. */
 export const WORKER_TYPE = "coder-acp-copilot-host";
-const inheritedProxyKeys = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"] as const;
+
+/** Detection payload consumed by the launcher before it registers this host worker. */
+export interface DetectedCopilotHost {
+  workerType: string;
+  executable: string;
+  version: string;
+  agentVersion: string;
+  componentVersions: Record<string, string>;
+}
+
+const inheritedProxyKeys = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+] as const;
 
 function assertNoInheritedProxyConflict(env: NodeJS.ProcessEnv): void {
   const key = inheritedProxyKeys.find((candidate) => env[candidate]);
@@ -19,7 +37,8 @@ function assertNoInheritedProxyConflict(env: NodeJS.ProcessEnv): void {
   );
 }
 
-export function detectCopilot(env: NodeJS.ProcessEnv = process.env) {
+/** Locate and validate the user's installed Copilot CLI without modifying it. */
+export function detectCopilot(env: NodeJS.ProcessEnv = process.env): DetectedCopilotHost {
   const command = env.SCOPE_HOST_EXECUTABLE || "copilot";
   const candidates = isAbsolute(command) || command.includes("/")
     ? [resolve(command)]
@@ -32,14 +51,35 @@ export function detectCopilot(env: NodeJS.ProcessEnv = process.env) {
       return false;
     }
   });
-  if (!executable) throw new Error(`Copilot CLI not found: ${command}. Install a compatible CLI and log in before enabling this host worker.`);
+  if (!executable) {
+    throw new Error(
+      `Copilot CLI not found: ${command}. Install a compatible CLI and log in before enabling this host worker.`,
+    );
+  }
 
-  const options = { encoding: "utf8" as const, timeout: 15_000, env: { ...env, COPILOT_AUTO_UPDATE: "false" }, stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"] };
+  const options = {
+    encoding: "utf8" as const,
+    timeout: 15_000,
+    env: { ...env, COPILOT_AUTO_UPDATE: "false" },
+    stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
+  };
   const versionOutput = execFileSync(executable, ["--version"], options);
   const help = execFileSync(executable, ["--help"], options);
   const version = versionOutput.match(/\b(\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?)\b/)?.[1];
-  if (!version || !["--acp", "--yolo", "--no-auto-update", "--disable-builtin-mcps", "--disable-mcp-server", "--additional-mcp-config"].every((flag) => help.includes(flag))) {
-    throw new Error("Installed Copilot CLI must support native --acp, --yolo, --no-auto-update, MCP disabling flags, and --additional-mcp-config. Update it yourself; Scope does not install or upgrade host CLIs.");
+  const requiredFlags = [
+    "--acp",
+    "--yolo",
+    "--no-auto-update",
+    "--disable-builtin-mcps",
+    "--disable-mcp-server",
+    "--additional-mcp-config",
+  ];
+  if (!version || !requiredFlags.every((flag) => help.includes(flag))) {
+    throw new Error(
+      "Installed Copilot CLI must support native --acp, --yolo, --no-auto-update, " +
+      "MCP disabling flags, and --additional-mcp-config. Update it yourself; " +
+      "Scope does not install or upgrade host CLIs.",
+    );
   }
   return {
     workerType: WORKER_TYPE,
@@ -50,8 +90,15 @@ export function detectCopilot(env: NodeJS.ProcessEnv = process.env) {
   };
 }
 
+/**
+ * Build the runtime contract for the shared Copilot worker implementation.
+ *
+ * HOME is deliberately not relocated: doing so would break reuse of the user's
+ * existing Copilot login. Reproducibility instead comes from disabling personal
+ * MCP servers/settings in the worker while keeping the installed CLI identity.
+ */
 export function copilotRuntime(
-  detected: ReturnType<typeof detectCopilot>,
+  detected: DetectedCopilotHost,
   env: NodeJS.ProcessEnv = process.env,
 ): CopilotWorkerRuntime {
   const workspaceRoot = env.SCOPE_HOST_WORKSPACE_ROOT;

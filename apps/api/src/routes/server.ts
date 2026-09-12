@@ -12,16 +12,24 @@ import { withRetry } from "shared";
 import type { RouteContext } from "../route-context.js";
 import { apiRoute } from "../openapi/api-route.js";
 
+/** Error returned when the API cannot reach or satisfy launcher control requests. */
 class ServerControlError extends Error {
   constructor(readonly status: number, message: string) {
     super(message);
   }
 }
 
+/**
+ * Register API endpoints that proxy local-agent setup to the packaged launcher.
+ *
+ * The API never starts host processes itself; when SCOPE_SERVER_CONTROL_URL is
+ * absent these routes report setup disabled, preserving hosted/Compose behavior.
+ */
 export function registerServerRoutes(
   ctx: Pick<RouteContext, "app" | "registry">,
   controlUrl = process.env.SCOPE_SERVER_CONTROL_URL,
 ): void {
+  /** Forward a validated read or mutation to the private launcher control API. */
   async function control(path: string, body?: z.infer<typeof ConfigureServerAgentSchema>) {
     if (!controlUrl) throw new ServerControlError(404, "Local agent setup is not enabled on this server");
     const url = new URL(path, `${controlUrl.replace(/\/$/, "")}/`);
@@ -34,16 +42,24 @@ export function registerServerRoutes(
         }),
         signal: AbortSignal.timeout(30_000),
       }).catch((error: unknown) => {
-        if (error instanceof TypeError
-          || (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name))) {
-          throw new ServerControlError(503, "Cannot reach the local Scope launcher. Check that scope-server is running.");
+        if (
+          error instanceof TypeError ||
+          (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name))
+        ) {
+          throw new ServerControlError(
+            503,
+            "Cannot reach the local Scope launcher. Check that scope-server is running.",
+          );
         }
         throw error;
       });
       const data: unknown = await response.json();
       if (!response.ok) {
         const failure = z.object({ error: z.string() }).safeParse(data);
-        throw new ServerControlError(response.status, failure.success ? failure.data.error : "Local agent setup failed");
+        throw new ServerControlError(
+          response.status,
+          failure.success ? failure.data.error : "Local agent setup failed",
+        );
       }
       return ServerControlStatusSchema.parse(data);
     };

@@ -29,6 +29,7 @@ const fields: DisplayField<ServerAgentStatus>[] = [
   { key: "error", label: "Error" },
 ];
 
+/** Print setup state using the requested output format, with a friendly disabled message. */
 function printStatus(status: ServerStatus, output: OutputFormat): void {
   if (output === "json") {
     console.log(JSON.stringify(status, null, 2));
@@ -41,12 +42,14 @@ function printStatus(status: ServerStatus, output: OutputFormat): void {
   }
 }
 
+/** Parse and validate the local-server setup status returned by the API. */
 async function readStatus(response: Response): Promise<ServerStatus> {
   if (!response.ok) throw await readApiError(response);
   const data: unknown = await response.json();
   return ServerStatusSchema.parse(data);
 }
 
+/** Read setup status with short retries for transient launcher/API availability gaps. */
 async function fetchStatus(url: string, signal = AbortSignal.timeout(30_000)): Promise<ServerStatus> {
   return withRetry(
     async () => {
@@ -57,8 +60,13 @@ async function fetchStatus(url: string, signal = AbortSignal.timeout(30_000)): P
       maxRetries: 2,
       baseDelayMs: 250,
       maxDelayMs: 2000,
-      isRetryable: (error: unknown) => !signal.aborted && (error instanceof TypeError || error instanceof NetworkError
-        || (error instanceof ApiError && [429, 500, 502, 503, 504].includes(error.status))),
+      isRetryable: (error: unknown) =>
+        !signal.aborted &&
+        (
+          error instanceof TypeError ||
+          error instanceof NetworkError ||
+          (error instanceof ApiError && [429, 500, 502, 503, 504].includes(error.status))
+        ),
     },
   );
 }
@@ -73,9 +81,15 @@ interface SetupOptions extends StatusOptions {
   timeout: number;
 }
 
-async function waitForSetup(initial: ServerStatus, worker: ServerWorkerType, options: SetupOptions): Promise<ServerStatus> {
+/** Poll after an accepted setup mutation without replaying the mutation itself. */
+async function waitForSetup(
+  initial: ServerStatus,
+  worker: ServerWorkerType,
+  options: SetupOptions,
+): Promise<ServerStatus> {
   const deadline = Date.now() + options.timeout * 1000;
-  const timeoutMessage = `Timed out waiting for ${worker}. Setup may still be running; inspect \`agent status\` before retrying setup.`;
+  const timeoutMessage = `Timed out waiting for ${worker}. ` +
+    "Setup may still be running; inspect `agent status` before retrying setup.";
   let status = initial;
   while (true) {
     if (!status.enabled) throw new Error("Local agent setup is not enabled on this server.");
@@ -90,7 +104,10 @@ async function waitForSetup(initial: ServerStatus, worker: ServerWorkerType, opt
     const readTimeout = deadline - Date.now();
     if (readTimeout <= 0) throw new Error(timeoutMessage);
     try {
-      status = await fetchStatus(options.url, AbortSignal.timeout(Math.max(1, Math.min(30_000, Math.ceil(readTimeout)))));
+      status = await fetchStatus(
+        options.url,
+        AbortSignal.timeout(Math.max(1, Math.min(30_000, Math.ceil(readTimeout)))),
+      );
     } catch (error) {
       if (Date.now() >= deadline) throw new Error(timeoutMessage);
       throw error;
@@ -98,6 +115,7 @@ async function waitForSetup(initial: ServerStatus, worker: ServerWorkerType, opt
   }
 }
 
+/** Register `scope agent status/setup` local-server setup commands. */
 export function registerAgentSetupCommands(agent: Command): void {
   withOutputOption(
     agent.command("status")
@@ -121,11 +139,15 @@ export function registerAgentSetupCommands(agent: Command): void {
       .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
   ).action(async (worker: string, options: SetupOptions) => {
     const parsed = ServerWorkerTypeSchema.safeParse(worker);
-    if (!parsed.success) throw new Error(`Unknown worker type "${worker}". Choose ${ServerWorkerTypeSchema.options.join(", ")}.`);
+    if (!parsed.success) {
+      throw new Error(`Unknown worker type "${worker}". Choose ${ServerWorkerTypeSchema.options.join(", ")}.`);
+    }
     if (Boolean(options.enable) === Boolean(options.disable)) {
       throw new Error("Pass exactly one of --enable or --disable.");
     }
-    if (!Number.isFinite(options.timeout) || options.timeout <= 0) throw new Error("--timeout must be a positive number of seconds.");
+    if (!Number.isFinite(options.timeout) || options.timeout <= 0) {
+      throw new Error("--timeout must be a positive number of seconds.");
+    }
     if ((options.executable !== undefined || options.consent) && (!options.enable || !parsed.data.endsWith("-host"))) {
       throw new Error("--executable and --consent are only valid when enabling a host worker.");
     }
