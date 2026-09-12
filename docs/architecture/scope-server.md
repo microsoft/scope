@@ -23,6 +23,23 @@ context; remote TCP and native Windows named-pipe engines are not supported.
 npx --package ./scope-server-0.1.0.tgz scope-server
 ```
 
+The package is private and is not published to any registry, so
+`npm install -g @scope/server` does not work. Install it from the artifact path
+instead, which also puts `scope-server` on `PATH`:
+
+```sh
+npm install -g --omit=optional ./scope-server-0.1.0.tgz
+scope-server --help
+```
+
+Use `--omit=optional`. Without it the install is about 618 MB, because
+`@anthropic-ai/claude-agent-sdk` pulls a 225 MB platform-specific `claude`
+binary as an optional dependency. Host runs never execute that copy: the ACP
+adapter's `claudeCliPath()` returns `CLAUDE_CODE_EXECUTABLE` when it is set, and
+the host runner always sets it to the user's own installed CLI. Omitting
+optional dependencies also skips `cpu-features`, which `ssh2` does not require.
+The separately packaged CLI installs the same way and needs no such flag.
+
 The private `@scope/server` package contains the compiled launcher/host workers,
 version-matched Scope sources, Dockerfiles, lockfile and configuration assets.
 It never checks out Scope or pulls prebuilt Scope images from a registry.

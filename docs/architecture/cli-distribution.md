@@ -175,6 +175,22 @@ The installer (`install-cli.sh` in scope-doc):
 
 Prerequisites: Node.js >= 20, `gh` CLI authenticated.
 
+### Installing the packaged tarball directly
+
+`pnpm --filter cli pack:standalone` produces a private `@scope/cli` tarball at
+`apps/cli/dist/scope-cli-<version>.tgz`. It is not published to any registry, so
+`npm install -g @scope/cli` does not work; install it from the artifact path:
+
+```bash
+npm install -g ./apps/cli/dist/scope-cli-0.0.0-dev.tgz
+scope --version
+```
+
+This links `scope` to the package's `scope.mjs` bin. The one-file bundle has no
+runtime dependencies, so the install is a single package. `npx --package <tgz>
+scope …` remains available when a global install is not wanted — that is the form
+the Scope Server prints after startup.
+
 ## Update check
 
 After each command, the CLI performs a non-blocking check for newer versions:
