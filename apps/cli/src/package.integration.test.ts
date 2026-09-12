@@ -55,7 +55,6 @@ it("installs the actual tarball offline and runs environment commands without ru
   expect(await scope("--help")).toContain("--env <name>");
   expect(await scope("agent", "setup", "--help")).toContain("--consent");
   expect(await scope("secret", "create", "--help")).toContain("--api-key-stdin");
-  expect(await scope("secret", "portal-ai", "set", "--help")).toContain("--key-id");
   await scope("env", "add", "local", "--url", "http://127.0.0.1:43127");
   await scope("env", "use", "local");
   await scope("env", "set", "project", "smoke-project");

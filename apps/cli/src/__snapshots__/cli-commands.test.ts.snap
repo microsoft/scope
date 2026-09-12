@@ -880,24 +880,6 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--url",
         ],
       },
-      "portal-ai": {
-        "subcommands": {
-          "set": {
-            "options": [
-              "--key-id",
-              "--model",
-              "--output",
-              "--url",
-            ],
-          },
-          "show": {
-            "options": [
-              "--output",
-              "--url",
-            ],
-          },
-        },
-      },
       "preview": {
         "options": [
           "--api-key",

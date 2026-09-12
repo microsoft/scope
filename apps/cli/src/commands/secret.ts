@@ -5,9 +5,9 @@ import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { NetworkError } from "ky";
 import {
-  PORTAL_AI_PROVIDERS, parseAzureAiFoundrySecret, parseOpenAiSecret, withRetry,
+  parseAzureAiFoundrySecret, withRetry,
   type CreateKeyRequest, type KeyDocument, type KeyType, type KeyValidationResult,
-  type PortalAiSettings, type UpdateKeyRequest,
+  type UpdateKeyRequest,
 } from "shared";
 import { ApiError, apiFetch, readApiError, type ApiFetchInit } from "../utils/api-client.js";
 import { formatData } from "../utils/formatters.js";
@@ -18,7 +18,6 @@ import type { DisplayField, OutputFormat } from "../utils/types.js";
 const KEY_TYPES: KeyType[] = [
   "github-pat-classic", "github-pat-fine-grained", "github-oauth", "github-oauth-cookie-state",
   "anthropic-api-key", "anthropic-oauth", "azure-ai-foundry",
-  "openai-api-key", "openrouter-api-key", "openai-compatible",
 ];
 type KeyMetadata = Pick<KeyDocument, "_id" | "type" | "enabled" | "capabilities" | "lastValidationStatus" | "lastValidationError" | "comment">;
 const keyFields: DisplayField<KeyMetadata>[] = [
@@ -30,9 +29,6 @@ const keyFields: DisplayField<KeyMetadata>[] = [
 const validationFields: DisplayField<KeyValidationResult>[] = [
   { key: "status", label: "Status" }, { key: "capabilities", label: "Capabilities", formatter: (result) => result.capabilities?.join(", ") ?? "" },
   { key: "error", label: "Error" },
-];
-const providerFields: DisplayField<PortalAiSettings>[] = [
-  { key: "provider", label: "Provider" }, { key: "keyId", label: "Key ID" }, { key: "model", label: "Model" },
 ];
 interface ConnectionOptions { url: string; output: OutputFormat }
 interface CredentialOptions extends ConnectionOptions {
@@ -55,7 +51,7 @@ async function request(url: string, path: string, init?: ApiFetchInit): Promise<
     return response;
   };
   // Creates and validation probes may store a second key or repeat provider
-  // work. Only reads and idempotent metadata/settings replacements retry.
+  // work. Only reads and idempotent metadata replacements retry.
   return !init?.method || init.method === "GET" || init.method === "PUT"
     ? withRetry(send, {
       maxRetries: 2, baseDelayMs: 250, maxDelayMs: 2000,
@@ -74,24 +70,22 @@ function credential(options: CredentialOptions): CreateKeyRequest {
   if (!KEY_TYPES.includes(options.type as KeyType)) throw new Error(`Invalid key type. Choose ${KEY_TYPES.join(", ")}.`);
   const sources = [options.value !== undefined, options.valueStdin, options.apiKey !== undefined, options.apiKeyStdin].filter(Boolean);
   if (sources.length !== 1) throw new Error("Provide exactly one of --value, --value-stdin, --api-key, or --api-key-stdin.");
+  if (options.value !== undefined) console.error("Warning: --value exposes secrets in shell history and process listings; prefer --value-stdin.");
+  if (options.apiKey !== undefined) console.error("Warning: --api-key exposes secrets in shell history and process listings; prefer --api-key-stdin.");
   const type = options.type as KeyType;
   let value = options.valueStdin || options.apiKeyStdin ? readStdin() : options.value ?? options.apiKey ?? "";
   if (!value.trim()) throw new Error("A nonempty credential is required.");
-  const structured = ["azure-ai-foundry", "openai-api-key", "openrouter-api-key", "openai-compatible"].includes(type);
+  const structured = type === "azure-ai-foundry";
   if (options.value !== undefined || options.valueStdin) {
     if (options.endpoint !== undefined || options.model !== undefined) throw new Error("--value contains the full secret; use --api-key with --endpoint/--model instead.");
   } else if (structured) {
-    const endpoint = options.endpoint ?? (type === "openai-api-key" ? "https://api.openai.com/v1" : type === "openrouter-api-key" ? "https://openrouter.ai/api/v1" : undefined);
-    const model = options.model ?? (type === "openai-api-key" ? "gpt-4.1" : type === "openrouter-api-key" ? "openai/gpt-4.1" : undefined);
-    value = JSON.stringify({ endpoint, apiKey: value, ...(model ? { model } : {}) });
+    value = JSON.stringify({ endpoint: options.endpoint, apiKey: value, ...(options.model ? { model: options.model } : {}) });
   } else if (options.endpoint !== undefined || options.model !== undefined) {
-    throw new Error("--endpoint/--model apply only to structured provider credentials.");
+    throw new Error("--endpoint/--model apply only to Azure AI Foundry credentials.");
   }
   if (structured) {
-    const parsed = type === "azure-ai-foundry" ? parseAzureAiFoundrySecret(value) : parseOpenAiSecret(value);
-    if (!parsed) throw new Error(type === "azure-ai-foundry"
-      ? "Foundry credentials require endpoint and apiKey (model is optional)."
-      : "Provider credentials require endpoint, apiKey and model. Use HTTPS; HTTP is allowed only for localhost.");
+    const parsed = parseAzureAiFoundrySecret(value);
+    if (!parsed) throw new Error("Foundry credentials require endpoint and apiKey (model is optional).");
     value = JSON.stringify(parsed);
   }
   if (options.expiresAt !== undefined && !Number.isFinite(Date.parse(options.expiresAt))) throw new Error("--expires-at must be a valid date.");
@@ -106,12 +100,12 @@ function credential(options: CredentialOptions): CreateKeyRequest {
 function credentialOptions(command: Command): Command {
   return withOutputOption(command
     .requiredOption("--type <type>", `Credential type: ${KEY_TYPES.join(", ")}`)
-    .option("--value <value>", "Raw secret, or complete JSON for structured provider credentials")
+    .option("--value <value>", "Raw secret, or complete JSON for Azure AI Foundry credentials")
     .option("--value-stdin", "Read the raw secret or complete JSON from piped stdin")
     .option("--api-key <key>", "Provider API key (prefer --api-key-stdin to avoid shell history)")
     .option("--api-key-stdin", "Read the provider API key from piped stdin")
-    .option("--endpoint <url>", "Provider endpoint; OpenAI/OpenRouter have presets")
-    .option("--model <model>", "Provider model; OpenAI/OpenRouter have presets")
+    .option("--endpoint <url>", "Azure AI Foundry inference endpoint")
+    .option("--model <model>", "Azure AI Foundry deployment/model name")
     .option("-u, --url <url>", "Scope API base URL", getDefaultApiUrl()));
 }
 
@@ -192,32 +186,5 @@ export function registerSecretCommands(program: Command): void {
     .action(async (id: string, options: ConnectionOptions) => {
       const data: KeyMetadata = await (await request(options.url, `/keys/${encodeURIComponent(id)}/validate`, { method: "POST", sensitiveBody: true })).json();
       console.log(formatData([data], keyFields, options.output));
-    });
-
-  const portal = secret.command("portal-ai").description("Read/set the instance-wide Portal AI provider (not worker or Judge settings)");
-  configureHelp(portal);
-  portal.action(() => { portal.help(); });
-  withOutputOption(portal.command("show").option("-u, --url <url>", "API base URL", getDefaultApiUrl()))
-    .action(async (options: ConnectionOptions) => {
-      const data: PortalAiSettings = await (await request(options.url, "/keys/portal-ai")).json();
-      console.log(formatData([data], providerFields, options.output));
-    });
-  withOutputOption(portal.command("set").argument("<provider>", PORTAL_AI_PROVIDERS.join(", "))
-    .option("--key-id <id>", "Pin a registered valid key instead of provider round-robin")
-    .option("--model <model>", "Override the Portal authoring model")
-    .option("-u, --url <url>", "API base URL", getDefaultApiUrl()))
-    .action(async (provider: string, options: ConnectionOptions & { keyId?: string; model?: string }) => {
-      if (!PORTAL_AI_PROVIDERS.includes(provider as PortalAiSettings["provider"])) throw new Error(`Choose a provider: ${PORTAL_AI_PROVIDERS.join(", ")}.`);
-      if (provider === "auto" && (options.keyId !== undefined || options.model !== undefined)) throw new Error("Automatic selection does not accept --key-id or --model.");
-      if ((options.keyId !== undefined && !options.keyId.trim()) || (options.model !== undefined && !options.model.trim())) throw new Error("Key ID and model must not be blank.");
-      const body: PortalAiSettings = {
-        provider: provider as PortalAiSettings["provider"],
-        ...(options.keyId !== undefined ? { keyId: options.keyId.trim() } : {}),
-        ...(options.model !== undefined ? { model: options.model.trim() } : {}),
-      };
-      const data: PortalAiSettings = await (await request(options.url, "/keys/portal-ai", {
-        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      })).json();
-      console.log(formatData([data], providerFields, options.output));
     });
 }
