@@ -296,9 +296,9 @@ Windows acceptance is claimed.
 | Path | Observed result |
 | --- | --- |
 | Claude Code host, installed 2.1.193 | Real coding, passing Judge evaluation, downloaded artifact producing exactly `Hello Scope!` plus a newline, and completed normal report. Setup worked through Portal and CLI. |
-| Copilot Docker, 1.0.65 | Real coding and exact downloaded-artifact output. The Judge rejected missing captured execution history, and the completed report retained that failed verdict; it was not counted as a passing evaluation. |
+| Copilot Docker | Real coding, gateway capture, and a passing evaluation. Request `0735ba0e` extracted 4 tool calls from the HAR, generated ATIF 1/1, and passed `hello_scope_output`, whose prompt requires evidence in the captured tool-call history. The downloaded artifact printed exactly `Hello Scope!` with exit 0 and its report completed. An earlier run of this same path failed the Judge for missing execution history because capture was disabled. |
 | Copilot host | ACP initialization worked, but session creation was blocked by the installed CLI's personal MCP startup. No corrected host benchmark completed. |
-| Claude Code Docker, ACP 0.52.0 / SDK 0.3.191 | After storage recovery and the image-stream timeout fix, one real `claude-haiku-4-5-20251001` benchmark completed coding in 18 seconds and passed Judge evaluation. The downloaded artifact produced exactly `Hello Scope!` plus a newline, exit 0; its normal report completed. |
+| Claude Code Docker, ACP 0.52.0 / SDK 0.3.191 | Completed a real `claude-haiku-4-5-20251001` benchmark with a passing Judge evaluation, exact artifact output and a completed report, while running **uncaptured**. A later attempt with gateway capture enabled failed with `Unable to connect to API (ConnectionRefused)` and an empty HAR, which is why capture is scoped to the Copilot worker. |
 | Portal AI | Real authoring passed with OpenAI, Anthropic's default `claude-sonnet-5`, OpenRouter and Foundry's configured `gpt-5.4-mini`. Compatible mode was exercised against an OpenAI endpoint, not every compatible server. |
 | CLI connections | Named environments reached the running instance, and an explicit API URL overrode an intentionally unreachable named-environment URL. |
 
