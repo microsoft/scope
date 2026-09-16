@@ -1,8 +1,8 @@
 <div align="center">
 
-  <h1><img src="./apps/portal/public/favicon.svg" alt="Scope logo" width="44" align="absmiddle" />&nbsp;Scope</h1>
+  <h1><img src="./apps/portal/public/favicon.svg" alt="Scope logo" width="44" align="absmiddle" />&nbsp;Scope Agentic Experience Platform (Research Preview)</h1>
 
-  <p><strong>Benchmark AI coding agents with repeatable, evidence-backed runs.</strong></p>
+  <p><strong>Evaluate the agentic experience of product surfaces with repeatable, evidence-backed runs.</strong></p>
 
   <p>
     Compare agents, models, skills, and product surfaces against realistic tasks.
