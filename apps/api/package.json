@@ -24,7 +24,7 @@
     "express": "^4.21.0",
     "ioredis": "^5.4.1",
     "mongodb": "^6.12.0",
-    "multer": "^2.2.0",
+    "multer": "^2.3.0",
     "openapi3-ts": "^4.5.0",
     "shared": "workspace:*",
     "telemetry": "workspace:*",
