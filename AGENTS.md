@@ -219,6 +219,7 @@ not open the PR against the fork unless the user explicitly asks you to.
 | [docs/architecture/data-organization-projects.md](docs/architecture/data-organization-projects.md) | Projects (a single container) to isolate/group data within a cluster; composes with data-tags and auth-rbac |
 | [docs/architecture/vscode-web-worker.md](docs/architecture/vscode-web-worker.md) | XState chat machine, GitHub auth flow, ARIA snapshots |
 | [docs/architecture/token-manager.md](docs/architecture/token-manager.md) | Token storage, validation, round-robin distribution |
+| [docs/architecture/user-auth.md](docs/architecture/user-auth.md) | User authentication via Entra ID (design) — Portal, API, CLI |
 | [docs/architecture/criteria-provider.md](docs/architecture/criteria-provider.md) | CriteriaProvider abstraction, filesystem vs REST backends |
 | [docs/architecture/skills.md](docs/architecture/skills.md) | Agent Skills spec, registration, resolution, delivery |
 | [docs/architecture/codebases.md](docs/architecture/codebases.md) | Codebase entity, immutable revisions, source types, worker seeding |
