@@ -167,6 +167,15 @@ For testing against real Azure CosmosDB (e.g. index behavior), a shared dev inst
 
 When making changes to any Rust component (e.g. the AI gateway in `apps/gateway/`), follow the `rust-best-practices` skill. This skill is available at `.agents/skills/rust-best-practices/SKILL.md` and covers idiomatic Rust, ownership patterns, error handling with `Result`, and performance guidelines.
 
+## OSS Compliance
+
+This repository is public (Microsoft OSS). Several release-gating compliance checks are automated by dedicated skills — follow the relevant one when your change hits its trigger:
+
+- When creating or adding source files, follow the `license-headers` skill (`.agents/skills/license-headers/SKILL.md`) — routes to the repo's MIT-header tooling (`pnpm headers` / `pnpm headers:check`).
+- When adding, removing, or upgrading a dependency, or bundling a redistributable, follow the `third-party-notice` skill (`.agents/skills/third-party-notice/SKILL.md`) — routes to the NOTICE tooling (`pnpm notice`) and escalates proprietary packages to CELA.
+- When naming things or writing user-facing strings, identifiers, or docs, follow the `inclusive-language` skill (`.agents/skills/inclusive-language/SKILL.md`) — routes to Microsoft PoliCheck.
+- When adding AI/ML or generative-AI features, follow the `responsible-ai` skill (`.agents/skills/responsible-ai/SKILL.md`) — routes to the Responsible AI Standard and the OneRAI intake.
+
 ## Testing
 
 Co-locate tests next to source as `<filename>.test.ts`. Framework: Vitest.
