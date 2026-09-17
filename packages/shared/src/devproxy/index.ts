@@ -60,6 +60,18 @@ export function createProxyClient(): ProxyClient {
           };
         }
 
+        // Enable CAPI HMAC signing when a signing key is provided.
+        // The key is base64-encoded and injected via ESO from Azure Key Vault in K8s.
+        // Environments without the key are unaffected (gradual rollout).
+        const capiHmacSigningKey = process.env.CAPI_HMAC_SIGNING_KEY;
+        const capiHmacEnabled = process.env.GATEWAY_CAPI_HMAC_ENABLED !== "false";
+        if (capiHmacSigningKey && capiHmacEnabled) {
+          plugins.capi_hmac = {
+            signingKey: capiHmacSigningKey,
+            ...(process.env.CAPI_HMAC_MACHINE_ID && { machineId: process.env.CAPI_HMAC_MACHINE_ID }),
+          };
+        }
+
         await gw.startSession(plugins, maxSessionDurationSecs);
       },
       stopAndCollectHar: async (log) => {

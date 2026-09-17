@@ -34,6 +34,7 @@ flowchart TB
         PR["Plugin Registry"]
         HAR["HAR Plugin<br/><i>JSONL → HAR 1.2</i>"]
         CT["CopilotToken Plugin<br/><i>token mint + refresh</i>"]
+        HMAC["CapiHmac Plugin<br/><i>HMAC-SHA256 signing</i>"]
         CA["Certificate Authority<br/><i>dynamic leaf certs</i>"]
     end
 
@@ -54,6 +55,7 @@ flowchart TB
     SM <-->|"session state"| REDIS
     PR --> HAR
     PR --> CT
+    PR --> HMAC
     HAR -->|"append block"| BLOB
     CT -->|"acquire OAuth token"| TM
     PX -->|"TLS intercept<br/>notify plugins"| PR
@@ -64,6 +66,7 @@ flowchart TB
     style PX fill:#f96,stroke:#333
     style HAR fill:#6cf,stroke:#333
     style CT fill:#6cf,stroke:#333
+    style HMAC fill:#6cf,stroke:#333
 ```
 
 ## Session Identity
@@ -345,6 +348,54 @@ clients/
 
 Each client is a thin async function that accepts a `reqwest::Client` and a URL, returns an `anyhow::Result`, and is tested independently with wiremock. The minter (`plugins/copilot_token/minter.rs`) orchestrates the two-step flow and owns the retry logic.
 
+### CAPI HMAC Signing Plugin
+
+The CAPI HMAC plugin (`plugins/capi_hmac`) computes and attaches HMAC-SHA256 signatures to outbound Copilot API requests, proving request authenticity to endpoints that enforce signature validation.
+
+**How it works:**
+
+1. Session starts with `capi_hmac` settings containing a base64-encoded signing key
+2. On each outbound request to a target host, the plugin:
+   - Builds a canonical string: `{method}\n{path}\n{unix_timestamp}\n{machineId}`
+   - Computes HMAC-SHA256 with the signing key
+   - Attaches the signature header: `v1:{timestamp}:{base64(hmac)}`
+3. CAPI validates the signature server-side
+
+**Session settings (passed under `"capi_hmac"` key):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `signingKey` | string | *(required)* | Base64-encoded HMAC secret key |
+| `machineId` | string | `"scope-gateway"` (env: `CAPI_HMAC_MACHINE_ID`) | Machine identifier for the signature payload |
+| `targetHosts` | string[] | `["api.githubcopilot.com", ...]` | Hosts whose requests should be signed |
+| `signatureHeader` | string | `"x-copilot-signature"` | Header name for the HMAC signature |
+
+**Key behaviors:**
+
+- **Per-session activation**: Only sessions that provide `capi_hmac` settings are signed. Other sessions are unaffected.
+- **Composable**: Works alongside the `copilot_token` plugin — both can modify headers on the same request in sequence (token first, then signature).
+- **Pre-decoded key**: The base64 signing key is decoded once at session start, avoiding per-request decode overhead.
+- **Invalid key rejection**: If the signing key is not valid base64, the session is not activated (logged as a warning).
+
+**Example session create with HMAC signing:**
+
+```json
+POST /api/v1/sessions
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "plugins": {
+    "har": { "redactCredentials": true },
+    "copilotToken": {
+    },
+    "capi_hmac": {
+      "signingKey": "base64-encoded-secret-key",
+      "machineId": "worker-001",
+      "targetHosts": ["api.githubcopilot.com"]
+    }
+  }
+}
+```
+
 ### Timestamps
 
 All HAR timestamps are in **UTC**. The `startedDateTime` field uses RFC 3339 format with millisecond precision and `Z` suffix (e.g. `2026-04-28T08:25:03.123Z`).
@@ -404,6 +455,8 @@ apps/gateway/
 │   ├── filters/
 │   │   └── url_matcher.rs      # Glob-based URL matching (urlsToWatch)
 │   ├── plugins/
+│   │   ├── capi_hmac/
+│   │   │   └── plugin.rs       # CapiHmacPlugin: HMAC-SHA256 request signing
 │   │   ├── copilot_token/
 │   │   │   ├── plugin.rs       # CopilotTokenPlugin: impl ProxyPlugin
 │   │   │   └── minter.rs       # Orchestrates token acquisition + retry logic
@@ -500,7 +553,7 @@ env:
 | Phase | Plugin | Status | Purpose |
 |-------|--------|--------|---------|
 | 1.b | Copilot Token Refresh | ✅ Shipped (#724) | Auto-mint and refresh Copilot session tokens |
-| 1.c | CAPI HMAC Signing | Planned | Sign requests with HMAC for Copilot API |
+| 1.c | CAPI HMAC Signing | ✅ Shipped (#1299) | Sign requests with HMAC for Copilot API |
 | 2.b | Rate Limiting | Planned | Budget-aware rate limiting for Claude Code (#659) |
 | 3 | Metrics | Planned | Prometheus `/metrics` — request counts, latency, bytes, error rates |
 

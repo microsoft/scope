@@ -1,5 +1,4 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-pub mod capi_hmac;
-pub mod har;
+pub mod plugin;
