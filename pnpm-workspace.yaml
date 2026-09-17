@@ -16,6 +16,7 @@ packages:
   - packages/db-migrations
   - packages/llm-eval
   - packages/telemetry
+  - evaluations/*
 
 # Runtime language version pinning (for worker Docker images)
 # - python: 3.x (system package)

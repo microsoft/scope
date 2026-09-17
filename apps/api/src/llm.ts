@@ -166,6 +166,16 @@ export interface GenerateResult {
   suggestedChildren: string[];
 }
 
+export interface CriteriaPromptRequest {
+  messages: [
+    { role: "system"; content: string },
+    { role: "user"; content: string },
+  ];
+  model: string;
+  temperature: number;
+  max_tokens: number;
+}
+
 export function isLlmAvailable(): boolean {
   return inferenceAvailable();
 }
@@ -192,22 +202,106 @@ function parseJson(content: string): any {
   }
 }
 
+export function buildCriteriaAuthoringRequest(
+  behavior: string,
+  gates: GateId[] | undefined,
+  model: string,
+): CriteriaPromptRequest {
+  return {
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT_AUTHOR },
+      {
+        role: "user",
+        content: `NEW CRITERION TO CREATE:\n${behavior}${authorGateHint(gates)}`,
+      },
+    ],
+    model,
+    temperature: 0.3,
+    max_tokens: 512,
+  };
+}
+
+export function parseCriteriaAuthoringResponse(
+  content: string,
+): { prompt: string; suggestedId: string } {
+  const parsed: unknown = parseJson(content);
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !("prompt" in parsed) ||
+    !parsed.prompt
+  ) {
+    throw new Error("Missing required field: prompt");
+  }
+  const value = parsed as { prompt: unknown; suggestedId?: unknown };
+  return {
+    prompt: String(value.prompt).trim(),
+    suggestedId: sanitizeId(value.suggestedId),
+  };
+}
+
+export function buildCriteriaDependencySuggestionRequest(
+  direction: SuggestDirection,
+  behavior: string,
+  pool: ExistingCriterion[],
+  model: string,
+): CriteriaPromptRequest {
+  return {
+    messages: [
+      { role: "system", content: suggestSystemPrompt(direction) },
+      {
+        role: "user",
+        content: buildSuggestMessage(direction, behavior, pool),
+      },
+    ],
+    model,
+    temperature: 0.3,
+    max_tokens: 512,
+  };
+}
+
+export function parseCriteriaDependencySuggestionResponse(
+  content: string,
+  pool: ExistingCriterion[],
+): string[] {
+  const parsed: unknown = parseJson(content);
+  const suggestions =
+    parsed && typeof parsed === "object" && "suggestions" in parsed
+      ? (parsed as { suggestions?: unknown }).suggestions
+      : undefined;
+  if (!Array.isArray(suggestions)) return [];
+  const poolIds = new Set(pool.map((criterion) => criterion.id));
+  return suggestions.filter(
+    (id): id is string => typeof id === "string" && poolIds.has(id),
+  );
+}
+
+export function selectCriteriaDependencyPool(
+  direction: SuggestDirection,
+  existingCriteria: ExistingCriterion[],
+  newGates?: GateId[],
+): ExistingCriterion[] {
+  if (!newGates) return existingCriteria;
+  return direction === "parents"
+    ? existingCriteria.filter((criterion) =>
+        gatesSatisfyInvariant(criterion.gates, newGates),
+      )
+    : existingCriteria.filter((criterion) =>
+        gatesSatisfyInvariant(newGates, criterion.gates),
+      );
+}
+
 async function chat(
   llm: ChatClient,
   endpoint: string,
-  model: string,
-  systemPrompt: string,
-  userMessage: string,
+  request: CriteriaPromptRequest,
 ): Promise<string> {
   const response = await postAdaptiveChatCompletion({
     endpoint,
-    model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage },
-    ],
-    temperature: 0.3,
-    maxTokens: 512,
+    model: request.model,
+    messages: request.messages,
+    temperature: request.temperature,
+    maxTokens: request.max_tokens,
     send: (body) => llm.path("/chat/completions").post({ body }),
   });
 
@@ -237,18 +331,9 @@ async function author(
   const content = await chat(
     llm,
     endpoint,
-    model,
-    SYSTEM_PROMPT_AUTHOR,
-    `NEW CRITERION TO CREATE:\n${behavior}${authorGateHint(gates)}`,
+    buildCriteriaAuthoringRequest(behavior, gates, model),
   );
-  const parsed = parseJson(content);
-  if (!parsed.prompt) {
-    throw new Error("Missing required field: prompt");
-  }
-  return {
-    prompt: String(parsed.prompt).trim(),
-    suggestedId: sanitizeId(parsed.suggestedId),
-  };
+  return parseCriteriaAuthoringResponse(content);
 }
 
 function buildSuggestMessage(
@@ -285,18 +370,18 @@ async function suggestDeps(
   pool: ExistingCriterion[],
 ): Promise<string[]> {
   if (pool.length === 0) return [];
-  const poolIds = new Set(pool.map((c) => c.id));
   try {
     const content = await chat(
       llm,
       endpoint,
-      model,
-      suggestSystemPrompt(direction),
-      buildSuggestMessage(direction, behavior, pool),
+      buildCriteriaDependencySuggestionRequest(
+        direction,
+        behavior,
+        pool,
+        model,
+      ),
     );
-    const parsed = parseJson(content);
-    const suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
-    return suggestions.filter((sid: unknown): sid is string => typeof sid === "string" && poolIds.has(sid));
+    return parseCriteriaDependencySuggestionResponse(content, pool);
   } catch (err) {
     console.warn(`[generate-prompt] ${direction} suggestion call failed, degrading to []:`, err);
     return [];
@@ -332,12 +417,16 @@ export async function generateCriteriaPrompt(
   // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
   const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
 
-  const parentPool = newGates
-    ? existingCriteria.filter((c) => gatesSatisfyInvariant(c.gates, newGates))
-    : existingCriteria;
-  const childPool = newGates
-    ? existingCriteria.filter((c) => gatesSatisfyInvariant(newGates, c.gates))
-    : existingCriteria;
+  const parentPool = selectCriteriaDependencyPool(
+    "parents",
+    existingCriteria,
+    newGates,
+  );
+  const childPool = selectCriteriaDependencyPool(
+    "children",
+    existingCriteria,
+    newGates,
+  );
 
   const [authored, suggestedParents, suggestedChildrenRaw] = await Promise.all([
     author(llm, endpoint, modelName, behavior, newGates),

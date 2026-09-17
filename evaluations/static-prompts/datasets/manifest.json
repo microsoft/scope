@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "datasetVersion": "v1",
+  "status": "approved",
+  "harvestedAt": "2026-09-09T03:49:04.515Z",
+  "source": {
+    "environment": "integration",
+    "project": {
+      "id": "d95231c0-884b-48fd-a950-b0e71d449989",
+      "name": "Default Project"
+    },
+    "endpoints": [
+      "/api/v1/criteria",
+      "/api/v1/projects",
+      "/api/v1/prompt-features",
+      "/api/v1/report-templates",
+      "/api/v1/reports",
+      "/api/v1/requests",
+      "/api/v1/requests/{id}/runs/{runId}/tool-calls",
+      "/api/v1/task-prompts",
+      "/api/v1/task-prompts/{id}/content"
+    ],
+    "openapiSha256": "4f6776ac4602e279c8723acd9a6cb22fa504c95538ab9491e0b5acab267c6a6b",
+    "codeRevision": "b494da81e9c36cd46b60feff79efa9d20ab3db5d"
+  },
+  "selection": {
+    "seed": "scope-static-prompts-v1",
+    "algorithm": "sha256-stratified-round-robin-v1",
+    "counts": {
+      "criteria-authoring": 20,
+      "parent-dependency-suggestion": 15,
+      "child-dependency-suggestion": 15,
+      "task-prompt-generation": 20,
+      "task-prompt-variation": 20,
+      "prompt-feature-authoring": 17,
+      "prompt-feature-extraction": 30,
+      "judge-instructions": 30,
+      "developer-feedback": 25,
+      "run-report": 30
+    }
+  },
+  "files": [
+    {
+      "path": "v1/criteria-authoring.jsonl",
+      "sha256": "0aa535c259d7d6fa36433ac88017919432f92f2c50dd6278f5740330105055c5",
+      "rows": 20,
+      "families": [
+        "criteria-authoring"
+      ]
+    },
+    {
+      "path": "v1/dependency-suggestions.jsonl",
+      "sha256": "49e47636bd6f59b3214ce241bdecb471d87f0153cefb20a99c3d8e178be289dd",
+      "rows": 30,
+      "families": [
+        "child-dependency-suggestion",
+        "parent-dependency-suggestion"
+      ]
+    },
+    {
+      "path": "v1/feedback.jsonl",
+      "sha256": "41a537d049332ad07af9329bb0a01e5039869079a3bcb16263539f0b6e23e0ad",
+      "rows": 25,
+      "families": [
+        "developer-feedback"
+      ]
+    },
+    {
+      "path": "v1/judge.jsonl",
+      "sha256": "2393d6cadc37d344f98d129964ed5302a8a90022c60b6125807f13e2e1317c93",
+      "rows": 30,
+      "families": [
+        "judge-instructions"
+      ]
+    },
+    {
+      "path": "v1/prompt-features.jsonl",
+      "sha256": "ed121a07576e900d471d076f1964fd13b89ca401ea9e4f0e7dcc1ad9fccdd7aa",
+      "rows": 47,
+      "families": [
+        "prompt-feature-authoring",
+        "prompt-feature-extraction"
+      ]
+    },
+    {
+      "path": "v1/reports.jsonl",
+      "sha256": "a049fa4a33054c1e5caa5f44bdab996c016979109024f6c752bde6d8e44d9df6",
+      "rows": 30,
+      "families": [
+        "run-report"
+      ]
+    },
+    {
+      "path": "v1/task-prompts.jsonl",
+      "sha256": "58c8fd827afddcc197bef8013817d2aea0fd68667bcc0e71bb4ad6055c3aed06",
+      "rows": 40,
+      "families": [
+        "task-prompt-generation",
+        "task-prompt-variation"
+      ]
+    }
+  ]
+}

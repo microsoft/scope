@@ -79,6 +79,7 @@ flowchart TB
 | `workers/coder-acp-claude-code` | Claude Code agent via Agent Client Protocol (ACP) |
 | `workers/coder-acp-copilot` | GitHub Copilot agent via Agent Client Protocol (ACP) |
 | `gateway` | AI Gateway — shared Rust TLS-intercepting proxy with plugin architecture (HAR capture, future: token refresh, rate limiting) |
+| `evaluations/static-prompts` | Developer-run static prompt quality and user-controlled prompt red-team suites |
 
 ## Data Flow
 
@@ -94,6 +95,24 @@ flowchart TB
 > gate configuration run as a single Select gate (identical to before). See the
 > [gates design doc](../design/gates.md) and
 > [app-design.md](app-design.md#gates--multi-phase-evaluation-pipeline).
+
+## Prompt Evaluation
+
+Scope's own prompt templates and its user-controlled AI instruction boundaries
+are tested by separate developer-run tracks:
+
+- **Static quality** executes production TypeScript prompt composition, then
+  grades generated outputs with deterministic checks and the Python Azure AI
+  Evaluation SDK.
+- **Cloud red teaming** inserts generated attacks at reviewed user-controlled
+  fields while preserving the production wrapper, roles, ordering, and tools.
+
+Curated inputs, rubrics, profiles, and policy are committed. Generated model
+responses, cloud downloads, manifests, summaries, and findings are written
+under the ignored `evaluations/static-prompts/results/` tree. These suites are
+explicit local workflows, not part of normal tests or CI. See
+[Prompt Evaluations](prompt-evaluations.md) for the inventory, exact request
+composition, commands, limitations, and maintenance rules.
 
 ## Benchmarking Configuration
 

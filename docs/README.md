@@ -9,6 +9,7 @@ Central documentation hub for the Scope platform — an AI coding agent benchmar
 | [System Overview](architecture/overview.md) | High-level architecture, component interactions, data flow |
 | [Architecture Layers](architecture/architecture-layers.md) | 5-layer responsibility model — from cloud foundation to app workloads |
 | [Application Design](architecture/app-design.md) | Data models, API design, judge pipeline, queue patterns, criteria system |
+| [Prompt Evaluations](architecture/prompt-evaluations.md) | Static prompt quality, user-controlled surface red teaming, datasets, commands, and maintenance |
 | [VS Code Web Worker](architecture/vscode-web-worker.md) | XState chat machine, GitHub auth flow, ARIA snapshots, AI dev loop |
 | [Token Manager](architecture/token-manager.md) | Capability-based token management, validation, round-robin distribution |
 | [Worker Requirements](architecture/worker-requirements.md) | Requirements checklist for coding agent workers |

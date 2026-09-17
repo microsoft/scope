@@ -1,0 +1,31 @@
+version: 1
+qualityFamilies:
+  - id: criteria-authoring
+    variants: [default]
+  - id: parent-dependency-suggestion
+    variants: [default]
+  - id: child-dependency-suggestion
+    variants: [default]
+  - id: task-prompt-generation
+    variants: [default]
+  - id: task-prompt-variation
+    variants: [default]
+  - id: prompt-feature-authoring
+    variants: [default]
+  - id: prompt-feature-extraction
+    variants: [default]
+  - id: judge-instructions
+    variants: [bundled, independent]
+  - id: developer-feedback
+    variants: [default, persona, descendant-guard]
+  - id: run-report
+    variants: [default, append, override-control]
+redTeamSurfaces:
+  - id: task-scenario-prompt
+  - id: gate-prompt
+  - id: agents-md
+  - id: criterion-prompt
+  - id: prompt-feature-definition
+  - id: persona-instructions
+  - id: report-user-prompt
+  - id: report-system-prompt

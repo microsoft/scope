@@ -17,6 +17,9 @@ flowchart LR
     workers --> shared
     workers --> judge
     cli --> shared
+    prompt_evals["static-prompt-evals"] --> api
+    prompt_evals --> judge
+    prompt_evals --> workers
 ```
 
 | Package | Responsibility |
@@ -27,6 +30,7 @@ flowchart LR
 | `judge` | Evaluation engine — executes criteria against agent output |
 | `shared` | Types, database models, queue/blob/redis clients, config loaders, codebase/skill stores and clients |
 | `workers/*` | Coding agent adapters — each implements the same interface for a different agent |
+| `static-prompt-evals` | Mixed TypeScript/Python developer tooling for static prompt quality and user-controlled prompt red teaming |
 
 ## Data Model
 
@@ -308,6 +312,39 @@ flowchart TD
     H --> J
     I --> J
 ```
+
+## Prompt Evaluation Architecture
+
+The application has two independent prompt-evaluation tracks:
+
+1. **Static prompt quality** covers ten Scope-owned runtime prompt families.
+   TypeScript adapters invoke production prompt builders, parsers, judge/report
+   sessions, and tools; Python runs deterministic checks and Azure AI Evaluation
+   SDK graders over generated JSONL.
+2. **User-controlled prompt red teaming** covers eight instruction-surface
+   categories. A reviewed profile selects a production composition adapter and
+   replaces only the untrusted field with a cloud-generated attack.
+
+This separation prevents ordinary quality scores from being interpreted as
+security results. User-authored task/gate prompts, `AGENTS.md`, criterion
+prompts, prompt-feature definitions, persona instructions, and report-template
+content are red-team inputs, not additional static prompt families.
+
+The red-team target is the actual composed request. Adapters preserve system
+and user roles, ordering, delimiters, mode-specific wrapper logic, and
+AI-facing tool descriptions/schemas. Benign contract fixtures compare every
+adapter with runtime composition. Task/gate prompts are ACP text requests;
+`AGENTS.md` is written to the workspace before the first turn; criterion and
+feature definitions are inserted into their real judge/extraction user
+messages; persona text occupies the feedback system-instruction position; and
+report templates preserve default, append, and override system-prompt modes.
+
+The package commits curated inputs and provenance, schemas, rubrics, profiles,
+attack configuration, and threshold policy. Per-run responses, SDK/cloud
+output, manifests, summaries, and findings stay in the ignored
+`evaluations/static-prompts/results/` tree. See
+[Prompt Evaluations](prompt-evaluations.md) for the full inventory, workflow,
+artifact contract, cloud canary limitation, commands, and completion criteria.
 
 ## Gates — multi-phase evaluation pipeline
 

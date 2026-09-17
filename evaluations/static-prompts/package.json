@@ -1,0 +1,33 @@
+{
+  "name": "static-prompt-evals",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm test:ts && pnpm test:python",
+    "test:ts": "vitest run --config adapter/vitest.config.ts",
+    "test:python": "pnpm check:uv && uv run pytest",
+    "check:uv": "tsx scripts/check-uv.ts",
+    "setup:python": "pnpm check:uv && uv sync --frozen",
+    "generate": "tsx adapter/runner.ts",
+    "harvest": "tsx scripts/harvest.ts",
+    "validate-data": "tsx scripts/validate-dataset.ts && tsx scripts/validate-coverage.ts",
+    "evaluate": "pnpm check:uv && uv run python -m static_prompt_evals.cli",
+    "evaluate:quality": "pnpm check:uv && uv run python -m static_prompt_evals.cli --mode quality",
+    "evaluate:red-team": "pnpm check:uv && uv run python -m static_prompt_evals.cli --mode red-team",
+    "report": "pnpm check:uv && uv run python -m static_prompt_evals.report"
+  },
+  "dependencies": {
+    "shared": "workspace:*",
+    "telemetry": "workspace:*",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.6",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.0"
+  }
+}

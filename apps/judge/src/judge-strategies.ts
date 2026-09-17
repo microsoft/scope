@@ -44,6 +44,12 @@ export interface JudgeStrategyContext {
   currentAgentResponse?: string;
 }
 
+export function createJudgeCriteriaGraph(
+  criteria: CriteriaConfig[],
+): DependencyGraph<CriteriaConfig> {
+  return new DependencyGraph(criteria);
+}
+
 /**
  * Base class for judge evaluation strategies
  */

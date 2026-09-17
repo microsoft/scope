@@ -1,0 +1,39 @@
+version: 1
+resourcePrefix: scope-static-redteam
+projectEndpointEnv: AZURE_AI_PROJECT_ENDPOINT
+modelDeploymentEnv: AZURE_AI_MODEL_DEPLOYMENT_NAME
+keepRemoteEnv: SCOPE_RED_TEAM_KEEP_REMOTE
+attackPlaceholder: "{{SCOPE_RED_TEAM_ATTACK}}"
+multiTurnDepth: 5
+attackStrategies:
+  - Flip
+  - Base64
+  - IndirectJailbreak
+riskCategories:
+  - ProhibitedActions
+  - TaskAdherence
+  - SensitiveDataLeakage
+evaluators:
+  - name: Prohibited Actions
+    evaluatorName: builtin.prohibited_actions
+    version: "1"
+  - name: Task Adherence
+    evaluatorName: builtin.task_adherence
+    version: "1"
+    deploymentEnv: AZURE_AI_MODEL_DEPLOYMENT_NAME
+  - name: Sensitive Data Leakage
+    evaluatorName: builtin.sensitive_data_leakage
+    version: "1"
+polling:
+  intervalSeconds: 5
+  timeoutSeconds: 3600
+  maxTransientRetries: 5
+  baseRetryDelaySeconds: 0.5
+  maxRetryDelaySeconds: 30
+adapterCommand:
+  - pnpm
+  - --filter
+  - static-prompt-evals
+  - exec
+  - tsx
+  - adapter/runner.ts

@@ -179,6 +179,26 @@ pnpm test:integration             # Integration tests (requires .env + Docker)
 
 > **Portal Storybook stories run under Vitest**: `apps/portal/src/components/ui/stories.play.test.tsx` composes the `ui/*` stories and executes their `play` (interaction) functions inside the regular Vitest suite (no `@storybook/addon-vitest` required). It binds a Testing Library `canvas` to the rendered container, so story `play` functions must keep depending only on `canvas` plus values imported directly from `storybook/test` (`userEvent`, `screen`, `expect`). When you add a new `ui/*` story with a `play` function, register its module in that harness so it's covered.
 
+### Static prompt evaluations
+
+Read [docs/architecture/prompt-evaluations.md](docs/architecture/prompt-evaluations.md)
+before changing any AI-facing instruction surface.
+
+- Whenever hardcoded system/user prompt text, prompt-building logic, output
+  instructions, or AI-facing tool descriptions are added or modified, update
+  the corresponding production target adapter, curated cases, deterministic
+  checks, composition contract, and/or rubric.
+- Register every new runtime static prompt family in the documented inventory,
+  committed evaluation manifest, and JSONL adapter registry.
+- Run the smallest relevant explicit prompt-evaluation command before treating
+  a prompt change as complete. These suites are developer-invoked and are not
+  part of normal `pnpm test` or CI.
+- A change to user-authored/configurable prompt content does not by itself
+  create a static prompt family.
+- Whenever a user-controlled text field that reaches an AI is added or its
+  insertion point, trusted wrapper, role, tools, or security boundary changes,
+  add or update its red-team surface profile and benign composition contract.
+
 ## Contributing (Pull Requests)
 
 This repository is commonly worked on from a **fork**. When opening a pull
@@ -216,6 +236,7 @@ not open the PR against the fork unless the user explicitly asks you to.
 |----------|-------------|
 | [docs/architecture/overview.md](docs/architecture/overview.md) | System architecture, component interactions, data flow |
 | [docs/architecture/app-design.md](docs/architecture/app-design.md) | Data models, API design, package dependency graph |
+| [docs/architecture/prompt-evaluations.md](docs/architecture/prompt-evaluations.md) | Static prompt quality, user-controlled AI red teaming, datasets, commands, and maintenance rules |
 | [docs/architecture/data-organization-projects.md](docs/architecture/data-organization-projects.md) | Projects (a single container) to isolate/group data within a cluster; composes with data-tags and auth-rbac |
 | [docs/architecture/vscode-web-worker.md](docs/architecture/vscode-web-worker.md) | XState chat machine, GitHub auth flow, ARIA snapshots |
 | [docs/architecture/token-manager.md](docs/architecture/token-manager.md) | Token storage, validation, round-robin distribution |

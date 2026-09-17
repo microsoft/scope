@@ -63,3 +63,13 @@ paths = [
   '''.*\.test\.ts$''',
   '''.*\.integration\.test\.ts$''',
 ]
+
+# The harvested OpenAPI fingerprint is a content hash, not an API credential.
+# Match only this verified digest in the dataset manifest, including history.
+[[allowlists]]
+description = "Static prompt dataset OpenAPI SHA-256 fingerprint"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = ['''^evaluations/static-prompts/datasets/manifest\.json$''']
+regexes = ['''^4f6776ac4602e279c8723acd9a6cb22fa504c95538ab9491e0b5acab267c6a6b$''']
