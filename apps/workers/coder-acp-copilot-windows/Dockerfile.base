@@ -20,6 +20,12 @@ RUN Invoke-WebRequest -Uri "https://nodejs.org/dist/v${env:NODE_VERSION}/node-v$
 # Install git via Chocolatey
 RUN choco install -y git
 
+# Install GitHub CLI via Chocolatey (pinned to match the Linux worker images)
+# No version check here: the chocolatey shim directory only joins PATH via the
+# ENV below, so `gh` is not yet invokable at this layer (same as git above).
+ARG GH_VERSION=2.100.0
+RUN choco install -y gh --version=$env:GH_VERSION
+
 # Install pnpm as a standalone executable
 RUN New-Item -ItemType Directory -Force -Path C:\tools | Out-Null; \
     Invoke-WebRequest -Uri 'https://github.com/pnpm/pnpm/releases/download/v10.29.1/pnpm-win-x64.exe' \

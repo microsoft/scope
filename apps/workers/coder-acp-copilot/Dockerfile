@@ -10,7 +10,10 @@ ENV npm_config_registry=${NPM_CONFIG_REGISTRY} \
 # which some private registry proxies don't serve; fall back to a pinned global
 # install (honors npm_config_registry) so restricted networks can still build.
 RUN corepack enable && (corepack prepare pnpm@10.29.1 --activate || npm install -g pnpm@10.29.1 --force)
-# Install system tools for coding agents: Python, uv, git, PowerShell, Go, .NET, Rust, Java, Maven, Gradle
+# Pinned like every other system tool below so image builds stay reproducible.
+ARG GH_VERSION=2.100.0
+
+# Install system tools for coding agents: Python, uv, git, GitHub CLI, PowerShell, Go, .NET, Rust, Java, Maven, Gradle
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
@@ -68,9 +71,18 @@ RUN apt-get update && apt-get install -y \
     && rm /tmp/gradle.zip \
     && chmod +x /opt/gradle/gradle-8.12/bin/gradle \
     && ln -s /opt/gradle/gradle-8.12/bin/gradle /usr/local/bin/gradle \
+    && curl -fsSL -o /tmp/gh.tar.gz \
+      "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${ARCH}.tar.gz" \
+    && tar -xzf /tmp/gh.tar.gz -C /tmp \
+    && mv "/tmp/gh_${GH_VERSION}_linux_${ARCH}/bin/gh" /usr/local/bin/gh \
+    && chmod +x /usr/local/bin/gh \
+    && rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${ARCH}" \
+    && gh --version \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PATH="/root/.cargo/bin:/root/.local/bin:$PATH"
+# Surfaced at runtime so the worker can report the toolchain it actually shipped.
+ENV GH_VERSION=${GH_VERSION}
 
 # --- Builder stage: compile TypeScript ---
 FROM base AS builder
