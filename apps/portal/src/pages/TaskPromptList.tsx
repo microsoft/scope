@@ -202,7 +202,7 @@ export function TaskPromptList() {
       cell: (tp) =>
         tp.features ? (
           <Badge variant="secondary" className="text-xs">
-            {tp.features.filter((f) => f.detected).length}/{tp.features.length}
+            {tp.features.filter((f) => f.detected).length}
           </Badge>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
