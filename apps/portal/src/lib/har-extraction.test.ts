@@ -9,6 +9,8 @@ import {
   extractEntrySegments,
   extractChronologicalSegments,
   extractFromHar,
+  isAiCompletionEntry,
+  detectTransport,
   type HarEntry,
   type HarFile,
 } from "./har-extraction";
@@ -506,5 +508,129 @@ describe("extractFromHar", () => {
     expect(result.thinkingContent).toBe("");
     expect(result.toolCalls).toEqual([]);
     expect(result.segments).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isAiCompletionEntry
+// ---------------------------------------------------------------------------
+/** Build a classification-focused HarEntry. */
+function makeClassifyEntry(opts: {
+  url?: string;
+  method?: string;
+  status?: number;
+  mimeType?: string;
+  responseHeaders?: { name: string; value: string }[];
+  resourceType?: string;
+  webSocketMessages?: unknown[];
+}): HarEntry {
+  return {
+    startedDateTime: "2025-01-01T00:00:00Z",
+    request: {
+      method: opts.method ?? "POST",
+      url: opts.url ?? "https://api.githubcopilot.com/chat/completions",
+    },
+    response: {
+      status: opts.status ?? 200,
+      ...(opts.responseHeaders ? { headers: opts.responseHeaders } : {}),
+      content: { ...(opts.mimeType ? { mimeType: opts.mimeType } : {}) },
+    },
+    ...(opts.resourceType ? { _resourceType: opts.resourceType } : {}),
+    ...(opts.webSocketMessages ? { _webSocketMessages: opts.webSocketMessages } : {}),
+  };
+}
+
+describe("isAiCompletionEntry", () => {
+  it("flags POST chat/completions with a 2xx status", () => {
+    expect(isAiCompletionEntry(makeClassifyEntry({
+      url: "https://api.githubcopilot.com/chat/completions",
+      method: "POST",
+      status: 200,
+    }))).toBe(true);
+  });
+
+  it("flags POST v1/messages (Anthropic) with a 2xx status", () => {
+    expect(isAiCompletionEntry(makeClassifyEntry({
+      url: "https://api.anthropic.com/v1/messages",
+      method: "POST",
+      status: 201,
+    }))).toBe(true);
+  });
+
+  it("flags a GET 101 WebSocket upgrade on the Responses API", () => {
+    expect(isAiCompletionEntry(makeClassifyEntry({
+      url: "https://api.enterprise.githubcopilot.com/responses",
+      method: "GET",
+      status: 101,
+    }))).toBe(true);
+  });
+
+  it("does not flag non-AI endpoints", () => {
+    expect(isAiCompletionEntry(makeClassifyEntry({
+      url: "https://api.githubcopilot.com/telemetry",
+      method: "POST",
+      status: 200,
+    }))).toBe(false);
+  });
+
+  it("does not flag 429 retries on an AI endpoint", () => {
+    expect(isAiCompletionEntry(makeClassifyEntry({
+      url: "https://api.githubcopilot.com/chat/completions",
+      method: "POST",
+      status: 429,
+    }))).toBe(false);
+  });
+
+  it("does not flag 5xx errors on an AI endpoint", () => {
+    expect(isAiCompletionEntry(makeClassifyEntry({
+      url: "https://api.githubcopilot.com/chat/completions",
+      method: "POST",
+      status: 503,
+    }))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectTransport
+// ---------------------------------------------------------------------------
+describe("detectTransport", () => {
+  it("classifies text/event-stream responses as sse", () => {
+    expect(detectTransport(makeClassifyEntry({
+      mimeType: "text/event-stream; charset=utf-8",
+    }))).toBe("sse");
+  });
+
+  it("classifies sse via the content-type response header", () => {
+    expect(detectTransport(makeClassifyEntry({
+      responseHeaders: [{ name: "Content-Type", value: "text/event-stream" }],
+    }))).toBe("sse");
+  });
+
+  it("classifies entries tagged with _resourceType websocket", () => {
+    expect(detectTransport(makeClassifyEntry({
+      resourceType: "websocket",
+      status: 101,
+    }))).toBe("websocket");
+  });
+
+  it("classifies a 101 upgrade with an Upgrade: websocket header", () => {
+    expect(detectTransport(makeClassifyEntry({
+      method: "GET",
+      status: 101,
+      responseHeaders: [{ name: "Upgrade", value: "websocket" }],
+    }))).toBe("websocket");
+  });
+
+  it("classifies entries carrying _webSocketMessages as websocket", () => {
+    expect(detectTransport(makeClassifyEntry({
+      webSocketMessages: [{ type: "receive", time: 1, opcode: 1, data: "{}" }],
+    }))).toBe("websocket");
+  });
+
+  it("classifies plain JSON responses as http", () => {
+    expect(detectTransport(makeClassifyEntry({
+      mimeType: "application/json",
+      status: 200,
+    }))).toBe("http");
   });
 });
