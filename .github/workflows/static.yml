@@ -60,8 +60,8 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Build site
         env:
-          SITE: ${{ steps.pages.outputs.origin }}
-          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          SITE: ${{ steps.pages.outputs.origin || 'https://microsoft.github.io' }}
+          BASE_PATH: ${{ github.ref != 'refs/heads/main' && '/scope' || steps.pages.outputs.base_path }}
         run: pnpm run build
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'

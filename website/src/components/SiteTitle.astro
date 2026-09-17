@@ -14,9 +14,6 @@ const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
 			role="img"
 			aria-label={config.logo?.alt}
 		>
-			{/* Single ECG pulse. It stays put; its amplitude
-			    oscillates low <-> high around the baseline, so the
-			    wave "beats" without moving sideways. */}
 			<g
 				class="scope-logo__wave"
 				stroke="currentColor"
@@ -50,7 +47,7 @@ const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
 		}
 		.scope-logo {
 			display: block;
-			height: calc(var(--sl-nav-height) - 2 * var(--sl-nav-pad-y));
+			height: 1.7rem;
 			aspect-ratio: 1 / 1;
 			color: var(--sl-color-text-accent);
 		}
@@ -59,26 +56,6 @@ const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
 			width: 100%;
 			height: 100%;
 			overflow: hidden;
-		}
-		/* The waveform stays put and breathes: a slow, gentle sway
-		   that eases up and down for a calm, relaxing rhythm. */
-		.scope-logo__wave {
-			transform-box: view-box;
-			transform-origin: center;
-			animation: scope-wave-beat 1.1s ease-in-out infinite alternate;
-		}
-		@keyframes scope-wave-beat {
-			from {
-				transform: scaleY(0.55);
-			}
-			to {
-				transform: scaleY(1.05);
-			}
-		}
-		@media (prefers-reduced-motion: reduce) {
-			.scope-logo__wave {
-				animation: none;
-			}
 		}
 	}
 </style>

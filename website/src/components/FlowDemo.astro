@@ -1,0 +1,95 @@
+---
+import { sampleAgents } from '../scripts/sample-agents';
+
+const stages = ['Define a scenario', 'Run the agents', 'Evaluate the work', 'Explore the results'];
+const rowHeight = 96;
+const rowGap = 12;
+const graphHeight = sampleAgents.length * rowHeight + (sampleAgents.length - 1) * rowGap;
+const center = graphHeight / 2;
+const incoming = sampleAgents.map((_, index) => {
+	const y = index * (rowHeight + rowGap) + rowHeight / 2;
+	const direction = Math.sign(y - center);
+	return direction === 0 ? `M210 ${center} H270`
+		: `M210 ${center} H228 Q240 ${center} 240 ${center + direction * 12} V${y - direction * 12} Q240 ${y} 252 ${y} H270`;
+}).join(' ');
+const outgoing = sampleAgents.map((_, index) => {
+	const y = index * (rowHeight + rowGap) + rowHeight / 2;
+	const direction = Math.sign(center - y);
+	return direction === 0 ? `M490 ${center} H550`
+		: `M490 ${y} H508 Q520 ${y} 520 ${y + direction * 12} V${center - direction * 12} Q520 ${center} 532 ${center} H550`;
+}).join(' ');
+const wires = [incoming, outgoing, `M770 ${center} H830`];
+---
+
+<scope-flow class="scope-flow" style={`--flow-agent-count: ${sampleAgents.length}; --flow-graph-height: ${graphHeight}px; --flow-agent-gap: ${rowGap}px;`} data-stage="0" data-playing="false" role="group" aria-label="Interactive fictional Scope benchmark">
+	<div class="flow-toolbar">
+		<div class="flow-demo-label"><span class="scope-signal" aria-hidden="true"></span><strong>Scope playground</strong><span class="flow-demo-badge">Simulated</span></div>
+		<label class="flow-select-label">Scenario
+			<select data-scenario disabled>
+				<option value="board">Build a task board</option>
+				<option value="api">Add a search API</option>
+			</select>
+		</label>
+	</div>
+	<div class="flow-canvas">
+		<div class="flow-canvas-label"><span>EXPERIMENT / <span data-experiment>task-board</span></span><span>{sampleAgents.length} sample profiles / same criteria</span></div>
+		<div class="flow-graph">
+		<svg class="flow-connections" viewBox={`0 0 1000 ${graphHeight}`} preserveAspectRatio="none" aria-hidden="true">
+			<g class="flow-wire">
+				{wires.map((d) => <path d={d} />)}
+			</g>
+			<g class="flow-packets">
+				{wires.map((d, index) => <path data-wire={index + 1} d={d} />)}
+			</g>
+		</svg>
+		<div class="flow-nodes">
+			<button type="button" class="flow-node flow-scenario" data-node="0" aria-label="Inspect scenario" aria-current="step" disabled>
+				<span class="flow-node-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7Z M14 3v5h4 M10 12h5 M10 16h5" /></svg></span>
+				<span class="flow-node-kicker">01 / Scenario</span>
+				<strong data-task-title>Build a task board</strong>
+				<span data-task-short>A small app. Real acceptance criteria.</span>
+				<span class="flow-node-tag">Your task prompt</span>
+			</button>
+			<div class="flow-agent-nodes">
+				{sampleAgents.map((agent) => (
+					<button type="button" class="flow-node flow-agent" data-node="1" aria-label="Inspect sample agent execution" disabled>
+						<span class="flow-agent-initial" aria-hidden="true">{agent.initial}</span><span><strong>{agent.name}</strong><span class="flow-node-kicker">Sample profile {agent.profile}</span></span>
+						<span class="flow-agent-status" data-agent-status>Ready</span>
+					</button>
+				))}
+			</div>
+			<button type="button" class="flow-node flow-judge" data-node="2" aria-label="Inspect criteria dependency graph" disabled>
+				<span class="flow-node-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6v6H9Z M3 16h6v5H3Z M15 16h6v5h-6Z M12 9v4 M6 16v-3h12v3" /></svg></span>
+				<span class="flow-node-kicker">03 / Judge</span><strong>Your criteria graph</strong>
+				<span class="flow-criteria"><span>Builds</span><i aria-hidden="true"></i><span>Tests pass</span><i aria-hidden="true"></i><span data-edge-label>Handles empty input</span></span>
+			</button>
+			<button type="button" class="flow-node flow-report" data-node="3" aria-label="Inspect simulated results" disabled>
+				<span class="flow-node-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4v16h17 M8 16v-5 M13 16V7 M18 16v-8" /></svg></span>
+				<span class="flow-node-kicker">04 / Evidence</span><strong>The whole picture</strong>
+				<span class="flow-chart" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+				<span>Results, not guesswork</span>
+			</button>
+		</div>
+		</div>
+	</div>
+	<div class="flow-controls">
+		<div class="flow-playback"><button type="button" class="scope-btn scope-btn--primary" data-play disabled>Play demo</button><button type="button" class="flow-reset" data-reset disabled aria-label="Reset demo to the first step">Reset</button></div>
+		<div class="flow-step-buttons" role="group" aria-label="Explore benchmark steps">
+			{stages.map((stage, index) => <button type="button" data-step={index} aria-label={`${index + 1}. ${stage}`} aria-current={index === 0 ? 'step' : undefined} disabled><span>{String(index + 1).padStart(2, '0')}</span><span class="flow-step-name">{['Scenario', 'Agents', 'Criteria', 'Results'][index]}</span></button>)}
+		</div>
+	</div>
+	<div class="flow-inspector">
+		<div class="flow-inspector-copy"><span class="scope-eyebrow" data-stage-label>Step 01 / Define</span><h3 data-detail-title>Give every agent the same starting line.</h3><p data-detail-body>Create a task board with add, complete, and filter actions. Define the expected behavior before the agents start.</p></div>
+		<div class="flow-detail-panel" data-detail-panel>
+			<span class="flow-code-label">TASK PROMPT / EXAMPLE</span>
+			<p>Build a task board. Users can add tasks, mark them complete, and filter by status. An empty title must not create a task.</p>
+		</div>
+	</div>
+	<p class="flow-disclaimer">Illustrative demo only. No agents are running. Agent names are examples, not a list of supported Scope integrations. These are not real scores or usage rankings. Select any step to explore.</p>
+	<p class="sr-only" aria-live="polite" aria-atomic="true" data-announcement></p>
+	<noscript><p class="flow-disclaimer">JavaScript is off. The diagram shows the full flow: define a scenario, run agent profiles, evaluate the criteria graph, and inspect results.</p></noscript>
+</scope-flow>
+
+<script>
+	import '../scripts/flow-demo';
+</script>

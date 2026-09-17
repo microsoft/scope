@@ -1,0 +1,118 @@
+---
+import FlowDemo from './FlowDemo.astro';
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const paths = [
+	{
+		number: '01',
+		title: 'Start in the Portal',
+		description: 'Get access, submit your first task, and follow the results in your browser.',
+		href: 'getting-started/first-run/',
+		label: 'Your first run',
+		tag: 'New to Scope',
+	},
+	{
+		number: '02',
+		title: 'Work from your terminal',
+		description: 'Install the CLI and make benchmarks part of your development workflow.',
+		href: 'getting-started/install-cli/',
+		label: 'Set up the CLI',
+		tag: 'For developers',
+	},
+	{
+		number: '03',
+		title: 'Build it into your tools',
+		description: 'Explore request examples and the searchable, generated API reference.',
+		href: 'reference/rest-api/',
+		label: 'Explore the API',
+		tag: 'For integrations',
+	},
+];
+---
+
+<div class="scope-home not-content">
+	<section class="scope-hero" aria-labelledby="_top">
+		<div class="scope-eyebrow"><span class="scope-signal" aria-hidden="true"></span> The agentic experience, measured</div>
+		<h1 id="_top" tabindex="-1" data-page-title>Your product.<br />Their agents. <span>The whole picture.</span></h1>
+		<p class="scope-subtitle">
+			How do coding agents really handle your product? Give them the same
+			task, define what good looks like, and see the evidence. That's Scope.
+		</p>
+		<div class="scope-actions">
+			<a class="scope-btn scope-btn--primary" href={`${base}getting-started/access/`}>Start with Scope <span aria-hidden="true">&rarr;</span></a>
+			<a class="scope-btn scope-btn--secondary" href="#see-it-work"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 7 5-7 5Z" fill="currentColor" /></svg> Explore a sample run</a>
+		</div>
+		<p class="scope-hero-note">Your tasks. Your criteria. Repeatable experiments.</p>
+		<div class="scope-agent-strip" aria-label="Documented coding agents">
+			<span>Built to evaluate</span>
+			<strong>GitHub Copilot</strong>
+			<span class="scope-strip-divider" aria-hidden="true"></span>
+			<strong>Claude Code</strong>
+			<a href={`${base}guides/choosing-a-coding-agent/`}>Meet the agents <span aria-hidden="true">&rarr;</span></a>
+		</div>
+	</section>
+
+	<section class="scope-section scope-demo-section" id="see-it-work" aria-labelledby="demo-heading">
+		<div class="scope-section-heading">
+			<div><p class="scope-eyebrow">From a prompt to a picture</p><h2 id="demo-heading">One task. Follow every step.</h2></div>
+		</div>
+		<FlowDemo />
+	</section>
+
+	<section class="scope-section" aria-labelledby="evidence-heading">
+		<div class="scope-section-heading">
+			<div><p class="scope-eyebrow">Beyond a pass or fail</p><h2 id="evidence-heading">Find the why behind the result.</h2></div>
+			<p>A score is a starting point. Understand the task, the setup, and the path an agent took.</p>
+		</div>
+		<div class="scope-evidence-grid">
+			<a class="scope-evidence scope-evidence--wide" href={`${base}guides/defining-criteria/`}>
+				<div class="scope-mini-dag" aria-hidden="true"><span>Build</span><i></i><span>Test</span><i></i><span>Evaluate</span></div>
+				<p class="scope-eyebrow">Define success</p>
+				<h3>Your criteria. Not a generic leaderboard.</h3>
+				<p>Model what matters as a criteria graph, with dependencies that make the evaluation meaningful for your product.</p>
+				<span class="scope-text-link">Build your criteria graph <span aria-hidden="true">&rarr;</span></span>
+			</a>
+			<a class="scope-evidence" href={`${base}guides/defining-profiles/`}>
+				<div class="scope-profile-preview" aria-hidden="true"><span>Agent <b>Configured</b></span><span>Model <b>Selected</b></span><span>Skills &amp; tools <b>Attached</b></span></div>
+				<p class="scope-eyebrow">Keep the context</p><h3>A setup you can run again.</h3>
+				<p>Save agent configuration in versioned profiles, so the next experiment starts from a known setup.</p>
+				<span class="scope-text-link">Explore profiles <span aria-hidden="true">&rarr;</span></span>
+			</a>
+			<a class="scope-evidence scope-evidence--trace" href={`${base}guides/submitting-requests-portal/`}>
+				<div class="scope-trace-preview" aria-hidden="true"><span>01 <b>Task submitted</b></span><span>02 <b>Agent working</b></span><span>03 <b>Evidence captured</b></span></div>
+				<p class="scope-eyebrow">Follow the work</p><h3>Don't lose the story.</h3>
+				<p>Follow live logs and inspect the run's iterations and criterion feedback to see where things went right or wrong.</p>
+				<span class="scope-text-link">Explore the workflow <span aria-hidden="true">&rarr;</span></span>
+			</a>
+		</div>
+	</section>
+
+	<section class="scope-section" aria-labelledby="docs-heading">
+		<div class="scope-section-heading">
+			<div><p class="scope-eyebrow">Make your next move</p><h2 id="docs-heading">Less searching. More building.</h2></div>
+			<a class="scope-text-link" href={`${base}introduction/concepts/`}>Learn the core concepts <span aria-hidden="true">&rarr;</span></a>
+		</div>
+		<div class="scope-paths">
+			{paths.map((path) => (
+				<a class="scope-path" href={`${base}${path.href}`}>
+					<div class="scope-path-top"><span>{path.number}</span><span>{path.tag}</span></div>
+					<h3>{path.title}</h3><p>{path.description}</p>
+					<span class="scope-text-link">{path.label} <span aria-hidden="true">&rarr;</span></span>
+				</a>
+			))}
+		</div>
+		<div class="scope-help-row"><span>Already running experiments?</span><a href={`${base}resources/troubleshooting/`}>Troubleshooting</a><a href={`${base}resources/faq/`}>Common questions</a><a href={`${base}resources/data-collection/`}>Data &amp; privacy</a></div>
+	</section>
+
+	<section class="scope-cta" aria-labelledby="cta-heading">
+		<p class="scope-eyebrow">Bring your own question</p>
+		<h2 id="cta-heading">What will your next<br />benchmark reveal?</h2>
+		<p>Start with one task you care about. Scope helps you see the rest.</p>
+		<a class="scope-btn scope-btn--primary" href={`${base}getting-started/access/`}>Get started <span aria-hidden="true">&rarr;</span></a>
+		<span class="scope-access-note">You'll need access to a Scope deployment. No account is needed for this demo.</span>
+	</section>
+	<footer class="scope-home-footer">
+		<span>Scope <span class="scope-footer-muted">/ A clearer view of agentic coding.</span></span>
+		<a href="https://github.com/microsoft/scope">Source on GitHub <span aria-hidden="true">&rarr;</span></a>
+	</footer>
+</div>
