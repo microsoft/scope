@@ -10,26 +10,29 @@ and manage profiles — all from your terminal.
 
 - **Node.js ≥ 20** — [nodejs.org](https://nodejs.org)
 - **GitHub CLI (`gh`)** — authenticated with access to the
-  `growth-ecosystems/scope-doc` repo.  
-  Alternatively, set a `GH_TOKEN` or `GITHUB_TOKEN` environment
-  variable with `repo` scope.
+  `microsoft/scope` repo.
 
 ## One-liner install
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh \
+gh api repos/microsoft/scope/contents/website/install-cli.sh \
   -H "Accept: application/vnd.github.raw" | bash
 ```
 
-This downloads and installs the latest release to
+This downloads and installs the latest `cli/v*` release from
+`microsoft/scope` to
 `~/.local/bin/scope`. Override the location with the
 `SCOPE_INSTALL_DIR` environment variable:
 
 ```bash
-SCOPE_INSTALL_DIR=~/bin \
-  gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh \
-  -H "Accept: application/vnd.github.raw" | bash
+gh api repos/microsoft/scope/contents/website/install-cli.sh \
+  -H "Accept: application/vnd.github.raw" | SCOPE_INSTALL_DIR=~/bin bash
 ```
+
+The installer requires a published `cli/v*` release with a `scope.mjs`
+asset. If none is available, follow
+[Local development](/getting-started/local-development/) to build the CLI
+from source.
 
 ## Add to PATH
 

@@ -44,7 +44,7 @@ for the required setup.
 For terminal-based workflows, install the `scope` CLI:
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh \
+gh api repos/microsoft/scope/contents/website/install-cli.sh \
   -H "Accept: application/vnd.github.raw" | bash
 ```
 

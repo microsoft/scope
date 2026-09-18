@@ -2,7 +2,7 @@
 # Scope CLI installer
 #
 # Usage:
-#   gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
+#   gh api repos/microsoft/scope/contents/website/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
 #
 # Requires: node (>= 20) and either `gh` CLI (authenticated) or GH_TOKEN/GITHUB_TOKEN.
 #
@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-REPO="growth-ecosystems/scope-doc"
+REPO="microsoft/scope"
 TAG_PREFIX="cli/v"
 INSTALL_DIR="${SCOPE_INSTALL_DIR:-$HOME/.local/bin}"
 BINARY_NAME="scope"
