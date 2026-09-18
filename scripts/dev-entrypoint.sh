@@ -12,6 +12,15 @@ if [ -z "$SERVICE_DIR" ]; then
   exit 1
 fi
 
+INSPECT_ARGS=()
+if [ -n "${NODE_INSPECT_PORT:-}" ]; then
+  if ! [[ "$NODE_INSPECT_PORT" =~ ^[0-9]+$ ]] || (( NODE_INSPECT_PORT < 1 || NODE_INSPECT_PORT > 65535 )); then
+    echo "ERROR: NODE_INSPECT_PORT must be an integer between 1 and 65535"
+    exit 1
+  fi
+  INSPECT_ARGS=("--inspect=0.0.0.0:${NODE_INSPECT_PORT}")
+fi
+
 # Sentinel file written by cancelExit() when a run is cancelled.
 # When detected, we kill tsx watch and exit — stopping the container.
 CANCEL_SENTINEL="/tmp/.scope-cancel-exit"
@@ -26,7 +35,7 @@ cd /app/apps/$SERVICE_DIR
 # Exclude shared dist — tsc --watch (above) already recompiles it and tsx
 # re-resolves modules on import. Without this, every shared rebuild triggers
 # a tsx restart that can overlap with in-flight message processing.
-npx tsx watch --exclude '/app/packages/shared/dist/**' src/index.ts &
+npx tsx watch --exclude '/app/packages/shared/dist/**' "${INSPECT_ARGS[@]}" src/index.ts &
 TSX_PID=$!
 
 # Forward SIGTERM/SIGINT to children so docker stop works gracefully

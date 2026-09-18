@@ -31,6 +31,38 @@ export const msalInstance = new PublicClientApplication(buildMsalConfiguration()
 let initialized = false;
 let initPromise: Promise<void> | undefined;
 
+/** An actual redirect result, not a restored account or silent token refresh. */
+export interface RedirectLogin {
+  readonly accountKey: string;
+}
+
+let pendingRedirectLogin: RedirectLogin | undefined;
+
+export function getAccountKey(account: AccountInfo): string {
+  return JSON.stringify([
+    account.homeAccountId,
+    account.localAccountId,
+    account.tenantId,
+    account.environment,
+  ]);
+}
+
+export function getPendingRedirectLogin(account: AccountInfo): RedirectLogin | undefined {
+  return pendingRedirectLogin?.accountKey === getAccountKey(account)
+    ? pendingRedirectLogin
+    : undefined;
+}
+
+/** Consume only after Scope accepted the login; failed attempts remain retryable. */
+export function consumeRedirectLogin(login: RedirectLogin): void {
+  if (pendingRedirectLogin === login) pendingRedirectLogin = undefined;
+}
+
+/** An abandoned account must not leave a login event for a later session. */
+export function discardRedirectLogin(accountKey: string): void {
+  if (pendingRedirectLogin?.accountKey === accountKey) pendingRedirectLogin = undefined;
+}
+
 /** Pick a stable active account: the current one, else the first cached. */
 function ensureActiveAccount(): AccountInfo | null {
   const active = msalInstance.getActiveAccount();
@@ -61,6 +93,7 @@ export async function initializeAuth(): Promise<void> {
       const result = await msalInstance.handleRedirectPromise();
       if (result?.account) {
         msalInstance.setActiveAccount(result.account);
+        pendingRedirectLogin = { accountKey: getAccountKey(result.account) };
       } else {
         ensureActiveAccount();
       }
@@ -85,6 +118,7 @@ export async function initializeAuth(): Promise<void> {
  * recover from a wedged/poisoned auth cache. Best-effort — never throws.
  */
 export async function clearAuthState(): Promise<void> {
+  pendingRedirectLogin = undefined;
   try {
     await msalInstance.clearCache();
   } catch {
@@ -115,6 +149,7 @@ export async function login(): Promise<void> {
 /** Sign out via redirect, clearing the cached account. */
 export async function logout(): Promise<void> {
   await initializeAuth();
+  pendingRedirectLogin = undefined;
   await msalInstance.logoutRedirect({
     account: msalInstance.getActiveAccount() ?? undefined,
   });

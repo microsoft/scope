@@ -10,6 +10,18 @@ The sophisticated criteria system can be configured via environment variables in
 
 Base URL of the Scope API used by all CLI commands. Override this to point the CLI at a remote or Docker-hosted API instance.
 
+## Docker Development
+
+### API_DEBUG_PORT
+**Default:** `9200`
+**Type:** integer (Docker Compose development only)
+
+Host port for the API's Node inspector when using `docker-compose.dev.yml`,
+including `pnpm docker:dev:portal`. The generated `.env` offsets this port per
+worktree. The inspector listens on port `9229` inside the container and is
+published to `127.0.0.1` only. Use the **Attach API (Docker)** VS Code launch
+configuration and enter the current worktree's generated `API_DEBUG_PORT`.
+
 ## Agent Target Validation
 
 ### SCOPE_STRICT_AGENT_CAPABILITIES
@@ -346,10 +358,47 @@ done. In **production** builds the config is only considered valid when
 `VITE_AUTH_CLIENT_ID` and `VITE_AUTH_AUTHORITY` are present; otherwise the Portal
 renders a "not configured" screen instead of silently pointing at `localhost`.
 
-> Authentication only — there is no authorization (roles/permissions) yet, and
-> the API does not verify the token yet. The token is attached to API requests
-> and the app is gated client-side; identity shown in the UI is derived from the
-> MSAL account token claims.
+**Docker builds:** the Portal Dockerfile accepts `VITE_AUTH_CLIENT_ID`,
+`VITE_AUTH_AUTHORITY`, `VITE_AUTH_KNOWN_AUTHORITIES`, `VITE_AUTH_SCOPES`,
+`VITE_AUTH_PROTOCOL_MODE`, `VITE_AUTH_REDIRECT_URI`,
+`VITE_AUTH_POST_LOGOUT_REDIRECT_URI`, and `VITE_AUTH_CACHE_LOCATION` as build
+arguments in its `builder` stage. Vite embeds them during `pnpm --filter portal
+build`; setting these variables only on the final nginx container has no effect.
+These are public client settings, not secrets; never pass client secrets or
+access tokens as Portal build arguments.
+
+- **Local Compose:** `pnpm docker:up:portal` forwards the settings from your shell
+  or `.env.local` through `portal.build.args`, using the seeded emulator and
+  per-worktree ports by default. `pnpm docker:dev:portal` supplies the same
+  settings to the Vite dev-server environment instead.
+- **CI:** the Portal image build in `.github/workflows/ci.yml` forwards the
+  same-named GitHub Actions configuration variables (`vars.VITE_AUTH_*`).
+  Configure at least the SPA client ID, authority, and the API's exposed scope
+  before building an image intended for authenticated use. No GitHub variable
+  values are provisioned by the workflow itself.
+- **Direct Docker build:** supply the settings with `--build-arg`, for example:
+
+  ```bash
+  docker build -f apps/portal/Dockerfile -t scope-portal \
+    --build-arg VITE_AUTH_CLIENT_ID="<spa-client-id>" \
+    --build-arg VITE_AUTH_AUTHORITY="https://login.microsoftonline.com/<tenant-id>" \
+    --build-arg VITE_AUTH_SCOPES="api://<api-client-id>/access_as_user" .
+  ```
+
+Rebuild and recreate the Portal after changing IdP settings. A single image
+promoted between environments retains the same IdP settings; only
+`SCOPE_AUTH_ENABLED` remains a runtime auth switch. Empty optional redirect
+arguments retain the current Portal origin, while empty protocol/cache settings
+retain their documented defaults. For Entra cloud through local Compose, also
+set `VITE_AUTH_PROTOCOL_MODE=AAD` and `VITE_AUTH_KNOWN_AUTHORITIES=` to override
+the emulator-specific defaults.
+
+> The API verifies the IdP token on every non-public authenticated request, then
+> resolves an active Scope user. Full route RBAC/ownership enforcement is still
+> deferred. After a redirect callback, the Portal's first Scope API request is
+> `POST /api/v1/users/me`; after a cached-account reload it is
+> `GET /users/me`. `AuthContext` takes the Scope UUID and role from that response, not
+> MSAL account claims. All eager queries, including feature flags, wait for it.
 
 ### ⚠️ IMPORTANT — Feature toggle (3 per-environment controls)
 
@@ -358,12 +407,12 @@ per-environment controls** — one each for **local dev**, **integration**, and
 **production**. It is **ON by default (secure by default)** in every environment;
 a control must **explicitly** opt out.
 
-> **Turn auth OFF until the API ships token verification.** The API does not yet
-> validate bearer tokens. Until it does, any environment that runs the auth-gated
-> Portal against that API should disable auth **for that environment only** (see
-> the table). Flip it back on (or remove the override) once the auth-enabled API
-> is deployed there. Because the three controls are independent, you can, for
-> example, keep auth on locally while it stays off in integration and production.
+> **Coordinate API and Portal rollout per environment.** The API in this branch
+> verifies bearer tokens and implements the explicit-login handshake. Do not infer
+> a deployed environment's version or flag state from the source tree. Enable
+> Portal auth after deploying/configuring the compatible API and verifying
+> POST `/users/me` followed by GET `/me`. These controls are independent
+> across environments and do not turn on global API lockdown.
 
 When auth is disabled the Portal behaves **exactly as it did before auth
 existed**: no sign-in gate, no account menu, and no `Authorization` header on API
@@ -380,8 +429,8 @@ promoted image — uses a build-time flag.
 | Environment | Control | Kind | Where to set | Default |
 | --- | --- | --- | --- | --- |
 | **Local dev** | `VITE_AUTH_ENABLED_LOCAL` | build-time (`import.meta.env.DEV`) | `docker-compose.dev.yml` or your shell | `true` |
-| **Integration** | `SCOPE_AUTH_ENABLED` | runtime (container env) | integration portal deployment env | `true` (default); currently `false` |
-| **Production** | `SCOPE_AUTH_ENABLED` | runtime (container env) | production portal deployment env | `true` (default); currently `false` |
+| **Integration** | `SCOPE_AUTH_ENABLED` | runtime (container env) | integration portal deployment env | `true`; verify deployed override |
+| **Production** | `SCOPE_AUTH_ENABLED` | runtime (container env) | production portal deployment env | `true`; verify deployed override |
 
 **Type:** boolean-ish string. `true`/`1`/`yes`/`on` enable; `false`/`0`/`no`/`off`
 disable (case-insensitive). Any other/unset value falls back to the secure
@@ -403,8 +452,8 @@ so local always falls through to the Vite flag.
   (or your shell) to skip sign-in while iterating on UI, without standing up
   `entra-local`.
 - **Integration / production:** set `SCOPE_AUTH_ENABLED=false` on the portal
-  Deployment in that environment's overlay (currently `false` in both until the
-  API verifies tokens). No image rebuild is needed — it takes effect on the next
+  Deployment in that environment's overlay when an anonymous rollout is intended.
+  No image rebuild is needed — it takes effect on the next
   pod start.
 
 ### Local dev setup (entra-local)
@@ -416,25 +465,64 @@ that starts the Portal (e.g. `pnpm docker:dev:copilot`, `pnpm docker:dev:portal`
 
 1. Ensures a locally-trusted TLS cert exists via **mkcert** (`scripts/ensure-dev-certs.sh`,
    invoked by `scripts/dev-compose.sh`). mkcert installs a local root CA into the
-   OS/browser trust store and mints `.certs/entra-local.pem` for `localhost`, so
-   `https://localhost:<ENTRA_LOCAL_PORT>` is trusted with no cert warning. MSAL
+   OS/browser trust store and mints `.certs/entra-local.pem` for `localhost`,
+   loopback IPs, and the Compose hostname `entra-local`, so
+   `https://localhost:<ENTRA_LOCAL_PORT>` is trusted with no cert warning. Older
+   localhost-only certificates, certificates nearing expiry, and certificates
+   signed by a different CA are regenerated automatically. The public CA is
+   exported to `.certs/rootCA.pem`; the CA private key is never copied. MSAL
    requires the authority to be served over HTTPS, which is why the emulator uses
    TLS rather than plain HTTP.
-2. Starts the `entra-local` emulator (compose `auth` profile, added automatically
+2. Stages the public CA into a separate `entra_local_ca` volume. The API,
+   emulator health check, and redirect-registration helper mount it read-only
+   and use `NODE_EXTRA_CA_CERTS=/ca/rootCA.pem`. The API never mounts the
+   emulator's private key, and TLS certificate verification stays enabled for
+   both local and external HTTPS calls.
+3. Starts the `entra-local` emulator (compose `auth` profile, added automatically
    by the dev scripts). `PUBLIC_ORIGIN`/`ISSUER` are pinned to
    `https://localhost:${ENTRA_LOCAL_PORT}` so the OIDC discovery document's
    `issuer`/endpoints use the host-facing port (the container binds `8443`
    internally; per-worktree port offsets would otherwise leak into the issuer and
    fail MSAL's authority match).
-3. Runs the one-shot `entra-local-init` service, which waits for the emulator to
+4. Runs the one-shot `entra-local-init` service, which waits for the emulator to
    become healthy and idempotently registers `http://localhost:${PORTAL_PORT}` as
    a `spa` redirect URI on the seeded Sample SPA app (the seed ships only
    `https://localhost:3000`, and each worktree gets its own `PORTAL_PORT`).
 
-**Prerequisite:** [mkcert](https://github.com/FiloSottile/mkcert) must be
-installed (`brew install mkcert nss`). The first run triggers `mkcert -install`,
+**Prerequisites:** [mkcert](https://github.com/FiloSottile/mkcert) and `openssl`
+must be installed (`brew install mkcert nss` on macOS, with `openssl` available
+on `PATH`). The first run triggers `mkcert -install`,
 which asks for your password once to add the local CA to the system trust store.
-This is the only interactive step.
+For a browser using that same trust store, this is the only interactive step.
+
+For WSL, remote development, or an integrated browser with a separate trust
+store, trust `.certs/rootCA.pem` on the machine or in the browser that opens the
+Portal as well. `mkcert -install` in the development shell cannot configure a
+different browser host. An `ERR_CERT_AUTHORITY_INVALID` error when MSAL fetches
+the emulator's discovery document means that browser-side trust is still
+missing; do not work around it by disabling TLS verification. Import only the
+public CA certificate, never `rootCA-key.pem` or the emulator private key.
+
+For a Windows browser with a WSL development shell, run
+`wslpath -w "$PWD/.certs/rootCA.pem"` in WSL to obtain the Windows path, then
+use an interactive Windows PowerShell session:
+
+```powershell
+Import-Certificate -FilePath "<Windows path printed by wslpath>" -CertStoreLocation Cert:\CurrentUser\Root
+```
+
+Review and approve the Windows certificate confirmation, then reload the Portal
+(restart the browser if it still caches the old trust result). This trusts
+certificates signed by the development CA for the current Windows user, not
+only the Scope certificate; it does not import a private key or require a
+machine-wide trust change.
+
+The CA initializer is optional when the `auth` profile is not enabled, so
+cloud-only Compose setups do not require mkcert. Set `NODE_EXTRA_CA_CERTS=` in
+that case to use only Node's normal CA trust store and avoid a missing-local-CA
+warning on a fresh volume. After rotating the local CA, recreate the API and
+emulator containers and update browser-side CA trust: Node reads extra CA
+certificates only at process startup.
 
 Then open the Portal at `http://localhost:${PORTAL_PORT}`, click **Log in**, and
 sign in with a seeded user (`alice@entralocal.dev` / `bob@entralocal.dev`).
@@ -468,7 +556,7 @@ Hosts MSAL is allowed to talk to for non-Microsoft (custom OIDC) authorities.
 Required for entra-local; typically unset for production Entra.
 
 ### VITE_AUTH_SCOPES
-**Default (dev):** `api://cccccccc-0000-0000-0000-000000000001/access_as_user`
+**Default (dev):** `api://cccccccc-0000-0000-0000-000000000005/access_as_user`
 **Type:** comma-separated scope list
 
 Scopes requested for the API access token (in addition to `openid`/`profile`,
@@ -502,7 +590,9 @@ Where MSAL navigates after sign-out.
 **Default:** `localStorage`
 **Type:** `localStorage` | `sessionStorage`
 
-Where MSAL persists its token cache.
+Where MSAL persists its **IdP token** cache. This is unrelated to the API's Redis
+user-access cache (`AUTH_USER_CACHE_TTL_SECONDS`). No Scope session token or
+additional browser bearer store is introduced.
 
 ## Portal Runtime Configuration
 
@@ -710,6 +800,199 @@ How far the queue-processor pushes out a duplicate message's visibility when the
 **Type:** integer (milliseconds)
 
 TTL applied to per-run liveness heartbeat keys in Redis (`run-heartbeat:<runId>`). The TTL is refreshed on every beat (every 15s), so the key only expires when the worker stops beating. Set comfortably above `SCOPE_RUN_HEARTBEAT_STALE_MS` so a brief beat delay never causes premature TTL expiry; the default gives 2.5× the staleness threshold.
+
+## API Authentication
+
+The API verifies Microsoft Entra ID access-token signature/claims **before any
+Redis/Mongo user lookup**. Every authenticated call keeps using the same IdP
+bearer; there is no `/auth/login`, token exchange, Scope JWT, or signing secret.
+`req.user` contains the resolved Scope UUID and database role, not an IdP role.
+
+Only **`POST /api/v1/users/me`** creates missing users or refreshes
+profile, `lastLoginAt`, and bootstrap-admin promotion. The upsert still precedes
+the disabled-user check: an explicit login can update those fields before returning
+`403`. `lastLoginAt` is the explicit upsert timestamp, not general activity or
+trustworthy proof of an interactive sign-in. Every GET `/me` and other
+routes read an existing active user from Redis, falling back to an exact
+`(idp, tid, oid)` Mongo lookup on miss/unavailability; they never JIT or refresh profile.
+Invalid/repeated/structured login values return `400`; HEAD never enrolls.
+
+The `/users/me` responses, including failures, are **`Cache-Control: no-store`**.
+Clients also use no-store; the enrollment POST has side effects and must never be
+prefetched or polled. New CLI/raw-bearer identities must deliberately enroll through
+it; already-enrolled callers remain compatible without any token change.
+
+With auth unconfigured, the API still boots and uses the existing anonymous rollout,
+so unauthenticated workers keep working. Partial auth configuration fails startup.
+With auth configured, missing tokens remain anonymous except where a route requires
+identity (`/users/me`); existing public exclusions remain unchanged. A verified
+identity is never silently downgraded to anonymous: missing users are
+`403 user_not_enrolled`, disabled users `403 user_disabled`, and the reserved `system`
+principal `401`. Invalid/expired tokens on non-public routes are rejected with `401`
+before cache access. Required Mongo/JWKS unavailability returns `503`; unexpected
+implementation/database errors use the logged `500` path.
+
+Full route RBAC/ownership enforcement is **not** part of this milestone. See
+[the auth flow and method walkthrough](docs/architecture/auth-rbac.md#3-api-authentication-middleware).
+
+### AUTH_USER_CACHE_TTL_SECONDS
+**Default:** `300` (only when unset)
+**Type:** positive safe integer (seconds)
+**Scope:** API
+
+Fixed, **non-sliding** lifetime of an existing active user's Redis snapshot.
+Blank, zero, negative, fractional, nonnumeric, or unsafe values fail startup,
+even when IdP auth is disabled.
+This variable alone does **not** enable IdP authentication or count as partial
+IdP configuration. Explicit login or successful Mongo fallback writes using
+atomic `SET ... EX <ttl>`; hits only `GET` and never extend expiry.
+
+Redis uses existing `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, and `REDIS_TLS`.
+A missing/blank Redis host creates no cache client and logs rate-limited
+unavailability; existing-user resolution falls back to Mongo.
+The key is
+`auth-user:v1:<encoded Mongo database namespace>:<encoded idp>:<encoded tid>:<encoded oid>`,
+with each component independently encoded using `encodeURIComponent`. The namespace
+is the configured MongoDB database name: independent databases sharing Redis must
+use distinct database names/namespaces (or separate Redis instances). No new Redis
+deployment or namespace secret is needed; verify this isolation in external
+deployment overlays before rollout.
+
+The repository's `.env.example`, `.env.local.example`, and API Compose environment
+wire this TTL setting. No additional tracked deployment manifests with auth
+configuration were found here; externally managed overlays and deployed values
+must be checked separately.
+
+Only validated active human principals are cached; no missing/disabled negative
+entries, raw bearer tokens, or IdP-derived permissions. Invalid/mismatched payloads
+are logged and evicted best-effort. Expected cache read/write/delete failures are
+rate-limited in logs without tokens/PII and fall back to Mongo; recovery restores
+caching. Connection/command waits are bounded, with no offline command queuing/replay
+or process-local authorization cache. Cache-write failure does not discard a
+successful Mongo result; required Mongo failure still fails the request.
+
+Database-only role/disable edits can stay stale until TTL expiry. Future mutation
+endpoints must evict this key; logout is not cache invalidation. No deployment-wide
+immediate revocation guarantee is implied by this cache.
+
+### AUTH_PROVIDER
+**Default:** (not set)
+**Type:** string (`entra`)
+
+Selects the identity-provider implementation. Set to `entra` with the required
+authority/audience settings to enable verification. When all IdP auth settings
+are unset, auth is disabled and callers remain anonymous; setting other IdP
+settings without `AUTH_PROVIDER` fails startup rather than disabling verification.
+
+### AUTH_AUTHORITY
+**Type:** URL string — **Required when `AUTH_PROVIDER` is set**
+
+OIDC authority used to discover the JWKS (signing keys) and validate the token
+issuer. For multi-tenant Entra apps this is typically
+`https://login.microsoftonline.com/common`. Point it at the `entra-local`
+emulator for offline development
+(e.g. `https://localhost:8443/<tenant>`). The JWKS URI is derived as
+`<AUTH_AUTHORITY>/discovery/v2.0/keys` unless `AUTH_JWKS_URI` is set. Scope
+retains `jose`'s remote key caching and rollover behavior while additionally
+validating the selected key's Entra-specific `issuer` metadata.
+
+### AUTH_ISSUER_TEMPLATE
+**Default:** `https://login.microsoftonline.com/{tenantid}/v2.0`
+**Type:** URL template string with a `{tenantid}` placeholder
+
+Per-tenant issuer the token's `iss` claim must match; `{tenantid}` is substituted
+from each token's `tid`. Override this for a self-hosted issuer whose URL differs
+from Entra cloud — e.g. the `entra-local` emulator uses
+`https://localhost:8443/{tenantid}/v2.0`. Verification stays multi-tenant: any
+tenant is accepted as long as its issuer matches this template. The selected
+JWK's required `issuer` uses the same substitution rule when it contains
+`{tenantid}`; otherwise it must exactly match the token issuer.
+
+### AUTH_JWKS_URI
+**Default:** derived as `<AUTH_AUTHORITY>/discovery/v2.0/keys`
+**Type:** URL string
+
+Explicit JWKS (signing keys) endpoint. Set this only when the JWKS URL cannot be
+derived from `AUTH_AUTHORITY`. The `entra-local` emulator's default JWKS
+(`<authority>/discovery/v2.0/keys`) already matches the derivation, so this is
+usually left unset. Every selected key must contain a non-empty string `issuer`;
+missing, malformed, ambiguous, or mismatched key issuer metadata rejects the
+token.
+
+> **entra-local compatibility prerequisite.** At the time this validation was
+> introduced, the external `cmaneu/entra-local` JWKS omitted the `issuer`
+> extension. Auth-enabled local development therefore requires an emulator
+> version that publishes the configured per-tenant issuer on every signing key.
+> This Scope change does not modify the external emulator.
+
+> **Local dev TLS.** Compose trusts the emulator's mkcert CA through a read-only
+> public-CA mount and `NODE_EXTRA_CA_CERTS`; the certificate covers the internal
+> `entra-local` hostname as well as `localhost`. TLS verification remains enabled,
+> including for external requests. Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0`.
+>
+> For a native API process, run `scripts/ensure-dev-certs.sh`, then launch with
+> `NODE_EXTRA_CA_CERTS="$PWD/.certs/rootCA.pem" pnpm dev:api`. Use the host-facing
+> `https://localhost:<ENTRA_LOCAL_PORT>/<tenant>/discovery/v2.0/keys` as
+> `AUTH_JWKS_URI`, not the Compose-only `entra-local` hostname. Remove any old
+> `NODE_TLS_REJECT_UNAUTHORIZED=0` override from the shell or local env files.
+
+### AUTH_API_CLIENT_ID
+**Type:** string (GUID) — **Required when `AUTH_PROVIDER` is set**
+
+The API's App Registration (client) ID. Verified as the token `aud` (audience)
+so tokens minted for other applications are rejected.
+
+### AUTH_CLI_CLIENT_ID
+**Type:** string (GUID)
+
+The public client ID reserved for future CLI interactive sign-in configuration;
+not used by API verification and not served by an `/auth/config` endpoint.
+
+### AUTH_PORTAL_CLIENT_ID
+**Type:** string (GUID)
+
+Reserved client-configuration metadata; not used by API verification. The current
+Portal uses build-time `VITE_AUTH_CLIENT_ID`, not this API setting or an
+`/auth/config` endpoint.
+
+### AUTH_SCOPES
+**Default:** (empty)
+**Type:** comma/space-separated string
+
+Scopes intended for clients acquiring an API access token
+(e.g. `api://<AUTH_API_CLIENT_ID>/access`). Not consumed by API verification or
+served by a config endpoint; configure the current Portal through `VITE_AUTH_SCOPES`.
+
+### AUTH_BOOTSTRAP_ADMINS
+**Default:** (empty)
+**Type:** comma-separated list of identity keys
+
+Identities to promote to the `admin` role on explicit POST `/users/me`
+enrollment or subsequent login refresh, formatted as
+`${idp}:${idpTenant}/${idpSubject}` (e.g.
+`entra:00000000-0000-0000-0000-000000000000/11111111-1111-1111-1111-111111111111`).
+Promotion requires an exact match for the verified identity and an explicit tenant
+match in `AUTH_BOOTSTRAP_TENANTS`. It is **promote-only**: an existing admin is never
+demoted, and users not listed here are never auto-promoted.
+
+Bootstrap does not depend on `email` or `email_verified`. Ordinary Entra workforce
+and seeded entra-local identities can therefore bootstrap without custom email
+claims when both allowlists match. Token verification remains required; this is
+not a local authentication bypass. Email storage is unchanged: only an explicitly
+verified profile email is persisted.
+
+### AUTH_BOOTSTRAP_TENANTS
+**Default:** (empty)
+**Type:** comma-separated list of tenant IDs
+
+Tenant allowlist that gates admin bootstrap. This setting is required when
+`AUTH_BOOTSTRAP_ADMINS` is non-empty; otherwise the API fails startup. An
+identity is promoted only when its tenant is explicitly listed here.
+
+> **Future — Graph profile enrichment.** `email`/`displayName` are read directly
+> from the verified token claims during explicit login today (no Microsoft Graph call, no client
+> secret). A later On-Behalf-Of enrichment would introduce
+> `AUTH_API_CLIENT_SECRET`; it is **not** used now.
 
 ## Token Manager Configuration
 

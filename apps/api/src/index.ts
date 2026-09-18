@@ -9,9 +9,14 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
-import { TaskPromptStore, SkillRevisionStore, SkillResolver, CodebaseStore, CodebaseRevisionStore, CodebaseResolver, McpSecretClient, McpSecretUnavailableError, BlobStorage, RedisHeartbeatStore, ProjectStore } from "shared";
+import { TaskPromptStore, SkillRevisionStore, SkillResolver, CodebaseStore, CodebaseRevisionStore, CodebaseResolver, McpSecretClient, McpSecretUnavailableError, BlobStorage, RedisHeartbeatStore, ProjectStore, loadAuthConfigFromEnv } from "shared";
 import { initTelemetry } from "telemetry";
-import type { TaskPromptDocument, SkillDocument, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, ProfileDocument, ProfileVersionDocument, ProjectDocument, HeartbeatStore } from "shared";
+import type { TaskPromptDocument, SkillDocument, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, ProfileDocument, ProfileVersionDocument, ProjectDocument, HeartbeatStore, AuthProvider, ProfileEnricher, UserDocument } from "shared";
+import { UserStore } from "./auth/user-store.js";
+import { createAuthMiddleware, createUserAccessMiddleware } from "./auth/middleware.js";
+import { authErrorHandler } from "./auth/error-handler.js";
+import { RedisUserAccessCache, type UserAccessCache } from "./auth/user-access-cache.js";
+import { UserAccessResolver, type UserAccessService } from "./auth/user-access-resolver.js";
 import { acquireGitHubPublicApiToken } from "./github-api-token.js";
 import { generateOpenAPIDocument, registry } from "./openapi/index.js";
 import swaggerUi from "swagger-ui-express";
@@ -42,6 +47,7 @@ import { registerSecretsRoutes } from "./routes/secrets.js";
 import { registerProfilesRoutes } from "./routes/profiles.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { ProjectScopeError } from "./utils/project-scope.js";
+import { registerUsersRoutes } from "./routes/users.js";
 import type { RouteContext } from "./route-context.js";
 import type {
   CriteriaDocument,
@@ -108,6 +114,12 @@ let skillRevisionCollection: Collection<SkillRevisionDocument>;
 let skillRevisionStore: SkillRevisionStore;
 let profileCollection: Collection<ProfileDocument>;
 let profileVersionCollection: Collection<ProfileVersionDocument>;
+let usersCollection: Collection<UserDocument>;
+let authProvider: AuthProvider | null = null;
+let profileEnricher: ProfileEnricher | null = null;
+let userStore: UserStore | null = null;
+let userAccessCache: UserAccessCache | null = null;
+let userAccessResolver: UserAccessService | null = null;
 let skillResolver: SkillResolver;
 let codebaseCollection: Collection<CodebaseDocument>;
 let codebaseRevisionCollection: Collection<CodebaseRevisionDocument>;
@@ -150,6 +162,33 @@ async function initializeClients(): Promise<void> {
   });
   profileCollection = db.collection<ProfileDocument>("profiles");
   profileVersionCollection = db.collection<ProfileVersionDocument>("profile-versions");
+
+  usersCollection = db.collection<UserDocument>("users");
+  const authRuntime = loadAuthConfigFromEnv();
+  if (authRuntime) {
+    authProvider = authRuntime.provider;
+    profileEnricher = authRuntime.enricher;
+    userStore = new UserStore(usersCollection, {
+      bootstrapAdmins: authRuntime.bootstrapAdmins,
+      bootstrapTenants: authRuntime.bootstrapTenants,
+    });
+    userAccessCache = new RedisUserAccessCache({
+      redisHost: process.env.REDIS_HOST || "",
+      redisPort: parseInt(process.env.REDIS_PORT || "6379", 10),
+      redisPassword: process.env.REDIS_PASSWORD || "",
+    }, {
+      ttlSeconds: authRuntime.userCacheTtlSeconds,
+      namespace: mongoDatabase,
+    });
+    userAccessResolver = new UserAccessResolver({
+      userStore,
+      cache: userAccessCache,
+      enricher: profileEnricher,
+    });
+    console.log(`Auth enabled: provider=${authProvider.id}`);
+  } else {
+    console.log("Auth not configured — all requests will be treated as anonymous");
+  }
 
   codebaseCollection = db.collection<CodebaseDocument>("codebases");
   codebaseRevisionCollection = db.collection<CodebaseRevisionDocument>("codebase-revisions");
@@ -237,6 +276,11 @@ const routeCtx: RouteContext = {
   get insightsCollection() { return insightsCollection; },
   get profileCollection() { return profileCollection; },
   get profileVersionCollection() { return profileVersionCollection; },
+  get usersCollection() { return usersCollection; },
+  get userStore() { return userStore; },
+  get userAccessResolver() { return userAccessResolver; },
+  get authProvider() { return authProvider; },
+  get profileEnricher() { return profileEnricher; },
   get taskPromptCollection() { return taskPromptCollection; },
   get featureFlagCollection() { return featureFlagCollection; },
   get skillCollection() { return skillCollection; },
@@ -260,6 +304,18 @@ const routeCtx: RouteContext = {
 };
 
 // ─── Route registration ───────────────────────────────────────────────────────
+app.use("/api/v1/users/me", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+app.use(
+  createAuthMiddleware({
+    getProvider: () => authProvider,
+  }),
+);
+registerUsersRoutes(routeCtx);
+app.use(createUserAccessMiddleware(() => userAccessResolver));
+
 // Secrets/proxy routes must be registered first (before :id param routes)
 registerSecretsRoutes(routeCtx);
 registerSystemRoutes(routeCtx);
@@ -289,6 +345,7 @@ registerInsightsRoutes(routeCtx);
 registerFeatureFlagRoutes(routeCtx);
 
 // Error handler
+app.use(authErrorHandler);
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof ProjectScopeError) {
     res.status(err.status).json({ error: err.message });
@@ -312,9 +369,30 @@ async function main(): Promise<void> {
   });
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openapiDocument));
 
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`API server listening on port ${port}`);
   });
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    server.close((error) => {
+      if (error) {
+        console.error("Failed to close API server:", error);
+        process.exitCode = 1;
+      }
+      void Promise.all([
+        userAccessCache?.close(),
+        heartbeatStore.close(),
+        mongoClient.close(),
+      ]).catch((closeError: unknown) => {
+        console.error("Failed to close API dependencies:", closeError);
+        process.exitCode = 1;
+      });
+    });
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 }
 
 // ─── Test support ────────────────────────────────────────────────────────────
@@ -335,6 +413,11 @@ export interface TestDependencies {
   insightsCollection?: Collection<InsightDocument>;
   profileCollection?: Collection<ProfileDocument>;
   profileVersionCollection?: Collection<ProfileVersionDocument>;
+  usersCollection?: Collection<UserDocument>;
+  userStore?: UserStore | null;
+  userAccessResolver?: UserAccessService | null;
+  authProvider?: AuthProvider | null;
+  profileEnricher?: ProfileEnricher | null;
   taskPromptCollection?: Collection<TaskPromptDocument>;
   taskPromptStore?: TaskPromptStore;
   featureFlagCollection?: Collection<FeatureFlagDocument>;
@@ -366,6 +449,11 @@ export function _injectTestDependencies(deps: TestDependencies): void {
   if (deps.insightsCollection) insightsCollection = deps.insightsCollection;
   if (deps.profileCollection) profileCollection = deps.profileCollection;
   if (deps.profileVersionCollection) profileVersionCollection = deps.profileVersionCollection;
+  if (deps.usersCollection) usersCollection = deps.usersCollection;
+  if (deps.userStore !== undefined) userStore = deps.userStore;
+  if (deps.userAccessResolver !== undefined) userAccessResolver = deps.userAccessResolver;
+  if (deps.authProvider !== undefined) authProvider = deps.authProvider;
+  if (deps.profileEnricher !== undefined) profileEnricher = deps.profileEnricher;
   if (deps.taskPromptCollection) taskPromptCollection = deps.taskPromptCollection;
   if (deps.taskPromptStore) taskPromptStore = deps.taskPromptStore;
   if (deps.featureFlagCollection) featureFlagCollection = deps.featureFlagCollection;

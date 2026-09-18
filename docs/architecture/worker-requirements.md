@@ -501,8 +501,22 @@ configuration and certificate failures exit immediately. Registration Jobs
 must not hide helper failures with `|| true`.
 
 The OSS Compose `register-agents` service uses this contract for Copilot and
-Claude. Cross-repository overlays can mount additional manifests and invoke the
-same helper before running their workers.
+Claude. It waits for the API's Docker health check (`GET /health` must return
+200), not merely for the API container to start. The probe uses Node's built-in
+HTTP client, runs every 5 seconds with a 3-second timeout, and allows a 120-second
+startup grace period followed by 12 consecutive failures before marking the API
+unhealthy. A successful probe releases registration immediately, without waiting
+out the grace period.
+
+This ordering also applies to `pnpm docker:dev:portal`: concurrent `tsx` startup
+and `tsc --watch` compilation under the API CPU limit can outlast the registration
+helper's readiness retry budget. The helper retains its own bounded retries for
+transient failures after the API is healthy. Scheduler/workers still require
+registration to exit successfully; failures are not ignored. If startup remains
+blocked, inspect the API logs and Docker health status before increasing retries.
+
+Cross-repository overlays can mount additional manifests and invoke the same
+helper before running their workers.
 
 
 ---

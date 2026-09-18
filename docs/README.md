@@ -11,6 +11,7 @@ Central documentation hub for the Scope platform — an AI coding agent benchmar
 | [Application Design](architecture/app-design.md) | Data models, API design, judge pipeline, queue patterns, criteria system |
 | [VS Code Web Worker](architecture/vscode-web-worker.md) | XState chat machine, GitHub auth flow, ARIA snapshots, AI dev loop |
 | [Token Manager](architecture/token-manager.md) | Capability-based token management, validation, round-robin distribution |
+| [Authentication & RBAC](architecture/auth-rbac.md) | Explicit-login IdP authentication, Redis user-access caching, Portal handshake; deferred RBAC roadmap |
 | [Worker Requirements](architecture/worker-requirements.md) | Requirements checklist for coding agent workers |
 | [Worker Compliance](architecture/worker-compliance.md) | Per-worker compliance matrix against requirements |
 | [Database Migrations](architecture/db-migrations.md) | Lightweight MongoDB migration framework, writing and running migrations |

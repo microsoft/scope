@@ -82,6 +82,30 @@ flowchart TB
 
 ## Data Flow
 
+### User authentication
+
+Configured human callers send the **IdP access token unchanged** on each API call.
+The API verifies its signature/claims before resolving an active Scope UUID and role
+through Redis (hit: no Mongo) or an exact `(idp, tid, oid)` Mongo lookup (miss/outage).
+Only `POST /api/v1/users/me` performs JIT/profile/`lastLoginAt`/bootstrap writes.
+Every GET is read-only. Enrollment responses use no-store, and clients must not 
+prefetch or poll the POST.
+
+The Portal calls that POST first after an IdP callback; cached-account
+reloads use plain `/users/me`. All application queries wait for the handshake, and
+the API response—not MSAL claims—owns the Scope identity/role. Enrolled CLI bearers
+remain compatible; new identities must explicitly enroll. Full RBAC/ownership,
+interactive CLI login, and Scope internal-token plans are deferred; existing public
+and anonymous rollout behavior is preserved.
+
+The access cache has a fixed/non-sliding TTL (`AUTH_USER_CACHE_TTL_SECONDS`, default
+300 seconds), is namespaced by the Mongo database and identity tuple, and never
+stores tokens. DB-only role/disable changes can remain stale until expiry; Redis
+failure falls back to Mongo. See [Authentication & RBAC](auth-rbac.md) for the method
+walkthrough, failures, cache isolation, and implemented/deferred boundary.
+
+### Benchmark execution
+
 1. **Submit** — A user submits a task via CLI or Portal, selecting a worker, model, criteria, and optionally an agent version. The API validates the selection (model must be in `supportedModels`, version must be active, at least one criterion required), resolves the agent version's queue, creates a run record in CosmosDB, and enqueues a message.
 2. **Execute** — KEDA scales the target worker pod from 0→N. The worker dequeues the message, spins up the coding agent, and executes the task. The worker stamps `workerVersion` (exact build identity) on the run.
 3. **Stream** — Workers publish real-time log events to Redis Pub/Sub. The API relays these as SSE streams to the CLI/Portal.

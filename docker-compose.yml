@@ -173,16 +173,16 @@ services:
   # entra-local-certs-init) so the browser trusts it with no manual cert step —
   # MSAL requires an https authority. See the auth docs.
   entra-local:
-    image: ghcr.io/cmaneu/entra-local:0.0.3
+    image: ghcr.io/cmaneu/entra-local:0.1.1
     profiles: [auth]
     ports:
       - "${ENTRA_LOCAL_PORT:-8443}:8443"
     environment:
-      # HTTPS with the mkcert-issued localhost cert. mkcert's CA is trusted on the
-      # host, so https://localhost:<port> is trusted by the browser.
+      # The cert covers localhost (browser) and entra-local (Compose clients).
       TLS_ENABLED: "true"
       TLS_CERT: /certs/entra-local.pem
       TLS_KEY: /certs/entra-local-key.pem
+      NODE_EXTRA_CA_CERTS: /ca/rootCA.pem
       # The container binds 0.0.0.0:8443 internally; the host maps it to
       # ENTRA_LOCAL_PORT (offset per worktree). Pin PUBLIC_ORIGIN *and* ISSUER to
       # the host-facing origin so the discovery/JWKS/token endpoints and the
@@ -197,11 +197,12 @@ services:
       # bind mount, so the emulator's `node` user can read the key on rootless /
       # UID-remapped engines. See entra-local-certs-init.
       - entra_local_certs:/certs:ro
+      - entra_local_ca:/ca:ro
     depends_on:
       entra-local-certs-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "require('https').get({host:'localhost',port:8443,path:'/health',rejectUnauthorized:false},(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('https').get({host:'localhost',port:8443,path:'/health'},(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -222,22 +223,32 @@ services:
     profiles: [auth]
     restart: "no"
     command:
-      [
-        "sh",
-        "-c",
-        "set -e; echo 'Staging entra-local certs for UID 1000...'; cp /certs-src/entra-local.pem /certs/entra-local.pem; cp /certs-src/entra-local-key.pem /certs/entra-local-key.pem; chown -v 1000:1000 /certs /certs/entra-local.pem /certs/entra-local-key.pem; chmod -v 0644 /certs/entra-local.pem; chmod -v 0640 /certs/entra-local-key.pem; echo 'Done'",
-      ]
+      - sh
+      - -c
+      - |
+        set -eu
+        echo 'Staging entra-local certs for UID 1000...'
+        cp /certs-src/entra-local.pem /certs/entra-local.pem
+        cp /certs-src/entra-local-key.pem /certs/entra-local-key.pem
+        cp /certs-src/rootCA.pem /ca/rootCA.pem
+        chown -v 1000:1000 /certs /certs/entra-local.pem /certs/entra-local-key.pem
+        chmod -v 0755 /certs /ca
+        chmod -v 0644 /certs/entra-local.pem /ca/rootCA.pem
+        chmod -v 0640 /certs/entra-local-key.pem
+        echo 'Done'
     volumes:
       - ./.certs:/certs-src:ro
       - entra_local_certs:/certs
+      # Clients receive only the public CA, never the emulator's private key.
+      - entra_local_ca:/ca
 
   # entra-local-init — one-shot: registers the dev Portal origin as an SPA
   # redirect URI on the seeded "Sample SPA" app so sign-in works with no manual
   # portal step. Idempotent (tolerates an already-registered URI). Talks to the
   # emulator over the compose network (https://entra-local:8443/admin/api); the
-  # cert is for `localhost`, so verification is disabled for this internal call.
+  # shared CA and entra-local certificate SAN keep TLS verification enabled.
   entra-local-init:
-    image: ghcr.io/cmaneu/entra-local:0.0.3
+    image: ghcr.io/cmaneu/entra-local:0.1.1
     profiles: [auth]
     restart: "no"
     entrypoint: ["node", "-e"]
@@ -248,7 +259,7 @@ services:
         const base = 'https://entra-local:8443/admin/api/apps/' + appId + '/redirectUris';
         const body = JSON.stringify({ uri, type: 'spa' });
         const post = () => new Promise((res, rej) => {
-          const r = require('https').request(base, { method: 'POST', rejectUnauthorized: false, headers: { 'content-type': 'application/json' } }, (rsp) => {
+          const r = require('https').request(base, { method: 'POST', headers: { 'content-type': 'application/json' } }, (rsp) => {
             let d = ''; rsp.on('data', c => d += c); rsp.on('end', () => res({ status: rsp.statusCode, body: d }));
           });
           r.on('error', rej); r.write(body); r.end();
@@ -267,6 +278,9 @@ services:
         })();
     environment:
       PORTAL_PORT: "${PORTAL_PORT:-5100}"
+      NODE_EXTRA_CA_CERTS: /ca/rootCA.pem
+    volumes:
+      - entra_local_ca:/ca:ro
     depends_on:
       entra-local:
         condition: service_healthy
@@ -312,6 +326,13 @@ services:
     restart: on-failure:5
     ports:
       - "${API_PORT:-3100}:80"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:80/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      # Dev startup runs tsx and tsc concurrently under the API's CPU limit.
+      start_period: 120s
     env_file:
       # .env.local holds developer-managed values that worktree-env must not
       # overwrite: AZURE_AI_INFERENCE_ENDPOINT, AZURE_AI_INFERENCE_API_KEY,
@@ -330,7 +351,29 @@ services:
       GIT_COMMIT: ${GIT_COMMIT:-development}
       BUILD_TIME: ${BUILD_TIME:-}
       SCOPE_ENVIRONMENT: ${SCOPE_ENVIRONMENT:-}
+      # Local Entra dev defaults: point the API at the same worktree-shifted
+      # `entra-local` issuer/JWKS and the API app registration the emulator
+      # exposes. This keeps auth enabled without requiring each developer to hand
+      # edit `.env.local` for every offset worktree.
+      AUTH_PROVIDER: "${AUTH_PROVIDER:-entra}"
+      AUTH_AUTHORITY: "${AUTH_AUTHORITY:-https://localhost:${ENTRA_LOCAL_PORT:-8443}/${AUTH_TENANT_ID:-11111111-1111-1111-1111-111111111111}}"
+      AUTH_ISSUER_TEMPLATE: "${AUTH_ISSUER_TEMPLATE:-https://localhost:${ENTRA_LOCAL_PORT:-8443}/{tenantid}/v2.0}"
+      AUTH_JWKS_URI: "${AUTH_JWKS_URI:-https://entra-local:8443/${AUTH_TENANT_ID:-11111111-1111-1111-1111-111111111111}/discovery/v2.0/keys}"
+      AUTH_API_CLIENT_ID: "${AUTH_API_CLIENT_ID:-cccccccc-0000-0000-0000-000000000005}"
+      AUTH_PORTAL_CLIENT_ID: "${AUTH_PORTAL_CLIENT_ID:-cccccccc-0000-0000-0000-000000000001}"
+      AUTH_SCOPES: "${AUTH_SCOPES:-api://cccccccc-0000-0000-0000-000000000005/access_as_user}"
+      AUTH_BOOTSTRAP_ADMINS: "${AUTH_BOOTSTRAP_ADMINS:-entra:11111111-1111-1111-1111-111111111111/aaaaaaaa-0000-0000-0000-000000000001}"
+      AUTH_BOOTSTRAP_TENANTS: "${AUTH_BOOTSTRAP_TENANTS:-11111111-1111-1111-1111-111111111111}"
+      AUTH_USER_CACHE_TTL_SECONDS: "${AUTH_USER_CACHE_TTL_SECONDS:-300}"
+      NODE_TLS_REJECT_UNAUTHORIZED: "1"
+      NODE_EXTRA_CA_CERTS: "${NODE_EXTRA_CA_CERTS-/ca/rootCA.pem}"
+    volumes:
+      - entra_local_ca:/ca:ro
     depends_on:
+      # Do not require local certificates when running without the auth profile.
+      entra-local-certs-init:
+        condition: service_completed_successfully
+        required: false
       mongodb:
         condition: service_healthy
         required: false
@@ -344,7 +387,7 @@ services:
     image: alpine:3.21
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - ./apps/workers:/workers:ro
       - ./scripts/register-agent.sh:/register-agent.sh:ro
@@ -538,9 +581,20 @@ services:
       dockerfile: apps/portal/Dockerfile
       args:
         <<: *npm-build-args
+        # Vite embeds these public IdP settings into the production bundle.
+        VITE_AUTH_CLIENT_ID: "${VITE_AUTH_CLIENT_ID:-cccccccc-0000-0000-0000-000000000001}"
+        VITE_AUTH_AUTHORITY: "${VITE_AUTH_AUTHORITY:-https://localhost:${ENTRA_LOCAL_PORT:-8443}/${AUTH_TENANT_ID:-11111111-1111-1111-1111-111111111111}/v2.0}"
+        VITE_AUTH_KNOWN_AUTHORITIES: "${VITE_AUTH_KNOWN_AUTHORITIES-localhost:${ENTRA_LOCAL_PORT:-8443}}"
+        VITE_AUTH_SCOPES: "${VITE_AUTH_SCOPES:-api://cccccccc-0000-0000-0000-000000000005/access_as_user}"
+        VITE_AUTH_PROTOCOL_MODE: "${VITE_AUTH_PROTOCOL_MODE:-OIDC}"
+        VITE_AUTH_REDIRECT_URI: "${VITE_AUTH_REDIRECT_URI:-}"
+        VITE_AUTH_POST_LOGOUT_REDIRECT_URI: "${VITE_AUTH_POST_LOGOUT_REDIRECT_URI:-}"
+        VITE_AUTH_CACHE_LOCATION: "${VITE_AUTH_CACHE_LOCATION:-localStorage}"
     profiles: [portal]
     ports:
       - "${PORTAL_PORT:-5100}:80"
+    environment:
+      SCOPE_AUTH_ENABLED: "${SCOPE_AUTH_ENABLED:-true}"
     depends_on:
       api:
         condition: service_started
@@ -844,6 +898,7 @@ volumes:
   lowkey_vault_data:
   entra_local_data:
   entra_local_certs:
+  entra_local_ca:
   gateway_cert:
   copilot_workspace:
   claude_har_output:

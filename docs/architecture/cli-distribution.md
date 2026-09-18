@@ -131,6 +131,12 @@ external GitHub API with its own `token` auth and must never receive the Scope
 `SCOPE_TOKEN` bearer that `apiFetch()` injects. All Scope-API requests go through
 `apiFetch()` (see [auth-rbac.md](./auth-rbac.md) subtask 7).
 
+`SCOPE_TOKEN` remains a raw **IdP access token**, not a Scope-issued credential.
+Existing enrolled users are compatible; a new identity must intentionally call
+`POST /api/v1/users/me` before ordinary authenticated commands. The enrollment
+POST is no-store and must not be prefetched/polled. Interactive CLI login/keychain
+support remains deferred; see [CLI authentication guidance](../../apps/cli/README.md#authentication).
+
 `apiFetch()` is a thin facade over the [`ky`](https://github.com/sindresorhus/ky)
 HTTP client: ky owns the underlying transport (a cached `ky.create()` instance with a
 `beforeRequest` auth hook), while the facade keeps the CLI-specific concerns — URL

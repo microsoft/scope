@@ -4,11 +4,20 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
 import { PROJECT_STORAGE_KEY } from "@/lib/project-scope";
+import { AuthContext } from "@/contexts/AuthContext";
+import { signedInAuth } from "@/contexts/authFixtures";
 import { Layout } from "./Layout";
 
 const meta = {
   component: Layout,
   tags: ["ai-generated", "needs-work"],
+  decorators: [
+    (Story) => (
+      <AuthContext.Provider value={signedInAuth}>
+        <Story />
+      </AuthContext.Provider>
+    ),
+  ],
   // Layout hides project-scoped nav until a project is in use, so seed one by
   // default; the NoProjectSelected story clears it to show the trimmed sidebar.
   beforeEach: () => {

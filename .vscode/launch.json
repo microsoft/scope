@@ -12,6 +12,30 @@
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Attach API (Docker)",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": "${input:apiDebugPort}",
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": "/app",
+      "sourceMaps": true,
+      "restart": true,
+      "timeout": 30000,
+      "skipFiles": [
+        "<node_internals>/**",
+        "${workspaceFolder}/**/node_modules/**"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "apiDebugPort",
+      "type": "promptString",
+      "description": "API_DEBUG_PORT from this worktree's .env file",
+      "default": "9200"
     }
   ]
 }

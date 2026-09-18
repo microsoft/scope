@@ -1030,7 +1030,16 @@ jobs:
           target: ${{ matrix.image.target || '' }}
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          build-args: ${{ steps.versions.outputs.build_args }}
+          build-args: |
+            ${{ steps.versions.outputs.build_args }}
+            VITE_AUTH_CLIENT_ID=${{ matrix.image.name == 'portal' && vars.VITE_AUTH_CLIENT_ID || '' }}
+            VITE_AUTH_AUTHORITY=${{ matrix.image.name == 'portal' && vars.VITE_AUTH_AUTHORITY || '' }}
+            VITE_AUTH_KNOWN_AUTHORITIES=${{ matrix.image.name == 'portal' && vars.VITE_AUTH_KNOWN_AUTHORITIES || '' }}
+            VITE_AUTH_SCOPES=${{ matrix.image.name == 'portal' && vars.VITE_AUTH_SCOPES || '' }}
+            VITE_AUTH_PROTOCOL_MODE=${{ matrix.image.name == 'portal' && vars.VITE_AUTH_PROTOCOL_MODE || '' }}
+            VITE_AUTH_REDIRECT_URI=${{ matrix.image.name == 'portal' && vars.VITE_AUTH_REDIRECT_URI || '' }}
+            VITE_AUTH_POST_LOGOUT_REDIRECT_URI=${{ matrix.image.name == 'portal' && vars.VITE_AUTH_POST_LOGOUT_REDIRECT_URI || '' }}
+            VITE_AUTH_CACHE_LOCATION=${{ matrix.image.name == 'portal' && vars.VITE_AUTH_CACHE_LOCATION || '' }}
           cache-from: type=gha,scope=${{ matrix.image.name }},ignore-error=true
           cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
 

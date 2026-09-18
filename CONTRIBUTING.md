@@ -87,6 +87,22 @@ pnpm dev:coder-acp-copilot        # A single worker natively (pnpm dev:<service-
 pnpm open:portal                  # Open the portal in your browser
 ```
 
+### Debug the Docker development API
+
+`pnpm docker:dev:portal` starts the API with the Node inspector enabled. To
+debug API TypeScript while retaining the Docker stack and hot reload:
+
+1. Run `pnpm docker:dev:portal` and wait for the API to start.
+2. Read `API_DEBUG_PORT` from the generated `.env` file (it is worktree-specific).
+3. In VS Code, select **Attach API (Docker)** from **Run and Debug**, enter that
+   port, and start debugging.
+4. Set breakpoints in the workspace source under `apps/api/src`, not in a copied
+   or attached snapshot of the file.
+
+The debugger maps the container's `/app` tree to the workspace and reconnects
+when `tsx watch` restarts the API after a source change. The inspector is
+published on `127.0.0.1` only.
+
 The CLI is the primary interface for CI/CD and power users:
 
 ```bash

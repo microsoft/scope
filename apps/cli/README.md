@@ -32,6 +32,33 @@ Or pass it per-command with `-u`:
 scope run list -u https://your-scope-api.example.com
 ```
 
+### Authentication
+
+Set `SCOPE_TOKEN` to an IdP access token obtained for your API's audience. The CLI
+sends that bearer unchanged; this release does not add interactive `scope auth`
+commands, a Scope JWT, or token exchange. Already-enrolled callers remain compatible.
+
+Before a **new identity** makes ordinary authenticated calls, explicitly enroll it:
+
+```bash
+curl --fail-with-body -sS \
+  -X POST \
+  -H "Authorization: Bearer $SCOPE_TOKEN" \
+  -H "Cache-Control: no-store" \
+  "${SCOPE_API_URL%/}/api/v1/users/me"
+```
+
+This POST has side effects (user/profile/`lastLoginAt`/eligible bootstrap updates):
+never prefetch or poll it. `GET /api/v1/users/me` is read-only and returns
+`403 user_not_enrolled` for missing enrollment or `403 user_disabled` for disabled
+access; do not auto-enroll/retry these as token-refresh errors.
+
+The API verifies every non-public bearer before active-user resolution. Redis hits
+avoid Mongo; misses/outages read the exact identity without creating users. Cache
+expiry is fixed/non-sliding (300 seconds by default), so database-only role/disable
+changes can remain stale until expiry. Existing public/anonymous rollout is unchanged.
+Never print or persist tokens in logs. See [the auth contract](../../docs/architecture/auth-rbac.md).
+
 ## Usage
 
 ```bash
@@ -81,5 +108,6 @@ export SCOPE_NO_UPDATE_CHECK=1
 |----------|-------------|
 | `SCOPE_API_URL` | Default API base URL |
 | `SCOPE_API_PORT` | Derive API URL as `http://localhost:$PORT` when `SCOPE_API_URL` is unset |
+| `SCOPE_TOKEN` | Caller-provided IdP access token for authenticated API calls; new identities must explicitly enroll |
 | `SCOPE_NO_UPDATE_CHECK` | Set to `1` to suppress update notifications |
 | `GH_TOKEN` / `GITHUB_TOKEN` | GitHub token for authenticated API calls (update checks, install script) |

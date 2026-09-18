@@ -23,7 +23,7 @@
     "docker:up:report": "scripts/worktree-env.sh && scripts/dev-compose.sh --profile report up --build",
     "docker:up:infra": "scripts/worktree-env.sh && scripts/dev-compose.sh up -d redis azurite mongodb",
     "docker:up:auth": "scripts/worktree-env.sh && scripts/dev-compose.sh --profile auth up -d entra-local",
-    "docker:up:portal": "scripts/worktree-env.sh && scripts/dev-compose.sh --profile portal up --build",
+    "docker:up:portal": "scripts/worktree-env.sh && scripts/dev-compose.sh --profile auth --profile portal up --build",
     "docker:dev": "scripts/worktree-env.sh && COMPOSE_EXPERIMENTAL_WATCH_POLL=1 scripts/dev-compose.sh -f docker-compose.yml -f docker-compose.dev.yml up --build --watch",
     "docker:dev:claude-code": "scripts/worktree-env.sh && SCOPE_REGISTER_CLAUDE_CODE_AGENT=true GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD) COMPOSE_EXPERIMENTAL_WATCH_POLL=1 scripts/dev-compose.sh --env-file .env --env-file apps/workers/coder-acp-claude-code/versions.env -f docker-compose.yml -f docker-compose.dev.yml --profile claude-code --profile report --profile post-processor --profile auth --profile portal up --build --watch",
     "docker:dev:copilot": "scripts/worktree-env.sh && SCOPE_REGISTER_COPILOT_AGENT=true GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD) COMPOSE_EXPERIMENTAL_WATCH_POLL=1 scripts/dev-compose.sh --env-file .env --env-file apps/workers/coder-acp-copilot/versions.env -f docker-compose.yml -f docker-compose.dev.yml --profile copilot --profile report --profile post-processor --profile auth --profile portal up --build --watch",

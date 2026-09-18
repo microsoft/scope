@@ -113,6 +113,50 @@ When you run a command:
 | `026-isolate-catalogs-per-project` | Per-project catalog isolation for `skills`, `extensions`, `criteria`, `prompt-features` — backfills `slug = _id`, swaps global-unique `{id}`/slug indexes to `{projectId,slug}` / `{projectId,id}` (see [db.md](db.md#per-project-catalog-isolation-migration-026)) |
 | `027-uuid-keys-mcp-profileversions` | Opaque UUID `_id` + reference key for `mcp-servers` (`slug`) and `profile-versions` (`ref`) with `{projectId,slug}` / `{projectId,ref}` indexes; drops dead `prompt-feature-extractions` (see [db.md](db.md#per-project-entity-keying-migration-027)) |
 | `028-isolate-mcp-secrets-per-project` | Reconciles the token-manager `mcp-secrets` unique index — drops the legacy global-unique `{mcpId,name}` and (re)creates the per-project `{projectId,mcpId,name}` (see [token-manager.md](token-manager.md#mcp-secrets)) |
+| `029-create-users-collection` | Creates the database-enforced unique identity index for authentication; uses Cosmos collection-creation extensions for continuous-backup accounts and preserves native MongoDB index creation (see below) |
+
+### Migration 029: users identity uniqueness
+
+`users.uniq_identity` must be a unique, non-sparse, unfiltered index on exactly
+`(idp, idpTenant, idpSubject)` with simple collation. It guarantees one Scope user
+per IdP identity. Unlike older catalog migrations, 029 **never falls back to a
+non-unique identity index**. The index name is also used by the API's narrowly
+scoped duplicate-key retry handling.
+
+| Backend | New collection | Existing collection | Email index |
+| --- | --- | --- | --- |
+| CosmosDB for MongoDB | `CreateCollection` includes the required `_id` index and `uniq_identity` at creation | Inspect and reuse only a compatible identity index; add the email index if missing | Non-sparse and non-unique |
+| Native MongoDB | Native `createIndex` creates the collection and unique identity index | Idempotent native index creation; duplicate data and conflicting indexes remain errors | Sparse and non-unique, as before |
+
+Backend selection uses the Cosmos extension commands, not URI heuristics. Only
+an explicit unknown-command error selects the native path. Cosmos authorization,
+connectivity, and index failures do not silently switch backends. Actual index
+metadata is checked before the migration reports success.
+
+Cosmos accounts using [continuous backup require unique indexes at collection
+creation](https://learn.microsoft.com/en-us/azure/cosmos-db/mongodb/indexing#unique-indexes).
+Cosmos also [does not support sparse indexes](https://learn.microsoft.com/en-us/azure/cosmos-db/mongodb/feature-support-70#indexes-and-index-properties),
+so 029 creates a normal, non-sparse advisory email index there instead. The email
+index is non-unique on both backends. This does not change email storage or authentication policy.
+
+**Recovery is non-destructive.** If an existing Cosmos `users` collection lacks
+the expected constraint, 029 stops, even if the collection is empty. It never
+drops, recreates, renames, copies, or edits user data. Do not bypass the failure
+by marking the migration as applied. Inspect and back up the collection, then
+approve a separate recovery that preserves Scope UUIDs, roles, and references;
+rerun 029 only after the collection has a compatible identity index.
+
+Throttling and recognized collection-creation races receive bounded retries
+(three attempts), with collection/index discovery repeated before each attempt.
+Transport failures propagate rather than blindly repeating DDL; a later rerun
+can recognize a successfully created collection after a lost response. `down()`
+remains log-only.
+
+Unit tests cover the Cosmos command contract; native MongoDB integration tests
+exercise actual uniqueness, concurrency, reruns, and non-destructive failures.
+**Live CosmosDB verification of the non-sparse email-index behavior is still
+required.** See the [shared infrastructure guide](../shared-dev-infra.md) for
+selecting a real account; use isolated test data for acceptance checks.
 
 ## CI/CD
 
