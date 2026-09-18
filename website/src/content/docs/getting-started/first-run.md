@@ -27,9 +27,9 @@ Navigate to the Portal URL provided for your deployment, for example
 
 Select or create a project to keep your evaluation data together.
 
-The home view lists recent runs across all users. The left navigation
-takes you to runs, tasks, criteria, profiles, prompt features, and
-more.
+The Portal then opens **Statistics** (`/statistics`), which summarizes
+benchmark results for the selected project. The left navigation takes you
+to runs, tasks, criteria, profiles, prompt features, and more.
 
 ## 2. Start a new request
 
