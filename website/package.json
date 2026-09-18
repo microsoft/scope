@@ -8,7 +8,7 @@
     "start": "worktree-env && astro dev",
     "build": "astro build",
     "preview": "worktree-env && astro preview",
-    "test": "node --test src/plugins/*.test.mjs",
+    "test": "node --test install-cli.test.mjs src/plugins/*.test.mjs",
     "astro": "astro",
     "refresh:openapi": "cd .. && pnpm --filter api generate:openapi"
   },

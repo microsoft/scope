@@ -145,8 +145,10 @@ MongoDB is CosmosDB-compatible — avoid MongoDB features that CosmosDB's MongoD
   (`.agents/skills/rust-best-practices/SKILL.md`).
 - **Databases**: keep MongoDB usage CosmosDB-compatible (see migrations above).
 - **Documentation is not optional**: if you add or change a component, API, data model, pattern, or
-  deployment behavior, update the relevant doc in [`docs/`](./docs/) (or add one and link it from the
-  README) as the last step before opening your PR.
+  deployment behavior, update the relevant technical doc in [`docs/`](./docs/) and user-facing
+  guide in [`website/src/content/docs/`](./website/src/content/docs/) as appropriate. Add new
+  website pages to the sidebar in [`website/astro.config.mjs`](./website/astro.config.mjs)
+  as the last step before opening your PR.
 
 ## Submitting a pull request
 
@@ -222,6 +224,9 @@ installed dependencies.
 
 - Start with the [system architecture](./docs/architecture/system-architecture.md) and the
   [app design](./docs/architecture/app-design.md) docs for the big picture.
-- The [README](./README.md) introduces the platform, provides a local quick start, and links the full documentation index.
+- The [official documentation website](https://microsoft.github.io/scope/) includes
+  [local setup](https://microsoft.github.io/scope/getting-started/local-development/),
+  the [development guide](https://microsoft.github.io/scope/resources/development/), and
+  [contribution guidance](https://microsoft.github.io/scope/resources/contributing/).
 - Browse [open issues](https://github.com/microsoft/scope/issues) for bugs and
   proposed improvements. Discuss larger changes in an issue before starting work.

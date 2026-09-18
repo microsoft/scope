@@ -18,6 +18,7 @@ vi.mock("node:fs", () => ({
 // Mock the update-check module
 vi.mock("../utils/update-check.js", () => ({
   fetchLatestVersion: vi.fn(),
+  RELEASES_REPO: "microsoft/scope",
 }));
 
 import { Command } from "commander";
@@ -98,7 +99,7 @@ describe("update command", () => {
       expect.stringContaining("New version available: 0.3.0"),
     );
     expect(mockedExecSync).toHaveBeenCalledWith(
-      expect.stringContaining("gh release download"),
+      expect.stringContaining('gh release download "cli/v0.3.0" --repo microsoft/scope'),
       expect.anything(),
     );
   });
@@ -120,7 +121,11 @@ describe("update command", () => {
     await program.parseAsync(["node", "scope", "update"]);
 
     expect(mockedExecSync).toHaveBeenCalledWith(
-      expect.stringContaining("gh release download"),
+      expect.stringContaining("gh release list --repo microsoft/scope"),
+      expect.anything(),
+    );
+    expect(mockedExecSync).toHaveBeenCalledWith(
+      expect.stringContaining('gh release download "cli/v0.3.0" --repo microsoft/scope'),
       expect.anything(),
     );
   });
@@ -167,7 +172,9 @@ describe("update command", () => {
       expect.stringContaining(".tmp"),
     );
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Update failed"),
+      expect.stringContaining(
+        'gh api repos/microsoft/scope/contents/website/install-cli.sh -H "Accept: application/vnd.github.raw" | bash',
+      ),
     );
   });
 

@@ -90,6 +90,7 @@ export default defineConfig({
 					label: 'Getting Started',
 					items: [
 						{ label: 'Access', slug: 'getting-started/access' },
+						{ label: 'Local development', slug: 'getting-started/local-development' },
 						{ label: 'Install the CLI', slug: 'getting-started/install-cli' },
 						{ label: 'Your first run', slug: 'getting-started/first-run' },
 					],
@@ -125,8 +126,16 @@ export default defineConfig({
 				},
 				...openAPISidebarGroups,
 				{
+					label: 'Contributing',
+					items: [
+						{ label: 'Contributor guide', slug: 'resources/contributing' },
+						{ label: 'Development guide', slug: 'resources/development' },
+					],
+				},
+				{
 					label: 'Resources',
 					items: [
+						{ label: 'Support and security', slug: 'resources/support' },
 						{ label: 'FAQ', slug: 'resources/faq' },
 						{ label: 'Data collection and privacy', slug: 'resources/data-collection' },
 						{ label: 'Troubleshooting', slug: 'resources/troubleshooting' },

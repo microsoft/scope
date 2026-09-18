@@ -5,7 +5,7 @@ Command-line interface for the Scope AI coding agent benchmarking platform.
 ## Installation
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
+gh api repos/microsoft/scope/contents/website/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
 ```
 
 **Prerequisites:**
@@ -66,7 +66,7 @@ scope update
 Or re-run the install script:
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
+gh api repos/microsoft/scope/contents/website/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
 ```
 
 The CLI will also notify you when a newer version is available. Suppress this with:

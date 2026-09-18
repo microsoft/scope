@@ -6,6 +6,10 @@ description: How to reach the Scope Portal.
 You can access Scope through the web Portal, the REST API, or the
 `scope` CLI.
 
+This page assumes you have access to an existing deployment. To run Scope
+yourself, follow [Local development](/getting-started/local-development/) for
+prerequisites, setup, authentication, and a first evaluation.
+
 ## Requirements
 
 Your deployment administrator provides the Portal URL and any required
@@ -40,7 +44,7 @@ for the required setup.
 For terminal-based workflows, install the `scope` CLI:
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh \
+gh api repos/microsoft/scope/contents/website/install-cli.sh \
   -H "Accept: application/vnd.github.raw" | bash
 ```
 

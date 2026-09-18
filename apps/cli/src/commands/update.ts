@@ -7,9 +7,7 @@ import { chmodSync, renameSync, unlinkSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import semver from "semver";
 import { getCliName } from "../utils/shared.js";
-import { fetchLatestVersion } from "../utils/update-check.js";
-
-const REPO = "growth-ecosystems/scope-doc";
+import { fetchLatestVersion, RELEASES_REPO } from "../utils/update-check.js";
 
 function getCliVersion(): string {
   return process.env.SCOPE_CLI_VERSION ?? "0.1.0-dev";
@@ -51,7 +49,7 @@ export function registerUpdateCommand(program: Command): void {
         // Resolve tag via gh release list
         try {
           targetTag = execSync(
-            `gh release list --repo ${REPO} --json tagName -q '[.[].tagName | select(startswith("cli/v"))][0]'`,
+            `gh release list --repo ${RELEASES_REPO} --json tagName -q '[.[].tagName | select(startswith("cli/v"))][0]'`,
             { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
           ).trim();
         } catch { /* ignore */ }
@@ -71,7 +69,7 @@ export function registerUpdateCommand(program: Command): void {
       try {
         // Download scope.mjs to a temp file, then atomically replace
         execSync(
-          `gh release download "${targetTag}" --repo ${REPO} --pattern scope.mjs -O "${tmpFile}" --clobber`,
+          `gh release download "${targetTag}" --repo ${RELEASES_REPO} --pattern scope.mjs -O "${tmpFile}" --clobber`,
           { stdio: "inherit" },
         );
         chmodSync(tmpFile, 0o755);
@@ -85,7 +83,7 @@ export function registerUpdateCommand(program: Command): void {
         try { unlinkSync(tmpFile); } catch { /* ignore */ }
         console.error(
           "\nUpdate failed. You can reinstall manually:\n" +
-            "  gh api repos/" + REPO + "/contents/install-cli.sh -H \"Accept: application/vnd.github.raw\" | bash",
+            "  gh api repos/" + RELEASES_REPO + "/contents/website/install-cli.sh -H \"Accept: application/vnd.github.raw\" | bash",
         );
         process.exit(1);
       }

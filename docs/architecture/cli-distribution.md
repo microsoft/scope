@@ -4,12 +4,15 @@ How the Scope CLI is bundled, distributed, and updated as a standalone tool.
 
 ## Overview
 
-The CLI is bundled into a single `.mjs` file using [esbuild](https://esbuild.github.io/), distributed via GitHub Releases on the `scope-doc` repo, and installed using the `gh` CLI. This allows users to run the CLI without checking out the monorepo.
+The CLI is bundled into a single `.mjs` file using
+[esbuild](https://esbuild.github.io/), distributed via GitHub Releases on
+`microsoft/scope`, and installed using the `gh` CLI. This allows users to run
+the CLI without checking out the monorepo.
 
 ```mermaid
 flowchart LR
-    A[scope-core<br/>apps/cli/] -->|publish-cli.yml| B[GitHub Actions]
-    B -->|gh release create| C[scope-doc releases<br/>scope.mjs]
+    A[microsoft/scope<br/>apps/cli/] -->|publish-cli.yml| B[GitHub Actions]
+    B -->|gh release create| C[microsoft/scope releases<br/>scope.mjs]
     C -->|install-cli.sh| D[User workstation<br/>~/.local/bin/scope]
 ```
 
@@ -36,12 +39,13 @@ the CLI's `build` script runs `tsc --noEmit` **before** esbuild:
 "build:tsc": "tsc --noEmit",   // standalone typecheck alias
 ```
 
-Because every CI/release entry point invokes the CLI `build` script — `pnpm build` (`pnpm -r build`,
-used by the CI **Build** job and `publish-cli.yml`) and `pnpm build:cli` (used by the
-**CLI Bundle Integration Tests** job) — the CLI is now typechecked automatically wherever it is
-built, with no separate CI step. `tsc` requires the `shared` package's `dist` to exist; every one
-of these entry points builds `shared` first (topologically for `pnpm -r`, explicitly for
-`build:cli`), which esbuild already required, so there is no new ordering constraint.
+Every CI/release entry point invokes the CLI `build` script: `pnpm build`
+(`pnpm -r build`, used by the CI **Build** job) and `pnpm build:cli` (used by
+`publish-cli.yml` and the **CLI Bundle Integration Tests** job). The CLI is
+typechecked automatically wherever it is built, with no separate CI step.
+`tsc` requires the `shared` package's `dist` to exist; every one of these entry
+points builds `shared` first (topologically for `pnpm -r`, explicitly for
+`build:cli`), which esbuild already required.
 
 > **Motivation:** In PR #1151 an import of `normalizeUrl` was removed from `criteria.ts` while a
 > call site remained, so `scope criteria export` threw `normalizeUrl is not defined` at runtime —
@@ -75,7 +79,11 @@ In dev mode (`pnpm cli` via tsx), these defines are not applied — the CLI fall
 
 ## Versioning
 
-The **source of truth** for the CLI version is the git tag on `scope-core` using the `cli/v*` prefix (e.g. `cli/v0.2.0`). The `apps/cli/package.json` version is `0.0.0-dev` — a placeholder that CI resolves from the latest `cli/v*` tag and then bumps via `pnpm version` during the publish workflow. It is never committed back to `main`.
+The **source of truth** for the CLI version is the git tag on `microsoft/scope`
+using the `cli/v*` prefix (e.g. `cli/v0.2.0`). The `apps/cli/package.json`
+version is `0.0.0-dev`, a placeholder that CI resolves from the latest
+`cli/v*` tag and then bumps via `pnpm version` during the publish workflow.
+It is never committed back to `main`.
 
 - Local builds produce `0.0.0-dev` — clearly indicating a dev build.
 - Dev mode (`pnpm cli`) reports `0.1.0-dev`.
@@ -90,40 +98,55 @@ The publish workflow (`.github/workflows/publish-cli.yml`) is triggered manually
 2. Workflow resolves the current version from the latest `cli/v*` tag
 3. Bumps `apps/cli/package.json` via `pnpm version`
 4. Builds the bundle with prod API URL (`vars.SCOPE_API_URL`)
-5. Creates a git tag `cli/v<version>` on scope-core
-6. Creates a GitHub Release on `scope-doc` with `scope.mjs`
+5. Creates a git tag `cli/v<version>` in the current repository
+6. Creates a GitHub Release in the same repository (`github.repository`,
+   `microsoft/scope` for official releases) with `scope.mjs`
+
+Tag pushes and release creation use the workflow's built-in GitHub token
+with `contents: write`. No cross-repository GitHub App token is needed.
 
 ### Required secrets/variables
 
 | Name | Type | Purpose |
 |------|------|---------|
-| `SCOPE_DOC_TOKEN` | Secret | PAT with `contents:write` on scope-doc repo |
 | `SCOPE_API_URL` | Variable | Production API URL injected at build time |
 
 ## Installation
 
-Users install via the `gh` CLI (required since the repo is EMU-protected):
+Users can fetch and run the installer with an authenticated `gh` CLI:
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
+gh api repos/microsoft/scope/contents/website/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
 ```
 
-The installer (`install-cli.sh` in scope-doc):
-1. Downloads `scope.mjs` from the latest `cli/v*` release
+The installer (`website/install-cli.sh` in `microsoft/scope`):
+1. Downloads `scope.mjs` from the latest `cli/v*` release in `microsoft/scope`
 2. Places it at `~/.local/bin/scope`
 3. Makes it executable
 
 Prerequisites: Node.js >= 20, `gh` CLI authenticated.
 
+When run directly, the installer also supports `curl` with `GH_TOKEN` or
+`GITHUB_TOKEN` if `gh` is unavailable. `SCOPE_INSTALL_DIR` overrides the
+destination and must be set on the `bash` side of an install pipeline.
+Installation requires a published release with a `scope.mjs` asset;
+tags alone are not enough.
+
 ## Update check
 
 After each command, the CLI performs a non-blocking check for newer versions:
 
-- Queries the GitHub Releases API on `scope-doc` (3s timeout)
+- Queries `microsoft/scope` releases via `gh`, falling back to the GitHub
+  Releases API (2s timeout per attempt for the background check)
 - Compares the current embedded version against the latest release tag
 - If newer, prints a one-line notice with the upgrade command
 - Suppressed by `SCOPE_NO_UPDATE_CHECK=1`
-- Requires `GH_TOKEN` or `GITHUB_TOKEN` for private repo access (silently skips without it)
+- Uses `gh` authentication or `GH_TOKEN`/`GITHUB_TOKEN` for authenticated
+  API access; the REST fallback can also read public releases without a token
+
+`scope update` uses the same repository for release discovery and asset
+downloads. Its manual recovery command fetches `website/install-cli.sh`
+from `microsoft/scope`.
 
 This is the **one** place in the CLI that calls `fetch` directly rather than the
 centralized `apiFetch()` wrapper (`apps/cli/src/utils/api-client.ts`): it targets the
