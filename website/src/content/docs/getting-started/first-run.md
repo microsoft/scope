@@ -14,14 +14,18 @@ profile). Scope creates one **run** per execution attempt — see
 ## Before you start
 
 - You can reach the [Portal](/getting-started/access/) for your
-  deployment.
-- You don't need to set anything up — the catalog ships with example
-  task prompts, criteria sets, and a default Copilot setup.
+  deployment, or have followed
+  [Local development](/getting-started/local-development/).
+- Your deployment has a running Copilot worker and access to an available
+  model. If the catalog doesn't contain suitable task prompts, criteria, or
+  profiles, create them as part of the steps below.
 
 ## 1. Open the Portal
 
 Navigate to the Portal URL provided for your deployment, for example
 **https://your-scope.example.com**.
+
+Select or create a project to keep your evaluation data together.
 
 The home view lists recent runs across all users. The left navigation
 takes you to runs, tasks, criteria, profiles, prompt features, and

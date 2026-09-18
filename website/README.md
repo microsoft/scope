@@ -7,7 +7,16 @@ End-user documentation site for **Scope**, built with
 and published to GitHub Pages.
 
 The product and this documentation site live in
-[scope-core](https://github.com/growth-ecosystems/scope-core).
+[microsoft/scope](https://github.com/microsoft/scope). Users and contributors
+should start at the [official documentation website](https://microsoft.github.io/scope/).
+
+The root README is a short introduction and entry point to the website.
+Keep detailed setup, usage, and contribution guidance in
+[src/content/docs/](src/content/docs/) and register new pages in the sidebar.
+Local setup lives in
+[getting-started/local-development.md](src/content/docs/getting-started/local-development.md);
+development, contribution, and support guidance live under
+[resources/](src/content/docs/resources/).
 
 ## Project structure
 
