@@ -3,17 +3,20 @@
 Project context for AI coding agents working on **scope-doc**, the
 Starlight-based documentation site for **Scope**.
 
-## What this repo is
+## What this directory is
 
-A static documentation site published to GitHub Pages.
+A static documentation site published to GitHub Pages, within the
+[microsoft/scope](https://github.com/microsoft/scope) monorepo.
 
 - Framework: **Astro 6.x** + **@astrojs/starlight**
 - Package manager: **pnpm** (pinned via `packageManager` in `package.json`)
 - TypeScript strict
 - Lives under the `website/` directory of the repo (all site sources,
   config, and `package.json` are rooted here; run every command from
-  `website/`)
-- Deployed by `.github/workflows/static.yml` (build + deploy jobs),
+  `website/` unless explicitly directed to the repository root).
+  The site has its own lockfile and is not part of the root pnpm workspace.
+- Deployed by [../.github/workflows/static.yml](../.github/workflows/static.yml)
+  (build + deploy jobs),
   which builds from `website/` via a `working-directory` default and
   `website/**` path filters; both PR and production builds explicitly use
   `SITE=https://microsoft.github.io` and `BASE_PATH=/scope`.
@@ -38,41 +41,40 @@ A static documentation site published to GitHub Pages.
   `starlight-openapi` config
 - `dist/` — build output (gitignored)
 
-## The source of truth: scope-core
+## The source of truth: microsoft/scope
 
-The product itself lives in the
-[scope-core](https://github.com/growth-ecosystems/scope-core)
-repository. When writing docs, **read scope-core before writing any
-factual claim**. Everything in the documentation \u2014 endpoints, field
-names, statuses, worker IDs, behaviors, defaults, error messages,
-anything \u2014 MUST be grounded in the source code. Do not invent. If
-the source doesn't say it, it doesn't go in the docs; ask the user
-or leave it out.
+The product and this documentation site live in this same
+[microsoft/scope](https://github.com/microsoft/scope) checkout. When writing
+docs, **read the local product source before writing any factual claim**.
+Everything in the documentation, including endpoints, field names,
+statuses, worker IDs, behaviors, defaults, and error messages, MUST be
+grounded in the source code. Do not invent. If the source doesn't say it,
+it doesn't go in the docs; ask the user or leave it out.
 
-## Where to look in scope-core
+## Where to look in this monorepo
 
-Anything that comes from the source — endpoints, field names,
-status enums, defaults, validation rules — must be read from
-scope-core at the time you write it, not copied from this file.
+Read endpoints, field names, status enums, defaults, and validation rules
+from this checkout at the time you write, not from this file.
 Use this map as a starting point; do not treat it as a substitute
-for opening the file.
+for opening the file. Paths in the table are relative to the repository
+root, one directory above `website/`; site paths elsewhere in this guide
+are relative to `website/`.
 
-| Topic | File(s) in scope-core |
+| Topic | File(s) from the repository root |
 | --- | --- |
-| Workers (allowed IDs, validation) | `packages/shared/src/schemas/request.ts` (`VALID_WORKERS`) |
-| Worker display names / labels | the `"name"` field in each worker's agent registration (upsert) payload (e.g. "GitHub Copilot CLI", "Claude Code CLI", "VS Code Copilot") |
-| Worker software stacks (pre-installed tools) | `apps/workers/*/src/test-worker.ts` — the `checkTools([...])` array lists every runtime and build tool baked into the container image |
-| Request payload, scenario shape | `packages/shared/src/schemas/request.ts` (`CreateRequestInputSchema`, `ScenarioSchema`) |
-| Request status / outcome enums | `packages/shared/src/schemas/request.ts` (`RequestStatusSchema`, `RequestOutcomeSchema`) |
-| Request lifecycle / scheduler | `apps/api/src/index.ts`, `docs/architecture/queue-scheduler.md` |
-| Profile + version schemas | `packages/shared/src/schemas/profile.ts` |
-| Criterion schema, DAG rules | `packages/shared/src/schemas/criteria.ts` |
-| Route handlers, validation, error codes | `apps/api/src/routes/*.ts` |
-| VS Code worker behavior | `docs/architecture/vscode-electron-worker.md`, `vscode-web-worker.md`, `worker-requirements.md` |
-| OpenAPI source | `apps/api/src/openapi/registry.ts`; generated snapshot at `src/openapi/scope-openapi.json` |
-| Swagger UI | served by the API; check `apps/api/src/index.ts` for the route |
+| Agent IDs, names, and registration validation | [packages/shared/src/schemas/agent.ts](../packages/shared/src/schemas/agent.ts), [apps/api/src/routes/agents.ts](../apps/api/src/routes/agents.ts) |
+| Worker software stacks (pre-installed tools) | `apps/workers/*/src/test-worker.ts`: the `checkTools([...])` arrays list the tools checked by each worker's smoke test |
+| Request payload, scenario shape | [packages/shared/src/schemas/request.ts](../packages/shared/src/schemas/request.ts) (`CreateRequestInputSchema`), [packages/shared/src/schemas/scenario.ts](../packages/shared/src/schemas/scenario.ts) (`ScenarioSchema`) |
+| Request status / outcome enums | [packages/shared/src/schemas/request.ts](../packages/shared/src/schemas/request.ts) (`RequestStatusSchema`, `RequestOutcomeSchema`) |
+| Request lifecycle / scheduler | [apps/api/src/index.ts](../apps/api/src/index.ts), [apps/scheduler/src/request-scheduler.ts](../apps/scheduler/src/request-scheduler.ts), [docs/architecture/queue-scheduler.md](../docs/architecture/queue-scheduler.md) |
+| Profile + version schemas | [packages/shared/src/schemas/profile.ts](../packages/shared/src/schemas/profile.ts) |
+| Criterion schema, DAG rules | [packages/shared/src/schemas/criteria.ts](../packages/shared/src/schemas/criteria.ts) |
+| Route handlers, validation, error codes | [apps/api/src/routes/](../apps/api/src/routes/) |
+| Coding worker behavior | [apps/workers/](../apps/workers/), [docs/architecture/worker-requirements.md](../docs/architecture/worker-requirements.md) |
+| OpenAPI source | [apps/api/src/openapi/registry.ts](../apps/api/src/openapi/registry.ts); generated snapshot at [website/src/openapi/scope-openapi.json](src/openapi/scope-openapi.json) |
+| Swagger UI | Served by the API; check [apps/api/src/index.ts](../apps/api/src/index.ts) for the route |
 
-When in doubt, `grep` scope-core for the symbol or string before
+When in doubt, search this checkout for the symbol or string before
 writing anything in the docs.
 
 ## Standing user rulings
@@ -171,8 +173,13 @@ pnpm install
 pnpm test                # plugin regressions, using Node's built-in test runner
 pnpm run build           # writes dist/
 pnpm run dev             # local preview at http://localhost:4321
-pnpm run refresh:openapi # generate the OpenAPI snapshot from scope-core
+pnpm run refresh:openapi # generate the OpenAPI snapshot from this monorepo's API
 ```
+
+For `refresh:openapi`, install the root workspace dependencies first.
+The script runs `pnpm --filter api generate:openapi` from the repository
+root, using [apps/api/src/openapi/generate.ts](../apps/api/src/openapi/generate.ts)
+to update [src/openapi/scope-openapi.json](src/openapi/scope-openapi.json).
 
 Both `pnpm test` and `pnpm run build` must pass. The public build uses
 `SITE=https://microsoft.github.io BASE_PATH=/scope pnpm run build`;
@@ -184,12 +191,12 @@ page count can indicate a content collection file failed to parse.
 ## Workflow
 
 - Each logical change is its own commit. Push to refresh the PR; CI
-  rebuilds and redeploys to GH Pages.
+  tests and builds the site. Deployment to GitHub Pages runs on `main`.
 - `main` is protected — open a PR, don't push directly.
 
 ## When in doubt
 
-1. Read the relevant file in scope-core (schemas first, then route
+1. Read the relevant file in this checkout (schemas first, then route
    handlers).
 2. Generate the OpenAPI snapshot with `pnpm run refresh:openapi` and
    inspect `src/openapi/scope-openapi.json`.
