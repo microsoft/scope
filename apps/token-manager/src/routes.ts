@@ -17,6 +17,10 @@ import {
 import { SecretStore } from "./keyvault-store.js";
 import { validateToken } from "./token-validators.js";
 import { RoundRobinMap } from "./round-robin.js";
+import {
+  updateFoundryModelSecret,
+  withFoundryModel,
+} from "./foundry-model.js";
 
 const VALID_TYPES: KeyType[] = [
   "github-pat-classic",
@@ -184,14 +188,14 @@ export function createKeyRouter(
         return;
       }
 
-      res.json(token);
+      res.json(await withFoundryModel(token, store));
     } catch (err) {
       next(err);
     }
   });
 
   // ──────────────────────────────────────────────
-  // PUT /api/v1/keys/:id — Update metadata only
+  // PUT /api/v1/keys/:id — Update metadata and Foundry model override
   // ──────────────────────────────────────────────
   router.put("/api/v1/keys/:id", async (req, res, next) => {
     try {
@@ -212,6 +216,46 @@ export function createKeyRouter(
           : null;
       }
 
+      let foundrySecretValue: string | undefined;
+      if (body.model !== undefined) {
+        if (body.model !== null && typeof body.model !== "string") {
+          res.status(400).json({ error: "model must be a string or null" });
+          return;
+        }
+
+        const token = await collection.findOne({
+          _id: req.params.id,
+          deletedAt: { $exists: false },
+        });
+
+        if (!token) {
+          res.status(404).json({ error: "Key not found" });
+          return;
+        }
+        if (token.type !== "azure-ai-foundry") {
+          res.status(400).json({
+            error: "model can only be updated for Azure AI Foundry keys",
+          });
+          return;
+        }
+
+        const updatedFoundrySecret = await updateFoundryModelSecret(
+          token,
+          body.model,
+          store
+        );
+        if (!updatedFoundrySecret) {
+          res.status(422).json({ error: "Stored Azure AI Foundry key is invalid" });
+          return;
+        }
+        foundrySecretValue = updatedFoundrySecret;
+
+        // The deployment is part of validation, so the previous result is stale.
+        update.lastValidationStatus = "unknown";
+        update.lastValidatedAt = null;
+        update.lastValidationError = null;
+      }
+
       const result = await collection.findOneAndUpdate(
         { _id: req.params.id, deletedAt: { $exists: false } },
         { $set: update },
@@ -223,7 +267,32 @@ export function createKeyRouter(
         return;
       }
 
-      res.json(result);
+      if (foundrySecretValue) {
+        validateToken(result.type, foundrySecretValue)
+          .then(async (validation) => {
+            const now = new Date();
+            await collection.updateOne(
+              { _id: result._id },
+              {
+                $set: {
+                  lastValidatedAt: now,
+                  lastValidationStatus: validation.status,
+                  lastValidationError: validation.error ?? undefined,
+                  capabilities: validation.capabilities ?? [],
+                  updatedAt: now,
+                },
+              }
+            );
+          })
+          .catch((err) => {
+            console.error(
+              `[routes] Background validation failed for ${result._id}:`,
+              err
+            );
+          });
+      }
+
+      res.json(await withFoundryModel(result, store));
     } catch (err) {
       next(err);
     }

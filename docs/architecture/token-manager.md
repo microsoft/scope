@@ -153,7 +153,8 @@ stateDiagram-v2
 | `GET` | `/api/v1/keys` | List all keys (optionally filter by capability) |
 | `POST` | `/api/v1/keys` | Register a new key |
 | `POST` | `/api/v1/keys/preview` | Preview capabilities without registering |
-| `GET` | `/api/v1/keys/:id` | Get key details (excludes secret) |
+| `GET` | `/api/v1/keys/:id` | Get key details (excludes secrets; includes the non-secret Foundry model name) |
+| `PUT` | `/api/v1/keys/:id` | Update metadata and the optional Azure AI Foundry model override |
 | `DELETE` | `/api/v1/keys/:id` | Delete a key |
 | `POST` | `/api/v1/keys/:id/validate` | Trigger manual validation |
 
@@ -164,6 +165,12 @@ stateDiagram-v2
 | `GET` | `/api/v1/keys/acquire?capability=X` | Acquire a key for given capability |
 
 The acquire endpoint uses round-robin selection among valid, enabled keys that provide the requested capability.
+
+Updating the model override rewrites only the `model` property of the Foundry
+credential stored in Key Vault; the endpoint and API key are preserved. The
+key returns to `unknown` while the Token Manager validates the new deployment
+in the background. The Portal polls the detail endpoint until that validation
+finishes.
 
 ## Usage Tracking
 
