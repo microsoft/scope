@@ -4,3 +4,10 @@
 # stays deterministic across checkouts. Marked generated so diffs collapse them.
 NOTICE -text linguist-generated=true
 NOTICE-REVIEW.txt -text linguist-generated=true
+* text=auto
+*.sh    text eol=lf
+*.bat   text eol=crlf
+*.png   binary
+*.jpg   binary
+*.pdf   binary
+*.min.* -diff
