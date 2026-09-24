@@ -4,24 +4,16 @@
 import type { Preview } from "@storybook/react-vite";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { PublicClientApplication } from "@azure/msal-browser";
-import { MsalProvider } from "@azure/msal-react";
 import { initialize, mswLoader } from "msw-storybook-addon";
 import { mswHandlers } from "./msw-handlers";
 import { FeatureFlagProvider } from "../src/contexts/FeatureFlagContext";
 import { ThemeProvider } from "../src/contexts/ThemeContext";
-import { AuthProvider } from "../src/contexts/AuthContext";
+import { AuthContext } from "../src/contexts/AuthContext";
+import { signedInAuth } from "../src/contexts/authFixtures";
 import { ProjectProvider } from "../src/contexts/ProjectContext";
 import "../src/index.css";
 
 initialize({ onUnhandledRequest: "bypass" });
-
-// Un-authenticated MSAL instance so components that read auth state (e.g. the
-// header UserMenu inside Layout) can render in Storybook without a live IdP.
-// Stories that need a signed-in state provide their own AuthContext value.
-const msalInstance = new PublicClientApplication({
-  auth: { clientId: "storybook-client-id" },
-});
 
 const preview: Preview = {
   decorators: [
@@ -34,19 +26,17 @@ const preview: Preview = {
       });
       return (
         <QueryClientProvider client={queryClient}>
-          <MsalProvider instance={msalInstance}>
-            <AuthProvider>
-              <FeatureFlagProvider>
-                <ThemeProvider>
-                  <ProjectProvider>
-                    <MemoryRouter>
-                      <Story />
-                    </MemoryRouter>
-                  </ProjectProvider>
-                </ThemeProvider>
-              </FeatureFlagProvider>
-            </AuthProvider>
-          </MsalProvider>
+          <AuthContext.Provider value={signedInAuth}>
+            <FeatureFlagProvider>
+              <ThemeProvider>
+                <ProjectProvider>
+                  <MemoryRouter>
+                    <Story />
+                  </MemoryRouter>
+                </ProjectProvider>
+              </ThemeProvider>
+            </FeatureFlagProvider>
+          </AuthContext.Provider>
         </QueryClientProvider>
       );
     },

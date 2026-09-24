@@ -12,6 +12,38 @@ import { MAX_ARCHIVE_UPLOAD_LABEL } from "./codebaseUpload";
 
 const BASE = "/api/v1";
 
+/** Browser-safe response from the Scope identity endpoint (not IdP claims). */
+export interface CurrentUserResponse {
+  id: string;
+  role?: string;
+  email?: string;
+  displayName?: string;
+  idp?: string;
+  idpTenant?: string;
+}
+
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number, public readonly code?: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+function validateCurrentUser(value: unknown): CurrentUserResponse {
+  if (
+    !value || typeof value !== "object" ||
+    !("id" in value) || typeof value.id !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.id) ||
+    value.id === "00000000-0000-0000-0000-000000000000" ||
+    ["role", "email", "displayName", "idp", "idpTenant"].some(
+      (key) => key in value && typeof (value as Record<string, unknown>)[key] !== "string",
+    )
+  ) {
+    throw new Error("Invalid user response from Scope");
+  }
+  return value as CurrentUserResponse;
+}
+
 /**
  * Append `projectId=<id>` to an already-built request path, choosing `?` vs `&`
  * based on whether the path already carries a query string. Mirrors the CLI
@@ -102,19 +134,37 @@ async function request<T>(path: string, init?: RequestInit, opts?: RequestOpts):
   // relative-time displays survive a misconfigured local clock.
   recordServerDate(res.headers.get("Date"));
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; details?: Array<{ path: string; message: string }> };
+    const body = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; code?: string; details?: Array<{ path: string; message: string }> };
     const message = body.error || `HTTP ${res.status}`;
     const details = body.details;
     if (details?.length) {
-      throw new Error(`${message}: ${details.map((d) => `${d.path || "body"}: ${d.message}`).join(", ")}`);
+      throw new ApiError(`${message}: ${details.map((d) => `${d.path || "body"}: ${d.message}`).join(", ")}`, res.status, body.code);
     }
-    throw new Error(message);
+    throw new ApiError(message, res.status, body.code);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
 }
 
+async function requestCurrentUser(
+  method: "GET" | "POST",
+  opts: { signal?: AbortSignal } = {},
+): Promise<CurrentUserResponse> {
+  const user = await request<unknown>("/users/me", {
+    method,
+    cache: "no-store",
+    signal: opts.signal,
+  });
+  return validateCurrentUser(user);
+}
+
 export const api = {
+  /** Only AuthProvider calls these; enrollment must never be prefetched. */
+  getCurrentUser: (opts: { signal?: AbortSignal } = {}): Promise<CurrentUserResponse> =>
+    requestCurrentUser("GET", opts),
+  enrollCurrentUser: (opts: { signal?: AbortSignal } = {}): Promise<CurrentUserResponse> =>
+    requestCurrentUser("POST", opts),
+
   /** List runs with cursor-based pagination, server-side filtering and sorting */
   listRuns: (opts?: RunFilterParams & { sortBy?: RunSortField; sortDir?: RunSortDir; limit?: number; after?: string; before?: string; last?: boolean }): Promise<CursorPaginatedResponse<Run>> => {
     return request(`/requests${qs({

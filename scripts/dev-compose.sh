@@ -3,7 +3,7 @@
 # dev-compose.sh — Docker Compose wrapper with shared-infra auto-detection
 # =============================================================================
 # Replaces direct `docker compose` calls in pnpm scripts. Automatically:
-#   - Loads .env.local for compose variable interpolation (if it exists)
+#   - Loads generated .env, then( overlays .env.local if it exists)
 #   - Adds --profile mongodb (starts local MongoDB) UNLESS SCOPE_SHARED_INFRA=1
 #   - Strips 'mongodb' from service arguments when using shared infra
 #
@@ -50,9 +50,11 @@ for arg in "$@"; do
   fi
 done
 
-# Always pass .env.local for compose variable interpolation (if it exists)
+# Passing any --env-file disables Compose's implicit .env loading. Include the
+# generated worktree file explicitly before .env.local so local overrides do not
+# discard COMPOSE_PROJECT_NAME or the worktree's offset ports.
 if [ -f .env.local ]; then
-  EXTRA_ARGS+=(--env-file .env.local)
+  EXTRA_ARGS+=(--env-file .env --env-file .env.local)
 fi
 
 # Handle mongodb: add profile OR strip from service args

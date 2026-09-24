@@ -41,4 +41,5 @@ export const REQUIRED_MIGRATIONS: readonly string[] = [
   "026-isolate-catalogs-per-project.ts",
   "027-uuid-keys-mcp-profileversions.ts",
   "028-isolate-mcp-secrets-per-project.ts",
+  "029-create-users-collection.ts",
 ];

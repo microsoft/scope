@@ -32,6 +32,16 @@ ENV BUILD_TIME=$BUILD_TIME
 ENV GIT_BRANCH=$GIT_BRANCH
 
 COPY apps/portal/ apps/portal/
+# Public MSAL settings are available to Vite only while building the bundle.
+# The nginx runtime receives neither these variables nor any client secret.
+ARG VITE_AUTH_CLIENT_ID
+ARG VITE_AUTH_AUTHORITY
+ARG VITE_AUTH_KNOWN_AUTHORITIES
+ARG VITE_AUTH_SCOPES
+ARG VITE_AUTH_PROTOCOL_MODE
+ARG VITE_AUTH_REDIRECT_URI
+ARG VITE_AUTH_POST_LOGOUT_REDIRECT_URI
+ARG VITE_AUTH_CACHE_LOCATION
 RUN pnpm --filter portal build
 
 # Stage 2: Serve with nginx

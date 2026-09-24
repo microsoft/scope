@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveAuthEnabled } from "./authConfig";
 
 // The auth feature is ON by default (secure by default) with three independent
@@ -23,6 +23,74 @@ describe("resolveAuthEnabled", () => {
   it("is enabled by default (no runtime config, no local flag) everywhere", () => {
     expect(resolveAuthEnabled(undefined, env({}), true)).toBe(true);
     expect(resolveAuthEnabled(undefined, env({}), false)).toBe(true);
+  });
+
+  describe("build-time authentication settings", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    });
+
+    async function config(overrides: Record<string, string> = {}) {
+      vi.resetModules();
+      vi.stubGlobal("window", { location: { origin: "https://scope.example.com" } });
+      vi.stubEnv("DEV", false);
+      for (const [key, value] of Object.entries({
+        VITE_AUTH_CLIENT_ID: "portal-client",
+        VITE_AUTH_AUTHORITY: "https://login.microsoftonline.com/test-tenant",
+        VITE_AUTH_KNOWN_AUTHORITIES: "",
+        VITE_AUTH_SCOPES: "api://api-client/access_as_user",
+        VITE_AUTH_PROTOCOL_MODE: "",
+        VITE_AUTH_REDIRECT_URI: "",
+        VITE_AUTH_POST_LOGOUT_REDIRECT_URI: "",
+        VITE_AUTH_CACHE_LOCATION: "",
+        ...overrides,
+      })) {
+        vi.stubEnv(key, value);
+      }
+      return (await import("./authConfig")).authConfig;
+    }
+
+    it("preserves production defaults when optional Docker build args are empty", async () => {
+      expect(await config()).toMatchObject({
+        clientId: "portal-client",
+        authority: "https://login.microsoftonline.com/test-tenant",
+        scopes: ["api://api-client/access_as_user"],
+        knownAuthorities: [],
+        protocolMode: "AAD",
+        redirectUri: "https://scope.example.com",
+        postLogoutRedirectUri: "https://scope.example.com",
+        cacheLocation: "localStorage",
+        enabled: true,
+        isConfigured: true,
+      });
+    });
+
+    it("uses explicit optional build settings", async () => {
+      expect(await config({
+        VITE_AUTH_KNOWN_AUTHORITIES: "login.example.com, other.example.com",
+        VITE_AUTH_SCOPES: "api://api-client/read, api://api-client/write",
+        VITE_AUTH_PROTOCOL_MODE: "OIDC",
+        VITE_AUTH_REDIRECT_URI: "https://scope.example.com/callback",
+        VITE_AUTH_POST_LOGOUT_REDIRECT_URI: "https://scope.example.com/signed-out",
+        VITE_AUTH_CACHE_LOCATION: "sessionStorage",
+      })).toMatchObject({
+        knownAuthorities: ["login.example.com", "other.example.com"],
+        scopes: ["api://api-client/read", "api://api-client/write"],
+        protocolMode: "OIDC",
+        redirectUri: "https://scope.example.com/callback",
+        postLogoutRedirectUri: "https://scope.example.com/signed-out",
+        cacheLocation: "sessionStorage",
+      });
+    });
+
+    it.each(["VITE_AUTH_CLIENT_ID", "VITE_AUTH_AUTHORITY"])(
+      "does not silently use the emulator when production %s is missing",
+      async (key) => {
+        expect((await config({ [key]: "" })).isConfigured).toBe(false);
+      },
+    );
   });
 
   it("runtime authEnabled governs integration/production (built bundle)", () => {

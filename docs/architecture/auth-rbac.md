@@ -1,16 +1,25 @@
 # Authentication & RBAC
 
-> Status: **Proposed** — implementation plan. Date: 2026-06-10.
+> Status: **Explicit-login authentication and user-access caching implemented; 
+> full RBAC, ownership enforcement, CLI interactive login, and internal-token
+> designs remain deferred.** Original RBAC proposal: 2026-06-10; auth contract updated:
+> 2026-09-18. This is not a statement that every deployed environment has migrated.
 
-## Problem
+## Scope and deferred goals
 
-Scope currently has **no authentication or authorization**. The API (`apps/api/`)
-serves every endpoint unauthenticated, the Portal (`apps/portal/`) talks to it over a
-same-origin nginx proxy with no credentials, and the CLI (`apps/cli/`) issues bare
-`fetch` calls against `SCOPE_API_URL`. Any caller can read, submit, mutate, or delete
-any run and any catalog resource.
+Scope verifies IdP access tokens and resolves an active application user, but does
+**not yet enforce full roles/permissions or ownership on its routes**. The existing
+no-token/auth-not-configured anonymous rollout and public endpoints remain supported.
+An authenticated identity that is missing or disabled in Scope is **not** anonymous.
 
-We need to:
+The implemented boundary is narrow: only **`POST /api/v1/users/me`**
+may JIT-create a user, refresh their profile/`lastLoginAt`, or apply bootstrap-admin
+Every GET `/users/me` and other -authenticated routes verify the IdP token,
+then read an existing active principal through one Redis-backed resolver. Clients
+continue to send the **unchanged IdP access token on every call**; there is no
+`/auth/login`, token exchange, Scope session JWT, or new signing-key configuration.
+
+The following are **deferred RBAC goals**, not guarantees of the current rollout:
 
 1. **Authenticate** every human-facing caller (CLI, API, Portal) using **Microsoft
    Entra ID** (formerly Azure AD).
@@ -26,15 +35,18 @@ We need to:
    is discoverable, usable, and editable only by its owner; shared data is globally
    discoverable and usable by everyone but **read-only unless you own it**. An `admin` sees
    everything. (See §5.)
-5. Keep **anonymous/public mode out of scope.** The `anonymous` principal carries **zero
+5. Keep a new **anonymous/public product mode out of scope.** In the future permission
+   model, the `anonymous` principal carries **zero
    permissions** and is rejected by any permission-gated route. Treating it as a named
    principal is a guard *mechanism* convenience only — it is **not** a public experience and
    must not be granted permissions until a future, explicit public/demo mode is introduced
    over **public-only** data (see Open Question J).
 
-> **Primary milestone — authenticate the user.** The one must-ship outcome of this work is
-> **user authentication across Portal, API, and CLI** (Entra ID identity, with ownership
-> scoping built on it). Everything else is sequenced around that. In particular,
+> **Current milestone — explicit enrollment, then cached application access.**
+> Portal/API authentication uses the existing Entra identity and singular Scope `role`.
+> Already-enrolled CLI/raw-bearer callers remain compatible; a new identity must
+> explicitly POST `/users/me` before other authenticated requests.
+> CLI device-code login and ownership enforcement are separate work. In particular,
 > **Scope-issued PAT / API tokens delivered through `SCOPE_TOKEN`** are very likely the
 > right long-term answer for **user CI integrations and user-attributed automation**, but
 > they are **explicitly out of scope for, and must not block, the user-auth milestone**
@@ -54,15 +66,16 @@ must be resolved with stakeholders before or during implementation.
 
 ---
 
-## Current State (investigation summary)
+## Current implementation
 
-| Component | Today | Relevant files |
+| Component | In this branch | Relevant files |
 |-----------|-------|----------------|
-| API | Express app, no auth middleware. Routes registered via `apiRoute()` helper that also feeds the OpenAPI registry. CORS open, `express.json()` only. | [apps/api/src/index.ts](../../apps/api/src/index.ts), [apps/api/src/openapi/api-route.ts](../../apps/api/src/openapi/api-route.ts), [apps/api/src/route-context.ts](../../apps/api/src/route-context.ts) |
+| API | Verifies the IdP signature and claims before any access-cache lookup. `/users/me` owns explicit enrollment; subsequent middleware resolves existing active users. Public/anonymous rollout is unchanged. | [apps/api/src/index.ts](../../apps/api/src/index.ts), [auth/middleware.ts](../../apps/api/src/auth/middleware.ts), [routes/users.ts](../../apps/api/src/routes/users.ts) |
+| User access | `UserAccessResolver` reads a validated Redis snapshot or the exact `(idp, idpTenant, idpSubject)` Mongo record. Only explicit login invokes `upsertOnLogin`; no per-request JIT. | [auth/user-access-resolver.ts](../../apps/api/src/auth/user-access-resolver.ts), [auth/user-access-cache.ts](../../apps/api/src/auth/user-access-cache.ts), [auth/user-store.ts](../../apps/api/src/auth/user-store.ts) |
 | Runs data model | `RequestResponseSchema` + embedded `RunStateSchema`; history in `runs` collection (`RunHistoryDocumentSchema`). **No owner field.** | [packages/shared/src/schemas/request.ts](../../packages/shared/src/schemas/request.ts) |
 | Run listing | Cursor-paginated `GET /api/v1/requests` with filters; no per-user scoping. | [apps/api/src/routes/requests.ts](../../apps/api/src/routes/requests.ts) |
-| CLI | `commander` CLI, each command takes `-u/--url` (`SCOPE_API_URL`), bare `fetch`, **no auth header**. | [apps/cli/src/commands/run.ts](../../apps/cli/src/commands/run.ts), [apps/cli/src/index.ts](../../apps/cli/src/index.ts) |
-| Portal | React 19 SPA, `fetch` against same-origin `/api/v1` via nginx proxy, **no token**. | [apps/portal/src/lib/api.ts](../../apps/portal/src/lib/api.ts), [apps/portal/src/main.tsx](../../apps/portal/src/main.tsx), [apps/portal/nginx.conf](../../apps/portal/nginx.conf) |
+| CLI | Centralized `apiFetch()` injects `SCOPE_TOKEN` as a raw IdP bearer. No CLI interactive-login implementation is added here. New identities must explicitly enroll; ordinary CLI calls never enroll them. | [apps/cli/src/utils/api-client.ts](../../apps/cli/src/utils/api-client.ts), [CLI guidance](../../.agents/skills/scope-cli/SKILL.md) |
+| Portal | MSAL supplies the IdP bearer; `AuthProvider` gates queries on `/users/me`. Fresh callback uses POST; cached-account reload uses GET. Scope UUID and role come from the API, not account claims. | [AuthContext.tsx](../../apps/portal/src/contexts/AuthContext.tsx), [apps/portal/src/lib/api.ts](../../apps/portal/src/lib/api.ts), [apps/portal/src/main.tsx](../../apps/portal/src/main.tsx) |
 | Token Manager | Already has a `users`-like pattern for **provider** credentials (not app users). Reuse its KeyVault/Mongo patterns, not its schema. | [apps/token-manager/src/account-routes.ts](../../apps/token-manager/src/account-routes.ts) |
 | Migrations | `mongo-migrate-ts`, numbered files with `up()`/`down()`. CosmosDB-compatible constraints apply. | [packages/db-migrations/src/migrations](../../packages/db-migrations/src/migrations) |
 
@@ -79,8 +92,9 @@ over HTTP (`SCOPE_MT_API_URL`) to read a specific run and write insights/reports
 The **scheduler** ([apps/scheduler](../../apps/scheduler)) does **not** call the API (it
 touches MongoDB + Storage Queues directly), so it needs no API auth.
 
-> **This makes service-to-service auth an immediate requirement, not a future one.** The
-> moment ownership scoping (§5) lands, `GET /api/v1/requests/:id` becomes owner-scoped and
+> **Service-to-service auth is a co-requisite of future ownership enforcement.** It
+> is not introduced by explicit login/caching. The moment ownership scoping (§5) lands,
+> `GET /api/v1/requests/:id` becomes owner-scoped and
 > the report-generator — which has no user identity — would receive `404`s and its
 > insight/report writes would be rejected. Service-to-service auth (§6) must therefore
 > ship **together with** ownership scoping. Because the report-generator operates on **one
@@ -92,35 +106,22 @@ touches MongoDB + Storage Queues directly), so it needs no API auth.
 
 ## Architecture
 
-### Overview
+### Overview — current IdP-token flow
 
 ```mermaid
 flowchart TB
-    subgraph Clients
-        CLI[CLI<br/>device-code flow]
-        Portal[Portal SPA<br/>auth-code + PKCE]
-    end
-
-    subgraph IdP[Microsoft Entra ID]
-        OIDC[OIDC / OAuth2<br/>JWKS, token endpoint]
-    end
-
-    subgraph API[API service]
-        MW[authn middleware<br/>verify JWT via AuthProvider]
-        RBAC[authz: role + ownership scope]
-        Routes[Routes apiRoute&#40;&#41;]
-        Users[(users collection)]
-    end
-
-    CLI -->|1 device-code login| OIDC
-    Portal -->|1 redirect login| OIDC
-    OIDC -->|access token JWT| CLI
-    OIDC -->|access token JWT| Portal
-    CLI -->|2 Bearer token| MW
-    Portal -->|2 Bearer token| MW
-    MW -->|verify sig/aud/iss/exp<br/>JWKS cache| OIDC
-    MW -->|JIT upsert + role lookup| Users
-    MW --> RBAC --> Routes
+    Clients[Portal or bearer client] -->|unchanged IdP access token| Verify[verifyAccessToken<br/>signature and claims first]
+    Verify -->|verified identity| Me[users/me]
+    Verify -->|other routes| Existing[resolveExisting]
+    Me -->|GET or HEAD| Existing
+    Me -->|POST only| Login[enrollOnLogin]
+    Login -->|profile and upsertOnLogin| Users[(MongoDB users)]
+    Existing -->|GET| Cache[(Redis active-user cache)]
+    Cache -->|valid hit: no Mongo| Principal[Scope UUID and role]
+    Existing -->|miss or unavailable: findByIdentity| Users
+    Users --> Validate[Validate identity and active access]
+    Validate -->|best-effort SET EX| Cache
+    Validate --> Principal
 ```
 
 ### 1. Pluggable IdP abstraction (`packages/shared/src/auth/`)
@@ -136,8 +137,11 @@ export interface VerifiedIdentity {
   idpSubject: string;
   /** Provider id, e.g. "entra", "google", "oidc". */
   idp: string;
+  /** Entra `tid`; part of the durable identity key. */
+  idpTenant: string;
   email?: string;
-  name?: string;
+  displayName?: string;
+  emailVerified?: boolean;
 }
 
 export interface AuthProvider {
@@ -167,12 +171,17 @@ export interface AuthClientConfig {
 
 - **Multi-tenant**: validates against the Entra **common/organizations** issuer pattern
   and accepts **any tenant** — no `tid` pinning in code. Tenant restriction (if any) is
-  configured at the **App Registration** level. JWKS is resolved per-tenant via OIDC
-  discovery (or common metadata) and cached by `(tenant, kid)` with TTL + rotation.
+  configured at the **App Registration** level. `jose` caches keys from the configured
+  JWKS endpoint (`AUTH_JWKS_URI`, otherwise derived from `AUTH_AUTHORITY`) and handles
+  key rotation. Scope requires the selected JWK to publish an `issuer` and enforces that
+  Entra-specific key restriction: a `{tenantid}` key issuer is expanded from the token's
+  `tid`, while a tenant-specific key issuer must match exactly.
 - Verifies signature (RS256), `iss` (per-tenant issuer template), `aud`
-  (`AUTH_API_CLIENT_ID`), `exp`, `nbf`.
-- Extracts `oid` → `idpSubject`, `tid` → `idpTenant`, `preferred_username`/`email`
-  (+ the `email_verified`/`verified_primary_email` signal where present), `name`. The
+  (`AUTH_API_CLIENT_ID`), `exp`, `nbf`. Both the configured token issuer template and
+  the selected signing key's issuer must match; missing or malformed key issuer metadata
+  fails closed.
+- Extracts `oid` → `idpSubject`, `tid` → `idpTenant`, `email` (falling back to
+  `preferred_username`), optional boolean `email_verified`, and `name`. The
   `(idp, idpTenant, idpSubject)` triple — **not** email — is the durable identity key
   (see §2 and Open Question D).
 - Uses `jose` for JWKS + verification (no heavyweight MSAL dependency on the API).
@@ -183,21 +192,25 @@ The provider is instantiated from env in API bootstrap:
 AUTH_PROVIDER=entra                # selects implementation
 AUTH_AUTHORITY=https://login.microsoftonline.com/common   # multi-tenant (or /organizations)
 AUTH_API_CLIENT_ID=<api-app-id>    # expected audience (pinned)
-AUTH_CLIENT_ID=<public-client-id>  # CLI/portal client id (hardcoded by clients too)
+AUTH_CLI_CLIENT_ID=<cli-client-id>        # public CLI client id
+AUTH_PORTAL_CLIENT_ID=<portal-client-id>  # public Portal client id
 AUTH_SCOPES=api://<api-app-id>/access_as_user
 # Bootstrap admins are matched on the *verified subject*, NOT a mutable email — see §2 / Q C:
 AUTH_BOOTSTRAP_ADMINS=entra:<tid>/<oid>,entra:<tid>/<oid>   # (idp:tenant/subject) tuples
 AUTH_BOOTSTRAP_TENANTS=<tid-1>,<tid-2>   # tenant allowlist that bootstrap may apply within
+AUTH_USER_CACHE_TTL_SECONDS=300         # positive safe integer; default only when unset
 # Tenant filtering, if needed, is enforced at the App Registration — not here.
 ```
 > **No dev/bypass mode — by design.** There is **no `AUTH_ENABLED` switch and no
-> env-selectable synthetic principal**. The middleware **always** verifies a real token; no
-> environment variable, header, or flag can mint a user or elevate a role. The previous
+> env-selectable synthetic principal**. With auth configured, every non-public bearer
+> request verifies a real token before accessing Redis or MongoDB. No environment
+> variable, header, or flag fabricates an authenticated principal. The previous
 > `local-user`/`local-admin` + `X-Dev-User`/`DEV_USER` bypass is **removed entirely** — it
 > was a standing privilege-escalation and "ships to prod by accident" risk.
 >
-> Local development authenticates against a **real IdP** like every other environment. A
-> dedicated **Entra ID local emulator** (built as a **separate project**) will provide a
+> Auth-not-configured and no-token requests retain the existing anonymous rollout
+> behavior; that does not enroll or authenticate anyone. Local sign-in uses a real
+> token from the **Entra ID local emulator** (a **separate project**), which provides a
 > standards-compliant local OIDC issuer; Scope consumes it purely as **another IdP
 > configuration** (`AUTH_AUTHORITY`/`AUTH_API_CLIENT_ID`/JWKS pointed at the emulator) via
 > the existing `AuthProvider` abstraction — **no Scope code path knows it is "dev".**
@@ -208,9 +221,14 @@ Authorization lives entirely in **our** database, not in the IdP, so RBAC is por
 across IdPs and survives IdP migration. The IdP only proves *identity*; Scope owns
 *authorization*.
 
-**Permissions are the atomic unit.** A permission is a namespaced `resource:action`
-string, e.g. `scope/run:write`. A **role** is just a named bundle of permissions. Today
-we ship exactly two roles (`user`, `admin`), but because the model is
+**Current model:** the stored user's singular `role` (default `user`, eligible
+bootstrap promotion to `admin`) is returned as metadata, not enforced as route RBAC.
+The permission types, overrides, and role bundles below are **deferred design**,
+not the current request/response contract.
+
+**Deferred: permissions are the atomic unit.** A permission is a namespaced
+`resource:action` string, e.g. `scope/run:write`. A **role** is a named bundle of
+permissions. The proposed first roles are `user` and `admin`; because the model is
 permission-first, adding custom roles or per-user permission overrides later is **not** a
 schema change.
 
@@ -256,7 +274,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 >   a required permission is **never** satisfied by the empty/anonymous set.
 
 ```ts
-// users collection
+// Proposed RBAC extension of the users collection; permission overrides are deferred.
 {
   _id: string,                 // **Scope User ID** — app-owned UUID; this is what
                                //   `ownerId` references everywhere (NOT the idpSubject).
@@ -266,8 +284,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   idpTenant: string,           // Entra `tid` — part of the identity key (multi-tenant)
   idpSubject: string,          // Entra `oid` — stable per (tenant, user); identity link only
   email?: string,              // mutable, advisory; never an authorization input
-  emailVerified?: boolean,     // captured when the IdP asserts it (bootstrap gate)
-  name?: string,
+  emailVerified?: boolean,     // captured when the IdP asserts it (email storage only)
+  displayName?: string,
   role: UserRole,              // "user" | "admin"  (persisted role union only)
   /** Optional explicit grants/denies layered on top of the role. Empty today;
    *  present in the schema so future custom permissions need no migration. */
@@ -275,7 +293,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   permissionsRemove?: Permission[],
   createdAt: Date,
   updatedAt: Date,
-  lastLoginAt?: Date,
+  lastLoginAt?: Date,          // explicit enrollment POST time, not request activity
   disabledAt?: Date,           // soft-disable
 }
 ```
@@ -290,7 +308,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 `permissionsRemove`. The authz layer always checks **permissions**, never role names
 directly — so swapping or adding roles never touches route code.
 
-**The `anonymous` principal is a guard *mechanism*, not a public experience.** A reserved,
+**Deferred permission model: the `anonymous` principal is a guard *mechanism*, not a
+public experience.** A reserved,
 non-persisted principal (`{ id: "anonymous", role: "anonymous", permissions: [] }`)
 represents unauthenticated callers so route guards have a uniform shape. It carries
 **zero permissions** and **any** permission-gated route rejects it. This convenience does
@@ -300,57 +319,199 @@ default of "just check the permission" would silently expose data if anyone ever
 set in v1**; a future public/demo mode is a deliberate, explicit change scoped to
 public-only data (Open Questions J), not an emergent property of this principal.
 
-**JIT provisioning**: on first successful token verification, upsert a `users` doc with
-default role `user`. **Admin bootstrap is identity-keyed, not email-keyed** (Entra
+**Current JIT provisioning**: only an actual
+`POST /api/v1/users/me`, after successful token verification, calls
+`UserAccessResolver.enrollOnLogin()` and `UserStore.upsertOnLogin()`. A missing user
+gets a Scope-owned UUID and default role `user`; an existing user's profile and
+`lastLoginAt` are refreshed even if Redis already contains an active snapshot.
+Every GET `/me`, cache expiry, and all other routes never upsert, enrich, promote, 
+or write `lastLoginAt`.
+
+`lastLoginAt` means **the explicit login upsert time**, not proof of an interactive
+IdP prompt or callback: callers can invoke/retry the endpoint themselves. The existing
+ordering is preserved: **the upsert (including profile/timestamp/promotion writes)
+occurs before the resolver checks `disabledAt`**. A disabled user's login request can
+therefore update those fields before returning `403`; it never admits/caches that user.
+
+**Admin bootstrap is identity-keyed, not email-keyed** (Entra
 `email`/`preferred_username` is mutable and not guaranteed verified, and in multi-tenant
 mode any tenant can sign users in):
 
-- A user is bootstrapped to `admin` **only if** their `(idp, idpTenant, idpSubject)`
+- On explicit login, a user is bootstrapped to `admin` **only if** their verified
+  `(idp, idpTenant, idpSubject)`
   appears in `AUTH_BOOTSTRAP_ADMINS` **and** their `idpTenant` is in
   `AUTH_BOOTSTRAP_TENANTS`. Email is **never** the match key.
+- Bootstrap does not require `email` or `email_verified`; ordinary Entra workforce
+  and local-emulator access tokens can bootstrap without those claims.
 - `email_verified` (where the IdP asserts it) is required before any email is even stored
   as advisory; an unverified email never influences a grant.
 - **Bootstrap promotes but does not silently demote.** Presence in the list grants admin;
   *removal* from the list does **not** auto-demote a sitting admin (that requires an
-  explicit admin action via §6), so a bad ConfigMap edit can't quietly strip admins. The
-  reconcile is **append-only promotion**, logged to the security audit (§F) on every change.
+  explicit administrative change), so a bad ConfigMap edit can't quietly strip admins.
+  Admin mutation endpoints and the durable security audit (§F) remain deferred.
 
-Index: unique compound `(idp, idpTenant, idpSubject)`; secondary on `email` (advisory
-lookup only). Folding `idpTenant` into the key is mandatory — `oid` is unique only *within*
+Index: database-enforced unique compound `(idp, idpTenant, idpSubject)`, named
+`uniq_identity`. Both backends have a non-unique `email` index for advisory
+lookup: sparse on native MongoDB, non-sparse on CosmosDB. Migration 029
+creates the Cosmos identity index with the collection and refuses incompatible
+existing collections without deleting data or weakening uniqueness. See
+[migration 029](db-migrations.md#migration-029-users-identity-uniqueness) for
+backend handling and the remaining live-Cosmos validation.
+
+Folding `idpTenant` into the key is mandatory — `oid` is unique only *within*
 a tenant, so `(idp, idpSubject)` alone collides across tenants and mis-identifies guest/B2B
 users (Open Question D).
 
 ### 3. API authentication middleware
 
-A single Express middleware mounted **before** route registration:
+Registration in `apps/api/src/index.ts` is deliberately ordered:
 
-1. Skip public routes (`/health`, `/ready`, `/about`, `/openapi.json`,
-   `/api/v1/version`). **There is no `/api/v1/auth/config`** — clients hardcode their IdP
-   config (§7/§8).
-2. Extract `Authorization: Bearer <token>`. Missing ⇒ attach the `anonymous` principal
-   (routes that require a permission will then return `401`/`403`).
-3. Verify the token. Two issuer paths share one shape (`AuthProvider`-style verification):
-   - **IdP token** (`iss` = Entra) ⇒ `authProvider.verifyAccessToken(token)` ⇒
-     `VerifiedIdentity` (invalid ⇒ `401`).
-   - **Scope internal token** (`iss = scope-api`) ⇒ verify against the Scope **public**
-     key, `aud = scope-internal`, `exp`, and `jti` against the revocation list (§6).
-4. JIT-upsert `users`, load role, compute **effective permissions**, attach
-   `req.user: AuthenticatedUser`
-   (`{ id, role: PrincipalRole, permissions, email, idp, idpTenant, idpSubject, isService? }`).
-5. **Liveness/revocation re-check on *every* path** (not just the IdP path): if the
-   resolved user's `disabledAt` is set ⇒ `403`; if a carried `jti` is revoked ⇒ `401`.
-   Internal tokens that carry permissions are re-validated against the live user wherever
-   feasible (see §6 — preference is to carry `sub` only and re-resolve downstream).
-6. **`req.user.id` must never be `"system"` for a live caller.** The reserved `"system"`
-   id is a backfill sentinel only (§5); the middleware refuses to ever assign it to an
-   authenticated principal, and treats any token that resolves to it as a hard `401`. A
-   missing/fallback user is `anonymous`, never `"system"`.
+1. CORS/body parsing and `/users/me` **`Cache-Control: no-store`** response policy.
+2. `createAuthMiddleware()` verifies credentials, preserving exclusions for `/health`,
+   `/ready`, `/about`, `/openapi.json`, `/api/v1/version`, and `/api-docs`.
+3. `registerUsersRoutes()` registers `/users/me` through `apiRoute()`.
+4. `createUserAccessMiddleware()` resolves existing users for the remaining routes.
+5. Other routes in their existing relative order, then `authErrorHandler` (typed
+   auth/access codes) and the existing logged unexpected-error handler.
 
-`AuthenticatedUser` is added to the `TypedRequest` type; it rides on the request object
-(no change to `RouteContext`). A typed accessor `getUser(req)` and a
-`hasPermission(user, perm)` helper (wildcard semantics per §2) are provided.
+Verification attaches request-local `req.auth = { identity, token }`, not application
+access. The raw bearer is used only as needed for explicit-login enrichment; it is
+never persisted, put in Redis, or logged. `req.user` is populated only after access
+resolution (or with the existing anonymous principal when no token/auth configuration
+is present). There is **no Scope-token verifier or query-based middleware bypass**:
+adding `?login=true` to a different route does not enroll a user.
 
-### 4. Route-level authorization
+#### `/users/me` method contract
+
+Both methods require a verified identity, return the same response (`id`, `role`,
+optional `email`, `displayName`, `idp`, `idpTenant`), and set `req.user` from the
+shared resolver. `id` is the **Scope UUID**, never Entra `oid`.
+
+| Request | Behavior |
+| --- | --- |
+| `POST /api/v1/users/me` | Explicit enrollment/profile/timestamp/bootstrap writes, then access validation and cache warming. Returns `200` with the current-user representation. |
+| `GET /api/v1/users/me` | Read-only existing-user resolution. |
+| Other values, repeated `login`, arrays, objects, or an empty value | `400`; no enrollment. |
+| `HEAD /api/v1/users/me?login=true` | Read-only resolution; Express dispatch to the GET handler must not cause JIT. |
+| `?login=true` on another route | Normal existing-user resolution; no enrollment. |
+
+Only the POST has side effects. All `/users/me` responses, including errors, are
+`Cache-Control: no-store`; clients also request `cache: "no-store"`. **Do not prefetch,
+poll, automatically retry transient failures, or conditionally HTTP-cache the
+enrollment POST.** An explicit user retry is allowed. The existing one-time `401`
+token-refresh retry is safe because authentication fails before enrollment.
+
+#### Shared resolver and Redis contract
+
+`UserAccessResolver` owns the same mapping, identity/reserved-ID validation,
+disabled check, and cache warming for both paths. The Mongo identity lookup is exact:
+`(idp, idpTenant, idpSubject)` = `(idp, tid, oid)` for Entra. Email, browser account
+IDs, token text, and client-supplied Scope IDs are never lookup keys.
+
+`RedisUserAccessCache` implements the API-local `UserAccessCache` interface (`get`,
+`set`, `delete`, `close`) using `ioredis` and existing `REDIS_HOST`, `REDIS_PORT`,
+`REDIS_PASSWORD`, and `REDIS_TLS` settings. There is no process-local access cache.
+
+Canonical key (each variable component is independently `encodeURIComponent`-encoded):
+
+```text
+auth-user:v1:<Mongo database namespace>:<idp>:<tid>:<oid>
+```
+
+The namespace is the configured **MongoDB database name**. Independent Scope databases
+sharing Redis must use distinct database names/namespaces (or separate Redis instances);
+the identity tuple alone is insufficient deployment isolation. A minimal version-1
+snapshot contains Scope ID, singular role, verified identity tuple, and optional
+profile fields — **no bearer, negative entry, IdP-derived permissions, or Mongo object**.
+Only existing active human principals are cached. Invalid JSON, unsupported versions,
+malformed/reserved IDs, and mismatched tuples are logged, evicted best-effort, and
+treated as misses rather than authorization.
+
+`AUTH_USER_CACHE_TTL_SECONDS` defaults to **300 only when unset**. A supplied value
+must be a positive safe integer; blank, zero, negative, fractional, nonnumeric, or
+unsafe values fail startup, even when IdP auth is disabled. Setting a valid value
+alone does not enable IdP auth.
+Writes use atomic `SET ... EX <ttl>`; a hit only performs `GET`, so expiry is
+**fixed/non-sliding**. Explicit login or a successful Mongo fallback starts a fresh TTL.
+
+Redis results distinguish hit, miss, and unavailable. Expected read/write/delete
+failures are rate-limited in logs (without tokens or cached PII), with recovery
+logging. A missing/blank Redis host creates no Redis client and reports unavailable
+with a rate-limited warning, so resolution uses Mongo. Connection/command waits and
+reconnect backoff are bounded; offline command queuing/replay is
+disabled. On miss/unavailability, Mongo is authoritative; a failed cache write does
+not discard a successful Mongo result. Unexpected application errors are not converted
+to cache misses or success.
+
+**Consistency:** database-only role/disable changes may remain invisible until the
+active snapshot's TTL expires. Hits do not extend that window. If a database lookup
+or login discovers a missing, disabled, or invalid user, it denies access and
+best-effort evicts any old entry; it never negatively caches the result. Future
+role/disable mutation endpoints **must evict the matching key**. This cache is not a
+browser session/revocation store; Portal logout does not delete shared Redis access.
+
+#### Method-level flow walkthrough
+
+1. **Fresh Portal callback → explicit login.** `initializeAuth()` records the
+   account-bound redirect result; `getAccountKey()` and `getPendingRedirectLogin()`
+   associate it with the current account. `wireApiAuth()` keeps the existing MSAL bearer
+   transport. `AuthProvider` calls `api.enrollCurrentUser({ signal })`
+   before mounting/querying authenticated application data. `createAuthMiddleware()`
+   calls `AuthProvider.verifyAccessToken()` first. The POST `/users/me` handler calls
+   `UserAccessResolver.enrollOnLogin(identity, token)`, which bypasses cache reads,
+   invokes `ProfileEnricher.enrich()` (claims-only today), then
+   `UserStore.upsertOnLogin()`. The resolver validates/maps the stored result and calls
+   `RedisUserAccessCache.set()` best-effort before returning the Scope user. Only a
+   successful handshake calls `consumeRedirectLogin()` and enables application queries.
+2. **Ordinary request → cache hit.** Verification still runs first; for a normal
+   route, `createUserAccessMiddleware()` calls `resolveExisting(identity)`.
+   `RedisUserAccessCache.get()` validates the snapshot and tuple, then returns it.
+   No Mongo read/write, enrichment, promotion, or `lastLoginAt` update occurs.
+3. **Miss/expiry/invalid entry.** After verification, `resolveExisting()` calls
+   `cache.get()`, then `UserStore.findByIdentity()` for that exact tuple.
+   The shared validator rejects missing/disabled/reserved users or maps an active user
+   and calls `cache.set()`. Expiry never triggers JIT.
+4. **Redis unavailable.** `get()` reports unavailable and logs with rate limiting.
+   `resolveExisting()` follows the same Mongo read/validation path. `set()`/`delete()`
+   failure is best-effort; required Mongo failures still fail the request. Caching
+   resumes after Redis recovers without replaying offline writes.
+5. **Cached-account Portal reload → plain `/me`.** `initializeAuth()` restores an
+   account without a new redirect login event. `AuthProvider` calls
+   `api.getCurrentUser({ signal })`, producing GET `/users/me`.
+   That route calls `resolveExisting()`, with the hit/miss/outage behavior above.
+   It never refreshes profile or `lastLoginAt`; `user_not_enrolled` offers explicit
+   sign-in rather than silently switching to enrollment.
+
+#### Failure contract
+
+| Condition | Response |
+| --- | --- |
+| Present but empty, malformed, or unsupported `Authorization` header on a non-public route with auth configured | `401`, `code: "invalid_token"`, before token verification or access lookup; never anonymous fallback. Only an absent header preserves the no-token anonymous rollout. |
+| Invalid/expired IdP token | `401`, preserving verifier codes, **before Redis/Mongo access**. |
+| No verified identity on `/users/me` | `401`; no enrollment or warming. |
+| Missing stored user | `403`, `code: "user_not_enrolled"`; never anonymous fallback. |
+| Disabled stored user | `403`, `code: "user_disabled"`; no active cache write. |
+| Reserved `system` or invalid principal | `401`, `code: "invalid_principal"`; never admitted/cached. |
+| Invalid `login` query | `400`; no writes. |
+| JWKS unavailable or required auth service uninitialized | `503`. |
+| Redis unavailable, required Mongo operation succeeds | Continue with Mongo result; log cache failure. |
+| Required Mongo operation unavailable | `503`; never grant/anonymous fallback. |
+| Unexpected implementation/database error | Logged centralized `500` path, not catch-all `503`. |
+
+#### OpenAPI authentication metadata (implemented)
+
+Both `GET` and `POST /api/v1/users/me` declare the HTTP bearer scheme `bearerAuth`
+in OpenAPI. Swagger UI's **Authorize** control accepts the unchanged IdP access token
+without its `Bearer` prefix, not an ID token or a Scope-issued token. GET retains its
+documented `400`/`401`/`403`/`503` responses; POST documents
+`401`/`403`/`503` and a `200` current-user response.
+
+`apiRoute()` forwards optional `security` metadata only. There is no global
+OpenAPI security requirement, and other operations retain their existing
+anonymous rollout. This does not implement the deferred authorization guards
+below.
+
+### 4. Deferred: route-level authorization
 
 Extend `ApiRouteConfig` (the `apiRoute()` helper) with optional fields so authz is
 declarative and shows up in the OpenAPI spec (`security` + `401`/`403` responses):
@@ -376,7 +537,7 @@ wildcard/subsumption semantics in §2** — e.g. `scope/*:admin` matches, but
 > Roles still exist as the *authoring* convenience (you assign a user a role, which
 > expands to permissions). Routes are authored against permissions.
 
-### 5. Data ownership & scoping
+### 5. Deferred: data ownership & scoping
 
 The model rests on two ideas, kept deliberately small for v1:
 
@@ -505,7 +666,12 @@ that must be settled before that work is scheduled. **v1 ships `ownerId` +
 fields above are documented intent, not implemented yet.
 
 
-### 6. Service-to-service auth
+### 6. Deferred: service-to-service auth
+
+> This section preserves the future ownership/RBAC design. None of its Scope-issued
+> JWTs, signing keys, service credentials, minting endpoints, or revocation lists are
+> introduced by the current explicit-login/cache implementation. Human clients keep
+> presenting the IdP bearer; there is no human token-exchange endpoint.
 
 Internal callers (scheduler, report-generator, future internal API consumers) and any
 worker that reaches the API authenticate with a **service principal**, not a user.
@@ -563,10 +729,11 @@ downstream service applies the same ownership scoping). When that's required:
 - **Permissions are NOT baked into the token (revocation must work).** Embedding a
   `permissions` array means a disabled user, a demoted admin, or a removed permission keeps
   working until `exp` — revocation becomes theoretical. So:
-  - **Preferred: carry `sub` only.** Downstream **re-resolves** role + effective
-    permissions **and `disabledAt`** from the live `users` record (the same JIT/lookup path
-    as the IdP flow), so revocation and demotion take effect immediately. The
-    `disabledAt → 403` check applies on the **internal-JWT path**, not just the IdP path.
+  - **Preferred: carry `sub` only.** The future downstream path must resolve role,
+    effective permissions, and `disabledAt` without JIT. Its invalidation/revocation
+    policy must be defined before this feature ships. The current human IdP path uses
+    a fixed-TTL active-user cache (§3), **not a live Mongo check on every request**;
+    a live downstream lookup must not be mistaken for an existing human-path guarantee.
   - **If permissions must be carried** (e.g. downstream can't reach Mongo), bound the
     staleness explicitly: a hard **`exp` ceiling of ≤ 5 minutes** (not a vague "minutes")
     **and** a **`jti` revocation list** the verifier consults, so a token can be killed
@@ -604,10 +771,22 @@ downstream service applies the same ownership scoping). When that's required:
 > on-behalf-of token, or the token is handed to it directly on the queue message (short
 > `exp`). Either way the IdP is never involved.
 
+### 7. CLI authentication — current bearer compatibility, deferred interactive UX
+
+Today `apiFetch()` attaches the caller's raw IdP `SCOPE_TOKEN`. Already-enrolled
+users keep using it unchanged. A new identity must intentionally call
+`POST /api/v1/users/me` with that bearer before ordinary authenticated commands;
+GET `/me` returns `403 user_not_enrolled` rather than auto-enrolling.
+No CLI code is added by this milestone. For the explicit enrollment request, use
+`Cache-Control: no-store`, never prefetch it, and keep tokens out of logs.
+
+The remaining interactive CLI design is **deferred**:
+
 - New command group `scope auth`:
   - `scope auth login` — Entra **device-code flow** via
     `@azure/msal-node` `PublicClientApplication.acquireTokenByDeviceCode`. Provides a
-    **great login UX** (see below).
+    **great login UX** (see below). After successful device-code authentication, its
+    first Scope API call must be POST `/users/me`; token refresh is not enrollment.
   - `scope auth logout` — clears the cached tokens from the `SecretStore` (OS keychain).
   - `scope auth status` / `scope auth whoami` — shows the signed-in identity + role
     (calls `GET /api/v1/users/me`).
@@ -662,7 +841,8 @@ downstream service applies the same ownership scoping). When that's required:
 
 > [!IMPORTANT]
 > **Large cross-cutting refactor — centralized `apiFetch()` on top of [`ky`](https://github.com/sindresorhus/ky).**
-> The CLI today calls `fetch` directly in ~every command
+> **Historical refactor rationale (transport delivered; see subtask 7).** The CLI
+> previously called `fetch` directly in ~every command
 > ([apps/cli/src/commands/run.ts](../../apps/cli/src/commands/run.ts)
 > alone has a dozen call sites, plus `run-get-action.ts`, and every other command
 > module), and the **Portal** has its own ad-hoc `fetch` paths in
@@ -707,30 +887,57 @@ downstream service applies the same ownership scoping). When that's required:
 
 ### 8. Portal authentication
 
-- Add `@azure/msal-browser` + `@azure/msal-react`. Wrap the app in `<MsalProvider>` in
-  [apps/portal/src/main.tsx](../../apps/portal/src/main.tsx).
-- **Auth Code + PKCE** redirect flow. MSAL config (authority, clientId, scopes, audience)
-  is **hardcoded** in the Portal build for now — there is **no** `GET /api/v1/auth/config`
-  fetch. Retargeting the IdP is a config change in the Portal (mirroring the CLI).
-- `<MsalAuthenticationTemplate>` (or a route guard) gates the app; unauthenticated
-  users are redirected to login.
-- The `request()` helper in [apps/portal/src/lib/api.ts](../../apps/portal/src/lib/api.ts)
-  acquires a token silently (`acquireTokenSilent`, falling back to redirect) and sets
-  the `Authorization` header. On `401`, it triggers re-auth.
-- **Permission-aware UI**: an `AuthContext` exposes `{ user, role, permissions }` (from
-  `GET /api/v1/users/me`). Nav items, the Tokens/Accounts/Admin/Users pages, and
-  catalog-write actions are shown/enabled based on **permissions** (e.g.
-  `hasPermission("scope/user:admin")`), not hardcoded role names. (UI gating is
-  convenience only; the API is the enforcement boundary.)
-- **No dev role switcher.** Dev mode is removed (§1); the Portal always authenticates
-  against a real IdP. There is no `X-Dev-User` toggle and no synthetic-principal
-  bypass. The per-environment `SCOPE_AUTH_ENABLED` (integration/production, runtime)
-  and `VITE_AUTH_ENABLED_LOCAL` (local dev, build-time) controls (subtask 10) are
-  **not** such a bypass: they turn the auth **feature** off wholesale (no gate, no
-  token, **no fabricated principal**) as a rollout gate while the API lacks token
-  verification — they never authenticate a request as a user.
+- MSAL (`@azure/msal-browser` + `@azure/msal-react`) uses **Auth Code + PKCE**
+  redirect login. `MsalProvider` and `AuthProvider` are composed in
+  [main.tsx](../../apps/portal/src/main.tsx). IdP settings are build-time
+  `VITE_AUTH_*` configuration; there is no `/api/v1/auth/config` fetch.
+- `initializeAuth()` distinguishes an account-bound completed callback from a
+  cached-account reload. `AuthProvider` alone owns the Scope handshake via
+  `api.enrollCurrentUser({ signal })` or `api.getCurrentUser({ signal })`:
+  **callback → POST `/users/me`**; **cached account → GET `/users/me`**.
+  A silent token refresh is not a new login.
+- The context exposes signed-out/resolving/ready/denied/error states. **MSAL account
+  presence is not application authentication.** In `main.tsx`, `RequireAuth` wraps
+  all eager API-query providers and `App`, including its version/favicon request.
+  `FeatureFlagProvider` also gates its query explicitly on Scope readiness. No
+  signed-out exception may let feature flags race the handshake.
+  Auth-disabled mode preserves anonymous behavior without a handshake.
+- `AuthContext` owns the returned Scope UUID and singular `role`. MSAL account,
+  username, and subject may remain display fallbacks, but they do not replace the
+  API's identity or supply permissions.
+- `useAccount()` observes active-account-only changes; `getAccountKey()` includes
+  home/local account IDs, tenant, and environment. In-flight handshakes are
+  deduplicated per account/login event. Re-render,
+  StrictMode, focus, or query retries must not repeat a completed enrollment POST
+  request. Consume a callback event only after success; explicit retries retain
+  it. A plain `/me` `user_not_enrolled` denial shows a sign-in action, not automatic JIT.
+- `wireApiAuth()` and the existing shared `api-client` interceptor remain the only
+  bearer transport. The token provider **must not await the handshake** it is
+  supplying a token for; ordering comes from provider/query gating, avoiding a
+  deadlock or a second token/retry implementation.
+- Errors preserve HTTP status and stable API `code`. Keep the existing one-time
+  `401` token-refresh retry, then interactive redirect. `403` and `503` do not
+  automatically reauthenticate: show denial/sign-in or retry/sign-out actions.
+  Natural network retries in `ky` are disabled so a lost response cannot
+  automatically replay an already-completed enrollment POST's writes.
+- Logout/account change uses `clearSession()` to abort the handshake and shared API
+  session signal (`setApiSessionSignal()`), cancel/clear QueryClient data, and
+  discard the abandoned callback event. It ignores late
+  results, clears Scope state, and prevents another account's query data from
+  appearing. It does **not** delete the shared Redis cache entry.
+- No new bearer store, Scope session token, or separate sign-in endpoint is
+  introduced. `/users/me` uses client/server no-store; the enrollment POST is never
+  prefetched or polled.
+- `SCOPE_AUTH_ENABLED` (integration/production runtime) and
+  `VITE_AUTH_ENABLED_LOCAL` (local build-time) disable the Portal feature wholesale
+  (no MSAL, gate, token, or fabricated principal). They do not lock down the API;
+  existing anonymous API rollout policy still applies.
 
-### 9. SSE / log streaming
+**Deferred:** permission-aware navigation and admin/catalog-write gating based on
+effective permissions, self-scoped runs, and user-management UI belong to RBAC.
+The current Scope `role` is authoritative metadata, not evidence those features ship.
+
+### 9. Deferred: SSE / log streaming authorization
 
 `EventSource` cannot set custom headers, so **`fetch`-based streaming (`ReadableStream`)
 is the preferred transport** for the live-log SSE endpoints in both Portal and CLI: it can
@@ -740,7 +947,7 @@ cannot use fetch-streaming) and, when used, the token **must be short-lived and 
 scoped** to the stream, and **must never be logged** (scrubbed at the proxy and app layers).
 The SSE endpoint applies the same `readScope` access check on the parent run.
 
-### 10. Where secrets are stored
+### 10. Deferred RBAC/internal-auth secret storage
 
 We classify the auth-related material and store each appropriately. The guiding rule:
 **public verification material is fetched, not stored; real secrets go to Key Vault via
@@ -755,34 +962,37 @@ the existing External Secrets pipeline.**
 | **Portal tokens** | **Yes** | Browser memory via MSAL (session/`localStorage` per MSAL cache config) | No tokens in app code or repo. |
 | **App user records / roles / permissions** | No (PII) | MongoDB `users` collection | Identity + authorization data, not credentials. |
 
-Local dev (`docker:up:infra` + Lowkey Vault) follows the same shape: per-service
-`INTERNAL_API_KEY_<NAME>` values come from `.env`, and IdP verification points at a real
-IdP (or the future **Entra ID local emulator**, §1) — there is **no** auth-bypass mode, so
-local dev exercises the same verification path as production. New env vars are documented in
-[ENV_VARIABLES.md](../../ENV_VARIABLES.md) and wired through the API's
-External Secrets / SecretStore manifests.
+When the deferred service-auth feature ships, local dev (`docker:up:infra` +
+Lowkey Vault) should follow this same secret-storage shape. Current explicit-login
+auth uses a real IdP or the Entra local emulator (§1), existing Redis configuration,
+and `AUTH_USER_CACHE_TTL_SECONDS`; **it requires none of these future internal keys**.
+Deployment/External Secrets overlays outside this repository must be updated and
+verified separately when those deferred credentials are introduced.
 
 ---
 
 ## Subtasks
 
-> Ordered. Each `auth?`/`permissions` default keeps unlisted routes authenticated.
-> Tests are Vitest, co-located as `<file>.test.ts`.
+> This roadmap mixes delivered foundations with **deferred RBAC work**, marked below.
+> `auth?`/permission defaults describe future guards, not today's anonymous rollout.
+> Tests are Vitest, co-located as `<file>.test.ts`. The explicit-login/cache change
+> does not add a collection/migration or require the deferred permission model.
 
-1. ⬜ **Auth abstraction in `shared`** — Add `packages/shared/src/auth/` with
-   `AuthProvider`, `VerifiedIdentity`, `AuthClientConfig` (the **hardcoded-by-clients**
-   config shape), `AuthError`, the `Permission`/`Action` types, `UserRole` +
+1. 🟡 **Auth abstraction in `shared`** — Delivered: `AuthProvider`, `VerifiedIdentity`,
+   `AuthClientConfig`, `AuthError`, `UserDocument`, `EntraIdAuthProvider`, and claims
+   profile enrichment. **Deferred**: extend `packages/shared/src/auth/` with
+   the `Permission`/`Action` types, `UserRole` +
    `PrincipalRole`, the `ROLE_PERMISSIONS` map + `hasPermission()` (with the **specified
-   wildcard/subsumption semantics**, §2), and `EntraIdAuthProvider` (JWKS verify via
-   `jose`, extracting `oid`/`tid`/`email_verified`). Add `UserDocument` schema (role +
-   `permissionsAdd`/`permissionsRemove` + `idpTenant`/`emailVerified`). Export from
-   `shared`. **Done when** unit tests verify a signed JWT (mocked JWKS) passes,
-   tampered/expired/wrong-aud tokens throw, and `hasPermission` resolves role bundles +
+   wildcard/subsumption semantics**, §2), and `UserDocument` permission overrides
+   (`permissionsAdd`/`permissionsRemove`). Export from `shared`.
+   **Done when** existing signed-JWT rejection tests remain green and `hasPermission`
+   resolves role bundles +
    wildcards correctly **including the mandatory negative cases** (e.g. `scope/run:write`
    not satisfied by `scope/criteria:admin` or by `scope/run:read`).
 
-2. ⬜ **`users` collection + migration** — New migration: create `users` with unique
-   `(idp, idpTenant, idpSubject)` index + `email` index; add `ownerId` (a **Scope User
+2. 🟡 **`users` collection + ownership migration** — Delivered: `users` with unique
+   `(idp, idpTenant, idpSubject)` index and read-only `findByIdentity()`; cache
+   resolution reuses this index. **Deferred**: add `ownerId` (a **Scope User
    ID** = `users._id`) **and `visibility` (`"private"|"shared"`, default `private`)** to
    `requests`/`runs` and the user-owned catalog collections, with indexes (incl. a
    `visibility`+`ownerId` index for `readScope`); backfill `ownerId = "system"` (a reserved
@@ -790,17 +1000,15 @@ External Secrets / SecretStore manifests.
    Decisions). **Done when** `pnpm migrate:up`/`down` succeed locally and indexes exist.
    Depends on 1.
 
-3. ⬜ **API authn middleware + bootstrap** — Instantiate `AuthProvider` from env;
-   mount global middleware; JIT-provision users; **bootstrap admins matched on
-   `(idp, idpTenant, idpSubject)` within `AUTH_BOOTSTRAP_TENANTS`** (never email),
-   promote-only; resolve effective permissions; `anonymous` principal for no-token;
-   **per-service principal recognition** (per-service JWT or `INTERNAL_API_KEY_<NAME>`,
-   narrow perms). **No dev/bypass principals and no `AUTH_ENABLED`.** Enforce
-   `disabledAt → 403` on **both** the IdP and internal-JWT paths, and **never** assign
-   `req.user.id = "system"` to a live caller. Add `getUser(req)`/`hasPermission` + typed
-   `req.user`. **Done when** protected routes return `401` anonymous / `200` with a valid
-   token, a disabled user is rejected mid-session, and a per-service credential
-   authenticates with only its granted permissions. Depends on 1, 2.
+3. ✅ **Explicit-login API authn + access cache** — Verify IdP JWT before cache,
+   register `/users/me` before existing-user middleware, and share
+   `UserAccessResolver`. Only POST `/users/me` enrolls/refreshes/bootstraps; every
+   GET is read-only. Promotion uses exact identity + tenant allowlists and remains
+   promote-only; email storage still requires verification. Normal requests use
+   fixed-TTL Redis, then read-only indexed Mongo fallback. Missing/disabled users
+   receive distinct `403`s; `system` receives `401`.
+   Preserve anonymous/public rollout. **Deferred**: permissions, service/internal-JWT
+   verification, and mutation-driven eviction endpoints.
 
 4. ⬜ **Route authz in `apiRoute()`** — Add `auth`/`permissions` to `ApiRouteConfig`,
    per-route permission guard (wildcard-aware, per §2 semantics incl. negative cases), and
@@ -823,11 +1031,13 @@ External Secrets / SecretStore manifests.
    item (`403` on write), and a valid deep link grants read-only access (5b); `admin` sees
    all. **5b must ship with subtask 11.** Depends on 3 (5a) / 3, 4, 11 (5b).
 
-6. ⬜ **User endpoints** — `GET /api/v1/users/me` (self; returns role + effective
-   permissions), `GET/PATCH /api/v1/users` + `/:id/role` and permission overrides
-   (requires `scope/user:admin`, soft-disable). **No `/api/v1/auth/config` endpoint** —
-   client config is hardcoded (§7/§8). **Done when** endpoints return correct data and
-   role/permission changes take effect on next request. Depends on 3, 4.
+6. 🟡 **User endpoints** — Delivered: `/users/me` query/method/no-store contract (§3),
+   returning Scope UUID, singular role, and optional profile/provider fields, not
+   effective permissions. **Deferred**: `GET/PATCH /api/v1/users`, `/:id/role`,
+   permission overrides, and soft-disable administration (`scope/user:admin`).
+   Mutation endpoints must evict the namespaced active-user cache entry; until they
+   exist, DB-only role/disable edits can remain stale until TTL expiry.
+   **No `/api/v1/auth/config` or `/auth/login` endpoint.**
 
 7. ✅ **Centralized `apiFetch()` refactor on `ky`** *(large, cross-cutting)* — Introduce a single
    `apiFetch()` wrapper in the CLI — **built on [`ky`](https://github.com/sindresorhus/ky)** as the
@@ -851,7 +1061,8 @@ External Secrets / SecretStore manifests.
    > mocks don't need `clone()`). Seams for subtasks 8/9: `setTokenProvider`, `setReauthHandler`,
    > `setApiLogSink`, `resetApiClient`; error shaping via `ApiError` + `readApiError(response)`. **Portal** —
    > [apps/portal/src/lib/api-client.ts](../../apps/portal/src/lib/api-client.ts) exports a shared `ky`
-   > instance (`apiClient`) with the same config + a `setApiTokenProvider` auth seam; `lib/api.ts`
+   > instance (`apiClient`) with a `setApiTokenProvider` auth seam and one forced `401`
+   > retry (natural network/status retries disabled to avoid login replay); `lib/api.ts`
    > `request()`/`batchArchive` and `hooks/useHarExtraction.ts` now route through it (`recordServerDate`
    > stays in the facade). The **only** remaining direct `fetch` calls are: the wrappers themselves, the
    > CLI's external GitHub Releases poll in `utils/update-check.ts` (its own `token` auth — must never
@@ -878,11 +1089,11 @@ External Secrets / SecretStore manifests.
    `--debug-zip` produces a zip, and a redaction test asserts no token/refresh-token/
    service key ever appears in the output. Depends on 7.
 
-10. 🟡 **Portal auth** — `@azure/msal-react`; `MsalProvider`; route guard; token
-    injection in `api.ts`; `AuthContext` with `useMe()`; permission-aware nav/pages;
-    **hardcoded IdP config** (no `/auth/config`). **No dev role switcher.** **Done when**
-    unauthenticated users are redirected to login, runs list is self-scoped, and admin UI
-    is hidden for `user`. Depends on 6.
+10. 🟡 **Portal auth** — Delivered: MSAL bearer transport plus one `AuthProvider`
+    handshake, callback/reload distinction, query gating, account-bound deduplication/
+    cancellation, and API-authoritative Scope identity/role (§8). **Deferred**:
+    permission-aware nav/pages and self-scoped runs. IdP settings remain build-time
+    `VITE_AUTH_*`; no `/auth/config`, Scope token store, or dev role switcher.
 
     > **MVP shipped (authentication only).** Delivered so far: MSAL sign-in
     > (auth-code + PKCE redirect), `MsalProvider` + `AuthProvider`, a `RequireAuth`
@@ -892,6 +1103,13 @@ External Secrets / SecretStore manifests.
     > `setApiTokenProvider`/`setReauthHandler` seams). IdP config is build-time
     > (`VITE_AUTH_*`, see [ENV_VARIABLES.md](../../ENV_VARIABLES.md)) defaulting to
     > the `entra-local` emulator for local dev.
+    > Docker's `builder` stage accepts these public settings as build arguments:
+    > Compose forwards them through `portal.build.args`, and CI forwards the
+    > same-named GitHub Actions configuration variables. They are embedded by
+    > Vite, not read from the final nginx container's environment. The dev image
+    > continues to read them from the Vite process environment. Changing the
+    > IdP requires rebuilding the image; promoting one image preserves its IdP
+    > settings. Empty optional redirect settings retain the current Portal origin.
     >
     > **Feature toggle (important).** Portal auth is **on by default (secure by
     > default)** but can be turned off per environment via **three independent
@@ -903,32 +1121,41 @@ External Secrets / SecretStore manifests.
     > written into `/config.js` by `apps/portal/docker-entrypoint.sh` (same
     > mechanism as `SCOPE_DOCS_BASE_URL`). When off, the Portal skips MSAL entirely
     > — no sign-in gate, no account menu, no `Authorization` header. This is a
-    > **rollout gate**, used to keep auth off in an environment **until its API
-    > verifies tokens** (the API does not yet). It is **not** a dev auth-bypass: it
+    > **rollout gate**, controlled per deployment while compatible API/Portal versions
+    > are deployed. The API in this branch verifies tokens. It is **not** a dev auth-bypass: it
     > disables the feature wholesale and fabricates **no** principal (contrast the
     > forbidden `X-Dev-User`/synthetic-user bypass in §8 and the security matrix).
-    > Since the API is the enforcement boundary, disabling a control once the API
-    > verifies tokens simply means the Portal sends no token and the API rejects the
-    > request — it cannot grant access. Resolution precedence: runtime
+    > Disabling a control means the Portal sends no token; `/users/me` rejects that
+    > request, while other routes retain existing anonymous rollout behavior.
+    > It never fabricates an authenticated user. Resolution precedence: runtime
     > `authEnabled` (int/prod) wins; else `VITE_AUTH_ENABLED_LOCAL` (local dev); else
     > default enabled. See [ENV_VARIABLES.md](../../ENV_VARIABLES.md) "Feature
     > toggle".
     >
     > **One-command local dev.** Any `pnpm docker:dev:*` script that starts the
     > Portal brings up the `entra-local` emulator (compose `auth` profile) over
-    > HTTPS with an mkcert-issued, locally-trusted `localhost` cert
-    > (`scripts/ensure-dev-certs.sh`), and auto-registers the per-worktree Portal
+    > HTTPS with an mkcert-issued certificate covering both `localhost` and the
+    > Compose hostname `entra-local` (`scripts/ensure-dev-certs.sh`), and
+    > auto-registers the per-worktree Portal
     > redirect URI via a one-shot `entra-local-init` service. MSAL requires the
     > authority to be served over HTTPS (it rejects non-HTTPS authorities with
     > `authority_uri_insecure`), hence the mkcert TLS setup rather than plain HTTP.
+    > The provisioning script renews older localhost-only or expiring certificates
+    > and exports only the public CA. Compose shares that CA in a separate,
+    > read-only volume with the API and redirect-registration helper via
+    > `NODE_EXTRA_CA_CERTS`; the emulator health check trusts it too. The API
+    > never receives the emulator private key, and no auth-related HTTPS call
+    > disables certificate verification. The CA initializer remains optional
+    > without the `auth` profile; recreate clients after rotating the CA because
+    > Node loads extra CAs at startup.
     > The only interactive step is a one-time `mkcert -install` password prompt.
     > See [ENV_VARIABLES.md](../../ENV_VARIABLES.md) "Local dev setup (entra-local)".
     >
-    > **Deferred (needs subtask 6 + API-side authn):** because the API does not
-    > verify tokens yet, enforcement is **client-side only** and identity shown in
-    > the UI comes from **MSAL account token claims**, not `GET /api/v1/users/me`
-    > (no `useMe()` yet). Self-scoped runs lists and permission-aware nav / admin-UI
-    > hiding are authorization concerns and are **out of scope for this MVP**.
+    > **Scope handshake delivered:** after callback the first Scope API request is
+    > POST `/users/me`; a cached-account reload first uses GET `/users/me`.
+    > `AuthContext` does not expose application-authenticated identity until that
+    > succeeds; feature flags and route queries wait too. MSAL-only identity display
+    > is no longer the contract. Self-scoping and permission-aware UI remain deferred.
 
 11. ⬜ **Service-to-service auth** *(co-requisite of subtask 5)* — **Per-service** principal
     recognition: per-service JWT (verified with the Scope public key) **or**
@@ -963,7 +1190,13 @@ External Secrets / SecretStore manifests.
     `readScope` check on the parent run. **Done when** log streaming works authenticated
     and is owner/shared-scoped. Depends on 5, 8, 10.
 
-14. ⬜ **Deployment & config** — Add auth env vars to
+14. 🟡 **Deployment & config** — Current cache config is
+    `AUTH_USER_CACHE_TTL_SECONDS` plus existing Redis settings; isolate independently
+    backed deployments by Mongo database namespace. Validate the deployed API/Portal
+    pairing and enrollment handshake before enabling Portal auth. No new signing
+    secret is needed. External deployment overlays must be checked separately, not
+    assumed updated by this branch. **Deferred RBAC/internal-auth deployment**: add
+    the corresponding auth env vars to
     [ENV_VARIABLES.md](../../ENV_VARIABLES.md) and the API/portal K8s manifests
     (deployment, configmap), **External
     Secrets** for the **per-service `INTERNAL_API_KEY_<NAME>`** values + the **internal JWT
@@ -974,7 +1207,9 @@ External Secrets / SecretStore manifests.
     at the registration** — **no Entra App Roles**. **Done when** the int overlay
     deploys with auth enforced (no bypass mode exists). Depends on 3–13.
 
-15. ⬜ **Docs** — Update [AGENTS.md](../../AGENTS.md), the `scope-api` /
+15. 🟡 **Docs** — Explicit-login/cache guidance is updated in [AGENTS.md](../../AGENTS.md),
+    [ENV_VARIABLES.md](../../ENV_VARIABLES.md), this spec, and the API/CLI skills.
+    **Deferred:** update the `scope-api` /
     `scope-cli` skills, [docs/architecture/overview.md](overview.md), and
     [docs/architecture/app-design.md](app-design.md) to reflect auth/RBAC, the `users`
     model, `ownerId`, and the `security_audit`/metrics surface. **Done when** docs
@@ -983,9 +1218,11 @@ External Secrets / SecretStore manifests.
 
 ---
 
-## Implementation Plan (phased)
+## Deferred RBAC rollout (historical phase numbering)
 
-The work is sequenced so that **authenticating the user and stamping `ownerId` on
+The explicit-login/cache slice of Phase 1 is implemented without ownership changes,
+CLI interactive login, or full API lockdown. The remaining work is sequenced so that
+**authenticating the user and stamping `ownerId` on
 created items comes first**; **enforcing permissions/ownership comes second**. This lets
 us ship identity + provenance early (low risk — nothing is locked down yet), then turn on
 enforcement once data is correctly attributed and the report-generator is ready.
@@ -995,21 +1232,21 @@ Auth & RBAC rollout
 │
 ├── Phase 0 — Foundations (no behavior change)              [subtasks 1, 2]
 │   ├── shared/auth: AuthProvider, EntraIdAuthProvider, Permission, ROLE_PERMISSIONS
-│   ├── users collection + (idp, idpTenant, idpSubject) / email indexes
+│   ├── users collection + unique identity index; non-unique email index (sparse on native MongoDB only)
 │   └── add ownerId + visibility to requests/runs/catalog (+ indexes); backfill "system" sentinel
 │       └── Gate: migrations up/down clean; shared unit tests green
 │
 ├── Phase 1 — Authenticate the user (IDENTITY FIRST)        [subtasks 3, 6, 7, 8, 10]
-│   │   Goal: every human caller is identified; NO enforcement yet. (THE milestone.)
+│   │   Current slice: explicit enrollment + active-user resolution; no route RBAC.
 │   ├── API authn middleware (verify token → req.user)       [3]
-│   │     • always-verify (NO bypass mode); anonymous principal = zero perms
-│   │     • JIT-provision users; bootstrap admins by (idp,tenant,subject)
-│   │     • permissions resolved & attached, but NOT yet enforced on routes
-│   ├── GET /users/me (auth config is hardcoded, no endpoint)  [6, partial]
-│   ├── CLI: apiFetch() refactor + `scope auth` login/SecretStore [7, 8]
-│   └── Portal: MsalProvider + login + token injection        [10]
-│       └── Gate: logged-in identity flows end-to-end on CLI + Portal;
-│                 app still behaves as today for everyone
+│   │     • verify every configured non-public bearer; anonymous rollout retained
+│   │     • POST /users/me ONLY: JIT/profile/lastLoginAt/bootstrap
+│   │     • ordinary requests: verify → Redis → indexed Mongo fallback (no writes)
+│   ├── GET /users/me: Scope UUID + singular role; no permission expansion [6, partial]
+│   ├── CLI: apiFetch() delivered; interactive login/SecretStore deferred [7, 8]
+│   └── Portal: callback POST / cached-account GET handshake [10]
+│       └── Gate: queries wait for Scope identity; new bearer identities enroll explicitly;
+│                 anonymous/public rollout remains unchanged
 │
 ├── Phase 2 — Stamp ownerId on created items (PROVENANCE)   [subtask 5a]
 │   │   Goal: every NEW item records its owner + visibility; still no read/write blocking.
@@ -1042,15 +1279,17 @@ Auth & RBAC rollout
 ```
 
 **Why this order**
-- **Phases 0–2 are non-breaking**: they add identity and `ownerId` provenance without
-  denying anyone access, so they can merge and run in production safely and incrementally.
+- **Current compatibility boundary:** existing enrolled IdP-bearer callers and
+  anonymous/public rollout stay supported. New bearer identities must explicitly
+  enroll; disabled users are denied when observed after login or cache expiry.
+  This is not a promise that every previously authenticated request still succeeds.
 - **The hard cutover is Phase 3** (ownership enforcement + service-to-service auth shipped
   together). Doing identity + provenance first means that by the time we flip enforcement
   on, runs are already correctly attributed and the report-generator path is ready —
   avoiding `404`s and mis-scoped data.
 - **Permission enforcement (Phase 4) is deliberately second**, per the priority: identity
-  and ownership are the must-haves; fine-grained RBAC builds on the already-attached
-  `permissions`.
+  and ownership are the must-haves; fine-grained RBAC must add permission resolution
+  rather than assume the current singular `role` is already a permission bundle.
 
 > Subtask 5 is split for sequencing: **5a** (stamp `ownerId` + `visibility` on create,
 > Phase 2) and **5b** (apply `readScope`/`writeScope` + deep links to reads/writes,
@@ -1060,21 +1299,69 @@ Auth & RBAC rollout
 
 ## Acceptance Scenarios
 
-### Setup
+### Current explicit-login/cache contract
+
+Use configured Entra/entra-local, the existing users identity index, and isolated
+Redis test data. Do not stop a shared Redis service to simulate outages.
+
+The opt-in
+[`auth-flow.integration.test.ts`](../../apps/api/src/auth/auth-flow.integration.test.ts)
+exercises real RS256 verification with locally generated keys and the registered
+Express routes backed by real MongoDB/Redis. Start **isolated test infrastructure**,
+set `AUTH_TEST_MONGO_URI` to its Mongo connection URI and `AUTH_TEST_REDIS_PORT` to
+its unauthenticated loopback Redis port, then run from the repository root:
+
+```bash
+pnpm exec vitest run --config vitest.integration.config.ts apps/api/src/auth/auth-flow.integration.test.ts
+```
+
+Both variables are required to opt in; a **skipped suite is not validation**.
+The suite creates/drops its own randomized Mongo database and cleans only its
+namespaced Redis keys. It covers enrollment, read-only hits/expiry, token rejection
+before cache access, disabled-user denial, and unavailable-cache Mongo fallback.
+It does not replace the Portal callback/order checks or live IdP/JWKS outage tests.
+
+| Scenario | Expected result |
+| --- | --- |
+| Fresh Portal callback | First Scope API call is `POST /api/v1/users/me`; feature flags and all other eager queries wait for success. |
+| First enrollment | Scope UUID/default `user` role; verified profile handling; exact identity + tenant bootstrap independent of email verification; explicit `lastLoginAt` write; active cache warmed. |
+| Login on active cache hit | Still bypasses the read cache and upserts, returning/warming the latest stored role. |
+| Ordinary/plain `/me` hit | Verify token first; no Mongo operation, profile enrichment, bootstrap promotion, or `lastLoginAt` write; TTL not extended. |
+| Miss/expiry | Exact identity Mongo read, validate/warm; missing user is `403 user_not_enrolled`, never JIT. |
+| Tenant/provider/database isolation | Same `oid` in a different tenant/provider or independently namespaced database cannot reuse an entry. |
+| Bad cache payload | Malformed/version-mismatched/identity-mismatched data is a logged, evicted miss, not an authenticated user. |
+| Invalid/expired token with warm cache | `401` before all cache/DB operations. |
+| Query/method boundary | Every GET is read-only; invalid/repeated/structured login values are `400`; only POST enrolls, while HEAD and other routes never do. |
+| Disabled/reserved identity | `403 user_disabled` / `401 invalid_principal`; no negative cache, discovered old active entry evicted best-effort. |
+| Disabled explicit login ordering | Existing upsert may refresh profile/timestamps before disabled validation returns `403`; still never caches/admit the user. |
+| TTL | Unset → 300; positive safe integer override accepted; invalid values rejected; hits non-sliding; DB-only role/disable changes visible after expiry. |
+| Redis outage/recovery | Bounded operations and rate-limited logs; Mongo fallback; successful DB result survives cache-write failure; no offline write replay. |
+| Required Mongo/JWKS unavailable | `503`; never anonymous/success fallback. Unexpected implementation/database errors remain `500`. |
+| Cached-account reload | Plain `/users/me` first, no `lastLoginAt` change; missing enrollment requires explicit sign-in. |
+| Portal races/errors | Deduplicate same-account/login event; explicit retry retains failed callback; logout/account change cancels/ignores stale work and clears account data; no `403`/`503` redirect loop. |
+| Compatibility | Existing enrolled raw IdP bearers, public probes, anonymous worker rollout, and auth-disabled Portal still work; CLI implementation unchanged. |
+| HTTP cache policy | All `/users/me` responses, including errors, are no-store; client sends no-store and never prefetches login. |
+
+### Deferred RBAC/CLI/internal-auth setup
 
 - Start infra: `pnpm docker:up:infra`; run migrations: `pnpm migrate:up`.
 - Register an Entra **API app** (expose `access_as_user`) and a **public client**
   (device-code + SPA redirect URIs), both **multi-tenant**. **No App Roles** —
   roles/permissions are managed in Scope. Tenant filtering (if any) is set on the
   registration.
-- Env: `AUTH_AUTHORITY`, `AUTH_API_CLIENT_ID`, `AUTH_CLIENT_ID`, `AUTH_SCOPES`,
+- Env: `AUTH_PROVIDER=entra`, `AUTH_AUTHORITY`, `AUTH_API_CLIENT_ID`, `AUTH_SCOPES`,
   `AUTH_BOOTSTRAP_ADMINS=entra:<tid>/<oid>`, `AUTH_BOOTSTRAP_TENANTS=<tid>`,
-  `INTERNAL_API_KEY_REPORTGEN=<secret>`. (No `AUTH_ENABLED` — there is no bypass mode.)
-  The CLI/Portal carry the **hardcoded** IdP config (no `/auth/config`).
+  `AUTH_USER_CACHE_TTL_SECONDS=300`. Only the **deferred** service-auth scenarios need
+  `INTERNAL_API_KEY_REPORTGEN` or internal signing material. No `AUTH_ENABLED`
+  synthetic-principal bypass. Clients carry their own IdP configuration (no `/auth/config`).
 - Two test identities: `admin@…` (its `(idp,tenant,subject)` in the bootstrap list) and
   `user@…` (not).
 
-### Scenarios
+### Deferred RBAC/CLI/internal-auth scenarios
+
+These are future enforcement criteria, **not implemented acceptance claims**. In
+particular, the current no-token request to `/requests` is not globally locked down.
+Any future "next request" role/disable guarantee requires mutation-driven cache eviction.
 
 | # | Scenario | Steps | Expected Result |
 |---|----------|-------|-----------------|
@@ -1085,7 +1372,7 @@ Auth & RBAC rollout
 | 5 | User cannot access foreign run | As `user`, `scope run get -i <admin-run-id>` | `404` (not `403`) |
 | 6 | Admin sees all runs | `scope run list` as `admin` | Both runs listed |
 | 7 | Permission-gated route blocked | As `user`, `PATCH /api/v1/users/<id>/role` (needs `scope/user:admin`) | `403` |
-| 8 | Admin manages roles | As `admin`, promote `user`→`admin`; user re-requests | New permissions effective on next request |
+| 8 | Admin manages roles | As `admin`, promote `user`→`admin`; mutation evicts its access-cache key; user re-requests | New permissions effective after eviction; DB-only edits are TTL-bound |
 | 9 | Portal login + scoping | Open Portal as `user` | Redirected to Entra; after login, Runs list shows only own runs; admin nav hidden |
 | 10 | Portal admin UI | Open Portal as `admin` | Tokens/Accounts/Admin/Users pages visible; all runs listed |
 | 11 | Shared vs private visibility | As `user`, create one `private` and one `shared` criterion; as another `user`, list/get/edit both | Both visible & usable; **only the owner** can edit; editing the shared one as non-owner → `403`; the private one is invisible to the other user (`404` on get) |
@@ -1099,7 +1386,7 @@ Auth & RBAC rollout
 | 19 | Audit log written | Onboard a new user, logout, regenerate a service key, mint an on-behalf-of token | `security_audit` has `user_onboarded`, `login`, `logout`, `key_regenerated`, `token_minted` rows; no secrets in `detail` |
 | 20 | Audit metrics exposed | `curl /metrics` after the above | `scope_auth_logins_total`, `scope_auth_onboarded_total`, `scope_auth_key_regenerations_total` counters incremented |
 | 21 | Read-only deep link | Owner shares a deep link to a `private` run; recipient opens it, then attempts an edit | Recipient can **view** the run read-only; any write/delete → `403`; revoking the link → subsequent view `404` |
-| 22 | Revocation takes effect | Disable a user (or revoke an on-behalf-of `jti`) while a token is still within `exp` | Next request → `403`/`401` (no waiting for `exp`); covers both the IdP and internal-JWT paths |
+| 22 | Mutation-driven revocation | Future disable endpoint evicts the user's active-cache key, or revoke a future internal-token `jti` | Following resolution denies access; the current DB-only disable path remains TTL-bound, not an immediate live-DB check |
 | 23 | No bypass mode | Set any env (`AUTH_ENABLED`, `DEV_USER`) and send `X-Dev-User` | Ignored entirely; request is still anonymous → `401`; no synthetic principal is ever created |
 
 UI checks (Portal): login redirect, loading/empty/error states on Runs list, admin-only
@@ -1108,6 +1395,9 @@ nav hidden for `user`, role badge in header. Responsive at 375 / 768 / 1280 px.
 ---
 
 ## Constraints
+
+Deferred CLI/RBAC/internal-token requirements below apply only when those features
+ship; they are not dependencies or secrets introduced by explicit login/caching.
 
 - **CosmosDB-compatible Mongo**: unique compound index `(idp, idpTenant, idpSubject)` and
   the new `ownerId`/`visibility` indexes must use features the Cosmos Mongo API supports
@@ -1124,8 +1414,8 @@ nav hidden for `user`, role badge in header. Responsive at 375 / 768 / 1280 px.
   without touching call sites.
 - **OpenAPI parity**: every route's `auth`/`permissions` must surface in the generated
   spec; the snapshot test must be updated.
-- **CLI ↔ Portal parity** (AGENTS.md): any auth/role capability in the Portal must
-  exist in the CLI.
+- **CLI ↔ Portal parity** (AGENTS.md) remains a product goal. Interactive CLI auth
+  is deferred; current bearer compatibility and explicit enrollment are documented.
 - **No bypass / dev mode**: there is **no** env-toggled auth bypass. No `AUTH_ENABLED`,
   `DEV_USER`, or `X-Dev-User` synthetic principal exists in any environment. Local
   development authenticates against a real IdP; a future **Entra ID local emulator**
@@ -1144,13 +1434,39 @@ nav hidden for `user`, role badge in header. Responsive at 375 / 768 / 1280 px.
   Mongo audit write must **fail the security-sensitive operation closed** (not silently
   drop the record); the retention TTL is an explicit policy decision, not an incidental
   default.
-- **Performance**: token verification per request must be local (cached JWKS), no
-  network round-trip to the IdP on the hot path; user lookup is a single indexed
-  Mongo read (cacheable per request).
+- **Performance**: every non-public authenticated request verifies the IdP signature
+  and claims first, usually locally with cached JWKS (fetch/rotation may require
+  network). An active Redis hit performs **no Mongo lookup/write**. Miss/unavailability
+  performs one indexed identity read and best-effort cache warming, never JIT.
+  Explicit login bypasses the cache read and performs its required upsert.
+- **Consistency and failures**: fixed TTL bounds active-user staleness; no sliding
+  extension or negative cache. Redis failures fall back to Mongo, required Mongo/JWKS
+  outages fail `503`, and unexpected errors remain `500`. Never log/cache raw tokens.
 
 ---
 
 ## Decisions
+
+### Current explicit-login/access decisions
+
+| Decision | Choice |
+| --- | --- |
+| Credential | IdP access token unchanged on every call, verified before any cache access; no Scope session JWT or `/auth/login`. |
+| Enrollment | Only POST `/users/me`; every GET `/me` and other routes resolve existing active users. |
+| Store identity | Exact `(idp, tid, oid)` lookup; Scope-owned UUID and database role returned to clients. |
+| Cache isolation | `auth-user:v1:<encoded Mongo database namespace>:<encoded idp>:<encoded tid>:<encoded oid>`. |
+| Expiration | `AUTH_USER_CACHE_TTL_SECONDS`, default 300 only when unset, positive safe integer, fixed/non-sliding `SET EX`. |
+| Denial vs cache miss | Miss/unavailable reads Mongo; missing/disabled users are distinct `403`s, reserved `system` is `401`; no negative cache. |
+| Bootstrap | Exact verified identity tuple + explicit tenant allowlist, independent of email verification, only on explicit login, promote-only. |
+| Timestamp | `lastLoginAt` records the explicit upsert, not ordinary activity or trustworthy proof of an interactive callback; disabled check follows upsert. |
+| Portal readiness | Callback POST `/me`, cached-account GET `/me`; API UUID/role authoritative; all queries gated and account-bound work deduplicated/cancelled. |
+| Rollout | Public and anonymous behavior preserved; no full RBAC/ownership lockdown; enrolled CLI bearers remain compatible. |
+
+### Retained RBAC roadmap decisions
+
+The following records include **deferred** permission, internal-JWT, service-auth,
+CLI-login, audit, and secret-storage designs; they do not change the current
+credential or cache consistency contract.
 
 | Decision | Options Considered | Choice | Rationale |
 |----------|-------------------|--------|-----------|
@@ -1170,7 +1486,7 @@ nav hidden for `user`, role badge in header. Responsive at 375 / 768 / 1280 px.
 | Downstream user identity | Forward IdP token vs Scope-minted internal token | **Scope-minted internal JWT (`iss=scope-api`, asymmetric, public-key verified); IdP token never leaves the API.** To keep authorization from going stale, the token carries **`sub` only and permissions are re-resolved downstream** (preferred), or — if perms are embedded — `exp ≤ 5min` **and** a `jti` revocation list, **both** required. `disabledAt`/revocation is re-checked on the internal-JWT path, not just the IdP path. | Downstream stays IdP-agnostic; revocation (disable user, demote admin, drop a permission) takes effect within minutes, not at token `exp`. |
 | Internal-JWT staleness | Long-lived perms-in-token vs re-resolve / tight exp + jti | **Re-resolve from `sub` downstream (preferred); else `exp ≤ 5min` + `jti` denylist** | Embedding permissions makes revocation impossible until `exp`; a 5-minute ceiling plus a denylist makes "short exp" concrete and enforceable. |
 | Entra tenancy | Single-tenant vs multi-tenant | **Multi-tenant** (Question D): accept configured tenants, no `tid` pinning in business logic; tenant filtering at the App Registration + `AUTH_BOOTSTRAP_TENANTS` allowlist for promotion | App-registration-level control; code stays tenant-agnostic. Because `oid` is unique only **within** a tenant (and guests carry their home-tenant `oid`), the unique identity index is **`(idp, idpTenant, idpSubject)`** — `tid` is part of the key. |
-| Bootstrap-admin matching | Match on email vs identity tuple | **Match on `(idp, idpTenant, idpSubject)`, require `email_verified`, restrict to `AUTH_BOOTSTRAP_TENANTS`; promotion is promote-only (removal from the list does not auto-demote)** | Entra `email`/`preferred_username` is mutable and not guaranteed verified; matching on identity + verified email + tenant allowlist closes the auto-promote-by-email-collision hole and the silent-demote-by-ConfigMap risk. |
+| Bootstrap-admin matching | Match on email vs identity tuple | **Match on `(idp, idpTenant, idpSubject)`, restrict to `AUTH_BOOTSTRAP_TENANTS`; promotion is independent of email verification and promote-only (removal from the list does not auto-demote)** | Entra `email`/`preferred_username` is mutable and not guaranteed verified; exact identity + tenant matching prevents promotion by email collision without depending on a nonstandard workforce email-verification claim. Promote-only behavior prevents silent demotion by a ConfigMap edit. |
 | Security audit | None vs log-only vs Mongo + metrics | **Append-only `security_audit` in MongoDB + Prometheus counters** (Question F) for login/logout/onboarding, key-regeneration, **token minting**, **service-key cross-user reads**, and **permission overrides** | Durable forensic record + alerting; single `recordSecurityEvent()` helper; a failed audit write **fails the operation closed**; retention TTL is an explicit policy choice; no secrets in audit. |
 | Secret storage | Env-only vs Key Vault + ESO | **Key Vault → External Secrets** for per-service `INTERNAL_API_KEY_<NAME>`/client secret; JWKS fetched (not stored); **CLI tokens via a Scope-owned `SecretStore` backed by `cross-keychain`** (`0600` fallback) | Matches existing `mongo-secrets`/`redis-secrets` pattern; public keys are not secrets; the `SecretStore` wrapper replaces unmaintained `keytar` and isolates the backing library. |
 | CLI login UX | Print URL+code only vs assisted | **Clipboard copy + browser auto-open, manual fallback always shown** | Fast happy path, still works headless/SSH. |
@@ -1229,7 +1545,7 @@ promotes)?
 
 ### B. Sharing, groups & projects
 
-**Question B**: v1 **already ships** two-level visibility (`private`/`shared`) and
+**Question B**: the **deferred RBAC v1** plans two-level visibility (`private`/`shared`) and
 read-only **deep links** (§5). What remains future is **groups/projects** and
 **per-user/per-group ACLs**. §5 ("Future-proofing") reserves the data shape and routes
 all scoping through one `readScope`/`writeScope` chokepoint so this is additive. Decisions
@@ -1254,16 +1570,18 @@ to settle **before** scheduling that work:
 v1 implements `private`/`shared` + deep links and reserves the remaining optional fields;
 **none** of the group/ACL machinery ships yet.
 
-### C. Admin bootstrap — **decided**
+### C. Admin bootstrap — **implemented**
 
 **Decision** *(confirmed)*: `AUTH_BOOTSTRAP_ADMINS` is the **sole** bootstrap mechanism
 for seeding the first admin, but it is matched on the **identity tuple
 `(idp, idpTenant, idpSubject)`** — **not** on email, which is mutable and not guaranteed
-verified. The matched login must also have `email_verified = true` and originate from a
-tenant in `AUTH_BOOTSTRAP_TENANTS`. Bootstrap is **promote-only**: removing an entry does
+verified. The matched explicit POST `/users/me` request must originate from a
+tenant in `AUTH_BOOTSTRAP_TENANTS`. Neither `email` nor `email_verified` is required
+for promotion; verified-email storage remains a separate, unchanged policy.
+Bootstrap is **promote-only**: removing an entry does
 **not** auto-demote an existing admin (prevents a misconfigured ConfigMap from silently
-revoking access). We do **not** use Entra App Roles. All later role/permission changes go
-through the admin user-management endpoints (`scope/user:admin`).
+revoking access). We do **not** use Entra App Roles. Future admin user-management
+endpoints (`scope/user:admin`) must invalidate the corresponding cache entry.
 
 ### D. Multi-tenant Entra — **decided**
 
@@ -1277,8 +1595,8 @@ code.
 Implications:
 - Issuer validation must accept the multi-tenant issuer pattern (per-tenant `iss`
   containing the caller's `tid`); `aud` is still pinned to `AUTH_API_CLIENT_ID`.
-- JWKS is resolved via OIDC discovery for the token's tenant (or the common metadata
-  endpoint); the key cache is keyed by `(tenant, kid)`.
+- JWKS is fetched/cached by `jose` from the configured endpoint; tenant identity
+  still comes from verified `tid`/issuer claims, never an unverified cache key.
 - Identity stays unique via **`(idp, idpTenant, idpSubject)`** where `idpSubject = oid`
   and `idpTenant = tid`. The Entra `oid` is **stable per user per tenant** — it is **not**
   globally unique, and guest/B2B users carry their **home-tenant** `oid`. Including `tid`
@@ -1287,7 +1605,7 @@ Implications:
 - No code change is needed to add/remove tenants — it's an App Registration setting (plus
   the `AUTH_BOOTSTRAP_TENANTS` allowlist for admin promotion).
 
-### E. Service-to-service mechanism — **decided**
+### E. Service-to-service mechanism — **decided, implementation deferred**
 
 **Decision**: Service-to-service auth uses **per-service identities**, not one global
 key. Each service principal gets its **own** credential — `INTERNAL_API_KEY_<NAME>` or a
@@ -1319,15 +1637,16 @@ This removes the Entra client-credentials option from scope; §6, the secrets ta
 the decisions table reflect per-service identities + the public/private internal-JWT
 approach.
 
-### F. Security audit log — **decided**
+### F. Security audit log — **decided, implementation deferred**
 
 **Decision**: Scope keeps a **security audit log**, **persisted in MongoDB** and
 **emitted to Prometheus** as metrics. Both sinks are written for every security event;
 Mongo is the durable record, Prometheus is for alerting/dashboards.
 
 **Events (v1, minimum)** — emitted at minimum for:
-- **Login** (successful token verification → session established) and **failed login**
-  (token rejected).
+- **Explicit login** (POST `/users/me` completes successfully) and **failed login**.
+  Ordinary token verification/cache hits are not login events. The endpoint invocation
+  is not trustworthy proof of an interactive IdP prompt.
 - **Logout** (explicit `scope auth logout` / Portal sign-out).
 - **User onboarding** (JIT provisioning of a new `users` doc on first login).
 - **Key regeneration** — rotation/regeneration of any `INTERNAL_API_KEY_<NAME>`, the
@@ -1394,10 +1713,12 @@ ownership model makes it straightforward to add later if needed.
 ### H. CI / non-interactive tokens
 
 **Question H**: What does non-interactive automation present? Two separable concerns:
-- **System jobs** use a **per-service** `INTERNAL_API_KEY_<NAME>` service principal with
-  narrow permissions (§6, Question E).
+- **System jobs** will use a **per-service** `INTERNAL_API_KEY_<NAME>` service
+  principal with narrow permissions when service auth ships (§6, Question E).
+  Existing anonymous worker rollout remains unchanged in this milestone.
 - **User-attributed automation / CI** uses `SCOPE_TOKEN`. **For the current milestone**,
-  `SCOPE_TOKEN` is a **raw bearer** (a token already obtained interactively) — this keeps
+  `SCOPE_TOKEN` is a **raw IdP bearer**. Existing enrolled callers are compatible;
+  new identities must explicitly POST `/users/me` first. This keeps
   the user-auth milestone unblocked. **Scope-issued PAT/API tokens** (long-lived,
   user-minted, revocable) delivered via the same `SCOPE_TOKEN` slot are the likely
   **future** answer for CI and user-attributed automation, but they are **out of scope**
@@ -1405,8 +1726,13 @@ ownership model makes it straightforward to add later if needed.
 
 ### J. Unauthenticated / public mode
 
-**Question J**: The `anonymous` principal ships with **zero** permissions and is **out of
-scope** to extend in this work. A public/demo mode is a **separate, future, explicit**
+The current explicit-login change **preserves existing anonymous/public rollout**
+when no token is provided or auth is not configured. It neither grants a synthetic
+authenticated principal nor applies the deferred global permission guards.
+
+**Deferred Question J**: The permission-model `anonymous` principal has **zero**
+permissions and is **out of scope** to extend in this work. A public/demo mode is a
+**separate, future, explicit**
 decision: it would be introduced as an opt-in config granting at most `scope/run:read`
 over **explicitly-public data only** (a separated public `ownerId`/`visibility`), and it
 must never be reachable by accidentally granting a permission to `anonymous` on an
@@ -1422,7 +1748,10 @@ the query-param fallback) given the proxy timeouts in
 
 ## Review
 
-> Adversarial self-review pass. Findings and resolutions:
+> Retained review of the broader RBAC proposal. "Resolved" below means a design
+> decision, not proof a deferred endpoint, permission guard, or internal token ships.
+> Current auth/cache behavior and validation criteria are specified in §3/§8 and the
+> current acceptance matrix above.
 
 1. **Existence leak** — Returning `403` for foreign runs reveals they exist. **Resolved**:
    use `404` for owner-scoped single-resource fetches.
@@ -1450,8 +1779,10 @@ the query-param fallback) given the proxy timeouts in
    **removed entirely** — no `AUTH_ENABLED`, `DEV_USER`, `X-Dev-User`, or
    `local-user`/`local-admin`. Local dev uses a real IdP; a future **Entra ID local
    emulator** (separate project) plugs in only as an IdP configuration.
-8. **JWKS network on hot path** — verifying per request must not call the IdP.
-   **Resolved**: cached JWKS with rotation; local RS256 verification.
+8. **JWKS network on hot path** — ordinary verification should use cached JWKS.
+   **Resolved**: local RS256 verification with key-fetch/rotation as needed. Access
+   caching never bypasses verification; a hit also avoids MongoDB, while a cache miss
+   does a read-only exact-identity lookup.
 9. **CLI token security** — tokens on disk, plus reliance on the unmaintained `keytar`.
    **Resolved**: tokens are stored behind a Scope-owned **`SecretStore`** interface backed
    by **`cross-keychain`** (`0600` file only as a keyring-less fallback), silent refresh,
@@ -1491,8 +1822,9 @@ the query-param fallback) given the proxy timeouts in
 17. **Bootstrap-admin trusts a mutable email claim** — Entra `email`/`preferred_username`
     is not guaranteed verified and is mutable; in multi-tenant mode an email collision
     could auto-promote the wrong user, and list edits could silently demote/promote.
-    **Resolved**: bootstrap matches on `(idp, idpTenant, idpSubject)`, requires
-    `email_verified`, is restricted to `AUTH_BOOTSTRAP_TENANTS`, and is **promote-only**.
+    **Resolved**: bootstrap matches on the verified `(idp, idpTenant, idpSubject)`,
+    is restricted to `AUTH_BOOTSTRAP_TENANTS`, and is **promote-only**.
+    Neither email nor its verification flag influences promotion.
 18. **Multi-tenant identity collision** — `(idp, idpSubject)` is **not** unique because
     `oid` is stable only per tenant and guests carry a home-tenant `oid`. **Resolved**:
     the unique index is **`(idp, idpTenant, idpSubject)`** — `tid` is part of the key.

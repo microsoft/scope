@@ -8,6 +8,8 @@ import type { OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
 import type { QueueClient } from "@azure/storage-queue";
 import type { BlobStorage } from "shared";
 import type { HeartbeatStore } from "shared";
+import type { UserStore } from "./auth/user-store.js";
+import type { UserAccessService } from "./auth/user-access-resolver.js";
 import type {
   TaskPromptStore,
   TaskPromptDocument,
@@ -25,6 +27,9 @@ import type {
   ProfileVersionDocument,
   ProjectStore,
   ProjectDocument,
+  UserDocument,
+  AuthProvider,
+  ProfileEnricher,
   // Zod response schemas → inferred types replace hand-written interfaces
   CriteriaResponseSchema,
   ExtensionResponseSchema,
@@ -98,6 +103,7 @@ export interface RouteContext {
   skillRevisionCollection: Collection<SkillRevisionDocument>;
   profileCollection: Collection<ProfileDocument>;
   profileVersionCollection: Collection<ProfileVersionDocument>;
+  usersCollection: Collection<UserDocument>;
   codebaseCollection: Collection<CodebaseDocument>;
   codebaseRevisionCollection: Collection<CodebaseRevisionDocument>;
 
@@ -112,6 +118,11 @@ export interface RouteContext {
 
   // Token Manager client (null when TOKEN_MANAGER_URL not set)
   mcpSecretClient: McpSecretClient | null;
+
+  authProvider: AuthProvider | null;
+  profileEnricher: ProfileEnricher | null;
+  userStore: UserStore | null;
+  userAccessResolver: UserAccessService | null;
 
   // Blob storage (log persistence + snapshots)
   blobStorage: BlobStorage;

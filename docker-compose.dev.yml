@@ -28,6 +28,12 @@ services:
     mem_limit: 1g
     build:
       target: dev
+    ports:
+      # Node inspector for VS Code. Keep host access loopback-only; .env.base
+      # offsets the host port so multiple worktrees can run concurrently.
+      - "127.0.0.1:${API_DEBUG_PORT:-9200}:9229"
+    environment:
+      NODE_INSPECT_PORT: "9229"
     develop:
       watch:
         - action: sync
@@ -117,8 +123,14 @@ services:
       # trusted) using the per-worktree host port. redirectUri/postLogoutRedirectUri
       # default to window.location.origin, so they auto-match this worktree's
       # portal port.
-      VITE_AUTH_AUTHORITY: "https://localhost:${ENTRA_LOCAL_PORT:-8443}/${AUTH_TENANT_ID:-11111111-1111-1111-1111-111111111111}/v2.0"
-      VITE_AUTH_KNOWN_AUTHORITIES: "localhost:${ENTRA_LOCAL_PORT:-8443}"
+      VITE_AUTH_CLIENT_ID: "${VITE_AUTH_CLIENT_ID:-cccccccc-0000-0000-0000-000000000001}"
+      VITE_AUTH_AUTHORITY: "${VITE_AUTH_AUTHORITY:-https://localhost:${ENTRA_LOCAL_PORT:-8443}/${AUTH_TENANT_ID:-11111111-1111-1111-1111-111111111111}/v2.0}"
+      VITE_AUTH_KNOWN_AUTHORITIES: "${VITE_AUTH_KNOWN_AUTHORITIES-localhost:${ENTRA_LOCAL_PORT:-8443}}"
+      VITE_AUTH_SCOPES: "${VITE_AUTH_SCOPES:-api://cccccccc-0000-0000-0000-000000000005/access_as_user}"
+      VITE_AUTH_PROTOCOL_MODE: "${VITE_AUTH_PROTOCOL_MODE:-OIDC}"
+      VITE_AUTH_REDIRECT_URI: "${VITE_AUTH_REDIRECT_URI:-}"
+      VITE_AUTH_POST_LOGOUT_REDIRECT_URI: "${VITE_AUTH_POST_LOGOUT_REDIRECT_URI:-}"
+      VITE_AUTH_CACHE_LOCATION: "${VITE_AUTH_CACHE_LOCATION:-localStorage}"
       # Auth feature toggle (see ENV_VARIABLES.md → "Feature toggle"). Auth is ON
       # by default. To iterate on the Portal locally WITHOUT sign-in (e.g. before
       # the API verifies tokens), export VITE_AUTH_ENABLED_LOCAL=false. This flag

@@ -3,32 +3,9 @@
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, screen } from "storybook/test";
-import { AuthContext, type AuthContextValue } from "@/contexts/AuthContext";
+import { AuthContext } from "@/contexts/AuthContext";
+import { signedInAuth, signedOutAuth } from "@/contexts/authFixtures";
 import { UserMenu } from "./UserMenu";
-
-/** Build an AuthContext value so stories are deterministic without MSAL. */
-function authValue(overrides: Partial<AuthContextValue>): AuthContextValue {
-  return {
-    account: null,
-    user: null,
-    isAuthenticated: false,
-    isReady: true,
-    login: async () => {},
-    logout: async () => {},
-    ...overrides,
-  };
-}
-
-const signedIn = authValue({
-  isAuthenticated: true,
-  user: {
-    name: "Alice Anderson",
-    username: "alice@entralocal.dev",
-    subject: "alice-subject",
-  },
-});
-
-const signedOut = authValue({ isAuthenticated: false, user: null });
 
 const meta = {
   component: UserMenu,
@@ -41,7 +18,7 @@ type Story = StoryObj<typeof meta>;
 export const SignedIn: Story = {
   decorators: [
     (Story) => (
-      <AuthContext.Provider value={signedIn}>
+      <AuthContext.Provider value={signedInAuth}>
         <Story />
       </AuthContext.Provider>
     ),
@@ -62,7 +39,7 @@ export const SignedIn: Story = {
 export const SignedOut: Story = {
   decorators: [
     (Story) => (
-      <AuthContext.Provider value={signedOut}>
+      <AuthContext.Provider value={signedOutAuth}>
         <Story />
       </AuthContext.Provider>
     ),

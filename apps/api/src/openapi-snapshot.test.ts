@@ -35,6 +35,25 @@ describe("OpenAPI spec snapshot", () => {
     const { generateOpenAPIDocument } = await import("./openapi/index.js");
     const doc = generateOpenAPIDocument();
 
+    expect(doc.components?.securitySchemes?.bearerAuth).toMatchObject({
+      type: "http",
+      scheme: "bearer",
+      bearerFormat: "JWT",
+    });
+    expect(doc.paths?.["/api/v1/users/me"]?.get?.security).toEqual([{ bearerAuth: [] }]);
+    expect(doc.paths?.["/api/v1/users/me"]?.post?.security).toEqual([{ bearerAuth: [] }]);
+    expect(doc.paths?.["/api/v1/users/me"]?.post?.responses).toHaveProperty("200");
+    expect(doc).not.toHaveProperty("security");
+    const securedOperations: string[] = [];
+    for (const [path, item] of Object.entries(doc.paths ?? {})) {
+      for (const method of ["get", "post", "put", "patch", "delete", "head", "options", "trace"] as const) {
+        if (item?.[method]?.security !== undefined) {
+          securedOperations.push(`${method.toUpperCase()} ${path}`);
+        }
+      }
+    }
+    expect(securedOperations).toEqual(["GET /api/v1/users/me", "POST /api/v1/users/me"]);
+
     // Snapshot the full spec — catches dropped routes, changed schemas, etc.
     expect(doc).toMatchSnapshot();
 

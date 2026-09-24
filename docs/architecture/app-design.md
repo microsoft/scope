@@ -30,6 +30,31 @@ flowchart LR
 
 ## Data Model
 
+### Application users and access resolution
+
+`users._id` is a Scope-owned UUID. The unique external identity is
+`(idp, idpTenant, idpSubject)` (`idp`, Entra `tid`, Entra `oid`), never email.
+`UserStore.upsertOnLogin()` is called only by the explicit
+`POST /api/v1/users/me` path for JIT/profile/`lastLoginAt`/eligible
+bootstrap-admin writes. `lastLoginAt` records that upsert, not request activity or
+proof of an interactive prompt; the disabled check still occurs after the upsert.
+
+After IdP verification, `UserAccessResolver.resolveExisting()` uses a validated
+`RedisUserAccessCache` snapshot or `UserStore.findByIdentity()` on cache miss/outage.
+It never upserts. The versioned cache key includes independently encoded Mongo
+database namespace, provider, tenant, and subject; only active users are positively
+cached. Fixed/non-sliding TTL defaults to 300 seconds
+(`AUTH_USER_CACHE_TTL_SECONDS`), so DB-only role/disable edits can remain stale until
+expiry. Redis failure falls back to Mongo, not anonymous access.
+
+The Portal handshake uses POST `/me` after callback and GET `/me` after an
+MSAL-cached reload, gating all queries until its API-authoritative UUID/role arrives.
+The singular stored role is metadata today: the permission bundles, ownership
+enforcement, service credentials, and internal JWTs in
+[Authentication & RBAC](auth-rbac.md) are deferred, not a global API lockdown.
+
+### Benchmark entities
+
 Runs are the central entity:
 
 ```mermaid
@@ -95,7 +120,8 @@ To support submitting an AGENTS.md prompt with a run, the request carries:
 A **Project** (`projects` collection, `ProjectStore`) is the top-level container that
 partitions all user-facing data. Every scoped entity carries one **immutable `projectId`**,
 set at creation and never changed. This is the data-organization layer only — it is a
-**filter, not a security boundary** (access control lives in `auth-rbac.md`; any caller may
+**filter, not a security boundary** (future ownership/RBAC is specified in
+[`auth-rbac.md`](auth-rbac.md); any caller admitted by the current auth rollout may
 pass any `projectId`).
 
 ### Scoped vs. unscoped entities
@@ -356,6 +382,10 @@ Agent registry → pending request → scheduler → AgentVersion.queueName → 
 Multiple agents or versions may advertise the same queue. The scheduler
 deduplicates that queue and claims requests only for the exact registered
 `workerType` + `agentVersion` targets mapped to it.
+
+The API owns only the report-generation queue. Its `RouteContext` exposes one
+`reportQueueClient`, not coding-agent queue clients or a queue-client factory;
+those belong to the scheduler.
 
 Capabilities are explicit opt-ins. The supported keys are
 `supportsReasoningEffort`, `supportsMcpServers`, `supportsSkills`, and
@@ -659,6 +689,20 @@ The REST API exposes an auto-generated **OpenAPI 3.1** spec built with [Zod](htt
 Zod schemas live in `packages/shared/src/schemas/` (16 files, ~78 schemas) so they can be reused by the API, CLI, and workers. Each entity has separate **input** (what the client sends) and **response** (what the API returns) schemas.
 
 OpenAPI route registrations live in `apps/api/src/openapi/routes/` — one file per resource group. The registry and generator are in `apps/api/src/openapi/registry.ts`.
+
+### Authentication metadata
+
+The registry declares `bearerAuth` as an HTTP bearer scheme for unchanged IdP
+access tokens. `apiRoute()` accepts optional OpenAPI `security` metadata;
+both `GET` and `POST /api/v1/users/me` set `security: [{ bearerAuth: [] }]`. In Swagger UI,
+use **Authorize** and paste the access token without its `Bearer` prefix.
+
+The requirement is operation-scoped: there is no global security requirement,
+and existing anonymous endpoints are not advertised as protected. This metadata
+does not install authentication or authorization guards; runtime enforcement
+remains in the existing middleware and route handlers.
+
+### Generated artifact
 
 The static documentation site consumes the committed artifact at
 `website/src/openapi/scope-openapi.json`. Generate it from the API

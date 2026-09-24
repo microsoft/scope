@@ -3549,6 +3549,32 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         },
         "type": "object",
       },
+      "UserMeResponse": {
+        "properties": {
+          "displayName": {
+            "type": "string",
+          },
+          "email": {
+            "type": "string",
+          },
+          "id": {
+            "type": "string",
+          },
+          "idp": {
+            "type": "string",
+          },
+          "idpTenant": {
+            "type": "string",
+          },
+          "role": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+        ],
+        "type": "object",
+      },
       "ValidateKeyInput": {
         "properties": {
           "token": {
@@ -3559,6 +3585,14 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "token",
         ],
         "type": "object",
+      },
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "bearerFormat": "JWT",
+        "description": "Use the unchanged IdP access token, without the Bearer prefix.",
+        "scheme": "bearer",
+        "type": "http",
       },
     },
   },
@@ -11041,6 +11075,74 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Toggle feature flag on task prompt",
         "tags": [
           "Task Prompts",
+        ],
+      },
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "description": "Read the existing authenticated Scope identity without enrollment or profile writes. Responses must not be HTTP-cached.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserMeResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "401": {
+            "description": "Not authenticated",
+          },
+          "403": {
+            "description": "User is not enrolled or is disabled",
+          },
+          "503": {
+            "description": "Authentication service unavailable",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Get the authenticated user's identity",
+        "tags": [
+          "Users",
+        ],
+      },
+      "post": {
+        "description": "JIT-enroll the authenticated user, refresh their profile and lastLoginAt, apply bootstrap-admin rules, and warm the access cache. Use this only after an explicit IdP login; do not prefetch, poll, or automatically retry transient failures.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserMeResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "401": {
+            "description": "Not authenticated",
+          },
+          "403": {
+            "description": "User is disabled",
+          },
+          "503": {
+            "description": "Authentication service unavailable",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Enroll the authenticated user",
+        "tags": [
+          "Users",
         ],
       },
     },
