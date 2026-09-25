@@ -31,6 +31,7 @@ import { ReportThumbnail } from "@/components/ReportThumbnail";
 import { CriteriaBadge } from "@/components/CriteriaBadge";
 import { TaskPromptBadge } from "@/components/TaskPromptBadge";
 import { AgentBadge } from "@/components/AgentBadge";
+import { SkillRevisionLinks } from "@/components/SkillRevisionLinks";
 import { ArrowLeft, Copy, Check, Sparkles, CheckCircle2, XCircle, MinusCircle, FileText, Plus, Download, Loader2, Archive, Video, LayoutGrid, List, Puzzle, RotateCcw, ChevronDown, Clock, Pause, Play, ArrowUpDown, X } from "lucide-react";
 import { formatDate, formatId, formatDuration, cn } from "@/lib/utils";
 import {
@@ -46,6 +47,7 @@ import { toast } from "sonner";
 import type { RunState, LogEvent } from "@/types";
 import { useShiftModifier } from "@/hooks/useShiftModifier";
 import { getRetryButtonState } from "@/components/RetryButton";
+import { getRunSkillReferences } from "@/lib/skill-spec";
 
 /** A compact labeled stat: a micro uppercase label above its value. */
 function MetaItem({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
@@ -503,13 +505,7 @@ export function RunDetail() {
         )
       : undefined);
 
-   const skillIdsFromRevisions = Array.from(new Set((run.skillRevisions ?? []).map((ref) => {
-     const at = ref.lastIndexOf("@");
-     return at > 0 ? ref.substring(0, at) : ref;
-   })));
-   const skillIds = skillIdsFromRevisions.length > 0
-     ? skillIdsFromRevisions
-     : (run.skills ?? []);
+  const skillReferences = getRunSkillReferences(run);
 
   const gateSummaries = (run.gateSummaries ?? []) as GateRunSummary[];
   const gateSummaryById = new Map(gateSummaries.map((summary) => [summary.gate, summary]));
@@ -1389,23 +1385,15 @@ export function RunDetail() {
             )}
 
             {/* Skills card */}
-            {skillIds.length > 0 && (
+            {skillReferences.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
-                    Skills ({skillIds.length})
+                    Skills ({skillReferences.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap gap-1.5">
-                    {skillIds.map((skillId) => (
-                      <Link key={skillId} to={`/skills/${skillId}`}>
-                        <Badge variant="secondary" className="font-mono text-xs hover:bg-accent transition-colors">
-                          {skillId}
-                        </Badge>
-                      </Link>
-                    ))}
-                  </div>
+                  <SkillRevisionLinks references={skillReferences} />
                 </CardContent>
               </Card>
             )}

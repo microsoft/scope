@@ -2,13 +2,21 @@
 
 <!-- What changed and why? Link the related issue, if any. -->
 
-## Demo
+## Demos
 
 <!-- For user-visible Portal/CLI changes, attach a short recording (before/after for fixes)
 and a one-line caption. Write "N/A" if the change isn't user-visible.
 For tooling, agent-assisted recording, and upload tips, see:
 https://github.com/microsoft/scope/blob/main/CONTRIBUTING.md#recording-a-demo
 Scrub tokens, cookies, and real run/customer data before uploading. Demos complement Testing. -->
+
+### Before
+
+<!-- Video before the change -->
+
+### After
+
+<!-- Video after the change -->
 
 ## Testing
 
@@ -27,3 +35,5 @@ API/CLI compatibility impacts, and any upgrade steps; write "None" if not applic
 - [ ] If Portal components changed, update their Storybook stories.
 - [ ] If database changes require a migration, include `up()` / `down()` and keep it CosmosDB-compatible.
 - [ ] If dependencies changed, update the lockfile and regenerate `NOTICE` / `NOTICE-REVIEW.txt` with `pnpm notice` as needed.
+- [ ] Video showing the behavior before the suggested change
+- [ ] Video showing the behavior after the suggested change

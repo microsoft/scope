@@ -1,0 +1,36 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import ArticleList from './ArticleList.astro';
+import TalkCard from './TalkCard.astro';
+import { getTalks } from './community';
+
+const talks = await getTalks();
+const featured = talks.find((t) => t.data.youtubeId) ?? talks[0];
+const allHref = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/community/articles-and-talks/`;
+---
+
+<section class="scope-section scope-community" aria-labelledby="community-heading">
+	<div class="scope-section-heading">
+		<div><p class="scope-eyebrow">From the community</p><h2 id="community-heading">Articles &amp; talks</h2></div>
+		<p>What the community has learned evaluating agentic product experiences with Scope, from the blog and the stage.</p>
+	</div>
+
+	<div class="scope-community__grid">
+		<div class="scope-community__col">
+			<h3 class="scope-community__label">Latest articles</h3>
+			<ArticleList limit={3} />
+		</div>
+		{
+			featured && (
+				<div class="scope-community__col">
+					<h3 class="scope-community__label">Featured talk</h3>
+					<TalkCard talk={featured} />
+				</div>
+			)
+		}
+	</div>
+
+	<a class="scope-text-link scope-community__all" href={allHref}>See all articles &amp; talks <span aria-hidden="true">&rarr;</span></a>
+</section>

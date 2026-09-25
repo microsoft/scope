@@ -1,0 +1,80 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import Byline from './Byline.astro';
+import { formatDate, getArticles, isoDate } from './community';
+
+interface Props {
+	/** Show only the N most recent articles. */
+	limit?: number;
+}
+
+const { limit } = Astro.props;
+const all = await getArticles();
+const articles = limit === undefined ? all : all.slice(0, limit);
+---
+
+<ul class="community-articles not-content">
+	{
+		articles.map(({ data }) => (
+			<li class="community-article">
+				<a
+					class="community-article__title"
+					href={data.url}
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					{data.title}
+					<span class="sr-only"> (opens in a new tab)</span>
+				</a>
+				<span class="community-article__authors">
+					<Byline people={data.authors} />
+				</span>
+				<span class="community-article__meta">
+					{data.publication}
+					{data.date && (
+						<>
+							{' · '}
+							<time datetime={isoDate(data.date)}>{formatDate(data.date)}</time>
+						</>
+					)}
+				</span>
+			</li>
+		))
+	}
+</ul>
+
+<style>
+	.community-articles {
+		list-style: none;
+		margin: 1rem 0 0;
+		padding: 0;
+		border-top: 1px solid var(--sl-color-hairline);
+	}
+	.community-article {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		margin: 0;
+		padding: 0.9rem 0;
+		border-bottom: 1px solid var(--sl-color-hairline);
+	}
+	.community-article__title {
+		font-weight: 600;
+		line-height: 1.4;
+		color: var(--sl-color-white);
+		text-decoration: none;
+	}
+	.community-article__title:hover {
+		color: var(--sl-color-text-accent);
+		text-decoration: underline;
+	}
+	.community-article__authors {
+		color: var(--sl-color-gray-2);
+	}
+	.community-article__meta {
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-3);
+	}
+</style>

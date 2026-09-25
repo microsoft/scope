@@ -23,9 +23,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { parseSkillSpec } from "@/components/SkillPicker";
 import { KbdBadge } from "@/components/KbdBadge";
 import { AgentBadge, agentDisplayName, useAgentCatalog } from "@/components/AgentBadge";
+import { SkillRevisionLinks } from "@/components/SkillRevisionLinks";
 import { toast } from "sonner";
 
 export function ProfileDetail() {
@@ -343,18 +343,8 @@ export function ProfileDetail() {
                     <Separator />
                     <div>
                       <FieldLabel>Skills</FieldLabel>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {displayVersion.skillRevisions.map((s) => {
-                          const { slug, commitHash } = parseSkillSpec(s);
-                          return (
-                            <Badge key={s} variant="outline" className="font-mono text-xs gap-1">
-                              {slug}
-                              {commitHash && (
-                                <span className="text-muted-foreground">@{commitHash.substring(0, 7)}</span>
-                              )}
-                            </Badge>
-                          );
-                        })}
+                      <div className="mt-1">
+                        <SkillRevisionLinks references={displayVersion.skillRevisions} />
                       </div>
                     </div>
                   </>

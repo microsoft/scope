@@ -1,0 +1,36 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import type { Person } from './community';
+
+interface Props {
+	people: Person[];
+}
+
+const { people } = Astro.props;
+---
+
+<span class="community-byline">
+	{
+		people.map((p, i) => (
+			<span class="community-byline__person">
+				{i > 0 && <span aria-hidden="true">{' · '}</span>}
+				{/* Keep on one line: newlines between these tags render as a space before the comma. */}
+				<span class="community-byline__name">{`${p.firstName} ${p.lastName}`}</span>{', '}<span class="community-byline__position">{p.position}</span>
+			</span>
+		))
+	}
+</span>
+
+<style>
+	.community-byline {
+		display: block;
+		font-size: var(--sl-text-sm);
+		line-height: 1.5;
+	}
+	.community-byline__name {
+		font-weight: 500;
+		white-space: nowrap;
+	}
+</style>

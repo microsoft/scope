@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Trash2, RefreshCw, Loader2, BookOpen, GitCommit, ExternalLink } from "lucide-react";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { formatDate } from "@/lib/utils";
+import { shortCommitHash } from "@/lib/skill-spec";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -160,7 +161,7 @@ export function SkillDetail() {
               <CardTitle className="text-base">SKILL.md</CardTitle>
               {latestRevision && (
                 <span className="text-xs text-muted-foreground font-mono">
-                  {latestRevision.commitHash.slice(0, 7)} · {formatDate(latestRevision.resolvedAt)}
+                  {shortCommitHash(latestRevision.commitHash)} · {formatDate(latestRevision.resolvedAt)}
                 </span>
               )}
             </div>
@@ -286,7 +287,7 @@ export function SkillDetail() {
                       )}
                     >
                       <GitCommit className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="font-mono">{rev.commitHash.slice(0, 7)}</span>
+                      <span className="font-mono">{shortCommitHash(rev.commitHash)}</span>
                       <span className="text-muted-foreground ml-auto whitespace-nowrap">
                         {formatDate(rev.resolvedAt)}
                       </span>

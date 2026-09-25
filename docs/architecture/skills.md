@@ -70,6 +70,10 @@ erDiagram
 - **SkillRevision** — An immutable, content-addressed snapshot of a skill at a specific commit. The `ref` format is `owner/repo/skillName@commitHash`.
 - **Run.skillRevisions** — Array of skill revision refs attached to a run. These are resolved at submit time and remain immutable throughout the run lifecycle.
 
+### Portal display
+
+Run details display each skill slug with the first seven characters of its pinned commit hash. Legacy runs containing only bare `skills` slugs remain supported.
+
 ## Import Paths
 
 Skills can be added to Scope's internal library through two distinct flows. In both cases, **GitHub is always the source of skill content** — the actual SKILL.md files live in GitHub repositories. Skills.sh is a separate search/discovery registry that indexes publicly available skills.

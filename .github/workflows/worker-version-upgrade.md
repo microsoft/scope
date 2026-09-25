@@ -7,17 +7,18 @@ description: |
 on:
   issues:
     types: [opened, edited]
-    names: [worker-update]
+    names: ["type: worker-update"]
   workflow_dispatch:
   # Workaround: gh-aw compiler bug — `names:` is commented out in the lock file
   # and no label condition is injected. Use on.steps to enforce label filtering.
   steps:
-    - name: Check worker-update label
+    - name: Check worker update label
       id: label_check
       if: github.event_name != 'workflow_dispatch'
       env:
         LABELS: ${{ toJSON(github.event.issue.labels.*.name) }}
-      run: echo "$LABELS" | grep -q '"worker-update"'
+      run: |
+        echo "$LABELS" | grep -q '"type: worker-update"'
 
 if: github.event_name == 'workflow_dispatch' || needs.pre_activation.outputs.label_check_result == 'success'
 

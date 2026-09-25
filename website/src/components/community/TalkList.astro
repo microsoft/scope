@@ -1,0 +1,22 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import TalkCard from './TalkCard.astro';
+import { getTalks } from './community';
+
+const talks = await getTalks();
+---
+
+<div class="community-talks not-content">
+	{talks.map((talk) => <TalkCard talk={talk} />)}
+</div>
+
+<style>
+	.community-talks {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+		gap: 1.25rem;
+		margin-top: 1rem;
+	}
+</style>
