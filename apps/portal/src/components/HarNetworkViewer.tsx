@@ -7,8 +7,9 @@ import { api } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Download, Search, X, ChevronDown, ChevronRight } from "lucide-react";
+import { Download, Search, X, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { detectTransport, isAiCompletionEntry, type Transport } from "@/lib/har-extraction";
 
 // ---------------------------------------------------------------------------
 // Types (inline HAR 1.2 subset — no shared dep needed for the portal)
@@ -31,6 +32,10 @@ interface HarEntry {
   time: number;
   request: HarRequest;
   response: HarResponse;
+  /** Chrome extension: resource type hint (e.g. "websocket"). */
+  _resourceType?: string;
+  /** Chrome extension: WebSocket messages recorded during the connection. */
+  _webSocketMessages?: unknown[];
 }
 interface HarFile {
   log: { entries: HarEntry[] };
@@ -123,6 +128,18 @@ function contentCategory(entry: HarEntry): string {
   return ct.split("/").pop()?.split(";")[0] ?? "other";
 }
 
+/** Label + Tailwind classes for a transport badge. HTTP is intentionally quiet. */
+function transportBadge(t: Transport): { label: string; className: string } {
+  switch (t) {
+    case "sse":
+      return { label: "SSE", className: "text-amber-600 bg-amber-500/10" };
+    case "websocket":
+      return { label: "WS", className: "text-cyan-600 bg-cyan-500/10" };
+    default:
+      return { label: "HTTP", className: "text-muted-foreground bg-muted" };
+  }
+}
+
 /**
  * Re-encode a string from Latin-1 code points back to UTF-8.
  * Fixes "mojibake" where UTF-8 bytes were stored as Latin-1 characters.
@@ -164,12 +181,19 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
     const all = har.log.entries;
     if (!filter) return all;
     const lf = filter.toLowerCase();
-    return all.filter(
-      (e) =>
+    return all.filter((e) => {
+      const transport = detectTransport(e);
+      const matchesClassification =
+        transport.includes(lf) ||
+        (lf === "ws" && transport === "websocket") ||
+        (lf === "ai" && isAiCompletionEntry(e));
+      return (
         e.request.url.toLowerCase().includes(lf) ||
         e.request.method.toLowerCase().includes(lf) ||
-        String(e.response.status).includes(lf),
-    );
+        String(e.response.status).includes(lf) ||
+        matchesClassification
+      );
+    });
   }, [har, filter]);
 
   // Summary stats
@@ -181,6 +205,16 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
     () => entries.reduce((sum, e) => sum + (e.response.content.size || 0), 0),
     [entries],
   );
+  const stats = useMemo(() => {
+    let ai = 0, sse = 0, ws = 0;
+    for (const e of entries) {
+      if (isAiCompletionEntry(e)) ai++;
+      const t = detectTransport(e);
+      if (t === "sse") sse++;
+      else if (t === "websocket") ws++;
+    }
+    return { ai, sse, ws };
+  }, [entries]);
 
   if (isLoading) {
     return (
@@ -216,6 +250,14 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
         <span className="font-medium">{entries.length} requests</span>
         <span className="text-muted-foreground">{formatBytes(totalSize)} transferred</span>
         <span className="text-muted-foreground">{formatMs(totalTime)} total</span>
+        {stats.ai > 0 && (
+          <span className="inline-flex items-center gap-1 font-medium text-violet-600">
+            <Sparkles className="h-3 w-3" />
+            {stats.ai} AI
+          </span>
+        )}
+        {stats.sse > 0 && <span className="font-medium text-amber-600">{stats.sse} SSE</span>}
+        {stats.ws > 0 && <span className="font-medium text-cyan-600">{stats.ws} WS</span>}
         <div className="flex-1" />
         <Button
           variant="outline"
@@ -259,21 +301,27 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
                   <tr className="border-b bg-muted/50 text-left">
                     <th className="p-2 pl-3 font-medium w-[60px]">Method</th>
                     <th className="p-2 font-medium w-[100px]">Started</th>
+                    <th className="p-2 font-medium w-[56px]">AI</th>
                     <th className="p-2 font-medium">URL</th>
                     <th className="p-2 font-medium w-[60px]">Status</th>
-                    <th className="p-2 font-medium w-[60px]">Type</th>
+                    <th className="p-2 font-medium w-[80px]">Transport</th>
+                    <th className="p-2 font-medium w-[70px]">Type</th>
                     <th className="p-2 font-medium w-[70px] text-right">Size</th>
                     <th className="p-2 pr-3 font-medium w-[70px] text-right">Time</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.map((entry, idx) => (
+                  {entries.map((entry, idx) => {
+                    const transport = detectTransport(entry);
+                    const tBadge = transportBadge(transport);
+                    const isAi = isAiCompletionEntry(entry);
+                    return (
                     <tr
                       key={idx}
                       onClick={() => setSelectedIdx(selectedIdx === idx ? null : idx)}
                       className={cn(
                         "border-b last:border-0 cursor-pointer hover:bg-muted/30 transition-colors",
-                        selectedIdx === idx && "bg-primary/5",
+                        selectedIdx === idx ? "bg-primary/5" : isAi && "bg-violet-500/[0.04]",
                       )}
                     >
                       <td className="p-2 pl-3">
@@ -284,16 +332,31 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
                       <td className="p-2 text-xs text-muted-foreground tabular-nums" title={`UTC: ${new Date(entry.startedDateTime).toISOString()}\nLocal: ${new Date(entry.startedDateTime).toString()}`}>
                         {formatStarted(entry.startedDateTime)}
                       </td>
-                      <td className="p-2 truncate max-w-[400px]">
-                        <span className="font-mono text-xs" title={entry.request.url}>
-                          {shortUrl(entry.request.url)}
-                        </span>
+                      <td className="p-2">
+                        {isAi && (
+                          <span className="inline-flex items-center gap-0.5 shrink-0 font-semibold text-[10px] px-1.5 py-0.5 rounded text-violet-600 bg-violet-500/10" title="AI completion call">
+                            <Sparkles className="h-2.5 w-2.5" />
+                            AI
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2 max-w-[400px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-mono text-xs truncate" title={entry.request.url}>
+                            {shortUrl(entry.request.url)}
+                          </span>
+                        </div>
                       </td>
                       <td className={cn("p-2 font-mono text-xs font-medium", statusColor(entry.response.status))}>
                         {entry.response.status}
                       </td>
+                      <td className="p-2">
+                        <span className={cn("font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase", tBadge.className)}>
+                          {tBadge.label}
+                        </span>
+                      </td>
                       <td className="p-2 text-xs text-muted-foreground">
-                        {contentCategory(entry)}
+                        {transport === "http" ? (contentCategory(entry) || "—") : "—"}
                       </td>
                       <td className="p-2 text-xs text-muted-foreground text-right tabular-nums">
                         {formatBytes(entry.response.content.size)}
@@ -302,7 +365,8 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
                         {formatMs(entry.time)}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -327,6 +391,9 @@ function DetailPanel({ entry, onClose }: { entry: HarEntry; onClose: () => void 
 
   const requestBody = entry.request.postData?.text ?? null;
   const responseBody = decodeBody(entry.response.content);
+  const transport = detectTransport(entry);
+  const tBadge = transportBadge(transport);
+  const isAi = isAiCompletionEntry(entry);
 
   return (
     <div className="w-1/2 flex flex-col max-h-[600px]">
@@ -339,6 +406,15 @@ function DetailPanel({ entry, onClose }: { entry: HarEntry; onClose: () => void 
           <span className={cn("font-mono text-xs font-medium", statusColor(entry.response.status))}>
             {entry.response.status} {entry.response.statusText}
           </span>
+          <span className={cn("font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase", tBadge.className)}>
+            {tBadge.label}
+          </span>
+          {isAi && (
+            <span className="inline-flex items-center gap-0.5 font-semibold text-[10px] px-1.5 py-0.5 rounded text-violet-600 bg-violet-500/10" title="AI completion call">
+              <Sparkles className="h-2.5 w-2.5" />
+              AI
+            </span>
+          )}
         </div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
           <X className="h-4 w-4" />
