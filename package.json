@@ -87,7 +87,7 @@
     "dotenv-cli": "^11.0.0",
     "github-actions-ctrf": "^0.0.58",
     "tsx": "^4.21.0",
-    "vitest": "^4.1.0",
+    "vitest": "^4.1.11",
     "worktree-env": "^0.1.2"
   },
   "pnpm": {
