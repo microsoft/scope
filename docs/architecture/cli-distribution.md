@@ -129,7 +129,7 @@ This is the **one** place in the CLI that calls `fetch` directly rather than the
 centralized `apiFetch()` wrapper (`apps/cli/src/utils/api-client.ts`): it targets the
 external GitHub API with its own `token` auth and must never receive the Scope
 `SCOPE_TOKEN` bearer that `apiFetch()` injects. All Scope-API requests go through
-`apiFetch()` (see [auth-rbac.md](./auth-rbac.md) subtask 7).
+`apiFetch()` (see [client integration](./auth-rbac.md#client-integration)).
 
 `SCOPE_TOKEN` remains a raw **IdP access token**, not a Scope-issued credential.
 Existing enrolled users are compatible; a new identity must intentionally call

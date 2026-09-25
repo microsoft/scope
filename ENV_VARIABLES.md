@@ -344,12 +344,92 @@ Maximum number of completed runs loaded into memory for a single Statistics / `G
 
 When set to `"true"`, displays the Pass@k metrics table on the Insights page. By default, this table is hidden. This is a Vite env var and must be prefixed with `VITE_` to be exposed to the frontend.
 
+## API Authentication and RBAC
+
+> **Status:** Proposed. These variables are part of the target
+> [authentication and RBAC design](docs/architecture/auth-rbac.md) and have no
+> effect until the API implementation ships.
+
+### AUTH_PROVIDER
+**Default:** `entra`
+**Type:** string
+**Scope:** API (`apps/api`)
+
+Identity-provider adapter used to verify human access tokens. V1 supports `entra`.
+
+### AUTH_AUTHORITY
+**Default:** `https://login.microsoftonline.com/common`
+**Type:** URL
+**Scope:** API (`apps/api`)
+
+OIDC authority used for discovery and issuer validation. Tenant acceptance is still
+restricted by `AUTH_ALLOWED_TENANTS`.
+
+### AUTH_API_CLIENT_ID
+**Default:** (required)
+**Type:** string
+**Scope:** API (`apps/api`)
+
+Microsoft Entra application/client ID accepted as the API access-token audience.
+
+### AUTH_CLIENT_ID
+**Default:** (required)
+**Type:** string
+**Scope:** CLI (`apps/cli`)
+
+Public-client application ID used by interactive CLI device-code authentication.
+
+### AUTH_SCOPES
+**Default:** (required)
+**Type:** comma-separated strings
+**Scope:** API (`apps/api`), CLI (`apps/cli`)
+
+Delegated API scopes requested by clients, for example
+`api://<api-app-id>/access_as_user`.
+
+### AUTH_ALLOWED_TENANTS
+**Default:** (required; fail closed when empty)
+**Type:** comma-separated Microsoft Entra tenant IDs
+**Scope:** API (`apps/api`)
+
+Allowlist applied before JIT user provisioning, bootstrap promotion, membership
+invitation/readonly-share directory resolution, or immutable-subject claiming. App
+Registration tenant restrictions remain defense in depth; they do not replace this
+check. Email/UPN aliases are never claim keys.
+
+### AUTH_BOOTSTRAP_PLATFORM_ADMINS
+**Default:** (empty)
+**Type:** comma-separated identity tuples
+**Scope:** API (`apps/api`)
+
+Promote-only bootstrap identities in `entra:<tenant-id>/<object-id>` form. Every
+tenant must also appear in `AUTH_ALLOWED_TENANTS`. Removing a tuple does not demote
+an administrator, and bootstrap processing cannot remove the final platform admin.
+
+### PAT_MAX_TTL
+**Default:** `P90D`
+**Type:** ISO 8601 duration
+**Scope:** API (`apps/api`)
+
+Maximum lifetime accepted when a user creates a personal access token. PATs require
+an explicit future expiration and cannot be non-expiring.
+
+### SHARE_LINK_MAX_TTL
+**Default:** `P30D`
+**Type:** ISO 8601 duration
+**Scope:** API (`apps/api`)
+
+Maximum lifetime of an explicit readonly run/report share for one named user. The
+share is resolved and persisted against the recipient's immutable IdP tenant/subject
+before it is created, then checked against the authenticated recipient's stable
+Scope user ID. Email/UPN changes and share URLs grant nothing.
+
 ## Portal Authentication (Microsoft Entra ID / MSAL)
 
 Build-time (`VITE_*`) configuration for Portal sign-in via MSAL. These are
 inlined into the bundle at build time (retargeting the IdP is a rebuild, not a
 runtime change), matching the auth spec's "hardcoded per build" intent
-(`docs/architecture/auth-rbac.md` §8, subtask 10).
+([client integration](docs/architecture/auth-rbac.md#client-integration)).
 
 In **dev** builds (`import.meta.env.DEV`) every value defaults to the seeded
 [entra-local](https://github.com/cmaneu/entra-local) emulator (Docker tag

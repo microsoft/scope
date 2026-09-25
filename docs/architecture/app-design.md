@@ -119,10 +119,10 @@ To support submitting an AGENTS.md prompt with a run, the request carries:
 
 A **Project** (`projects` collection, `ProjectStore`) is the top-level container that
 partitions all user-facing data. Every scoped entity carries one **immutable `projectId`**,
-set at creation and never changed. This is the data-organization layer only — it is a
-**filter, not a security boundary** (future ownership/RBAC is specified in
-[`auth-rbac.md`](auth-rbac.md); any caller admitted by the current auth rollout may
-pass any `projectId`).
+set at creation and never changed. The `projectId` is both a data-organization key and an
+**authorization boundary**: callers may name a project, but
+[auth-rbac.md](auth-rbac.md) must verify their project membership before any scoped data is
+read or changed.
 
 ### Scoped vs. unscoped entities
 
