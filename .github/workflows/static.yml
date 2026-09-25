@@ -67,6 +67,8 @@ jobs:
           SITE: https://microsoft.github.io
           BASE_PATH: /scope
         run: pnpm run build
+      - name: Test rendered documentation
+        run: pnpm test:build
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
