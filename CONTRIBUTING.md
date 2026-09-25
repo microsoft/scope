@@ -278,8 +278,65 @@ without a response**. Close it **two weeks after the reminder (four weeks total)
 still no response, making clear that the contributor can resume later. Do not close PRs under
 this rule when they are waiting on the team.
 
-As a team follow-up, create a `waiting-on-author` label to track these PRs. Once available, the PR
-owner applies it when requesting a response and removes it when the contributor responds.
+The PR owner applies `status: waiting` when requesting a contributor response and removes it when
+the contributor responds. State who owes the next action in a comment; the label alone must not
+trigger the closure policy, particularly when a PR is waiting on the team.
+
+## Repository labels
+
+Use the existing `category: value` labels for issue and PR triage. Check the
+[live label list](https://github.com/microsoft/scope/labels) before applying labels;
+do not recreate retired names or the migration-only `author:` labels.
+Keep `good first issue` and `help wanted` unprefixed for contribution discovery.
+
+Automations depend on these exact names:
+
+| Consumer | Labels |
+| --- | --- |
+| Worker version checker and upgrade workflow | `type: worker-update` |
+| Test Improver issues, PRs, and monthly-summary searches | `type: automation`, `topic: testing` |
+| Daily repository status reports | `agentic-workflows` |
+| Dependabot | `type: dependencies`, plus `language: javascript` or `language: rust` |
+
+Use `area: reporting` for Scope's benchmark reporting component, not daily repository activity.
+Worker upgrade routing uses `type: worker-update`, not the broader `area: worker`.
+
+### Agentic Workflows system-label exception
+
+The pinned GitHub Agentic Workflows runtimes hard-code the unprefixed `agentic-workflows`
+label when searching for and creating failure reports, no-op tracking issues, and PR fallback
+issues. This is a machine-managed compatibility exception to the namespaced label convention.
+
+Before relying on these workflows after a label migration, a maintainer must ensure
+`agentic-workflows` exists and is applied to existing workflow tracking issues that were renamed,
+especially `[aw] No-Op Runs` and `[aw] ... failed` issues. Otherwise the runtime can miss existing
+trackers and attempt duplicate reports. Keep this exact name until every active runtime supports
+a replacement for both lookups and writes.
+Changing `safe-outputs` label lists alone does not change these built-in handlers.
+Repository configuration does not create or backfill this label automatically.
+
+### Updating label-dependent configuration
+
+Update both the label filters and label writes in `.github/workflows/check-worker-versions.yml`,
+the agentic workflow `.md` frontmatter, and any label searches in their prompts.
+Regenerate the corresponding `.lock.yml` files with `gh aw compile`; do not edit generated YAML
+by hand. Use each file's recorded compiler version to avoid unrelated runtime upgrades:
+
+| Workflow | Compiler |
+| --- | --- |
+| `daily-test-improver` | `v0.57.1` |
+| `daily-repo-status` | `v0.60.0` |
+| `worker-version-upgrade` | `v0.63.0` |
+
+The daily schedules are explicit cron expressions preserving their existing UTC execution times.
+Review changes to `.github/aw/actions-lock.json` and generated workflow permissions, triggers,
+action pins, and handler configuration before merging.
+
+`.github/dependabot.yml` specifies namespaced labels for the root pnpm workspace, the separate
+website package, and the Rust gateway. Each entry has `open-pull-requests-limit: 0` to keep
+version-update PRs disabled; the required schedule does not enable those PRs. These labels also
+apply to security-update PRs when security updates are enabled in repository settings. This file
+does not enable security updates or change live labels.
 
 ## Third-party notices
 

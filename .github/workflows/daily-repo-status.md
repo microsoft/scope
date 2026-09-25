@@ -6,7 +6,8 @@ description: |
   and project recommendations.
 
 on:
-  schedule: daily
+  schedule:
+    - cron: "47 23 * * *"
   workflow_dispatch:
 
 permissions:
@@ -32,7 +33,7 @@ safe-outputs:
   allowed-github-references: []
   create-issue:
     title-prefix: "[repo-status] "
-    labels: [report, daily-status]
+    labels: [agentic-workflows]
     close-older-issues: true
 source: githubnext/agentics/workflows/daily-repo-status.md@346204513ecfa08b81566450d7d599556807389f
 ---
