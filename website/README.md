@@ -46,15 +46,20 @@ Sidebar order is defined in `astro.config.mjs`, not by directory order.
 | :--------------------- | :--------------------------------------------------------- |
 | `pnpm install`         | Install dependencies                                       |
 | `pnpm dev`             | Start local dev server at `localhost:4321`                 |
-| `pnpm build`           | Build the production site to `./dist/`                     |
+| `pnpm build`           | Build the production site to `./dist/` and test its output |
 | `pnpm preview`         | Preview the production build locally                       |
 | `pnpm test`            | Test site plugins with Node's built-in test runner          |
+| `pnpm test:build`      | Test rendered Markdown/MDX tables in `dist/` after a build |
 | `pnpm refresh:openapi` | Generate the OpenAPI snapshot from `scope-core` |
 
 ## Authoring docs
 
 - Use `.md` for plain Markdown, `.mdx` whenever the page contains JSX
   (e.g. Starlight `<Tabs>`).
+- Use standard pipe-delimited Markdown tables in both `.md` and `.mdx`.
+  Keep `markdown.gfm: true` explicit in [astro.config.mjs](astro.config.mjs):
+  the installed MDX integration does not inherit Astro's Markdown processor
+  defaults, so otherwise MDX tables render as plain text.
 - Write internal Markdown links and literal MDX `href`/`src` attributes
   relative to the site root, such as `/getting-started/access/`.
   [src/plugins/remark-base-path.mjs](src/plugins/remark-base-path.mjs)
@@ -109,6 +114,8 @@ SITE=https://microsoft.github.io BASE_PATH=/scope pnpm preview
 
 Open `/scope/` on the preview server. Keep `BASE_PATH` the same for the
 build and preview so assets, navigation, and search use the same URLs.
+`pnpm build` runs `pnpm test:build` after generating the site, so local and
+CI builds catch table-rendering regressions in both Markdown and MDX pages.
 
 ## Learn more
 

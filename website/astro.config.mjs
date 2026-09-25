@@ -55,6 +55,8 @@ export default defineConfig({
 	base,
 	server: { port: docPort },
 	markdown: {
+		// The installed MDX integration does not inherit the processor's GFM default.
+		gfm: true,
 		remarkPlugins: [[remarkBasePath, { base }], remarkHttpSnippets],
 	},
 	integrations: [

@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "worktree-env && astro dev",
     "start": "worktree-env && astro dev",
-    "build": "astro build",
+    "build": "astro build && pnpm test:build",
     "preview": "worktree-env && astro preview",
     "test": "node --test src/plugins/*.test.mjs",
+    "test:build": "node --test tests/*.test.mjs",
     "astro": "astro",
     "refresh:openapi": "cd .. && pnpm --filter api generate:openapi"
   },
