@@ -46,7 +46,7 @@ Sidebar order is defined in `astro.config.mjs`, not by directory order.
 | :--------------------- | :--------------------------------------------------------- |
 | `pnpm install`         | Install dependencies                                       |
 | `pnpm dev`             | Start local dev server at `localhost:4321`                 |
-| `pnpm build`           | Build the production site to `./dist/`                     |
+| `pnpm build`           | Build the production site to `./dist/` and test its output |
 | `pnpm preview`         | Preview the production build locally                       |
 | `pnpm test`            | Test site plugins with Node's built-in test runner          |
 | `pnpm test:build`      | Test rendered Markdown/MDX tables in `dist/` after a build |
@@ -109,14 +109,13 @@ public deployment locally, run these commands from `website/`:
 ```sh
 pnpm test
 SITE=https://microsoft.github.io BASE_PATH=/scope pnpm build
-pnpm test:build
 SITE=https://microsoft.github.io BASE_PATH=/scope pnpm preview
 ```
 
 Open `/scope/` on the preview server. Keep `BASE_PATH` the same for the
 build and preview so assets, navigation, and search use the same URLs.
-CI runs `pnpm test:build` after building to catch table-rendering regressions
-in both Markdown and MDX pages.
+`pnpm build` runs `pnpm test:build` after generating the site, so local and
+CI builds catch table-rendering regressions in both Markdown and MDX pages.
 
 ## Learn more
 
