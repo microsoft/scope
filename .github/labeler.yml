@@ -1,0 +1,136 @@
+"area: cicd":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "scripts/**"
+
+"area: cli":
+  - changed-files:
+      - any-glob-to-any-file: "apps/cli/**"
+
+"area: gateway":
+  - changed-files:
+      - any-glob-to-any-file: "apps/gateway/**"
+
+"area: infrastructure":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docker-compose*.yml"
+          - "Dockerfile"
+          - "**/Dockerfile"
+          - "infra/**"
+          - "k8s/**"
+          - "manifests/**"
+          - "packages/db-migrations/**"
+
+"area: judge":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/judge/**"
+          - "packages/llm-eval/**"
+
+"area: portal":
+  - changed-files:
+      - any-glob-to-any-file: "apps/portal/**"
+
+"area: post-processing":
+  - changed-files:
+      - any-glob-to-any-file: "apps/workers/post-processor/**"
+
+"area: reporting":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/workers/report-generator/**"
+          - "docs/architecture/post-processing.md"
+
+"area: skills":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".agents/skills/**"
+          - "docs/architecture/skills.md"
+
+"area: worker":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/workers/**"
+          - "apps/model-scanners/**"
+          - "apps/version-checkers/**"
+          - "apps/key-updaters/**"
+          - "packages/model-scanning/**"
+          - "packages/version-checking/**"
+
+"language: javascript":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.js"
+          - "**/*.jsx"
+          - "**/*.mjs"
+          - "**/*.cjs"
+          - "**/*.ts"
+          - "**/*.tsx"
+          - "**/*.mts"
+          - "**/*.cts"
+          - "package.json"
+          - "pnpm-lock.yaml"
+          - "pnpm-workspace.yaml"
+          - "website/package.json"
+          - "website/pnpm-lock.yaml"
+          - "website/pnpm-workspace.yaml"
+
+"language: rust":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.rs"
+          - "Cargo.toml"
+          - "Cargo.lock"
+          - "apps/gateway/**"
+
+"topic: security":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".gitleaks.toml"
+          - ".github/workflows/gitleaks.yml"
+          - "SECURITY.md"
+          - "apps/token-manager/**"
+          - "packages/github-auth/**"
+          - "docs/architecture/auth-rbac.md"
+          - "docs/architecture/token-manager.md"
+
+"topic: testing":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.test.ts"
+          - "**/*.test.tsx"
+          - "**/*.spec.ts"
+          - "**/*.spec.tsx"
+          - "**/*.eval.test.ts"
+          - "vitest*.config.ts"
+          - "apps/**/test/**"
+          - "packages/**/test/**"
+
+"topic: ui":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/portal/src/**/*.tsx"
+          - "apps/portal/src/**/*.css"
+          - "website/src/**"
+
+"type: dependencies":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "package.json"
+          - "pnpm-lock.yaml"
+          - "website/package.json"
+          - "website/pnpm-lock.yaml"
+          - "Cargo.toml"
+          - "Cargo.lock"
+          - "**/package.json"
+
+"type: documentation":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+          - "website/README.md"
+          - "website/AGENTS.md"
+          - "website/src/content/**"

@@ -297,6 +297,7 @@ Automations depend on these exact names:
 | Test Improver issues, PRs, and monthly-summary searches | `type: automation`, `topic: testing` |
 | Daily repository status reports | `agentic-workflows` |
 | Dependabot | `type: dependencies`, plus `language: javascript` or `language: rust` |
+| Pull Request Labeler | Area, topic, language, and type labels from `.github/labeler.yml` |
 
 Use `area: reporting` for Scope's benchmark reporting component, not daily repository activity.
 Worker upgrade routing uses `type: worker-update`, not the broader `area: worker`.
@@ -318,7 +319,7 @@ Repository configuration does not create or backfill this label automatically.
 ### Updating label-dependent configuration
 
 Update both the label filters and label writes in `.github/workflows/check-worker-versions.yml`,
-the agentic workflow `.md` frontmatter, and any label searches in their prompts.
+`.github/labeler.yml`, the agentic workflow `.md` frontmatter, and any label searches in their prompts.
 Regenerate the corresponding `.lock.yml` files with `gh aw compile`; do not edit generated YAML
 by hand. Use each file's recorded compiler version to avoid unrelated runtime upgrades:
 
@@ -337,6 +338,10 @@ website package, and the Rust gateway. Each entry has `open-pull-requests-limit:
 version-update PRs disabled; the required schedule does not enable those PRs. These labels also
 apply to security-update PRs when security updates are enabled in repository settings. This file
 does not enable security updates or change live labels.
+
+`.github/workflows/labeler.yml` runs on the unprivileged `pull_request` event and skips fork PRs.
+Do not switch it to `pull_request_target` just to label fork PRs; that would violate the fork-PR
+security boundary above.
 
 ## Third-party notices
 
