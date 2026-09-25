@@ -1,0 +1,118 @@
+---
+import { sampleAgents, sampleProfiles } from '../scripts/sample-agents';
+import { demoCriteria, demoGates, exampleScenario, passedGateCount } from '../scripts/flow-demo-data';
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const stages = ['Define a scenario', 'Compare profiles', 'Judge gates and criteria', 'Explore the results'];
+const rowHeight = 116;
+const rowGap = 12;
+const graphHeight = sampleProfiles.length * rowHeight + (sampleProfiles.length - 1) * rowGap;
+const center = graphHeight / 2;
+const incoming = sampleProfiles.map((_, index) => {
+	const y = index * (rowHeight + rowGap) + rowHeight / 2;
+	const direction = Math.sign(y - center);
+	return direction === 0 ? `M210 ${center} H270`
+		: `M210 ${center} H228 Q240 ${center} 240 ${center + direction * 12} V${y - direction * 12} Q240 ${y} 252 ${y} H270`;
+}).join(' ');
+const outgoing = sampleProfiles.map((_, index) => {
+	const y = index * (rowHeight + rowGap) + rowHeight / 2;
+	const direction = Math.sign(center - y);
+	return direction === 0 ? `M490 ${center} H550`
+		: `M490 ${y} H508 Q520 ${y} 520 ${y + direction * 12} V${center - direction * 12} Q520 ${center} 532 ${center} H550`;
+}).join(' ');
+const wires = [incoming, outgoing, `M770 ${center} H830`];
+---
+
+<scope-flow class="scope-flow" style={`--flow-agent-count: ${sampleProfiles.length}; --flow-graph-height: ${graphHeight}px; --flow-agent-gap: ${rowGap}px;`} data-stage="0" data-playing="false" role="group" aria-label="Interactive Scope example with mock data">
+	<div class="flow-toolbar">
+		<div>
+			<div class="flow-demo-label"><strong>Interactive example</strong><span class="flow-demo-badge">Mock data</span></div>
+			<p class="flow-demo-note">No agents run here. All results are pre-written examples.</p>
+		</div>
+	</div>
+	<ul class="flow-support" aria-label="Coding agent availability">
+		{sampleAgents.map((agent) => (
+			<li data-supported={agent.status === 'Supported today'}><strong>{agent.name}</strong><span>{agent.status}</span></li>
+		))}
+	</ul>
+	<div class="flow-canvas">
+		<div class="flow-canvas-label"><span>MOCK SCENARIO / {exampleScenario.id}</span><span>1 base + {sampleProfiles.length - 1} variations / same task and criteria</span></div>
+		<div class="flow-graph">
+		<svg class="flow-connections" viewBox={`0 0 1000 ${graphHeight}`} preserveAspectRatio="none" aria-hidden="true">
+			<g class="flow-wire">
+				{wires.map((d) => <path d={d} />)}
+			</g>
+			<g class="flow-packets">
+				{wires.map((d, index) => <path data-wire={index + 1} d={d} />)}
+			</g>
+		</svg>
+		<div class="flow-nodes">
+			<button type="button" class="flow-node flow-scenario" data-node="0" aria-label="Inspect scenario" aria-current="step" disabled>
+				<span class="flow-node-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7Z M14 3v5h4 M10 12h5 M10 16h5" /></svg></span>
+				<span class="flow-node-kicker">01 / Scenario</span>
+				<strong>{exampleScenario.title}</strong>
+				<span>{exampleScenario.short}</span>
+				<span class="flow-node-tag">Example task prompt</span>
+			</button>
+			<div class="flow-agent-nodes">
+				{sampleProfiles.map((profile) => (
+					<button type="button" class="flow-node flow-agent" data-node="1" data-profile={profile.id} aria-label={`Inspect ${profile.label}: ${profile.agent.name}, ${profile.name}`} disabled>
+						<span class="flow-agent-initial" aria-hidden="true">{profile.agent.initial}</span><span><strong>{profile.agent.name}</strong><span class="flow-profile-label" data-base={profile.id === 'base'}>{profile.label}</span><span class="flow-profile-name">{profile.name}</span></span>
+						<span class="flow-agent-status">Example profile</span>
+					</button>
+				))}
+			</div>
+			<button type="button" class="flow-node flow-judge" data-node="2" aria-label="Inspect gates and the reusable criteria library" disabled>
+				<span class="flow-node-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6v6H9Z M3 16h6v5H3Z M15 16h6v5h-6Z M12 9v4 M6 16v-3h12v3" /></svg></span>
+				<span class="flow-node-kicker">03 / Judge</span><strong>Gates + criteria</strong>
+				<span class="flow-criteria"><span>Requirements gate</span><i aria-hidden="true"></i><span>Build gate</span><i aria-hidden="true"></i><span>Test gate</span></span>
+				<span>From your reusable criteria library</span>
+			</button>
+			<button type="button" class="flow-node flow-report" data-node="3" aria-label="Inspect simulated results" disabled>
+				<span class="flow-node-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4v16h17 M8 16v-5 M13 16V7 M18 16v-8" /></svg></span>
+				<span class="flow-node-kicker">04 / Evidence</span><strong>The whole picture</strong>
+				<span class="flow-chart" aria-hidden="true">{sampleProfiles.map((profile) => <i style={`height: ${passedGateCount(exampleScenario.results[profile.id]) / demoGates.length * 100}%`}></i>)}</span>
+				<span class="flow-result-preview">Gates passed: {sampleProfiles.map((profile) => `${profile.label}: ${passedGateCount(exampleScenario.results[profile.id])}/${demoGates.length}`).join(' / ')}</span>
+				<span>Quality, tokens, duration</span>
+			</button>
+		</div>
+		</div>
+	</div>
+	<div class="flow-controls">
+		<div class="flow-playback"><button type="button" class="scope-btn scope-btn--primary" data-play disabled>Play animation</button><button type="button" class="flow-reset" data-reset disabled aria-label="Reset example to the first step">Reset</button></div>
+		<div class="flow-step-buttons" role="group" aria-label="Explore benchmark steps">
+			{stages.map((stage, index) => <button type="button" data-step={index} aria-label={`${index + 1}. ${stage}`} aria-current={index === 0 ? 'step' : undefined} disabled><span>{String(index + 1).padStart(2, '0')}</span><span class="flow-step-name">{['Scenario', 'Profiles', 'Judge', 'Results'][index]}</span></button>)}
+		</div>
+	</div>
+	<div class="flow-inspector">
+		<div class="flow-inspector-copy"><span class="scope-eyebrow" data-stage-label>Step 01 / Define</span><h3 data-detail-title>Give every agent the same starting line.</h3><p data-detail-body>{exampleScenario.context}</p></div>
+		<div class="flow-detail-panel" data-detail-panel>
+			<span class="flow-code-label">TASK PROMPT / EXAMPLE</span>
+			<p>{exampleScenario.prompt}</p>
+		</div>
+		<details class="flow-criteria-explorer" data-criteria-explorer hidden>
+			<summary>Explore the criteria graph</summary>
+			<p>Gates run in order. Inside each gate, criteria form a dependency graph. Here, both Test checks depend on "Tests execute"; if it fails, both are skipped.</p>
+			<div class="flow-gate-graph" role="group" aria-label="Three sequential gates, each with its own criteria graph">
+				{demoGates.map((gate) => (
+					<section class="flow-gate-group" aria-label={`${gate.label} gate criteria`}>
+						<h4>{gate.label} gate</h4>
+						<ul class="flow-criterion-nodes">
+							{demoCriteria.filter((criterion) => criterion.gate === gate.id).map((criterion) => (
+								<li data-dependent={criterion.dependsOn.length > 0}><span>{criterion.label}</span></li>
+							))}
+						</ul>
+					</section>
+				))}
+			</div>
+			<a class="scope-text-link" href={`${base}guides/defining-criteria/`}>Learn about reusable criteria <span aria-hidden="true">&rarr;</span></a>
+		</details>
+	</div>
+	<p class="flow-disclaimer">Illustrative demo only. No agents are running. All outcomes, token counts, and durations are invented, not measured benchmarks or agent rankings. Planned agents are not available today and are not included in the sample runs. Select any step to explore.</p>
+	<p class="sr-only" aria-live="polite" aria-atomic="true" data-announcement></p>
+	<noscript><p class="flow-disclaimer">JavaScript is off. The diagram shows the full flow: define a scenario, compare a base profile with variations, judge gates using reusable criteria, and inspect quality, tokens, and duration.</p></noscript>
+</scope-flow>
+
+<script>
+	import '../scripts/flow-demo';
+</script>

@@ -12,6 +12,25 @@ stable ID and a `prompt` describing what to look for, and a
 [request](/guides/submitting-requests-portal/) references criteria by
 ID.
 
+## Gates and reusable criteria
+
+**Gates** are the stages of a run. **Criteria** are the reusable checks
+that define success within each stage. For example, a run can use the
+**Requirements**, **Build**, and **Test** gates, in that order.
+
+Select criteria from your library for each gate. A criterion can declare
+which gates it is compatible with using `gates`; the criteria within a
+gate still form a dependency graph. Gates are not themselves criteria.
+
+Each gate has its own iteration budget. If it does not pass before
+exhausting that budget, the pipeline stops and later gates are recorded
+as skipped. Separately, a failed criterion causes its dependent criteria
+to be skipped inside the gate.
+
+The [interactive example](/#see-it-work) illustrates both levels: the
+ordered gates and an expandable criteria graph. Its results, token
+counts, and durations are fictional examples, not benchmark measurements.
+
 ## The criteria graph
 
 Every criterion lives in a **directed acyclic graph (DAG)**.

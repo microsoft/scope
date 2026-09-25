@@ -26,9 +26,8 @@ This downloads and installs the latest release to
 `SCOPE_INSTALL_DIR` environment variable:
 
 ```bash
-SCOPE_INSTALL_DIR=~/bin \
-  gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh \
-  -H "Accept: application/vnd.github.raw" | bash
+gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh \
+  -H "Accept: application/vnd.github.raw" | SCOPE_INSTALL_DIR=~/bin bash
 ```
 
 ## Add to PATH

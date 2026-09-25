@@ -11,10 +11,9 @@ const featured = talks.find((t) => t.data.youtubeId) ?? talks[0];
 const allHref = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/community/articles-and-talks/`;
 ---
 
-<section class="scope-section scope-community">
-	<div class="scope-section__head">
-		<span class="scope-section__eyebrow">From the community</span>
-		<h2>Articles &amp; talks</h2>
+<section class="scope-section scope-community" aria-labelledby="community-heading">
+	<div class="scope-section-heading">
+		<div><p class="scope-eyebrow">From the community</p><h2 id="community-heading">Articles &amp; talks</h2></div>
 		<p>What the community has learned evaluating agentic product experiences with Scope, from the blog and the stage.</p>
 	</div>
 
@@ -33,5 +32,5 @@ const allHref = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/community/articl
 		}
 	</div>
 
-	<a class="scope-community__all" href={allHref}>See all articles &amp; talks →</a>
+	<a class="scope-text-link scope-community__all" href={allHref}>See all articles &amp; talks <span aria-hidden="true">&rarr;</span></a>
 </section>
