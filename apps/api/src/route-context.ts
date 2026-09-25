@@ -20,8 +20,13 @@ import type {
   CodebaseStore,
   CodebaseRevisionStore,
   CodebaseResolver,
+  ResourceStore,
+  ResourceRevisionStore,
+  ResourceResolver,
   CodebaseDocument,
   CodebaseRevisionDocument,
+  ResourceDocument,
+  ResourceRevisionDocument,
   McpSecretClient,
   ProfileDocument,
   ProfileVersionDocument,
@@ -106,6 +111,8 @@ export interface RouteContext {
   usersCollection: Collection<UserDocument>;
   codebaseCollection: Collection<CodebaseDocument>;
   codebaseRevisionCollection: Collection<CodebaseRevisionDocument>;
+  resourceCollection: Collection<ResourceDocument>;
+  resourceRevisionCollection: Collection<ResourceRevisionDocument>;
 
   // Services
   taskPromptStore: TaskPromptStore;
@@ -114,6 +121,9 @@ export interface RouteContext {
   codebaseStore: CodebaseStore;
   codebaseRevisionStore: CodebaseRevisionStore;
   codebaseResolver: CodebaseResolver;
+  resourceStore: ResourceStore;
+  resourceRevisionStore: ResourceRevisionStore;
+  resourceResolver: ResourceResolver;
   projectStore: ProjectStore;
 
   // Token Manager client (null when TOKEN_MANAGER_URL not set)

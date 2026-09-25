@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { ResourceBindingSpec } from "./resource.js";
+
 // --- Profile types ---
 
 /**
@@ -60,6 +62,7 @@ export interface ProfileVersionDocument {
   agentVersion?: string;          // Agent version string
   mcpServers?: string[];          // MCP server slugs
   skillRevisions?: string[];      // Pinned skill revision refs (e.g. "source/skillName@commitHash")
+  resources?: ResourceBindingSpec[]; // Resource bindings with optional preset parameters
   extensions?: string[];          // Pinned extension IDs with version (e.g. "ms-python.python@2024.8.1")
   createdAt: Date;                // Immutable — no updatedAt
 }

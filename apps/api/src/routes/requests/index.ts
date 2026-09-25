@@ -32,12 +32,21 @@ import {
   runDurationMs,
   parseExtensionSpec,
   parseProfileSpec,
+  resolveResourceParams,
   validateGateConfigs,
   isCriterionCompatibleWithGate,
   orderGates,
   computeTaskPromptId,
 } from "shared";
-import type { ProfileDocument, ProfileVersionDocument, GateConfig, GateId } from "shared";
+import type {
+  ProfileDocument,
+  ProfileVersionDocument,
+  GateConfig,
+  GateId,
+  ResourceBinding,
+  ResourceBindingSpec,
+  ResourceRevisionDocument,
+} from "shared";
 import { apiRoute } from "../../openapi/api-route.js";
 import type {
   ExtensionDocument,
@@ -171,6 +180,40 @@ export function _resetRunFacetsCacheForTests(): void {
   runFacetsCache.clear();
 }
 
+/**
+ * Decide where a resubmit's resources come from.
+ *
+ * A resubmit must reproduce the original environment, so pinned bindings are
+ * preserved by default — re-resolving would let a run pinned to `simulator@r1`
+ * with `REPO=run/repo` come back as `simulator@r2` with the revision's default,
+ * fail 422 if that parameter is required, or lose its resources entirely if the
+ * profile declares none.
+ *
+ * Only an explicitly supplied replacement profile re-resolves. This is keyed off
+ * `overrideProfileId` rather than off the resolved profile version, because the
+ * latter is also populated when the caller simply keeps the original profile.
+ *
+ * @param overrideProfileId - `undefined` keeps the original profile, `null`
+ *   detaches it, and a string selects a replacement.
+ */
+export function planResubmitResources(
+  overrideProfileId: string | null | undefined,
+  originalResources: ResourceBinding[] | undefined,
+  profileResourceSpecs: ResourceBindingSpec[] | undefined,
+):
+  | { kind: "preserve"; bindings: ResourceBinding[] | null }
+  | { kind: "resolve"; specs: ResourceBindingSpec[] } {
+  if (typeof overrideProfileId === "string") {
+    return profileResourceSpecs && profileResourceSpecs.length > 0
+      ? { kind: "resolve", specs: profileResourceSpecs }
+      : { kind: "preserve", bindings: null };
+  }
+  return {
+    kind: "preserve",
+    bindings: originalResources && originalResources.length > 0 ? originalResources : null,
+  };
+}
+
 export function registerRequestsRoutes(ctx: RouteContext): void {
 
 const upload = multer({ dest: tmpdir() });
@@ -185,6 +228,7 @@ const validatePersistedRequestTarget = (request: RequestDocument) =>
       mcpServers: request.mcpServers,
       skillRevisions: request.skillRevisions,
       extensions: request.extensions,
+      resources: request.resources,
     }),
     strictCapabilities: ctx.strictAgentCapabilities,
   });
@@ -284,6 +328,120 @@ async function resolveGatePromptText(
   );
 }
 
+type ResourceBindingSpecInput = string | ResourceBindingSpec;
+
+function normalizeResourceBindingSpec(input: ResourceBindingSpecInput): ResourceBindingSpec {
+  return typeof input === "string" ? { ref: input } : input;
+}
+
+function normalizeResourceBindingSpecs(input: unknown): ResourceBindingSpec[] | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const specs = input
+    .map((item) => {
+      if (typeof item === "string") {
+        const ref = item.trim();
+        return ref ? { ref } : undefined;
+      }
+      if (item && typeof item === "object" && typeof (item as { ref?: unknown }).ref === "string") {
+        const ref = (item as { ref: string }).ref.trim();
+        if (!ref) return undefined;
+        const params = (item as { params?: unknown }).params;
+        return {
+          ref,
+          ...(params && typeof params === "object" ? { params: params as Record<string, string> } : {}),
+        };
+      }
+      return undefined;
+    })
+    .filter((spec): spec is ResourceBindingSpec => spec !== undefined);
+  return specs.length > 0 ? specs : undefined;
+}
+
+async function resolveResourceRevision(
+  ctx: RouteContext,
+  projectId: string,
+  spec: string,
+): Promise<ResourceRevisionDocument | null> {
+  const at = spec.lastIndexOf("@r");
+  const slug = at > 0 ? spec.slice(0, at) : spec;
+  const revisionNumber = at > 0 ? Number(spec.slice(at + 2)) : undefined;
+
+  let revision: ResourceRevisionDocument | null = null;
+  if (revisionNumber !== undefined && Number.isInteger(revisionNumber) && revisionNumber > 0) {
+    const resource = await ctx.resourceStore.getBySlug(projectId, slug);
+    revision = resource
+      ? await ctx.resourceRevisionStore.getByNumber(resource._id, revisionNumber)
+      : null;
+  } else {
+    // A bare spec is a slug or a revision id; try both before failing.
+    const resource = await ctx.resourceStore.getBySlug(projectId, spec);
+    revision = resource
+      ? await ctx.resourceRevisionStore.getLatest(resource._id)
+      : await ctx.resourceRevisionStore.get(spec);
+  }
+
+  if (revision && revision.projectId !== projectId) return null;
+  return revision;
+}
+
+async function resolveResourceBindings(
+  ctx: RouteContext,
+  projectId: string,
+  requestedSpecs: ResourceBindingSpec[] | undefined,
+  profileSpecs: ResourceBindingSpec[] | undefined,
+): Promise<{ bindings?: ResourceBinding[]; conflicts: string[]; errors: string[] }> {
+  const conflicts: string[] = [];
+  const errors: string[] = [];
+  const effectiveSpecs = profileSpecs ?? requestedSpecs;
+  if (!effectiveSpecs || effectiveSpecs.length === 0) return { conflicts, errors };
+
+  if (profileSpecs && requestedSpecs && requestedSpecs.length > profileSpecs.length) {
+    conflicts.push(`resources: sent ${requestedSpecs.length} binding(s), profile requires ${profileSpecs.length}`);
+  }
+
+  const bindings: ResourceBinding[] = [];
+  for (let index = 0; index < effectiveSpecs.length; index += 1) {
+    const profileSpec = profileSpecs?.[index];
+    const runSpec = requestedSpecs?.[index];
+    const effectiveSpec = normalizeResourceBindingSpec(profileSpec ?? runSpec!);
+
+    const revision = await resolveResourceRevision(ctx, projectId, effectiveSpec.ref);
+    if (!revision) {
+      errors.push(`Resource '${effectiveSpec.ref}' not found in this project`);
+      continue;
+    }
+
+    let runParams = runSpec?.params;
+    if (profileSpec && runSpec) {
+      const normalizedRunSpec = normalizeResourceBindingSpec(runSpec);
+      const runRevision = await resolveResourceRevision(ctx, projectId, normalizedRunSpec.ref);
+      if (!runRevision) {
+        errors.push(`Resource '${normalizedRunSpec.ref}' not found in this project`);
+        runParams = undefined;
+      } else if (runRevision._id !== revision._id) {
+        conflicts.push(`resources[${index}].ref: sent "${normalizedRunSpec.ref}", profile requires "${effectiveSpec.ref}"`);
+        runParams = undefined;
+      }
+    }
+
+    const result = resolveResourceParams({
+      parameters: revision.parameters,
+      profileParams: profileSpec?.params,
+      runParams,
+      ref: revision.ref,
+    });
+    conflicts.push(...result.conflicts);
+    errors.push(...result.errors);
+    bindings.push({
+      ref: revision.ref,
+      revisionId: revision._id,
+      params: result.params,
+    });
+  }
+
+  return { bindings, conflicts, errors };
+}
+
 // Submit a request
 apiRoute(ctx.app, ctx.registry, {
   method: "post",
@@ -301,7 +459,7 @@ apiRoute(ctx.app, ctx.registry, {
   successStatus: 201,
   handler: async (req, res) => {
     const projectId = getQueryProjectId(req);
-    const { scenario: scenarioObj, persona: personaObj, maxIterations, personaInstructions, count = 1, model: requestedModel, reasoningEffort: requestedReasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, extensions: extensionIds, agentVersion: requestedAgentVersion, profileId: requestedProfileSpec, profileVariations, priority: requestedPriority, agentsMd: requestedAgentsMd, agentsMdParentIds: requestedAgentsMdParentIds, gates: requestedGates, codebase: codebaseSpec, codebaseRevisionId: requestedCodebaseRevisionId } = req.body;
+    const { scenario: scenarioObj, persona: personaObj, maxIterations, personaInstructions, count = 1, model: requestedModel, reasoningEffort: requestedReasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, extensions: extensionIds, agentVersion: requestedAgentVersion, profileId: requestedProfileSpec, profileVariations, priority: requestedPriority, agentsMd: requestedAgentsMd, agentsMdParentIds: requestedAgentsMdParentIds, gates: requestedGates, codebase: codebaseSpec, codebaseRevisionId: requestedCodebaseRevisionId, resources: resourceSpecs } = req.body;
     let worker = req.query.worker as string | undefined;
 
     // AGENTS.md body + lineage (for any caller that wants to attach an
@@ -353,6 +511,8 @@ apiRoute(ctx.app, ctx.registry, {
         resolvedCodebaseRevisionId = result.revisionId;
       }
     }
+
+    const requestedResourceSpecs = normalizeResourceBindingSpecs(resourceSpecs);
 
     type VariationInput = {
       profileId: string;
@@ -481,6 +641,7 @@ apiRoute(ctx.app, ctx.registry, {
         agentVersion: string;
         mcpServers?: string[];
         skillRevisions?: string[];
+        resources?: ResourceBinding[];
         extensions?: string[];
       };
 
@@ -524,6 +685,13 @@ apiRoute(ctx.app, ctx.registry, {
             mcpServers: effectiveMcpServers,
             skillRevisions: effectiveSkills,
             extensions: effectiveExtensions,
+            // Mirrors resolveResourceBindings' precedence (profile wins). Uses the
+            // specs rather than resolved bindings because the capability check only
+            // needs to know whether any resource was requested, and resolution
+            // happens after this point.
+            resources:
+              normalizeResourceBindingSpecs(variationProfileVersion.resources)
+              ?? requestedResourceSpecs,
           }),
           strictCapabilities: ctx.strictAgentCapabilities,
         });
@@ -601,6 +769,29 @@ apiRoute(ctx.app, ctx.registry, {
           validatedExtensions = resolvedSpecs;
         }
 
+        const resourceResult = await resolveResourceBindings(
+          ctx,
+          projectId,
+          requestedResourceSpecs,
+          normalizeResourceBindingSpecs(variationProfileVersion.resources),
+        );
+        if (resourceResult.errors.length > 0) {
+          res.status(400).json({
+            error: resourceResult.errors.join("; "),
+            errors: resourceResult.errors,
+            variationProfileId: variationEntry.profileId,
+          });
+          return;
+        }
+        if (resourceResult.conflicts.length > 0) {
+          res.status(400).json({
+            error: `Profile "${variationEntry.profileId}" controls these fields. Either omit them or match the profile values.`,
+            conflicts: resourceResult.conflicts,
+            variationProfileId: variationEntry.profileId,
+          });
+          return;
+        }
+
         resolved.push({
           entry: variationEntry,
           profile: variationProfile,
@@ -610,6 +801,7 @@ apiRoute(ctx.app, ctx.registry, {
           agentVersion: targetCheck.agentVersion,
           mcpServers: validatedMcpServers,
           skillRevisions: resolvedSkillRevisions,
+          resources: resourceResult.bindings,
           extensions: validatedExtensions,
         });
       }
@@ -650,6 +842,7 @@ apiRoute(ctx.app, ctx.registry, {
             ...(r.mcpServers ? { mcpServers: r.mcpServers } : {}),
             ...(r.skillRevisions ? { skillRevisions: r.skillRevisions } : {}),
             ...(resolvedCodebaseRevisionId ? { codebaseRevisionId: resolvedCodebaseRevisionId } : {}),
+            ...(r.resources ? { resources: r.resources } : {}),
             ...(r.extensions ? { extensions: r.extensions } : {}),
             agentVersion: r.agentVersion,
             profileId: r.profile._id,
@@ -690,6 +883,7 @@ apiRoute(ctx.app, ctx.registry, {
     let profileId: string | undefined;
     let profileVersionId: string | undefined;
     let profileVersion: ProfileVersionDocument | null = null;
+    let resolvedResources: ResourceBinding[] | undefined;
     if (requestedProfileSpec) {
       let requestedProfileId: string;
       let requestedProfileVersion: number | undefined;
@@ -750,6 +944,18 @@ apiRoute(ctx.app, ctx.registry, {
           conflicts.push(`extensions: sent ${JSON.stringify(extensionIds)}, profile requires ${JSON.stringify(profileExts)}`);
         }
       }
+      const resourceResult = await resolveResourceBindings(
+        ctx,
+        projectId,
+        requestedResourceSpecs,
+        normalizeResourceBindingSpecs(profileVersion.resources),
+      );
+      if (resourceResult.errors.length > 0) {
+        res.status(400).json({ error: resourceResult.errors.join("; "), errors: resourceResult.errors });
+        return;
+      }
+      conflicts.push(...resourceResult.conflicts);
+      resolvedResources = resourceResult.bindings;
       if (conflicts.length > 0) {
         res.status(400).json({
           error: `Profile "${profileId}" controls these fields. Either omit them or match the profile values.`,
@@ -760,6 +966,13 @@ apiRoute(ctx.app, ctx.registry, {
 
       // Profile fields take precedence
       worker = profileVersion.workerType;
+    } else {
+      const resourceResult = await resolveResourceBindings(ctx, projectId, requestedResourceSpecs, undefined);
+      if (resourceResult.errors.length > 0) {
+        res.status(400).json({ error: resourceResult.errors.join("; "), errors: resourceResult.errors });
+        return;
+      }
+      resolvedResources = resourceResult.bindings;
     }
 
     // Effective values: profile overrides client inputs for controlled fields
@@ -838,6 +1051,7 @@ apiRoute(ctx.app, ctx.registry, {
         mcpServers: effectiveMcpServers,
         skillRevisions: effectiveSkills,
         extensions: effectiveExtensions,
+        resources: resolvedResources,
       }),
       strictCapabilities: ctx.strictAgentCapabilities,
     });
@@ -1048,6 +1262,7 @@ apiRoute(ctx.app, ctx.registry, {
           ...(validatedMcpServers ? { mcpServers: validatedMcpServers } : {}),
           ...(resolvedSkillRevisions ? { skillRevisions: resolvedSkillRevisions } : {}),
           ...(resolvedCodebaseRevisionId ? { codebaseRevisionId: resolvedCodebaseRevisionId } : {}),
+          ...(resolvedResources ? { resources: resolvedResources } : {}),
           ...(validatedExtensions ? { extensions: validatedExtensions } : {}),
           agentVersion: resolvedAgentVersion,
           ...(profileId ? { profileId } : {}),
@@ -1109,6 +1324,7 @@ apiRoute(ctx.app, ctx.registry, {
       ...(validatedMcpServers ? { mcpServers: validatedMcpServers } : {}),
       ...(resolvedSkillRevisions ? { skillRevisions: resolvedSkillRevisions } : {}),
       ...(resolvedCodebaseRevisionId ? { codebaseRevisionId: resolvedCodebaseRevisionId } : {}),
+      ...(resolvedResources ? { resources: resolvedResources } : {}),
       ...(validatedExtensions ? { extensions: validatedExtensions } : {}),
       ...(resolvedAgentVersion ? { agentVersion: resolvedAgentVersion } : {}),
       ...(profileId ? { profileId } : {}),
@@ -1868,6 +2084,30 @@ apiRoute(ctx.app, ctx.registry, {
           ? (activeProfileVersion.extensions ?? null)
           : (overrides?.extensions !== undefined ? overrides.extensions : original.extensions);
 
+        const resubmitPlan = planResubmitResources(
+          overrideProfileId,
+          original.resources,
+          normalizeResourceBindingSpecs(activeProfileVersion?.resources),
+        );
+        let effectiveResources: ResourceBinding[] | null = null;
+        if (resubmitPlan.kind === "resolve") {
+          const resolvedResources = await resolveResourceBindings(
+            ctx,
+            original.projectId,
+            undefined,
+            resubmitPlan.specs,
+          );
+          if (resolvedResources.errors.length > 0) {
+            res.status(422).json({
+              error: `Resource resolution failed during resubmit: ${resolvedResources.errors.join("; ")}`,
+            });
+            return;
+          }
+          effectiveResources = resolvedResources.bindings ?? null;
+        } else {
+          effectiveResources = resubmitPlan.bindings;
+        }
+
         const targetCheck = await validateAgentTarget(ctx.agentCollection, {
           workerType: effectiveWorkerType,
           requestedVersion:
@@ -1879,6 +2119,7 @@ apiRoute(ctx.app, ctx.registry, {
             mcpServers: effectiveMcpServers,
             skillRevisions: effectiveSkillRevisions,
             extensions: effectiveExtensions,
+            resources: effectiveResources,
           }),
           strictCapabilities: ctx.strictAgentCapabilities,
         });
@@ -1908,6 +2149,7 @@ apiRoute(ctx.app, ctx.registry, {
           ...(effectiveMcpServers && effectiveMcpServers.length > 0 ? { mcpServers: effectiveMcpServers } : {}),
           ...(resolvedSkillRevisions && resolvedSkillRevisions.length > 0 ? { skillRevisions: resolvedSkillRevisions } : {}),
           ...(effectiveExtensions && effectiveExtensions.length > 0 ? { extensions: effectiveExtensions } : {}),
+          ...(effectiveResources && effectiveResources.length > 0 ? { resources: effectiveResources } : {}),
           agentVersion: resolvedAgentVersion,
           ...(original.taskPromptId ? { taskPromptId: original.taskPromptId } : {}),
           ...(effectiveProfileId ? { profileId: effectiveProfileId } : {}),

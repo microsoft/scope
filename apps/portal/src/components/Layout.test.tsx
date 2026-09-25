@@ -126,6 +126,10 @@ describe("Layout", () => {
     expect(within(sidebar).getByText("Activity")).toBeTruthy();
     expect(within(sidebar).getByRole("link", { name: "Runs" })).toBeTruthy();
     expect(within(sidebar).getByRole("link", { name: "MCP" })).toBeTruthy();
+    // The Integrations group holds Resources alongside MCP and Extensions; the
+    // group and its Resources item deliberately no longer share a label.
+    expect(within(sidebar).getByText("Integrations")).toBeTruthy();
+    expect(within(sidebar).getByRole("link", { name: "Resources" })).toBeTruthy();
     // Global group is present too.
     expect(within(sidebar).getByText("Platform")).toBeTruthy();
   });
@@ -145,9 +149,10 @@ describe("Layout", () => {
     // Scoped groups and their items are hidden.
     expect(within(sidebar).queryByText("Activity")).toBeNull();
     expect(within(sidebar).queryByText("Library")).toBeNull();
-    expect(within(sidebar).queryByText("Resources")).toBeNull();
+    expect(within(sidebar).queryByText("Integrations")).toBeNull();
     expect(within(sidebar).queryByRole("link", { name: "Runs" })).toBeNull();
     expect(within(sidebar).queryByRole("link", { name: "Prompts" })).toBeNull();
+    expect(within(sidebar).queryByRole("link", { name: "Resources" })).toBeNull();
     expect(within(sidebar).queryByRole("link", { name: "MCP" })).toBeNull();
     // The New Run CTA is scoped too, so it's gone until a project is picked.
     expect(within(sidebar).queryByRole("link", { name: "New Run" })).toBeNull();

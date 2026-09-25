@@ -381,6 +381,8 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--model",
           "--name",
           "--project",
+          "--resource-param",
+          "--resources",
           "--skills",
           "--url",
           "--worker",
@@ -415,6 +417,8 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
               "--id",
               "--mcp-servers",
               "--model",
+              "--resource-param",
+              "--resources",
               "--skills",
               "--url",
               "--worker",
@@ -657,6 +661,70 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       },
     },
   },
+  "resource": {
+    "subcommands": {
+      "create": {
+        "options": [
+          "--creator",
+          "--description",
+          "--exports",
+          "--name",
+          "--output",
+          "--param",
+          "--project",
+          "--setup-file",
+          "--setup-sh",
+          "--slug",
+          "--teardown-file",
+          "--teardown-sh",
+          "--url",
+        ],
+      },
+      "delete": {
+        "options": [
+          "--project",
+          "--url",
+        ],
+      },
+      "get": {
+        "options": [
+          "--output",
+          "--project",
+          "--url",
+        ],
+      },
+      "list": {
+        "options": [
+          "--output",
+          "--project",
+          "--url",
+        ],
+      },
+      "revisions": {
+        "options": [
+          "--creator",
+          "--exports",
+          "--limit",
+          "--output",
+          "--param",
+          "--project",
+          "--setup-file",
+          "--setup-sh",
+          "--teardown-file",
+          "--teardown-sh",
+          "--url",
+        ],
+      },
+      "update": {
+        "options": [
+          "--description",
+          "--name",
+          "--project",
+          "--url",
+        ],
+      },
+    },
+  },
   "run": {
     "subcommands": {
       "attempts": {
@@ -758,6 +826,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--agents-md",
           "--base-profile",
           "--codebase",
+          "--count",
           "--criteria",
           "--extensions",
           "--gates",
@@ -771,6 +840,8 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--profile-variations-file",
           "--project",
           "--reasoning-effort",
+          "--resource-param",
+          "--resources",
           "--scenario",
           "--skills",
           "--traits",

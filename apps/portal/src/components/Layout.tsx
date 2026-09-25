@@ -26,6 +26,7 @@ import {
   GitBranch,
   Plug,
   Puzzle,
+  Boxes,
   SlidersHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
@@ -74,12 +75,12 @@ interface NavGroup {
 
 /**
  * Sidebar nav grouped by domain noun:
- *   Activity  - what happened (runs and their outputs)
- *   Library   - content you author (tasks, criteria, profiles, ...)
- *   Resources - project-scoped integrations you wire up (MCP, extensions)
- *   Platform  - global infra shared across projects (agents, models, secrets)
+ *   Activity     - what happened (runs and their outputs)
+ *   Library      - content you author (tasks, criteria, profiles, ...)
+ *   Integrations - project-scoped things you wire up (resources, MCP, extensions)
+ *   Platform     - global infra shared across projects (agents, models, secrets)
  *
- * Activity, Library and Resources are `scoped`: their pages live behind a
+ * Activity, Library and Integrations are `scoped`: their pages live behind a
  * ProjectGate, so the sidebar hides them until a project is selected. Platform
  * is global - it lives at the tenant level and is shared by every project, so
  * it stays visible without a selection and is pinned last.
@@ -114,9 +115,10 @@ const navGroups: NavGroup[] = [
   },
   {
     id: "resources",
-    label: "Resources",
+    label: "Integrations",
     scoped: true,
     items: [
+      { to: "/resources", label: "Resources", icon: Boxes },
       { to: "/mcp-servers", label: "MCP", icon: Server, featureKey: "mcp" },
       { to: "/extensions", label: "Extensions", icon: Puzzle, featureKey: "extensions" },
     ],
@@ -158,6 +160,7 @@ const FULL_BLEED_ROUTE_PATTERNS = [
   "/task-prompts",
   "/criteria",
   "/insights",
+  "/resources",
   "/mcp-servers",
   "/skills",
   "/extensions",

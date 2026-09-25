@@ -38,6 +38,9 @@ import { SkillList } from "@/pages/SkillList";
 import { SkillDetail } from "@/pages/SkillDetail";
 import { CodebaseList } from "@/pages/CodebaseList";
 import { CodebaseDetail } from "@/pages/CodebaseDetail";
+import { ResourceList } from "@/pages/ResourceList";
+import { ResourceDetail } from "@/pages/ResourceDetail";
+import { CreateResource } from "@/pages/CreateResource";
 import { ExtensionList } from "@/pages/ExtensionList";
 import { ExtensionDetail } from "@/pages/ExtensionDetail";
 import { ExtensionPreviewPanel } from "@/pages/ExtensionPreviewPanel";
@@ -138,6 +141,10 @@ export function App() {
         <Route path="/codebases" element={<ProjectGate><CodebaseList /></ProjectGate>} />
         <Route path="/codebases/:id" element={<CodebaseDetail />} />
         <Route path="/codebases/:id/revisions/:revisionId" element={<CodebaseDetail />} />
+        <Route path="/resources" element={<ProjectGate><ResourceList /></ProjectGate>} />
+        <Route path="/resources/new" element={<ProjectGate><CreateResource /></ProjectGate>} />
+        <Route path="/resources/:id" element={<ProjectGate><ResourceDetail /></ProjectGate>} />
+        <Route path="/resources/:id/revisions/:revisionId" element={<ProjectGate><ResourceDetail /></ProjectGate>} />
         <Route path="/extensions" element={<FeatureRoute featureKey="extensions"><ProjectGate><ExtensionList /></ProjectGate></FeatureRoute>}>
           <Route path=":id/preview" element={<FeatureRoute featureKey="extensions"><ExtensionPreviewPanel /></FeatureRoute>} />
         </Route>

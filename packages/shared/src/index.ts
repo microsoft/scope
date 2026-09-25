@@ -17,6 +17,7 @@ export * from "./token-manager/index.js";
 export * from "./mcp/index.js";
 export * from "./skills/index.js";
 export * from "./codebases/index.js";
+export * from "./resources/index.js";
 export * from "./extensions/index.js";
 export * from "./projects/index.js";
 export * from "./agent-version.js";

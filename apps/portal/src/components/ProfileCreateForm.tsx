@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, Save, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { ExtensionPicker } from "@/components/ExtensionPicker";
+import { ResourcePicker } from "@/components/ResourcePicker";
 import { SkillPicker } from "@/components/SkillPicker";
 import {
   ModelSelectItems,
@@ -30,6 +31,7 @@ import {
   type CodingAgent,
   type McpServerDocument,
   type ProfileWithVersion,
+  type ResourceBindingSpec,
 } from "@/types";
 
 interface ProfileCreateFormProps {
@@ -55,6 +57,7 @@ export function ProfileCreateForm({
   const [selectedAgentVersion, setSelectedAgentVersion] = useState("");
   const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [selectedResources, setSelectedResources] = useState<ResourceBindingSpec[]>([]);
   const [selectedExtensions, setSelectedExtensions] = useState<string[]>([]);
   const strictAgentCapabilities = useStrictAgentCapabilities();
 
@@ -123,6 +126,7 @@ export function ProfileCreateForm({
         ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}),
         ...(selectedMcpServers.length > 0 ? { mcpServers: selectedMcpServers } : {}),
         ...(selectedSkills.length > 0 ? { skillRevisions: selectedSkills } : {}),
+        ...(selectedResources.length > 0 ? { resources: selectedResources } : {}),
         ...(selectedExtensions.length > 0 ? { extensions: selectedExtensions } : {}),
       }),
     onSuccess: (profile) => {
@@ -157,6 +161,10 @@ export function ProfileCreateForm({
       const shortSkills = selectedSkills.map((s) => s.split("/").pop() ?? s);
       parts.push(shortSkills.join(", "));
       descParts.push(`Skills: ${selectedSkills.join(", ")}`);
+    }
+    if (selectedResources.length > 0) {
+      parts.push(selectedResources.map((resource) => resource.ref).join(", "));
+      descParts.push(`Resources: ${selectedResources.map((resource) => resource.ref).join(", ")}`);
     }
     if (selectedExtensions.length > 0) {
       const shortExts = selectedExtensions.map((e) => e.split("/").pop() ?? e);
@@ -342,6 +350,16 @@ export function ProfileCreateForm({
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Resources</CardTitle>
+          <CardDescription>Select lifecycle resources and preset any parameter values this profile should control</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResourcePicker selected={selectedResources} onChange={setSelectedResources} />
+        </CardContent>
+      </Card>
 
       {supportsExtensions && (
         <Card>

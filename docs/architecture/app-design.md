@@ -65,10 +65,12 @@ erDiagram
     RUN }o--|| PERSONA : uses
     RUN }o--|| WORKER_TYPE : targets
     RUN }o--|| CODEBASE_REVISION : seeds
+    RUN }o--o{ RESOURCE_REVISION : provisions
     ITERATION ||--o{ CRITERION_RESULT : evaluated_by
     CRITERION ||--o{ CRITERION_RESULT : produces
     CRITERION }o--o{ CRITERION : depends_on
     CODEBASE ||--o{ CODEBASE_REVISION : has
+    RESOURCE ||--o{ RESOURCE_REVISION : has
 ```
 
 - **Run** — A single benchmark execution: one scenario + one persona + one worker
@@ -77,6 +79,9 @@ erDiagram
 - **CriterionResult** — Pass/fail result of evaluating a criterion against a specific iteration
 - **Codebase** — Mutable first-class project entity in `codebases`, with a unique slug, source type (`git` or `archive`), optional GitHub source/default branch, revision counter, latest revision pointer, and soft-delete metadata.
 - **CodebaseRevision** — Immutable snapshot in `codebase-revisions`. Every Git resolution or archive upload creates a fresh UUID revision with the next per-codebase `revisionNumber` and canonical `{slug}@r{N}` ref.
+- **Resource** — Mutable project-scoped lifecycle identity in `resources` with a unique slug, revision counter, latest revision pointer, and soft-delete metadata.
+- **ResourceRevision** — Immutable lifecycle snapshot in `resource-revisions` containing normalized setup/teardown scripts, exported names, parameter declarations, `contentSha256`, and canonical `{slug}@r{N}` ref. Revisions deduplicate against the latest revision only. See [resources](resources.md).
+- **ProfileVersion.resources** — Immutable resource binding specs (`{ref, params}`) stored with a profile version. Submit resolves them to pinned request `resources[]` and merges profile preset parameters with run-supplied values using profile-wins precedence.
 
 ### Typed prompts, AGENTS.md, and size-based storage
 
@@ -128,8 +133,8 @@ pass any `projectId`).
 
 | Class | Collections | How `projectId` is set |
 |-------|-------------|------------------------|
-| **Root** (no parent) | `requests`, `profiles`, `criteria`, `prompt-features`, `mcp-servers`, `report-templates`, `skills`, `extensions`, `codebases` | From the `?projectId=` query param at create time |
-| **Child** (references a parent) | `runs` (history), `profile-versions`, `codebase-revisions`, `reports`, `insights` | Copied from the parent doc's `projectId` |
+| **Root** (no parent) | `requests`, `profiles`, `criteria`, `prompt-features`, `mcp-servers`, `report-templates`, `skills`, `extensions`, `codebases`, `resources` | From the `?projectId=` query param at create time |
+| **Child** (references a parent) | `runs` (history), `profile-versions`, `codebase-revisions`, `resource-revisions`, `reports`, `insights` | Copied from the parent doc's `projectId` |
 | **Special** (deterministic key → per-project copies) | `task-prompts`, `skill-revisions` | From the run's `projectId`; see below |
 | **Unscoped** | `projects`, `agents`, `models`, tokens/accounts, feature-flags | n/a — never filtered by project |
 
@@ -212,7 +217,7 @@ mechanism — see [Per-project catalog isolation (migration 026)](#per-project-c
 Entities the pipeline **creates** are persisted with the run's `projectId` (derived from the
 request doc, never a query param): reports (report-generator / trigger endpoint), insights
 (judge / agent-authored via `sourceReportId`), demoted retry attempts (`insertHistoricalRun`),
-codebase-revisions, and profile-versions. The DoD asserts these land in the right project.
+codebase-revisions, resource-revisions, and profile-versions. The DoD asserts these land in the right project.
 
 ### Migration & rollout (migrate-then-enforce)
 

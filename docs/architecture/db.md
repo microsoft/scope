@@ -221,7 +221,7 @@ Production uses **Cosmos DB for MongoDB (RU-based)**. Key considerations:
 
 Migration 025 (Data Organization: Projects) adds an immutable `projectId` to every user-scoped collection and indexes it for the required `?projectId=` list filter. Each of the following gains `{ projectId: 1 }` and `{ projectId: 1, _id: 1 }`:
 
-`requests`, `profiles`, `criteria`, `prompt-features`, `mcp-servers`, `report-templates`, `skills`, `extensions`, `codebases`, `runs`, `profile-versions`, `codebase-revisions`, `reports`, `insights`, `task-prompts`, `skill-revisions`.
+`requests`, `profiles`, `criteria`, `prompt-features`, `mcp-servers`, `report-templates`, `skills`, `extensions`, `codebases`, `resources`, `runs`, `profile-versions`, `codebase-revisions`, `resource-revisions`, `reports`, `insights`, `task-prompts`, `skill-revisions`.
 
 Two deterministic-key collections additionally get project-scoped **unique** indexes so identical content can coexist across projects:
 
@@ -254,6 +254,10 @@ It **pre-asserts** there are no duplicate `{ projectId, slug }` / `{ projectId, 
 
 > **MCP now isolated (migration 027).** `mcp-servers` was the fifth tagged-but-not-isolated family
 > deferred out of 026. Migration 027 completes it (see below).
+
+### Resource indexes (migration 029)
+
+Migration 029 adds the first Resource catalog indexes. Resources are project-scoped from creation: `resources` gets `{ projectId, slug }` and `resource-revisions` gets `{ projectId, ref }`, both through `ensureUniqueIndexOrFallback`. On Cosmos these may be non-unique lookup indexes, so API create paths perform explicit same-project duplicate checks. Additional lookup indexes mirror codebases: `{ createdAt: -1 }` / `{ deletedAt: 1 }` on resources and `{ resourceId: 1 }` / `{ resourceId: 1, revisionNumber: -1 }` on revisions.
 
 ### Per-project entity keying (migration 027)
 

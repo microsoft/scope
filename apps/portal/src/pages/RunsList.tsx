@@ -2306,14 +2306,30 @@ export function RunsList() {
                     const failedAtStatus =
                       agg?.outcomeCounts?.failed ??
                       runs.filter((r) => r.run?.status === "done" && r.run?.outcome === "failed").length;
+                    // A collapsed group otherwise looks idle while it is still
+                    // working: the bar only moves when a run finishes, so a long
+                    // batch is indistinguishable from a stalled one.
+                    const activeCount =
+                      agg?.statusCounts?.processing ?? runs.filter((r) => r.run?.status === "processing").length;
                     return (
-                      <AggregateProgress
-                        count={doneCount - failedAtStatus}
-                        failedCount={failedAtStatus}
-                        total={total}
-                        label="done"
-                        tone={failedAtStatus > 0 && doneCount === failedAtStatus ? "destructive" : "success"}
-                      />
+                      <div className="flex items-center gap-2">
+                        <AggregateProgress
+                          count={doneCount - failedAtStatus}
+                          failedCount={failedAtStatus}
+                          total={total}
+                          label="done"
+                          tone={failedAtStatus > 0 && doneCount === failedAtStatus ? "destructive" : "success"}
+                        />
+                        {activeCount > 0 && (
+                          <span
+                            className="relative flex h-2 w-2 shrink-0"
+                            title={`${activeCount} run${activeCount === 1 ? "" : "s"} processing`}
+                          >
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
+                          </span>
+                        )}
+                      </div>
                     );
                   }
                   if (column.id === "outcome") {

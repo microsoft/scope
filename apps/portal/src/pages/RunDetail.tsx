@@ -32,7 +32,7 @@ import { CriteriaBadge } from "@/components/CriteriaBadge";
 import { TaskPromptBadge } from "@/components/TaskPromptBadge";
 import { AgentBadge } from "@/components/AgentBadge";
 import { SkillRevisionLinks } from "@/components/SkillRevisionLinks";
-import { ArrowLeft, Copy, Check, Sparkles, CheckCircle2, XCircle, MinusCircle, FileText, Plus, Download, Loader2, Archive, Video, LayoutGrid, List, Puzzle, RotateCcw, ChevronDown, Clock, Pause, Play, ArrowUpDown, X } from "lucide-react";
+import { ArrowLeft, Copy, Check, Sparkles, CheckCircle2, XCircle, MinusCircle, FileText, Plus, Download, Loader2, Archive, Video, LayoutGrid, List, Puzzle, RotateCcw, ChevronDown, Clock, Pause, Play, ArrowUpDown, X, Boxes } from "lucide-react";
 import { formatDate, formatId, formatDuration, cn } from "@/lib/utils";
 import {
   GATE_METADATA,
@@ -44,7 +44,7 @@ import {
 } from "@/lib/gates";
 import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
-import type { RunState, LogEvent } from "@/types";
+import type { RunState, LogEvent, ResourceBinding, ResourceRunOutcome } from "@/types";
 import { useShiftModifier } from "@/hooks/useShiftModifier";
 import { getRetryButtonState } from "@/components/RetryButton";
 import { getRunSkillReferences } from "@/lib/skill-spec";
@@ -72,6 +72,49 @@ function ResourceLinks({ label, items, hrefBase }: { label: string; items: strin
             className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-mono hover:bg-accent transition-colors"
           >
             {slug}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RunResourceLinks({ bindings, outcomes }: { bindings: ResourceBinding[]; outcomes: ResourceRunOutcome[] }) {
+  const outcomeByRevisionId = new Map(outcomes.map((resource) => [resource.revisionId, resource]));
+  const bindingsByRevisionId = new Set(bindings.map((binding) => binding.revisionId));
+  const outcomeOnly = outcomes.filter((resource) => !bindingsByRevisionId.has(resource.revisionId));
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Resources</span>
+      <div className="flex flex-wrap items-center gap-1">
+        {bindings.map((binding) => {
+          const outcome = outcomeByRevisionId.get(binding.revisionId);
+          return (
+            <Link
+              key={binding.revisionId}
+              to={`/resources/${binding.ref.split("@r")[0]}`}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-mono transition-colors hover:bg-accent",
+                outcome ? outcome.setupSucceeded ? "border-emerald-500/40" : "border-destructive/50" : "",
+              )}
+            >
+              {binding.ref}
+              {outcome && (outcome.setupSucceeded ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <XCircle className="h-3 w-3 text-destructive" />)}
+            </Link>
+          );
+        })}
+        {outcomeOnly.map((resource) => (
+          <Link
+            key={resource.revisionId}
+            to={`/resources/${resource.slug}`}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-mono transition-colors hover:bg-accent",
+              resource.setupSucceeded ? "border-emerald-500/40" : "border-destructive/50",
+            )}
+          >
+            {resource.ref}
+            {resource.setupSucceeded ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <XCircle className="h-3 w-3 text-destructive" />}
           </Link>
         ))}
       </div>
@@ -506,6 +549,23 @@ export function RunDetail() {
       : undefined);
 
   const skillReferences = getRunSkillReferences(run);
+  const runResources = run.resources ?? [];
+  const runResourceOutcomes = activeRun?.resources ?? [];
+  const resourceOutcomeByRevisionId = new Map(runResourceOutcomes.map((resource) => [resource.revisionId, resource]));
+  const resourceRows = runResources.length > 0
+    ? runResources.map((binding) => ({
+        binding,
+        outcome: resourceOutcomeByRevisionId.get(binding.revisionId),
+      }))
+    : runResourceOutcomes.map((outcome) => ({
+        binding: {
+          ref: outcome.ref,
+          revisionId: outcome.revisionId,
+          params: outcome.params ?? {},
+        },
+        outcome,
+      }));
+  const hasRunResources = resourceRows.length > 0;
 
   const gateSummaries = (run.gateSummaries ?? []) as GateRunSummary[];
   const gateSummaryById = new Map(gateSummaries.map((summary) => [summary.gate, summary]));
@@ -636,6 +696,19 @@ export function RunDetail() {
                   value={<span className="font-mono">{run.agentVersion}</span>}
                 />
               )}
+              {run.profileId && (
+                <MetaItem
+                  label="Profile"
+                  value={(
+                    <Link to={`/profiles/${run.profileId}`} className="text-primary hover:underline">
+                      {profile?.name ?? <Skeleton className="inline-block h-4 w-24 align-middle" />}
+                      {run.profileVersionId?.split("@")[1] && (
+                        <span className="ml-1 font-mono text-muted-foreground">v{run.profileVersionId.split("@")[1]}</span>
+                      )}
+                    </Link>
+                  )}
+                />
+              )}
               <MetaItem label="Created" value={formatDate(run.createdAt)} />
               {run.maxIterations && <MetaItem label="Max iterations" value={run.maxIterations} />}
               {(() => {
@@ -665,11 +738,24 @@ export function RunDetail() {
                   value={<span className="font-mono">{activeRun?.aiCallCount}</span>}
                 />
               )}
+              {activeRun?.mcpRegistered !== undefined && (
+                <MetaItem
+                  label="MCP registered"
+                  title="Whether MCP server registration completed for this attempt"
+                  value={(
+                    <Badge variant={activeRun.mcpRegistered ? "success" : "secondary"} className="gap-1">
+                      {activeRun.mcpRegistered ? <CheckCircle2 className="h-3 w-3" /> : <MinusCircle className="h-3 w-3" />}
+                      {activeRun.mcpRegistered ? "Yes" : "No"}
+                    </Badge>
+                  )}
+                />
+              )}
             </div>
 
             {/* Tier 3 — resource attachments */}
             {((run.mcpServers && run.mcpServers.length > 0) ||
               (run.skills && run.skills.length > 0) ||
+              hasRunResources ||
               (run.extensions && run.extensions.length > 0)) && (
               <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
                 {run.mcpServers && run.mcpServers.length > 0 && (
@@ -680,6 +766,9 @@ export function RunDetail() {
                 )}
                 {run.extensions && run.extensions.length > 0 && (
                   <ResourceLinks label="Extensions" items={run.extensions} hrefBase="/extensions" />
+                )}
+                {hasRunResources && (
+                  <RunResourceLinks bindings={runResources} outcomes={runResourceOutcomes} />
                 )}
               </div>
             )}
@@ -1380,6 +1469,61 @@ export function RunDetail() {
                       );
                     })}
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Resources card */}
+            {hasRunResources && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Boxes className="h-4 w-4" /> Resources ({resourceRows.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {resourceRows.map(({ binding, outcome }) => (
+                      <div key={binding.revisionId} className="rounded-md border p-3 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link to={`/resources/${binding.ref.split("@r")[0]}`} className="font-mono text-xs text-primary hover:underline">{binding.ref}</Link>
+                          <Badge variant="outline" className="font-mono text-xs">revision {formatId(binding.revisionId)}</Badge>
+                          {outcome && (
+                            outcome.setupSucceeded ? (
+                              <Badge variant="success" className="gap-1"><CheckCircle2 className="h-3 w-3" /> setup ok</Badge>
+                            ) : (
+                              <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" /> setup failed</Badge>
+                            )
+                          )}
+                          {outcome?.teardownRan !== undefined && (
+                            <Badge variant="outline" className="text-xs">teardown {outcome.teardownRan ? "ran" : "not run"}</Badge>
+                          )}
+                          {outcome?.setupDurationMs !== undefined && (
+                            <Badge variant="secondary" className="font-mono text-xs">{formatDuration(outcome.setupDurationMs)}</Badge>
+                          )}
+                        </div>
+                        {outcome?.error && <p className="mt-2 text-xs text-destructive">{outcome.error}</p>}
+                        <div className="mt-2 space-y-1">
+                          <span className="text-xs text-muted-foreground">Resolved parameters:</span>
+                          {Object.keys(binding.params).length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {Object.entries(binding.params).map(([name, value]) => (
+                                <Badge key={name} variant="outline" className="font-mono text-xs">{name}={value}</Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="ml-1 text-xs text-muted-foreground">none</span>
+                          )}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground">Published:</span>
+                          {outcome?.published && outcome.published.length > 0 ? (
+                            outcome.published.map((name) => <Badge key={name} variant="secondary" className="font-mono text-xs">{name}</Badge>)
+                          ) : (
+                            <span className="text-xs text-muted-foreground">none</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                 </CardContent>
               </Card>
             )}

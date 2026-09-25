@@ -4,9 +4,25 @@
 import { z } from "zod";
 import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
 import { ScenarioSchema, PersonaSchema } from "./scenario.js";
+import { ResourceBindingSchema, ResourceBindingSpecSchema } from "./resource.js";
 import { GateIdSchema } from "./criteria.js";
 
 extendZodWithOpenApi(z);
+
+/** Outcome of one resource's lifecycle within a run. */
+export const ResourceRunOutcomeSchema = z
+  .object({
+    ref: z.string(),
+    slug: z.string(),
+    revisionId: z.string(),
+    setupSucceeded: z.boolean(),
+    published: z.array(z.string()),
+    params: z.record(z.string(), z.string()).optional(),
+    setupDurationMs: z.number().optional(),
+    error: z.string().optional(),
+    teardownRan: z.boolean().optional(),
+  })
+  .openapi("ResourceRunOutcome");
 
 export const GateConfigSchema = z
   .object({
@@ -117,6 +133,11 @@ export const CreateRequestInputSchema = z
     mcpServers: z.array(z.string()).optional(),
     skillRevisions: z.array(z.string()).optional(),
     codebaseRevisionId: z.string().optional(),
+    /** Resources to provision for this run, in setup order. Each entry is a
+     *  bare spec (slug, `slug@rN`, or revision id) or an object carrying
+     *  parameter values. Resolved at submit time and shared by every variation
+     *  in a grouped submission, so each profile gets an identical environment. */
+    resources: z.array(ResourceBindingSpecSchema).optional(),
     extensions: z.array(z.string()).optional(),
     profileId: z.string().optional(),
     profileVariations: z.array(z.string()).optional(),
@@ -152,6 +173,7 @@ export const RequestResponseSchema = z
     mcpServers: z.array(z.string()).optional(),
     skillRevisions: z.array(z.string()).optional(),
     codebaseRevisionId: z.string().optional(),
+    resources: z.array(ResourceBindingSchema).optional(),
     extensions: z.array(z.string()).optional(),
     agentVersion: z.string().optional(),
     profileId: z.string().optional(),
@@ -215,6 +237,12 @@ export const RunStateSchema = z
     setupVideoUrls: z.array(z.string()).optional(),
     tokenUsage: TokenUsageSchema.optional(),
     aiCallCount: z.number().optional(),
+    /** Per-resource lifecycle outcomes, so a run that ended up without the
+     *  environment it asked for is distinguishable after the fact. */
+    resources: z.array(ResourceRunOutcomeSchema).optional(),
+    /** Whether MCP servers were actually registered with the gateway. False
+     *  alongside a non-empty `mcpServers` means the run had no tools. */
+    mcpRegistered: z.boolean().optional(),
     rawChatUrl: z.string().optional(),
     rawChatFormat: z.string().optional(),
     pausedAt: z.coerce.date().optional(),

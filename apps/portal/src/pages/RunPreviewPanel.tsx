@@ -31,6 +31,12 @@ export function RunPreviewPanel() {
     },
   });
 
+  const { data: profile } = useQuery({
+    queryKey: ["profile", run?.profileId],
+    queryFn: () => api.getProfile(run!.profileId!),
+    enabled: !!run?.profileId,
+  });
+
   const closePanel = () => navigate({ pathname: "/runs", search: window.location.search });
 
   if (isLoading) {
@@ -174,6 +180,19 @@ export function RunPreviewPanel() {
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-2 gap-3 text-sm">
+              {run.profileId && (
+                <div>
+                  <dt className="text-xs text-muted-foreground">Profile</dt>
+                  <dd className="mt-0.5 text-xs">
+                    <Link to={`/profiles/${run.profileId}`} className="text-primary hover:underline">
+                      {profile?.name ?? formatId(run.profileId)}
+                      {run.profileVersionId?.split("@")[1] && (
+                        <span className="ml-1 font-mono text-muted-foreground">v{run.profileVersionId.split("@")[1]}</span>
+                      )}
+                    </Link>
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-xs text-muted-foreground">Worker</dt>
                 <dd className="mt-0.5 text-xs">

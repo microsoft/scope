@@ -14,17 +14,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import {
   Send, Loader2, Server, Info, BookOpen, Sparkles, Puzzle, SlidersHorizontal,
-  X, Save, Plus, ChevronDown, FilePlus2, History, ArrowLeft, Check, FolderGit2, FileText,
+  X, Save, Plus, ChevronDown, FilePlus2, History, ArrowLeft, Check, FolderGit2, FileText, Boxes,
 } from "lucide-react";
 import {
   getActiveAgentVersions, isAgentAvailable, isAgentVersionAvailable, type CodingAgent, type McpServerDocument,
-  type ProfileWithVersion, type ProfileVersionDocument, type Run,
+  type ProfileWithVersion, type ProfileVersionDocument, type ResourceBindingSpec, type Run,
 } from "@/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CriteriaPicker } from "@/components/CriteriaPicker";
 import { CreateCriterionDialog } from "@/components/CreateCriterionDialog";
 import { SkillPicker } from "@/components/SkillPicker";
 import { CodebasePicker } from "@/components/CodebasePicker";
+import { ResourcePicker } from "@/components/ResourcePicker";
 import { ExtensionPicker } from "@/components/ExtensionPicker";
 import { ProfileCreateForm } from "@/components/ProfileCreateForm";
 import { ProfilePicker } from "@/components/ProfilePicker";
@@ -218,6 +219,7 @@ export function SubmitRun() {
   const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [selectedCodebaseSpec, setSelectedCodebaseSpec] = useState<string | null>(null);
+  const [selectedResourceSpecs, setSelectedResourceSpecs] = useState<ResourceBindingSpec[]>([]);
   const [selectedExtensions, setSelectedExtensions] = useState<string[]>([]);
 
   // Profile
@@ -245,6 +247,7 @@ export function SubmitRun() {
   const [mcpOpen, setMcpOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [codebaseOpen, setCodebaseOpen] = useState(false);
+  const [resourcesOpen, setResourcesOpen] = useState(false);
   const [agentsMdOpen, setAgentsMdOpen] = useState(false);
   const [extensionsOpen, setExtensionsOpen] = useState(false);
   const [graphSelection, setGraphSelection] = useState<GraphSelection>({ kind: "base" });
@@ -301,6 +304,9 @@ export function SubmitRun() {
     );
   const selectableProfileList = profileList.filter((profile) => profileVersionIsAvailable(profile.version));
   const selectedBaseProfile = profileList.find((profile) => profile._id === selectedProfileId);
+  const selectedBaseProfileVersion = selectedProfileId
+    ? profileVersions.find((version) => version.version === selectedProfileVersion) ?? selectedBaseProfile?.version
+    : undefined;
   const topProfiles = selectableProfileList.slice(0, 3);
 
   // ─── Effects ────────────────────────────────────────────────────────────
@@ -395,9 +401,11 @@ export function SubmitRun() {
     setSelectedAgentVersion(v.agentVersion ?? "");
     setSelectedMcpServers(v.mcpServers ?? []);
     setSelectedSkills(v.skillRevisions ?? []);
+    setSelectedResourceSpecs(v.resources ?? []);
     setSelectedExtensions(v.extensions ?? []);
     if ((v.mcpServers ?? []).length > 0) setMcpOpen(true);
     if ((v.skillRevisions ?? []).length > 0) setSkillsOpen(true);
+    if ((v.resources ?? []).length > 0) setResourcesOpen(true);
     if ((v.extensions ?? []).length > 0) setExtensionsOpen(true);
   };
 
@@ -553,6 +561,14 @@ export function SubmitRun() {
       setSelectedCodebaseSpec(run.codebaseRevisionId);
       setCodebaseOpen(true);
     }
+    const resources = run.resources ?? (run.run?.resources ?? []).map((resource) => ({
+      ref: resource.ref,
+      ...(resource.params ? { params: resource.params } : {}),
+    }));
+    if (resources.length > 0) {
+      setSelectedResourceSpecs(resources);
+      setResourcesOpen(true);
+    }
     if (run.agentsMdPromptId) {
       setAgentsMdOpen(true);
       api.getTaskPromptContent(run.agentsMdPromptId)
@@ -577,6 +593,7 @@ export function SubmitRun() {
         ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}),
         ...(selectedMcpServers.length > 0 ? { mcpServers: selectedMcpServers } : {}),
         ...(selectedSkills.length > 0 ? { skillRevisions: selectedSkills } : {}),
+        ...(selectedResourceSpecs.length > 0 ? { resources: selectedResourceSpecs } : {}),
         ...(selectedExtensions.length > 0 ? { extensions: selectedExtensions } : {}),
       }),
     onSuccess: (data) => {
@@ -682,6 +699,7 @@ export function SubmitRun() {
       ...(inVariationMode ? {} : { ...(selectedSkills.length > 0 ? { skills: selectedSkills } : {}) }),
       ...(inVariationMode ? {} : { ...(selectedExtensions.length > 0 ? { extensions: selectedExtensions } : {}) }),
       ...(selectedCodebaseSpec ? { codebase: selectedCodebaseSpec } : {}),
+      ...(selectedResourceSpecs.length > 0 ? { resources: selectedResourceSpecs } : {}),
       ...(inVariationMode ? {} : { ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}) }),
       ...(inVariationMode
         ? {
@@ -796,6 +814,7 @@ export function SubmitRun() {
     selectedMcpServers.length > 0 ? `${selectedMcpServers.length} MCP` : "",
     selectedSkills.length > 0 ? `${selectedSkills.length} skill${selectedSkills.length === 1 ? "" : "s"}` : "",
     selectedCodebaseSpec ? `codebase ${selectedCodebaseSpec}` : "",
+    selectedResourceSpecs.length > 0 ? `${selectedResourceSpecs.length} resource${selectedResourceSpecs.length === 1 ? "" : "s"}` : "",
     agentsMd.trim() ? "AGENTS.md" : "",
     selectedExtensions.length > 0 ? `${selectedExtensions.length} ext` : "",
   ].filter(Boolean);
@@ -1004,6 +1023,50 @@ export function SubmitRun() {
                 </Button>
               </div>
               <CodebasePicker selected={selectedCodebaseSpec} onChange={setSelectedCodebaseSpec} />
+            </div>
+          )}
+
+          {/* ─── Resources (optional, discreet) ───────────────────────────── */}
+          {!(resourcesOpen || selectedResourceSpecs.length > 0) ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-xs text-muted-foreground"
+              onClick={() => setResourcesOpen(true)}
+            >
+              <Boxes className="h-3.5 w-3.5" />
+              Add resources
+            </Button>
+          ) : (
+            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs">
+                    Resources{" "}
+                    <span className="font-normal text-muted-foreground">(optional)</span>
+                  </Label>
+                  <HelpTooltip text="Optional lifecycle dependencies. Pick bare resources to pin their latest revision at submit time, or choose a specific immutable revision." />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                  onClick={() => {
+                    setSelectedResourceSpecs([]);
+                    setResourcesOpen(false);
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Remove
+                </Button>
+              </div>
+              <ResourcePicker
+                selected={selectedResourceSpecs}
+                onChange={setSelectedResourceSpecs}
+                profileBindings={selectedBaseProfileVersion?.resources ?? []}
+              />
             </div>
           )}
 
@@ -1485,6 +1548,7 @@ export function SubmitRun() {
                   </p>
                   <p className="mt-1 text-muted-foreground">
                     {(selectedGraphPreview.versionDocument?.mcpServers?.length ?? 0)} MCP · {(selectedGraphPreview.versionDocument?.skillRevisions?.length ?? 0)} skills · {(selectedGraphPreview.versionDocument?.extensions?.length ?? 0)} extensions
+                    · {(selectedGraphPreview.versionDocument?.resources?.length ?? 0)} resources
                   </p>
                 </div>
               )}

@@ -20,10 +20,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { SkillPicker } from "@/components/SkillPicker";
 import { ExtensionPicker } from "@/components/ExtensionPicker";
+import { ResourcePicker } from "@/components/ResourcePicker";
 import { useModelCapabilities, useReasoningEffort, ReasoningEffortSelect, ModelSelectItems } from "@/components/ReasoningEffortSelect";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
+import type { ResourceBindingSpec } from "@/types";
 
 export function NewProfileVersion() {
   const { profileId } = useParams<{ profileId: string }>();
@@ -37,6 +39,7 @@ export function NewProfileVersion() {
   const [selectedAgentVersion, setSelectedAgentVersion] = useState("");
   const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [selectedResources, setSelectedResources] = useState<ResourceBindingSpec[]>([]);
   const [selectedExtensions, setSelectedExtensions] = useState<string[]>([]);
 
   // Fetch profile to pre-fill from latest version
@@ -67,6 +70,7 @@ export function NewProfileVersion() {
       setSelectedAgentVersion(profile.version.agentVersion ?? "");
       setSelectedMcpServers(profile.version.mcpServers ?? []);
       setSelectedSkills(profile.version.skillRevisions ?? []);
+      setSelectedResources(profile.version.resources ?? []);
       setSelectedExtensions(profile.version.extensions ?? []);
     }
   }, [profile]);
@@ -135,6 +139,7 @@ export function NewProfileVersion() {
       ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}),
       ...(selectedMcpServers.length > 0 ? { mcpServers: selectedMcpServers } : {}),
       ...(selectedSkills.length > 0 ? { skillRevisions: selectedSkills } : {}),
+      ...(selectedResources.length > 0 ? { resources: selectedResources } : {}),
       ...(selectedExtensions.length > 0 ? { extensions: selectedExtensions } : {}),
     }),
     onSuccess: (data) => {
@@ -174,6 +179,7 @@ export function NewProfileVersion() {
     (selectedAgentVersion || "") !== (ev.agentVersion || "") ||
     JSON.stringify([...selectedMcpServers].sort()) !== JSON.stringify([...(ev.mcpServers ?? [])].sort()) ||
     JSON.stringify([...selectedSkills].sort()) !== JSON.stringify([...(ev.skillRevisions ?? [])].sort()) ||
+    JSON.stringify(sortResourceBindings(selectedResources)) !== JSON.stringify(sortResourceBindings(ev.resources ?? [])) ||
     JSON.stringify([...selectedExtensions].sort()) !== JSON.stringify([...(ev.extensions ?? [])].sort())
   );
 
@@ -325,6 +331,16 @@ export function NewProfileVersion() {
         </Card>
       )}
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Resources</CardTitle>
+          <CardDescription>Select lifecycle resources and preset any parameter values this version should control</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResourcePicker selected={selectedResources} onChange={setSelectedResources} />
+        </CardContent>
+      </Card>
+
       {/* Extensions */}
       {supportsExtensions && (
         <Card>
@@ -356,4 +372,13 @@ export function NewProfileVersion() {
       </div>
     </div>
   );
+}
+
+function sortResourceBindings(bindings: ResourceBindingSpec[]): ResourceBindingSpec[] {
+  return [...bindings]
+    .map((binding) => ({
+      ref: binding.ref,
+      ...(binding.params ? { params: Object.fromEntries(Object.entries(binding.params).sort(([a], [b]) => a.localeCompare(b))) } : {}),
+    }))
+    .sort((a, b) => a.ref.localeCompare(b.ref));
 }

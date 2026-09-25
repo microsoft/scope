@@ -220,22 +220,28 @@ describe("coder-acp-copilot integration", async () => {
 
       log(`confirmedModel=${first.confirmedModel}`);
 
-      // KNOWN LIMITATION: model selection depends on server-side capability
-      // advertisement. The ACP newSession response must include either a `models`
-      // field or a `configOptions` entry with category "model". If the server
-      // stops advertising these (which can change independently of CLI version),
-      // selectModel() returns undefined and we can only verify the graceful
-      // fallback path rather than asserting a confirmed model.
+      // KNOWN LIMITATION: model selection depends on the server, not on us. The
+      // ACP newSession response must advertise a `models` field or a `configOptions`
+      // entry with category "model", and the subsequent set call must succeed. Any
+      // of those can change independently of the CLI version, so when the model is
+      // not confirmed we verify the graceful fallback rather than assert a model.
       if (first.confirmedModel === undefined) {
-        // Server did not advertise model selection — verify logs show the warning
-        const hasWarning = result.logs?.some((l) =>
-          l.includes("does not advertise model selection capability")
-        );
+        // selectModel() gives up on three distinct paths, and each one logs a
+        // different warning. Asserting only the capability message made the other
+        // two report "expected a capability warning" — which describes the test's
+        // assumption rather than what actually happened, and sends the reader
+        // looking for a capability problem that is not there.
+        const fallbackWarnings = [
+          "does not advertise model selection capability",
+          "session/set_model failed",
+          "session/set_config_option failed",
+        ];
+        const matched = fallbackWarnings.find((w) => result.logs?.some((l) => l.includes(w)));
         expect(
-          hasWarning,
-          "selectModel() returned undefined but expected a capability warning in logs",
-        ).toBe(true);
-        log("SKIPPED (server did not advertise model selection capability)");
+          matched,
+          `selectModel() returned undefined without any known fallback warning. Logs:\n${(result.logs ?? []).join("\n")}`,
+        ).toBeDefined();
+        log(`SKIPPED (model not confirmed: ${matched})`);
       } else {
         expect(first.confirmedModel).toBe("claude-opus-4.6");
       }

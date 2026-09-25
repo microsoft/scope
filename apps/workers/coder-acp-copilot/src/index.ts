@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CodingAgentQueueProcessor, WorkerProcessor, WorkerProcessorOptions, WorkerResult, QueueProcessorConfig, LogEvent, WorkerLogFn, TokenManagerClient, createProxyClient, isProxyEnabled, type ProxyClient, McpGatewayClient, McpServerConfig, KubedockClient, createFreshWorkspace, cleanupWorkspaces } from "shared";
+import { CodingAgentQueueProcessor, WorkerProcessor, WorkerProcessorOptions, WorkerResult, QueueProcessorConfig, LogEvent, WorkerLogFn, TokenManagerClient, createProxyClient, isProxyEnabled, type ProxyClient, McpGatewayClient, McpServerConfig, KubedockClient, createFreshWorkspace, cleanupWorkspaces, type ResourceConfig, type ResourceRunOutcome, runResourceSetups, runResourceTeardowns, createConcealedStore, interpolateMcpServerConfigs, referencedPlaceholders } from "shared";
 import { initTelemetry, trackMetric, trackTrace, trackEvent } from "telemetry";
 import { runACPSession } from "./acp-client.js";
+import { access, constants as fsConstants } from "node:fs/promises";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -57,15 +58,46 @@ export function isFirstAiCallSignal(msg: string): boolean {
  *   provided, set as NODE_EXTRA_CA_CERTS so the Node-based CLI trusts the proxy's
  *   MITM cert for the intercepted model endpoint.
  */
-export function buildSubprocessEnv(
-  githubToken: string,
+/**
+ * Reject a key published to both the public and the concealed channel.
+ *
+ * The two channels mean opposite things about agent visibility, so a key in both
+ * has no sensible resolution: the concealed value would win for MCP
+ * interpolation, the public value would be silently discarded, and the key would
+ * be withheld from the agent entirely. That is a security-sensitive ambiguity, so
+ * it fails the run instead of being resolved silently.
+ *
+ * @throws if any key appears in both maps.
+ */
+export function assertNoPublishChannelCollision(
+  values: Record<string, string>,
+  concealed: Record<string, string>,
+): void {
+  const collisions = Object.keys(concealed).filter((key) => key in values);
+  if (collisions.length > 0) {
+    throw new Error(
+      `Resource setup published the same key to both the public and concealed channels: ${collisions.sort().join(", ")}. `
+      + "Publish each key to exactly one of $SCOPE_SETUP_ENV or $SCOPE_CONCEALED_ENV."
+    );
+  }
+}
+
+export function buildSubprocessEnv(  githubToken: string,
   devProxyEnabled: boolean,
   currentNodeOptions?: string,
   gatewayUrl?: string,
   proxyUrl?: string,
   certPath?: string,
+  resourceEnv?: Record<string, string>,
+  concealedNames?: string[],
 ): Record<string, string> {
   const gatewayHost = gatewayUrl ? new URL(gatewayUrl).hostname : null;
+  // Values a resource published to the concealed store are for the platform and
+  // for tooling wrappers, not for the agent. They stay in `resourceEnv` because
+  // MCP server interpolation needs them; this is where they stop.
+  const visibleResourceEnv = Object.fromEntries(
+    Object.entries(resourceEnv ?? {}).filter(([name]) => !(concealedNames ?? []).includes(name)),
+  );
   const noProxy = [
     "localhost",
     "127.0.0.1",
@@ -77,6 +109,14 @@ export function buildSubprocessEnv(
     ...(gatewayHost ? [gatewayHost] : []),
   ].join(",");
   return {
+    // Connection details published by the run's resources. This is the only way
+    // an agent-facing tool can learn where its resources live: every other key
+    // here is fixed, and process.env is deliberately not spread.
+    //
+    // Spread FIRST so the fixed keys below win. A resource must not be able to
+    // shadow GITHUB_TOKEN — that is the CLI's own auth, not the simulator's —
+    // nor the proxy settings, which are what route model traffic for capture.
+    ...visibleResourceEnv,
     GITHUB_TOKEN: githubToken,
     // Disable the Copilot CLI in-session auto-updater. In headless --acp --yolo
     // mode it downloads a newer binary mid-run, logs "restart to update", and then
@@ -121,6 +161,28 @@ class CopilotProcessor implements WorkerProcessor {
   private gateway: McpGatewayClient | null = null;
   private mcpConfigs: McpServerConfig[] = [];
   private kubedock: KubedockClient | null = null;
+  private resourceConfigs: ResourceConfig[] = [];
+  /** Resources actually brought up this run, for reverse-order release. */
+  private provisionedResources: ResourceConfig[] = [];
+  /** Connection details published by this run's resources. */
+  private resourceEnv: Record<string, string> = {};
+  /**
+   * Names published to the concealed store rather than to `$SCOPE_SETUP_ENV`.
+   * They stay in `resourceEnv` because MCP server interpolation needs them, and
+   * are subtracted when the agent's environment is built.
+   */
+  private concealedNames: string[] = [];
+  /** Run-scoped concealed store; must outlive setup, since the agent runs after it. */
+  private concealedStore: { path: string; dispose: () => Promise<void> } | null = null;
+  /** Per-resource lifecycle outcomes, surfaced on the run record. */
+  private resourceOutcomes: ResourceRunOutcome[] = [];
+  /** Whether MCP servers were actually registered with the gateway. */
+  private mcpRegistered = false;
+
+  /** Lifecycle observability for the run record, read after setup/teardown. */
+  getRunObservations(): { resources: ResourceRunOutcome[]; mcpRegistered: boolean } {
+    return { resources: this.resourceOutcomes, mcpRegistered: this.mcpRegistered };
+  }
 
   getAgentVersion(): string {
     return AGENT_VERSION;
@@ -136,7 +198,10 @@ class CopilotProcessor implements WorkerProcessor {
     this.workspacePath = createFreshWorkspace();
     await log("info", "Fresh workspace created", { workspacePath: this.workspacePath });
 
-    // Purge orphan containers from previous runs (crash recovery)
+    // Purge orphan containers from previous runs (crash recovery).
+    //
+    // This must stay BEFORE resource setup: a resource that publishes a fixed
+    // port cannot start if a container from an earlier run is still holding it.
     if (KubedockClient.isEnabled()) {
       this.kubedock = new KubedockClient();
       try {
@@ -148,18 +213,168 @@ class CopilotProcessor implements WorkerProcessor {
     }
 
     this.mcpConfigs = options?.mcpServerConfigs ?? [];
+    this.resourceConfigs = options?.resourceConfigs ?? [];
+    // Reset per-run observations here rather than in teardown. The processor
+    // instance is reused across messages, and teardown cleared mcpConfigs but
+    // left mcpRegistered set -- so once any run registered a server, every later
+    // run on the same worker reported mcpRegistered: true regardless of its own
+    // configuration. Registration itself was correctly skipped, so this was a
+    // false report rather than a leak of tools, which makes it worse: the field
+    // exists precisely to show which surface a run was given.
+    this.mcpRegistered = false;
+    this.resourceOutcomes = [];
+    this.resourceEnv = {};
+    this.concealedNames = [];
+
+    // Provision resources before registering MCP servers. This ordering is the
+    // whole point of the feature: registration opens a live connection to the
+    // server and throws if it is unreachable, so anything the run needs to talk
+    // to has to exist first.
+    if (this.resourceConfigs.length > 0) {
+      await this.preflightDockerSocket(log);
+      this.concealedStore = await createConcealedStore();
+      try {
+        const { values, concealed, provisioned } = await runResourceSetups(this.resourceConfigs, {
+          cwd: this.workspacePath,
+          env: { ...(process.env.DOCKER_HOST ? { DOCKER_HOST: process.env.DOCKER_HOST } : {}) },
+          log: (level, message) => void log(level, message),
+          concealedEnvPath: this.concealedStore?.path,
+          // Tracked as each resource is attempted, not from the returned list: a
+          // setup that throws never returns, and releaseResources() would then
+          // find an empty list and tear down nothing — including the failing
+          // resource, whose script may already have created containers.
+          onProvisioned: (resource) => {
+            this.provisionedResources = [...this.provisionedResources, resource];
+          },
+        });
+        this.provisionedResources = provisioned;
+        assertNoPublishChannelCollision(values, concealed);
+        // Concealed values join resourceEnv so MCP server interpolation keeps
+        // working; they are subtracted again when the agent's env is built.
+        this.resourceEnv = { ...values, ...concealed };
+        this.concealedNames = Object.keys(concealed);
+        this.resourceOutcomes = provisioned.map((r) => ({
+          ref: r.ref,
+          slug: r.slug,
+          revisionId: r.revisionId,
+          setupSucceeded: true,
+          published: r.exports,
+          ...(r.params && Object.keys(r.params).length > 0 ? { params: r.params } : {}),
+        }));
+        await log("info", "Resources provisioned", {
+          count: provisioned.length,
+          published: Object.keys(values).sort(),
+        });
+      } catch (err) {
+        // Record what actually happened to each resource, so a failed run still
+        // shows the environment it was trying to stand up. The attempted prefix
+        // is read before releaseResources() clears it: everything before the last
+        // entry was provisioned successfully, the last entry is the one that
+        // failed, and anything beyond it was never attempted. Marking all of them
+        // failed would misreport both of the other two groups.
+        const message = err instanceof Error ? err.message : String(err);
+        const attempted = this.provisionedResources;
+        const failing = attempted[attempted.length - 1];
+        this.resourceOutcomes = this.resourceConfigs
+          .filter((r) => attempted.some((a) => a.revisionId === r.revisionId))
+          .map((r) => ({
+            ref: r.ref,
+            slug: r.slug,
+            revisionId: r.revisionId,
+            setupSucceeded: failing ? r.revisionId !== failing.revisionId : false,
+            published: failing && r.revisionId !== failing.revisionId ? r.exports : [],
+            ...(r.params && Object.keys(r.params).length > 0 ? { params: r.params } : {}),
+            ...(failing && r.revisionId === failing.revisionId ? { error: message } : {}),
+          }));
+        // Unwind whatever already came up before failing the run; a partially
+        // provisioned environment would otherwise leak into the next run.
+        await this.releaseResources(log);
+        throw err;
+      }
+    }
+
     if (this.mcpConfigs.length > 0) {
       if (!McpGatewayClient.isEnabled()) {
         throw new Error("MCP servers configured but MCP_GATEWAY_URL is not set — cannot proceed without gateway");
       }
+      // Interpolate AFTER secret hydration (done by the queue processor) and
+      // immediately before registration. Hydration replaces the whole env or
+      // headers object rather than merging, so substituting any earlier would be
+      // silently undone.
+      let configs = this.mcpConfigs;
+      if (Object.keys(this.resourceEnv).length > 0 || referencedPlaceholders(configs).length > 0) {
+        configs = interpolateMcpServerConfigs(configs, this.resourceEnv);
+        this.mcpConfigs = configs;
+      }
       this.gateway = new McpGatewayClient();
-      await log("info", "Registering MCP servers with gateway", { count: this.mcpConfigs.length, servers: this.mcpConfigs.map((s) => s.name) });
+      await log("info", "Registering MCP servers with gateway", { count: configs.length, servers: configs.map((s) => s.name) });
       await this.gateway.purgeAll();
-      for (const config of this.mcpConfigs) await this.gateway.registerServer(config);
+      for (const config of configs) await this.gateway.registerServer(config);
+      this.mcpRegistered = true;
+    }
+  }
+
+  /**
+   * Fail early, and legibly, when the Docker socket is unusable.
+   *
+   * Without this a container-backed resource fails inside its own script with a
+   * raw `permission denied ... /var/run/docker.sock`, which reads like a group
+   * ownership problem even when it is an SELinux label denial — a genuinely
+   * costly thing to misdiagnose.
+   */
+  private async preflightDockerSocket(log: WorkerLogFn): Promise<void> {
+    const dockerHost = process.env.DOCKER_HOST;
+    if (!dockerHost) {
+      await log("warn", "Resources are configured but DOCKER_HOST is not set — a container-backed resource will fail");
+      return;
+    }
+    const socketPath = dockerHost.startsWith("unix://") ? dockerHost.slice("unix://".length) : null;
+    if (!socketPath) return;
+    try {
+      await access(socketPath, fsConstants.R_OK | fsConstants.W_OK);
+      await log("info", "Docker socket is reachable", { dockerHost });
+    } catch (err) {
+      throw new Error(
+        `Docker socket at ${socketPath} is not usable by this worker (${err instanceof Error ? err.message : String(err)}). ` +
+          `Resources that start containers cannot run. On a host enforcing SELinux this is usually a label denial rather than ` +
+          `a GID problem — the container needs security_opt label=disable in addition to the right group_add.`,
+      );
+    }
+  }
+
+  /** Release provisioned resources in reverse order. Safe to call twice. */
+  private async releaseResources(log: WorkerLogFn): Promise<void> {
+    if (this.provisionedResources.length === 0) {
+      // Setup may have failed before provisioning anything, so the store is
+      // still disposed of here rather than only on the happy path.
+      await this.concealedStore?.dispose();
+      this.concealedStore = null;
+      return;
+    }
+    const toRelease = this.provisionedResources;
+    this.provisionedResources = [];
+    for (const o of this.resourceOutcomes) {
+      if (toRelease.some((r) => r.revisionId === o.revisionId)) o.teardownRan = true;
+    }
+    try {
+      await runResourceTeardowns(toRelease, {
+        cwd: this.workspacePath ?? process.cwd(),
+        env: { ...(process.env.DOCKER_HOST ? { DOCKER_HOST: process.env.DOCKER_HOST } : {}) },
+        log: (level, message) => void log(level, message),
+        concealedEnvPath: this.concealedStore?.path,
+      });
+    } finally {
+      await this.concealedStore?.dispose();
+      this.concealedStore = null;
     }
   }
 
   async teardown(log: WorkerLogFn): Promise<void> {
+    // Release resources BEFORE purging containers. The purge would otherwise
+    // destroy the very containers a teardown script is about to remove, leaving
+    // it to fail or silently no-op.
+    await this.releaseResources(log);
+
     // Clean up containers spawned during this run
     if (this.kubedock) {
       try {
@@ -286,7 +501,7 @@ class CopilotProcessor implements WorkerProcessor {
       const result = await runACPSession(message, {
         command: "copilot",
         args,
-        env: buildSubprocessEnv(githubToken, !!devProxy, process.env.NODE_OPTIONS, process.env.MCP_GATEWAY_URL, devProxy?.proxyUrl, caCertBundlePath),
+        env: buildSubprocessEnv(githubToken, !!devProxy, process.env.NODE_OPTIONS, process.env.MCP_GATEWAY_URL, devProxy?.proxyUrl, caCertBundlePath, this.resourceEnv, this.concealedNames),
         cwd: this.workspacePath!,
         onLog: async (msg) => {
           lastProtocolEventTime = Date.now();

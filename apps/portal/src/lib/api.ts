@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Run, RunState, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir } from "@/types";
+import type { Run, RunState, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ResourceDocument, ResourceRevisionDocument, ResourceBindingSpec, CreateResourceBody, CreateResourceRevisionBody, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir } from "@/types";
 
 import type { Project, CreateProjectRequest, UpdateProjectRequest } from "@/types";
 import { qs } from "./url";
@@ -221,6 +221,7 @@ export const api = {
     mcpServers?: string[];
     skills?: string[];
     extensions?: string[];
+    resources?: ResourceBindingSpec[];
     agentVersion?: string;
     profileId?: string;
     profileVariations?: string[];
@@ -1228,6 +1229,60 @@ export const api = {
     return request(`/codebase-revisions/${id}`);
   },
 
+  // ─── Resources ───────────────────────────────────────────────────────────
+
+  /** List all resources */
+  listResources: (): Promise<ResourceDocument[]> => {
+    return request("/resources", undefined, { scoped: true });
+  },
+
+  /** Get a single resource by id or project-scoped slug */
+  getResource: (idOrSlug: string): Promise<ResourceDocument> => {
+    return request(`/resources/${idOrSlug}`, undefined, { scoped: true });
+  },
+
+  /** Create a resource together with its first immutable revision */
+  createResource: (body: CreateResourceBody): Promise<ResourceDocument & { firstRevision?: ResourceRevisionDocument }> => {
+    return request("/resources", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }, { scoped: true });
+  },
+
+  /** Update a resource's mutable metadata */
+  updateResource: (
+    idOrSlug: string,
+    body: Partial<Pick<ResourceDocument, "name" | "description">>,
+  ): Promise<ResourceDocument> => {
+    return request(`/resources/${idOrSlug}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }, { scoped: true });
+  },
+
+  /** Soft-delete a resource */
+  deleteResource: (idOrSlug: string): Promise<void> => {
+    return request(`/resources/${idOrSlug}`, { method: "DELETE" }, { scoped: true });
+  },
+
+  /** List revisions for a resource */
+  listResourceRevisions: (idOrSlug: string, limit?: number): Promise<ResourceRevisionDocument[]> => {
+    return request(`/resources/${idOrSlug}/revisions${limit ? `?limit=${limit}` : ""}`, undefined, { scoped: true });
+  },
+
+  /** Get a single resource revision by id */
+  getResourceRevision: (id: string): Promise<ResourceRevisionDocument> => {
+    return request(`/resources/revisions/${id}`, undefined, { scoped: true });
+  },
+
+  /** Create a new immutable lifecycle revision */
+  createResourceRevision: (idOrSlug: string, body: CreateResourceRevisionBody): Promise<ResourceRevisionDocument> => {
+    return request(`/resources/${idOrSlug}/revisions`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }, { scoped: true });
+  },
+
   // ─── Extensions ──────────────────────────────────────────────────────────
 
   /** List all imported extensions */
@@ -1297,9 +1352,11 @@ export const api = {
     description?: string;
     workerType: string;
     model: string;
+    reasoningEffort?: string;
     agentVersion?: string;
     mcpServers?: string[];
     skillRevisions?: string[];
+    resources?: ResourceBindingSpec[];
     extensions?: string[];
   }): Promise<ProfileWithVersion> => {
     return request("/profiles", {
@@ -1312,9 +1369,11 @@ export const api = {
   createProfileVersion: (profileId: string, body: {
     workerType: string;
     model: string;
+    reasoningEffort?: string;
     agentVersion?: string;
     mcpServers?: string[];
     skillRevisions?: string[];
+    resources?: ResourceBindingSpec[];
     extensions?: string[];
   }): Promise<ProfileVersionDocument> => {
     return request(`/profiles/${profileId}`, {
