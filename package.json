@@ -78,7 +78,8 @@
     "k3d:build": "scripts/worktree-env.sh && ./scripts/k3d-build.sh",
     "k3d:build:claude": "scripts/worktree-env.sh && ./scripts/k3d-build.sh --worker=claude",
     "k3d:build:all": "scripts/worktree-env.sh && ./scripts/k3d-build.sh --worker=all",
-    "k3d:logs": "kubectl -n scoped logs -f --all-containers --prefix -l app.kubernetes.io/part-of=scoped --max-log-requests=20"
+    "k3d:logs": "kubectl -n scoped logs -f --all-containers --prefix -l app.kubernetes.io/part-of=scoped --max-log-requests=20",
+    "k3d:registry:down": "k3d registry delete k3d-scope-registry.localhost 2>/dev/null || k3d registry delete scope-registry.localhost 2>/dev/null || echo 'Shared registry not found (already removed).'"
   },
   "devDependencies": {
     "@d2t/vitest-ctrf-json-reporter": "^1.3.0",

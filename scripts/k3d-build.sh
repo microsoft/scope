@@ -39,7 +39,9 @@ if [ -z "${CONTAINER_RUNTIME:-}" ]; then
   fi
 fi
 
-# Read port offset for registry port (env var takes precedence over file)
+# Read port offset (env var takes precedence over file). The offset identifies the
+# worktree; it is used to derive the per-worktree image TAG below. The registry
+# itself is shared across all worktrees (fixed name + port), not per-offset.
 if [ -z "${PORT_OFFSET:-}" ]; then
   PORT_OFFSET=0
   if [ -f ".port-offset" ]; then
@@ -47,11 +49,20 @@ if [ -z "${PORT_OFFSET:-}" ]; then
   fi
 fi
 
-REGISTRY_PORT=$((5050 + PORT_OFFSET))
-REGISTRY="scope-${PORT_OFFSET}-registry.localhost:${REGISTRY_PORT}"
+# ── Shared registry + per-worktree image tag ──────────────────────────────
+# A single registry (fixed name/port) is shared by every worktree/cluster so
+# image layers are cached and de-duplicated across worktrees. Isolation comes
+# from a per-worktree image TAG (the worktree directory name) — no worktree can
+# overwrite another's images. Override with IMAGE_TAG=... if needed.
+REGISTRY_PORT=5050
+REGISTRY="scope-registry.localhost:${REGISTRY_PORT}"
+WORKTREE_NAME=$(basename "$REPO_ROOT")
+# Tag combines offset (unique among live worktrees) + worktree dir name, e.g.
+# 'sc-64-jduffney-microsoft-add-k3d-local-dev'. Must match k3d-up.sh.
+IMAGE_TAG="${IMAGE_TAG:-sc-${PORT_OFFSET}-${WORKTREE_NAME}}"
 
 # Ensure pushes to the local registry bypass any Docker/corporate proxy
-export NO_PROXY="${NO_PROXY:+${NO_PROXY},}scope-${PORT_OFFSET}-registry.localhost,localhost,127.0.0.1"
+export NO_PROXY="${NO_PROXY:+${NO_PROXY},}scope-registry.localhost,localhost,127.0.0.1"
 export no_proxy="$NO_PROXY"
 
 # Parse flags
@@ -95,7 +106,7 @@ for svc in $BUILD_TARGETS; do
   fi
 done
 
-echo ">>> Building images → $REGISTRY"
+echo ">>> Building images → $REGISTRY (tag: $IMAGE_TAG)"
 
 # ── Source worker version files as env vars for docker-bake.hcl ───────────
 for versions_file in apps/workers/*/versions.env apps/*/versions.env; do
@@ -119,7 +130,7 @@ if [ "$CONTAINER_RUNTIME" = "podman" ]; then
     PODMAN_BUILD_LIST="$BUILD_TARGETS"
   fi
 
-  echo "    Runtime: podman — sequential build + push → localhost:${REGISTRY_PORT}"
+  echo "    Runtime: podman — sequential build + push → localhost:${REGISTRY_PORT} (tag: ${IMAGE_TAG})"
   echo ""
 
   podman_build_push() {
@@ -146,8 +157,9 @@ if [ "$CONTAINER_RUNTIME" = "podman" ]; then
                     --build-arg "CLAUDE_AGENT_SDK_VERSION=${CLAUDE_AGENT_SDK_VERSION:-}") ;;
     esac
 
-    # Push over localhost (insecure) but keep the repo path pods expect.
-    image="localhost:${REGISTRY_PORT}/scoped/${svc}:latest"
+    # Push over localhost (insecure) but keep the repo path pods expect. The tag
+    # is per-worktree so images stay isolated in the shared registry.
+    image="localhost:${REGISTRY_PORT}/scoped/${svc}:${IMAGE_TAG}"
 
     echo "  Building $svc..."
     if ! podman build ${NO_CACHE} "${target_args[@]}" "${build_args[@]}" \
@@ -188,11 +200,11 @@ if docker buildx bake --help &>/dev/null; then
 
   if [ -z "$BUILD_TARGETS" ]; then
     echo "    Services: ALL (parallel)"
-    REGISTRY="$REGISTRY" docker buildx bake "${BAKE_ARGS[@]}"
+    REGISTRY="$REGISTRY" TAG="$IMAGE_TAG" docker buildx bake "${BAKE_ARGS[@]}"
     PUSH_LIST="$ALL_SERVICES"
   else
     echo "    Services: $BUILD_TARGETS (parallel)"
-    REGISTRY="$REGISTRY" docker buildx bake "${BAKE_ARGS[@]}" $BUILD_TARGETS
+    REGISTRY="$REGISTRY" TAG="$IMAGE_TAG" docker buildx bake "${BAKE_ARGS[@]}" $BUILD_TARGETS
     PUSH_LIST="$BUILD_TARGETS"
   fi
 
@@ -201,7 +213,7 @@ if docker buildx bake --help &>/dev/null; then
   echo ""
   echo ">>> Loading images into cluster '$CLUSTER_NAME'..."
   for svc in $PUSH_LIST; do
-    image="${REGISTRY}/scoped/${svc}:latest"
+    image="${REGISTRY}/scoped/${svc}:${IMAGE_TAG}"
     # Try push with 30s timeout first (fast when Docker Desktop cooperates)
     if timeout 60 docker push "$image" --quiet 2>/dev/null; then
       echo "  ✓ $svc (pushed)"
@@ -251,7 +263,7 @@ build_and_push() {
   local dockerfile=$(get_dockerfile "$name")
   local context=$(get_build_context "$name")
   local target=$(get_target "$name")
-  local image="${REGISTRY}/scoped/${name}:latest"
+  local image="${REGISTRY}/scoped/${name}:${IMAGE_TAG}"
 
   if [ ! -f "$dockerfile" ]; then
     echo "  Warning: Dockerfile not found at $dockerfile, skipping $name"
@@ -286,6 +298,6 @@ echo ""
 echo ">>> Pushing images to $REGISTRY..."
 for svc in $BUILD_LIST; do
   echo "  Pushing $svc..."
-  docker push "${REGISTRY}/scoped/${svc}:latest" --quiet
+  docker push "${REGISTRY}/scoped/${svc}:${IMAGE_TAG}" --quiet
 done
 echo "  ✓ All images pushed"
