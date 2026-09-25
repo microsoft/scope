@@ -209,16 +209,15 @@ coordinate the review and follow it through to merge or closure. Confirm that th
 Scope's direction before asking the contributor for substantial revisions. Discuss larger
 features or architectural changes in an issue first.
 
-Reviewer routing is the team's responsibility, not the contributor's. Until automated routing is
-configured, the team designates a triage maintainer to check incoming PRs each business day, assign
-a maintainer as the PR owner, and request reviewers familiar with the affected area.
+Reviewer routing is the team's responsibility, not the contributor's. The repository's
+[`CODEOWNERS`](./.github/CODEOWNERS) file now routes review requests by area. The team should still
+designate a triage maintainer to check incoming PRs each business day, assign a maintainer as the PR
+owner, and request additional reviewers familiar with the affected area when needed.
 
-**Team follow-up:** add a `CODEOWNERS` file with a catch-all maintainers team and area owners for
-high-risk paths, including `.github/workflows/`, `packages/db-migrations/`, `packages/github-auth/`,
-`apps/token-manager/`, auth/RBAC and project-scoping code, and `packages/shared/`. Configure team
-review assignment to distribute requests, and branch protection to require code-owner review and
-dismiss stale approvals. These mechanisms are not configured by this policy change; until they
-are, the PR owner coordinates reviews and the merging maintainer checks the approval requirements.
+Keep the [`CODEOWNERS`](./.github/CODEOWNERS) file current as maintainers and area ownership evolve.
+Team review assignment and branch protection still need to be configured to distribute requests,
+require code-owner review, and dismiss stale approvals. Until those settings are enabled, the PR
+owner coordinates reviews and the merging maintainer checks the approval requirements.
 
 ### 2. Check readiness
 
