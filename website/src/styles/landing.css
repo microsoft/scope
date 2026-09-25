@@ -76,6 +76,17 @@ body:has(.scope-home) header.header { background: color-mix(in srgb, var(--scope
 .scope-btn--secondary { color: var(--scope-text); background: var(--scope-surface); border-color: var(--scope-border); }
 .scope-btn--secondary:hover { background: var(--scope-inset); }
 .scope-hero .scope-hero-note { margin-top: 1rem; color: var(--scope-muted); font-size: 0.75rem; }
+/* The showreel is dark in both themes, so its overlay controls use fixed dark styling. */
+scope-showreel { display: block; max-width: 60rem; margin: 3rem auto 0; }
+.scope-showreel-frame { position: relative; margin: 0; overflow: hidden; border: 1px solid var(--scope-border); border-radius: 1rem; background: #0b0d18; box-shadow: var(--scope-shadow), 0 0 0 6px color-mix(in srgb, var(--scope-brand) 7%, transparent); }
+.scope-showreel-frame video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+.scope-showreel-controls { position: absolute; right: 0.75rem; bottom: 0.75rem; left: 0.75rem; display: flex; flex-wrap: wrap; justify-content: end; align-items: center; gap: 0.5rem; pointer-events: none; text-align: right; }
+.scope-showreel-controls > * { pointer-events: auto; }
+.scope-showreel-controls button { min-height: 44px; padding: 0.5rem 0.85rem; border: 1px solid #ffffff33; border-radius: 0.5rem; background: #0b0d18c7; color: #e9eaf6; font-size: 0.75rem; backdrop-filter: blur(6px); }
+.scope-showreel-controls button:hover { border-color: #ffffff80; }
+.scope-showreel-controls button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.scope-showreel-controls button:disabled { opacity: 0.6; }
+.scope-showreel-controls [role='status'] { max-width: 36ch; padding: 0.45rem 0.65rem; border-radius: 0.4rem; background: #0b0d18d9; color: #e9eaf6; font-size: 0.75rem; }
 .scope-agent-strip { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1.4rem; margin-top: 3.7rem; padding: 1.5rem 0; border-top: 1px solid var(--scope-border); border-bottom: 1px solid var(--scope-border); font-size: 0.8rem; }
 .scope-agent-strip > span:first-child { color: var(--scope-muted); font-size: 0.75rem; }
 .scope-agent-strip strong { font-size: 1rem; font-weight: 600; }
@@ -257,6 +268,9 @@ body:has(.scope-home) header.header { background: color-mix(in srgb, var(--scope
 }
 @media (max-width: 30rem) {
 	.scope-hero { padding-inline: 0; }.scope-hero h1 { font-size: 2.65rem; }.scope-hero > .scope-eyebrow { letter-spacing: 0.07em; font-size: 0.6rem; }
+	scope-showreel { margin-top: 2.25rem; }
+	.scope-showreel-controls { position: static; padding: 0.5rem; border-top: 1px solid #ffffff1f; }
+	.scope-showreel-controls:not(:has(> :not([hidden]))) { display: none; }
 	.scope-evidence-grid { grid-template-columns: 1fr; }.scope-evidence--wide { grid-column: auto; }
 	.flow-controls { flex-wrap: wrap; }.flow-step-buttons { width: 100%; justify-content: space-between; }.flow-step-buttons button { min-width: 44px; }.flow-step-name { display: inline; }
 	.flow-agent { grid-template-columns: 1fr; }.flow-agent-initial { display: none; }

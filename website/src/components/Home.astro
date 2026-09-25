@@ -43,6 +43,32 @@ const paths = [
 			<a class="scope-btn scope-btn--secondary" href="#see-it-work"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 7 5-7 5Z" fill="currentColor" /></svg> Explore a mock benchmark</a>
 		</div>
 		<p class="scope-hero-note">Your tasks. Your criteria. Repeatable experiments.</p>
+		<scope-showreel>
+			<figure class="scope-showreel-frame">
+				<video
+					id="scope-showreel-video"
+					data-src={`${base}scope-showreel.mp4`}
+					poster={`${base}scope-showreel-poster.jpg`}
+					width="1920"
+					height="1080"
+					autoplay
+					muted
+					loop
+					playsinline
+					preload="none"
+					disablepictureinpicture
+					aria-describedby="scope-showreel-description"
+				></video>
+				<figcaption class="sr-only" id="scope-showreel-description">
+					Silent Scope showreel: a task prompt, a criteria graph, ordered gates,
+					repeated runs, an agent trajectory, and a before-and-after comparison.
+				</figcaption>
+				<div class="scope-showreel-controls">
+					<span role="status" hidden></span>
+					<button type="button" aria-controls="scope-showreel-video" hidden disabled>Play showreel</button>
+				</div>
+			</figure>
+		</scope-showreel>
 		<div class="scope-agent-strip" aria-label="Documented coding agents">
 			<span>Built to evaluate</span>
 			<strong>GitHub Copilot</strong>
@@ -116,3 +142,7 @@ const paths = [
 		<a href="https://github.com/microsoft/scope">Source on GitHub <span aria-hidden="true">&rarr;</span></a>
 	</footer>
 </div>
+
+<script>
+	import '../scripts/showreel';
+</script>

@@ -131,8 +131,33 @@ table of contents, code examples, and previous/next navigation.
 - **Onboarding:** a concrete example before terminology, followed by
   separate Portal, CLI, and API entry points. Access requirements are
   explicit rather than promising instant access to a hosted service.
-- **Motion:** confined to the example experiment, not a permanently
-  animated logo or documentation chrome.
+- **Motion:** limited to the silent showreel and the interactive
+  example, with pause controls and reduced-motion support. The logo
+  and documentation chrome remain still.
+
+### Showreel
+
+The supplied Scope showreel plays in a framed 16:9 player below the
+hero calls to action, so the headline stays clean and the footage is
+shown without an overlay. The local [video](public/scope-showreel.mp4)
+is re-encoded as H.264 at half the original speed (30 seconds instead
+of 15), with the audio track removed and metadata moved to the front
+for web playback. It loops, is always muted, and plays inline on
+mobile. A visually hidden caption describes the scenes it shows.
+
+[showreel.ts](src/scripts/showreel.ts) starts playback when at least a
+quarter of the player is visible. A keyboard-accessible button pauses
+or resumes it. Scrolling it out of view or hiding the tab pauses
+playback; an explicit user pause persists when returning. The button
+overlays the bottom corner of the video, and moves below it on narrow
+screens so it does not cover the footage.
+
+Reduced-motion visitors see the [poster](public/scope-showreel-poster.jpg),
+taken from the closing Scope title card, without downloading the video
+until they choose to play it. Without JavaScript, the poster remains
+visible and the playback button stays hidden. Blocked autoplay offers
+manual playback; media failures display a status message and log the
+error. Both media URLs use the configured deployment base.
 
 ### Interactive example
 
