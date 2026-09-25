@@ -297,6 +297,7 @@ Automations depend on these exact names:
 | Test Improver issues, PRs, and monthly-summary searches | `type: automation`, `topic: testing` |
 | Daily repository status reports | `agentic-workflows` |
 | Dependabot | `type: dependencies`, plus `language: javascript` or `language: rust` |
+| Pull Request Labeler | Area, topic, language, and type labels from `.github/labeler.yml` |
 
 Use `area: reporting` for Scope's benchmark reporting component, not daily repository activity.
 Worker upgrade routing uses `type: worker-update`, not the broader `area: worker`.
@@ -318,7 +319,7 @@ Repository configuration does not create or backfill this label automatically.
 ### Updating label-dependent configuration
 
 Update both the label filters and label writes in `.github/workflows/check-worker-versions.yml`,
-the agentic workflow `.md` frontmatter, and any label searches in their prompts.
+`.github/labeler.yml`, the agentic workflow `.md` frontmatter, and any label searches in their prompts.
 Regenerate the corresponding `.lock.yml` files with `gh aw compile`; do not edit generated YAML
 by hand. Use each file's recorded compiler version to avoid unrelated runtime upgrades:
 
