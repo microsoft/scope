@@ -1,9 +1,3 @@
-.github/workflows/*.lock.yml linguist-generated=true merge=ours
-# Generated third-party attribution files: store verbatim (no EOL normalization)
-# so each license matches its source package byte-for-byte and `pnpm notice:check`
-# stays deterministic across checkouts. Marked generated so diffs collapse them.
-NOTICE -text linguist-generated=true
-NOTICE-REVIEW.txt -text linguist-generated=true
 * text=auto
 *.sh    text eol=lf
 *.bat   text eol=crlf
@@ -11,3 +5,9 @@ NOTICE-REVIEW.txt -text linguist-generated=true
 *.jpg   binary
 *.pdf   binary
 *.min.* -diff
+.github/workflows/*.lock.yml linguist-generated=true merge=ours
+# Generated third-party attribution files: store verbatim (no EOL normalization)
+# so each license matches its source package byte-for-byte and `pnpm notice:check`
+# stays deterministic across checkouts. Marked generated so diffs collapse them.
+NOTICE -text linguist-generated=true
+NOTICE-REVIEW.txt -text linguist-generated=true
