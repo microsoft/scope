@@ -895,7 +895,7 @@ export function SubmitRun() {
                 docs="taskPrompts"
               />
             </div>
-            <TaskPromptPicker onSelect={(text) => setTask(text)} />
+            <TaskPromptPicker type="select" onSelect={(text) => setTask(text)} />
             <Textarea
               id="task"
               placeholder="e.g., Create a Hello World Express API"
