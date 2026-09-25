@@ -16,12 +16,17 @@ The product and this documentation site live in
 ├── public/                          # static assets
 ├── src/
 │   ├── assets/
-│   ├── content/docs/                # all user-facing pages (.md / .mdx)
-│   │   ├── introduction/
-│   │   ├── getting-started/
-│   │   ├── guides/
-│   │   ├── reference/
-│   │   └── resources/
+│   ├── components/community/        # article/talk lists + landing teaser
+│   ├── content/
+│   │   ├── docs/                    # all user-facing pages (.md / .mdx)
+│   │   │   ├── introduction/
+│   │   │   ├── getting-started/
+│   │   │   ├── guides/
+│   │   │   ├── reference/
+│   │   │   ├── resources/
+│   │   │   └── community/
+│   │   ├── articles/                # one YAML per published article
+│   │   └── talks/                   # one YAML per talk
 │   ├── openapi/scope-openapi.json   # artifact generated from the API registry
 │   ├── plugins/
 │   │   ├── remark-base-path.mjs    # applies the deployment base to internal links
@@ -71,6 +76,10 @@ Sidebar order is defined in `astro.config.mjs`, not by directory order.
   routes or schemas. It runs `apps/api`'s generator from the same
   `scope-core` checkout, so root workspace dependencies must be
   installed first.
+
+- To list a new article or talk on the Community page, add one YAML
+  file under `src/content/articles/` or `src/content/talks/`. See
+  "Articles & talks" in [AGENTS.md](AGENTS.md) for the fields.
 
 See [AGENTS.md](AGENTS.md) for conventions, the source-of-truth
 policy (everything factual must be grounded in scope-core), and
