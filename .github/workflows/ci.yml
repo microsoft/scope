@@ -776,11 +776,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         if: github.event_name == 'push' || github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
       - uses: dorny/paths-filter@v3.0.2
         if: github.event_name == 'push' || github.event_name == 'pull_request'
         id: changes
         with:
-          base: ${{ github.event.before }}
           filters: |
             shared:
               - 'packages/shared/**'
