@@ -70,7 +70,7 @@ export function checkForUpdates(currentVersion: string): () => Promise<void> {
   };
 }
 
-export const RELEASES_REPO = "growth-ecosystems/scope-doc";
+export const RELEASES_REPO = "microsoft/scope";
 
 export const RELEASES_URL =
   process.env.SCOPE_RELEASES_URL ||

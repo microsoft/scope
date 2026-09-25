@@ -116,3 +116,20 @@ Optional capabilities that extend what an agent can do during a run:
 
 All three are properties of a profile.
 See [Using MCP servers, skills & extensions](/guides/mcp-skills-extensions/).
+
+## Evaluation building blocks
+
+| Concept | Purpose |
+| --- | --- |
+| Tasks and scenarios | Define the work the agent should perform. |
+| Criteria | Define observable checks and dependencies in the Judge's criteria DAG. |
+| Personas | Configure the evaluation perspective and feedback style. |
+| Profiles and variations | Save an agent configuration and compare changes against a baseline. |
+| Skills and MCP servers | Provide agent instructions and tools through the Model Context Protocol. |
+| Codebases | Seed a run with a versioned starting workspace. |
+
+The YAML files in
+[config/](https://github.com/microsoft/scope/tree/main/config) are portable
+examples, not the live configuration database. MongoDB is the runtime source
+of truth. Manage configuration through the Portal or CLI; don't assume that
+editing an example file changes an existing evaluation.

@@ -7,7 +7,16 @@ End-user documentation site for **Scope**, built with
 and published to GitHub Pages.
 
 The product and this documentation site live in
-[scope-core](https://github.com/growth-ecosystems/scope-core).
+[microsoft/scope](https://github.com/microsoft/scope). Users and contributors
+should start at the [official documentation website](https://microsoft.github.io/scope/).
+
+The root README is a short introduction and entry point to the website.
+Keep detailed setup, usage, and contribution guidance in
+[src/content/docs/](src/content/docs/) and register new pages in the sidebar.
+Local setup lives in
+[getting-started/local-development.md](src/content/docs/getting-started/local-development.md);
+development, contribution, and support guidance live under
+[resources/](src/content/docs/resources/).
 
 ## Project structure
 
@@ -37,6 +46,10 @@ Sidebar order is defined in `astro.config.mjs`, not by directory order.
 
 ## Commands
 
+Run these commands from `website/`. The site has its own
+[package.json](package.json) and [pnpm-lock.yaml](pnpm-lock.yaml), separate
+from the root pnpm workspace.
+
 | Command                | Action                                                     |
 | :--------------------- | :--------------------------------------------------------- |
 | `pnpm install`         | Install dependencies                                       |
@@ -44,7 +57,7 @@ Sidebar order is defined in `astro.config.mjs`, not by directory order.
 | `pnpm build`           | Build the production site to `./dist/`                     |
 | `pnpm preview`         | Preview the production build locally                       |
 | `pnpm test`            | Test site plugins with Node's built-in test runner          |
-| `pnpm refresh:openapi` | Generate the OpenAPI snapshot from `scope-core` |
+| `pnpm refresh:openapi` | Generate the OpenAPI snapshot from this monorepo's API |
 
 ## Authoring docs
 
@@ -68,13 +81,15 @@ Sidebar order is defined in `astro.config.mjs`, not by directory order.
   [`starlight-openapi`](https://starlight-openapi.vercel.app/) — do
   not edit them by hand.
 - Run `pnpm refresh:openapi` from this directory after changing API
-  routes or schemas. It runs `apps/api`'s generator from the same
-  `scope-core` checkout, so root workspace dependencies must be
-  installed first.
+  routes or schemas. It runs `pnpm --filter api generate:openapi` from the
+  repository root, using [apps/api/src/openapi/generate.ts](../apps/api/src/openapi/generate.ts)
+  in this same `microsoft/scope` checkout. Install the root workspace
+  dependencies first; the generator updates
+  [src/openapi/scope-openapi.json](src/openapi/scope-openapi.json).
 
 See [AGENTS.md](AGENTS.md) for conventions, the source-of-truth
-policy (everything factual must be grounded in scope-core), and
-where to look in scope-core for any given topic.
+policy (everything factual must be grounded in this checkout's source),
+and where to look in the monorepo for any given topic.
 
 ## Deployment
 
