@@ -339,6 +339,10 @@ version-update PRs disabled; the required schedule does not enable those PRs. Th
 apply to security-update PRs when security updates are enabled in repository settings. This file
 does not enable security updates or change live labels.
 
+`.github/workflows/labeler.yml` runs on the unprivileged `pull_request` event and skips fork PRs.
+Do not switch it to `pull_request_target` just to label fork PRs; that would violate the fork-PR
+security boundary above.
+
 ## Third-party notices
 
 Scope redistributes npm production dependencies in its service images and Rust

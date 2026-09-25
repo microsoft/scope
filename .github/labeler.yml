@@ -73,6 +73,9 @@
           - "package.json"
           - "pnpm-lock.yaml"
           - "pnpm-workspace.yaml"
+          - "website/package.json"
+          - "website/pnpm-lock.yaml"
+          - "website/pnpm-workspace.yaml"
 
 "language: rust":
   - changed-files:
@@ -128,4 +131,6 @@
       - any-glob-to-any-file:
           - "**/*.md"
           - "docs/**"
-          - "website/**"
+          - "website/README.md"
+          - "website/AGENTS.md"
+          - "website/src/content/**"
