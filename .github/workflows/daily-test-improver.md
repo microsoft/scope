@@ -11,7 +11,8 @@ description: |
   Always thoughtful, quality-focused, and mindful of test maintainability.
 
 on:
-  schedule: daily
+  schedule:
+    - cron: "3 6 * * *"
   workflow_dispatch:
   slash_command:
     name: test-assist
@@ -38,7 +39,7 @@ safe-outputs:
   create-pull-request:
     draft: true
     title-prefix: "[Test Improver] "
-    labels: [automation, testing]
+    labels: ["type: automation", "topic: testing"]
     max: 4
     protected-files: fallback-to-issue
   push-to-pull-request-branch:
@@ -47,7 +48,7 @@ safe-outputs:
     max: 4
   create-issue:
     title-prefix: "[Test Improver] "
-    labels: [automation, testing]
+    labels: ["type: automation", "topic: testing"]
     max: 4
   update-issue:
     target: "*"
@@ -209,7 +210,7 @@ Always do Task 7 (Update Monthly Activity Summary Issue) every run. In all comme
 
 ### Task 5: Comment on Testing Issues
 
-1. List open issues mentioning tests, coverage, or with `testing` label. Resume from memory's backlog cursor.
+1. List open issues mentioning tests, coverage, or with the `topic: testing` label. Resume from memory's backlog cursor.
 2. For each issue (save cursor in memory): prioritize issues that have never received a Test Improver comment.
 3. If you have something insightful and actionable to say:
    - Suggest testing approaches or strategies
@@ -253,7 +254,7 @@ Always do Task 7 (Update Monthly Activity Summary Issue) every run. In all comme
 
 Maintain a single open issue titled `[Test Improver] Monthly Activity {YYYY}-{MM}` as a rolling summary of all Test Improver activity for the current month.
 
-1. Search for an open `[Test Improver] Monthly Activity` issue with label `testing`. If it's for the current month, update it. If for a previous month, close it and create a new one. Read any maintainer comments - they may contain instructions or priorities; note them in memory.
+1. Search for an open `[Test Improver] Monthly Activity` issue with label `topic: testing`. If it's for the current month, update it. If for a previous month, close it and create a new one. Read any maintainer comments - they may contain instructions or priorities; note them in memory.
 2. **Issue body format** - use **exactly** this structure:
 
    ```markdown

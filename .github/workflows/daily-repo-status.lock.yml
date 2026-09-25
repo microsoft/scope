@@ -28,13 +28,12 @@
 #
 # Source: githubnext/agentics/workflows/daily-repo-status.md@346204513ecfa08b81566450d7d599556807389f
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"76b3cf18e33147180c10a0d1a77027cb1cfa8d6f10a743560c55397b8a36dba0","compiler_version":"v0.60.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"f11e23adeb5079f5ebf793637f305ba3386f862152fff2f1c8eec0e0533b7905","compiler_version":"v0.60.0","strict":true}
 
 name: "Daily Repo Status"
 "on":
   schedule:
   - cron: "47 23 * * *"
-    # Friendly format: daily (scattered)
   workflow_dispatch:
 
 permissions: {}
@@ -331,7 +330,7 @@ jobs:
           cat > /opt/gh-aw/safeoutputs/tools_meta.json << 'GH_AW_SAFE_OUTPUTS_TOOLS_META_EOF'
           {
             "description_suffixes": {
-              "create_issue": " CONSTRAINTS: Maximum 1 issue(s) can be created. Title will be prefixed with \"[repo-status] \". Labels [\"report\" \"daily-status\"] will be automatically added."
+              "create_issue": " CONSTRAINTS: Maximum 1 issue(s) can be created. Title will be prefixed with \"[repo-status] \". Labels [\"agentic-workflows\"] will be automatically added."
             },
             "repo_params": {},
             "dynamic_tools": []
@@ -1003,7 +1002,7 @@ jobs:
           GH_AW_ALLOWED_DOMAINS: "api.business.githubcopilot.com,api.enterprise.githubcopilot.com,api.github.com,api.githubcopilot.com,api.individual.githubcopilot.com,api.snapcraft.io,archive.ubuntu.com,azure.archive.ubuntu.com,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,github.com,host.docker.internal,json-schema.org,json.schemastore.org,keyserver.ubuntu.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,ppa.launchpad.net,raw.githubusercontent.com,registry.npmjs.org,s.symcb.com,s.symcd.com,security.ubuntu.com,telemetry.enterprise.githubcopilot.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com"
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_API_URL: ${{ github.api_url }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_issue\":{\"close_older_issues\":true,\"labels\":[\"report\",\"daily-status\"],\"max\":1,\"title_prefix\":\"[repo-status] \"},\"missing_data\":{},\"missing_tool\":{}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_issue\":{\"close_older_issues\":true,\"labels\":[\"agentic-workflows\"],\"max\":1,\"title_prefix\":\"[repo-status] \"},\"missing_data\":{},\"missing_tool\":{}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
