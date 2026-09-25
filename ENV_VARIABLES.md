@@ -1083,6 +1083,24 @@ own token lifecycle: both Copilot ACP workers set `false` because the Copilot CL
 token minting/refresh itself (enabling the plugin caused upstream 502s — #1058). The VS Code
 Electron worker leaves it enabled.
 
+### CAPI_HMAC_MACHINE_ID
+**Default:** `"scope-gateway"`
+**Type:** string
+
+Default machine identifier used in CAPI HMAC signature payloads when the session's `capi_hmac.machineId` field is not provided. Only relevant when the `capi_hmac` gateway plugin is activated for a session.
+
+### CAPI_HMAC_SIGNING_KEY
+**Default:** _(none)_
+**Type:** string (base64-encoded)
+
+Base64-encoded HMAC-SHA256 signing key for CAPI request signatures. When set (and `GATEWAY_CAPI_HMAC_ENABLED` is not `"false"`), the worker passes this key to the gateway's `capi_hmac` plugin at session creation. In Kubernetes, injected from Azure Key Vault via External Secrets Operator.
+
+### GATEWAY_CAPI_HMAC_ENABLED
+**Default:** `true` (enabled when `CAPI_HMAC_SIGNING_KEY` is present)
+**Type:** boolean (`true` | `false`)
+
+Kill switch for the CAPI HMAC signing plugin on the worker side. Set to `"false"` to disable HMAC signing without removing the signing key from the environment.
+
 ### DEV_PROXY_ENABLED
 **Default:** `false`
 **Type:** boolean (`true` | `false`)

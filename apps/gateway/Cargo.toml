@@ -39,6 +39,8 @@ parking_lot = "0.12"
 uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "json"] }
 backon = "1"
+hmac = "0.12"
+sha2 = "0.10"
 azure_storage = { version = "0.21", default-features = false, features = ["enable_reqwest_rustls", "hmac_rust"] }
 azure_storage_blobs = { version = "0.21", default-features = false, features = ["enable_reqwest_rustls"] }
 fred = { version = "10", features = ["tracing", "enable-rustls", "i-scripts"] }
