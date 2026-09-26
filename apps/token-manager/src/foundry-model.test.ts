@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { KeyDocument } from "shared";
 import type { SecretStore } from "./keyvault-store.js";
 import {
-  updateFoundryModelSecret,
+  buildFoundryModelSecret,
   withFoundryModel,
 } from "./foundry-model.js";
 
@@ -51,12 +51,30 @@ describe("Foundry model editing", () => {
   it("updates only the model and preserves the credential", async () => {
     const { store, getValue } = makeStore();
 
-    await updateFoundryModelSecret(token, " new-model ", store);
+    const value = await buildFoundryModelSecret(token, " new-model ", store);
 
-    expect(JSON.parse(getValue())).toEqual({
+    expect(JSON.parse(value!)).toEqual({
       endpoint: "https://example.services.ai.azure.com/models",
       apiKey: "secret-api-key",
       model: "new-model",
     });
+    expect(store.setSecret).not.toHaveBeenCalled();
+    expect(JSON.parse(getValue())).toMatchObject({ model: "old-model" });
+  });
+
+  it("returns metadata when the model cannot be read from Key Vault", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const store = {
+      getSecret: vi.fn(async () => {
+        throw new Error("Key Vault unavailable");
+      }),
+    } as unknown as SecretStore;
+
+    await expect(withFoundryModel(token, store)).resolves.toEqual(token);
+    expect(warn).toHaveBeenCalledWith(
+      `[foundry-model] Failed to project model for ${token._id}:`,
+      "Key Vault unavailable"
+    );
+    warn.mockRestore();
   });
 });

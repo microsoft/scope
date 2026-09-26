@@ -94,6 +94,8 @@ export function TokenDetail() {
   });
 
   const handleSave = () => {
+    if (!token) return;
+
     updateMutation.mutate(buildKeyUpdateRequest({
       type: token.type,
       enabled,

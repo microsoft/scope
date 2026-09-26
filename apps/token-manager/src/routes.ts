@@ -18,7 +18,7 @@ import { SecretStore } from "./keyvault-store.js";
 import { validateToken } from "./token-validators.js";
 import { RoundRobinMap } from "./round-robin.js";
 import {
-  updateFoundryModelSecret,
+  buildFoundryModelSecret,
   withFoundryModel,
 } from "./foundry-model.js";
 
@@ -200,7 +200,7 @@ export function createKeyRouter(
   router.put("/api/v1/keys/:id", async (req, res, next) => {
     try {
       const body = req.body as UpdateKeyRequest;
-      const update: Record<string, unknown> = { updatedAt: new Date() };
+      const update: Record<string, unknown> = {};
 
       if (typeof body.enabled === "boolean") {
         update.enabled = body.enabled;
@@ -239,7 +239,7 @@ export function createKeyRouter(
           return;
         }
 
-        const updatedFoundrySecret = await updateFoundryModelSecret(
+        const updatedFoundrySecret = await buildFoundryModelSecret(
           token,
           body.model,
           store
@@ -256,6 +256,8 @@ export function createKeyRouter(
         update.lastValidationError = null;
       }
 
+      const updateRevision = new Date();
+      update.updatedAt = updateRevision;
       const result = await collection.findOneAndUpdate(
         { _id: req.params.id, deletedAt: { $exists: false } },
         { $set: update },
@@ -268,11 +270,15 @@ export function createKeyRouter(
       }
 
       if (foundrySecretValue) {
+        // Persist the fail-safe pending state before changing Key Vault. If the
+        // secret write fails, the key cannot remain valid with stale capabilities.
+        await store.setSecret(result.secretName, foundrySecretValue);
+
         validateToken(result.type, foundrySecretValue)
           .then(async (validation) => {
             const now = new Date();
             await collection.updateOne(
-              { _id: result._id },
+              { _id: result._id, updatedAt: updateRevision },
               {
                 $set: {
                   lastValidatedAt: now,

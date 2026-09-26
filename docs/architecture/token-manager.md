@@ -168,9 +168,13 @@ The acquire endpoint uses round-robin selection among valid, enabled keys that p
 
 Updating the model override rewrites only the `model` property of the Foundry
 credential stored in Key Vault; the endpoint and API key are preserved. The
-key returns to `unknown` while the Token Manager validates the new deployment
-in the background. The Portal polls the detail endpoint until that validation
-finishes.
+key is persisted as `unknown` before the Key Vault write, so a partial update
+cannot leave an unvalidated deployment available for acquisition. The Token
+Manager validates the new deployment in the background and applies the result
+only if no newer edit has changed the key. The Portal polls the detail endpoint
+until that validation finishes. Reading the non-secret model projection is
+best-effort: a transient Key Vault failure omits the model without making the
+rest of the key metadata unavailable.
 
 ## Usage Tracking
 
