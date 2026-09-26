@@ -22,6 +22,7 @@ import { ArrowLeft, Trash2, ShieldCheck, Loader2, Save, Zap, Circle } from "luci
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import { buildKeyUpdateRequest } from "./token-detail-utils";
 
 function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
   switch (status) {
@@ -53,12 +54,14 @@ export function TokenDetail() {
   const [enabled, setEnabled] = useState(true);
   const [expiresAt, setExpiresAt] = useState("");
   const [comment, setComment] = useState("");
+  const [foundryModel, setFoundryModel] = useState("");
 
   useEffect(() => {
     if (token) {
       setEnabled(token.enabled);
       setExpiresAt(token.expiresAt ? new Date(token.expiresAt).toISOString().slice(0, 16) : "");
       setComment(token.comment ?? "");
+      setFoundryModel(token.model ?? "");
     }
   }, [token]);
 
@@ -91,11 +94,15 @@ export function TokenDetail() {
   });
 
   const handleSave = () => {
-    updateMutation.mutate({
+    if (!token) return;
+
+    updateMutation.mutate(buildKeyUpdateRequest({
+      type: token.type,
       enabled,
-      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
-      comment: comment.trim() || null,
-    });
+      expiresAt,
+      comment,
+      foundryModel,
+    }));
   };
 
   if (isLoading) {
@@ -338,6 +345,30 @@ export function TokenDetail() {
                 </p>
               )}
             </div>
+            {token.type === "azure-ai-foundry" && (
+              <div className="space-y-1">
+                <Label htmlFor="foundry-model">Deployment / Model name</Label>
+                {editing ? (
+                  <>
+                    <Input
+                      id="foundry-model"
+                      value={foundryModel}
+                      onChange={(e) => setFoundryModel(e.target.value)}
+                      placeholder="e.g. gpt-4.1-mini"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Clear this field to use the default model.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm">
+                    {token.model || (
+                      <span className="text-muted-foreground">Provider default</span>
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -901,7 +901,7 @@ export const api = {
     });
   },
 
-  /** Update key metadata (enabled, expiresAt) */
+  /** Update key metadata and, for Azure AI Foundry keys, the model override */
   updateKey: (id: string, body: UpdateKeyRequest): Promise<KeyDocument> => {
     return request(`/keys/${id}`, {
       method: "PUT",
