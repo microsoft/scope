@@ -422,7 +422,7 @@ function VersionEntry({ version }: { version: AgentVersion }) {
         </p>
         <p className="break-all font-mono text-xs text-muted-foreground">Queue: {version.queueName}</p>
       </div>
-      <span className="shrink-0 text-xs text-muted-foreground">{formatDate(version.createdAt)}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{formatDate(version.buildTime)}</span>
     </div>
   );
 }
