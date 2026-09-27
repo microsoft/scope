@@ -13,6 +13,7 @@ import {
   UpdateKeyRequest,
   AcquireKeyRequest,
   deriveSecretName,
+  parseAzureAiFoundrySecret,
 } from "shared";
 import { SecretStore } from "./keyvault-store.js";
 import { validateToken } from "./token-validators.js";
@@ -184,6 +185,13 @@ export function createKeyRouter(
         return;
       }
 
+      if (token.type === "azure-ai-foundry") {
+        const raw = await store.getSecret(token.secretName);
+        const foundry = parseAzureAiFoundrySecret(raw);
+        res.json({ ...token, foundryModel: foundry?.model });
+        return;
+      }
+
       res.json(token);
     } catch (err) {
       next(err);
@@ -191,12 +199,50 @@ export function createKeyRouter(
   });
 
   // ──────────────────────────────────────────────
-  // PUT /api/v1/keys/:id — Update metadata only
+  // PUT /api/v1/keys/:id — Update metadata and Foundry model
   // ──────────────────────────────────────────────
   router.put("/api/v1/keys/:id", async (req, res, next) => {
     try {
       const body = req.body as UpdateKeyRequest;
+      const token = await collection.findOne({
+        _id: req.params.id,
+        deletedAt: { $exists: false },
+      });
+
+      if (!token) {
+        res.status(404).json({ error: "Key not found" });
+        return;
+      }
+
       const update: Record<string, unknown> = { updatedAt: new Date() };
+
+      if (body.foundryModel !== undefined) {
+        if (token.type !== "azure-ai-foundry") {
+          res.status(400).json({ error: "foundryModel is only valid for Azure AI Foundry keys" });
+          return;
+        }
+
+        const raw = await store.getSecret(token.secretName);
+        const foundry = parseAzureAiFoundrySecret(raw);
+        if (!foundry) {
+          res.status(422).json({ error: "Stored Azure AI Foundry credential is malformed" });
+          return;
+        }
+
+        const model = typeof body.foundryModel === "string" ? body.foundryModel.trim() : "";
+        const value = JSON.stringify({
+          endpoint: foundry.endpoint,
+          apiKey: foundry.apiKey,
+          ...(model ? { model } : {}),
+        });
+        await store.setSecret(token.secretName, value);
+
+        const validation = await validateToken(token.type, value);
+        update.lastValidatedAt = new Date();
+        update.lastValidationStatus = validation.status;
+        update.lastValidationError = validation.error ?? null;
+        update.capabilities = validation.capabilities ?? [];
+      }
 
       if (typeof body.enabled === "boolean") {
         update.enabled = body.enabled;
@@ -213,7 +259,7 @@ export function createKeyRouter(
       }
 
       const result = await collection.findOneAndUpdate(
-        { _id: req.params.id, deletedAt: { $exists: false } },
+        { _id: token._id, deletedAt: { $exists: false } },
         { $set: update },
         { returnDocument: "after" }
       );

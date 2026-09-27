@@ -99,12 +99,15 @@ export interface CreateKeyRequest {
 
 /**
  * Request body for PUT /api/v1/keys/:id.
- * Only metadata — secret value is immutable.
+ * Foundry credentials may update only their model while preserving the
+ * endpoint and API key stored in KeyVault.
  */
 export interface UpdateKeyRequest {
   enabled?: boolean;
   expiresAt?: string | null;
   comment?: string | null;
+  /** New model for an Azure AI Foundry credential. Null clears the override. */
+  foundryModel?: string | null;
 }
 
 /**

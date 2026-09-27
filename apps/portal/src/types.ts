@@ -531,6 +531,8 @@ export interface KeyDocument {
   type: KeyType;
   capabilities: KeyCapability[];
   secretName: string;
+  /** Non-sensitive model name exposed for Azure AI Foundry credentials. */
+  foundryModel?: string;
   expiresAt?: string;
   lastValidatedAt?: string;
   lastValidationStatus: KeyValidationStatus;
@@ -569,6 +571,7 @@ export interface UpdateKeyRequest {
   enabled?: boolean;
   expiresAt?: string | null;
   comment?: string | null;
+  foundryModel?: string | null;
 }
 
 export const KEY_TYPE_LABELS: Record<KeyType, string> = {

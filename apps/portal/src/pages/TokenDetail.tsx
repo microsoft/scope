@@ -53,12 +53,14 @@ export function TokenDetail() {
   const [enabled, setEnabled] = useState(true);
   const [expiresAt, setExpiresAt] = useState("");
   const [comment, setComment] = useState("");
+  const [foundryModel, setFoundryModel] = useState("");
 
   useEffect(() => {
     if (token) {
       setEnabled(token.enabled);
       setExpiresAt(token.expiresAt ? new Date(token.expiresAt).toISOString().slice(0, 16) : "");
       setComment(token.comment ?? "");
+      setFoundryModel(token.foundryModel ?? "");
     }
   }, [token]);
 
@@ -95,6 +97,7 @@ export function TokenDetail() {
       enabled,
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
       comment: comment.trim() || null,
+      ...(token?.type === "azure-ai-foundry" ? { foundryModel: foundryModel.trim() || null } : {}),
     });
   };
 
@@ -292,6 +295,28 @@ export function TokenDetail() {
 
           {/* Editable fields */}
           <div className="space-y-3">
+            {token.type === "azure-ai-foundry" && (
+              <div className="space-y-1">
+                <Label htmlFor="foundry-model">Model</Label>
+                {editing ? (
+                  <Input
+                    id="foundry-model"
+                    value={foundryModel}
+                    onChange={(e) => setFoundryModel(e.target.value)}
+                    placeholder="e.g. gpt-4.1-mini"
+                  />
+                ) : (
+                  <p className="text-sm">
+                    {token.foundryModel || <span className="text-muted-foreground">Provider default</span>}
+                  </p>
+                )}
+                {editing && (
+                  <p className="text-xs text-muted-foreground">
+                    Change the deployment/model without replacing the endpoint or API key. Clear it to use the provider default.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-1">
               <Label>Comment</Label>
               {editing ? (
