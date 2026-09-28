@@ -45,6 +45,7 @@ export const ReportResponseSchema = z
     insightReferences: z.array(InsightReferenceSchema).optional(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date().optional(),
+    deletedAt: z.coerce.date().optional(),
     projectId: z.string(),
   })
   .openapi("ReportResponse");

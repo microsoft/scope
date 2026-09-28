@@ -678,6 +678,7 @@ export interface ReportDocument {
   insightReferences?: InsightReference[];  // Insights discovered/referenced by this report
   createdAt: Date;
   updatedAt?: Date;
+  deletedAt?: Date;      // Soft-delete timestamp, cascaded from the parent request
 }
 
 /** Queue message payload for report generation */

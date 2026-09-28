@@ -1052,6 +1052,10 @@ describe("API Endpoints", () => {
       const res = await request(testServer()).delete("/api/v1/requests/r1");
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("deleted", true);
+      expect(mocks.reportCollection.updateMany).toHaveBeenCalledWith(
+        { requestId: "r1", deletedAt: { $exists: false } },
+        { $set: { deletedAt: expect.any(Date), updatedAt: expect.any(Date) } },
+      );
     });
 
     it("returns 404 when request not found", async () => {

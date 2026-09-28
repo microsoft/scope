@@ -1965,11 +1965,19 @@ apiRoute(ctx.app, ctx.registry, {
     ).toArray();
     const existingIds = new Set(existingDocs.map(d => d._id));
 
-    // Soft-delete all matching documents
+    // Soft-delete all matching documents and their associated reports.
+    // Use one timestamp so the cascade is traceable as a single deletion event.
+    const deletedAt = new Date();
     const result = await ctx.requestCollection.updateMany(
       { _id: { $in: ids }, deletedAt: { $exists: false } },
-      { $set: { deletedAt: new Date() } }
+      { $set: { deletedAt } }
     );
+    if (existingIds.size > 0) {
+      await ctx.reportCollection.updateMany(
+        { requestId: { $in: [...existingIds] }, deletedAt: { $exists: false } },
+        { $set: { deletedAt, updatedAt: deletedAt } },
+      );
+    }
 
     // Determine which IDs were not found or already deleted
     const notFound = ids.filter(id => !existingIds.has(id));
@@ -1993,9 +2001,10 @@ apiRoute(ctx.app, ctx.registry, {
   handler: async (req, res) => {
     const { id } = req.params;
 
+    const deletedAt = new Date();
     const result = await ctx.requestCollection.updateOne(
       { _id: id, deletedAt: { $exists: false } },
-      { $set: { deletedAt: new Date() } }
+      { $set: { deletedAt } }
     );
 
     if (result.matchedCount === 0) {
@@ -2007,6 +2016,11 @@ apiRoute(ctx.app, ctx.registry, {
       }
       return;
     }
+
+    await ctx.reportCollection.updateMany(
+      { requestId: id, deletedAt: { $exists: false } },
+      { $set: { deletedAt, updatedAt: deletedAt } },
+    );
 
     res.json({ id, deleted: true });
   },
