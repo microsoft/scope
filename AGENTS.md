@@ -29,6 +29,7 @@ packages/
   model-scanning/               # Shared model scanning logic
   version-checking/             # Version comparison utilities
   llm-eval/                     # LLM-graded eval harness (grader, sampling, rate-limit retry)
+  test-utils/                   # ACP worker integration test helpers (Docker runner, in-container harness)
 config/                         # Benchmark definitions (YAML)
 ```
 

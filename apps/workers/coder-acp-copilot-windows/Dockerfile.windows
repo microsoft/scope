@@ -15,6 +15,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/telemetry/package.json ./packages/telemetry/
+COPY packages/test-utils/package.json ./packages/test-utils/
 COPY apps/workers/coder-acp-copilot/package.json ./apps/workers/coder-acp-copilot/
 COPY apps/workers/coder-acp-copilot-windows/package.json ./apps/workers/coder-acp-copilot-windows/
 
@@ -24,12 +25,14 @@ COPY packages/shared/tsconfig.json ./packages/shared/
 COPY packages/shared/src ./packages/shared/src/
 COPY packages/telemetry/tsconfig.json ./packages/telemetry/
 COPY packages/telemetry/src ./packages/telemetry/src/
+COPY packages/test-utils/tsconfig.json ./packages/test-utils/
+COPY packages/test-utils/src ./packages/test-utils/src/
 COPY apps/workers/coder-acp-copilot/tsconfig.json ./apps/workers/coder-acp-copilot/
 COPY apps/workers/coder-acp-copilot/src ./apps/workers/coder-acp-copilot/src/
 COPY apps/workers/coder-acp-copilot-windows/tsconfig.json ./apps/workers/coder-acp-copilot-windows/
 COPY apps/workers/coder-acp-copilot-windows/src ./apps/workers/coder-acp-copilot-windows/src/
 
-RUN C:\tools\pnpm.exe --filter shared build; C:\tools\pnpm.exe --filter telemetry build; C:\tools\pnpm.exe --filter coder-acp-copilot build; C:\tools\pnpm.exe --filter coder-acp-copilot-windows build
+RUN C:\tools\pnpm.exe --filter shared build; C:\tools\pnpm.exe --filter telemetry build; C:\tools\pnpm.exe --filter test-utils build; C:\tools\pnpm.exe --filter coder-acp-copilot build; C:\tools\pnpm.exe --filter coder-acp-copilot-windows build
 
 # Pre-convert agent.yaml to JSON so the registration job doesn't need the yaml package at runtime
 COPY apps/workers/coder-acp-copilot-windows/agent.yaml ./apps/workers/coder-acp-copilot-windows/agent.yaml
