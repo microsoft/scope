@@ -588,13 +588,64 @@ export class RequestScheduler {
             reason = "agent_queue_missing";
           }
         }
-        return { workerType, agentVersion, count, reason };
+        return {
+          workerType,
+          agentVersion,
+          rawWorkerType: _id.workerType,
+          rawAgentVersion: _id.agentVersion,
+          count,
+          reason,
+        };
       })
       .sort(
         (left, right) =>
           left.workerType.localeCompare(right.workerType) ||
           left.agentVersion.localeCompare(right.agentVersion),
       );
+
+    // Requests pinned to targets that can never become runnable again should
+    // not remain pending forever. Keep recoverable registry/configuration
+    // states pending, but terminalize deleted agents and missing/retired exact
+    // versions. The status filter makes this safe against concurrent dispatch.
+    const terminalizedCounts = new Map<string, number>();
+    for (const target of invalid) {
+      if (
+        target.reason !== "agent_deleted" &&
+        target.reason !== "agent_version_unavailable"
+      ) {
+        continue;
+      }
+      if (!target.rawWorkerType || !target.rawAgentVersion) continue;
+
+      const finishedAt = new Date();
+      const error =
+        target.reason === "agent_deleted"
+          ? `Agent "${target.rawWorkerType}" is deleted and cannot run this request`
+          : `Agent version "${target.rawAgentVersion}" for "${target.rawWorkerType}" is no longer available`;
+      const result = await this.requestCollection.updateMany(
+        {
+          workerType: target.rawWorkerType,
+          agentVersion: target.rawAgentVersion,
+          "run.status": "pending",
+          deletedAt: { $exists: false },
+        } as any,
+        {
+          $set: {
+            "run.status": "done",
+            "run.outcome": "failed",
+            "run.error": error,
+            "run.errorCode": target.reason,
+            "run.finishedAt": finishedAt,
+            "run.updatedAt": finishedAt,
+            updatedAt: finishedAt,
+          },
+        } as any,
+      );
+      terminalizedCounts.set(
+        this.targetKey(target.workerType, target.agentVersion),
+        result.modifiedCount,
+      );
+    }
 
     const signature = JSON.stringify(
       invalid.map(({ workerType, agentVersion, reason }) => ({
@@ -607,6 +658,32 @@ export class RequestScheduler {
     this.invalidTargetSignature = signature;
 
     for (const target of invalid) {
+      const terminalized =
+        terminalizedCounts.get(
+          this.targetKey(target.workerType, target.agentVersion),
+        ) ?? 0;
+      if (terminalized > 0) {
+        console.warn(
+          `[Scheduler] Terminalized ${terminalized} request(s) for permanently invalid target ` +
+            `worker=${target.workerType}, version=${target.agentVersion}: ${target.reason}`,
+        );
+        trackEvent({
+          name: "scheduler.invalid_pending_target_terminalized",
+          properties: {
+            workerType: target.workerType,
+            agentVersion: target.agentVersion,
+            reason: target.reason,
+            terminalizedCount: String(terminalized),
+          },
+        });
+        trackMetric({
+          name: "scheduler.invalid_pending_requests_terminalized",
+          value: terminalized,
+          properties: { reason: target.reason },
+        });
+        continue;
+      }
+
       console.warn(
         `[Scheduler] Leaving ${target.count} request(s) pending for invalid target ` +
           `worker=${target.workerType}, version=${target.agentVersion}: ${target.reason}`,

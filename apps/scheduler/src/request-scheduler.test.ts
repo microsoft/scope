@@ -168,15 +168,17 @@ function makeCollections(
         filter: {
           workerType?: string;
           agentVersion?: string;
+          "run.status"?: string;
           "run.queuedQueueName"?: string | { $exists: false };
         },
         update: {
-          $set: { "run.status": string };
+          $set: Record<string, any>;
           $unset?: { "run.queuedQueueName"?: string };
         },
       ) => {
         const matches = requests.filter((candidate) => {
-          if (candidate.run?.status !== "queued" || candidate.deletedAt) return false;
+          const expectedStatus = filter["run.status"] ?? "queued";
+          if (candidate.run?.status !== expectedStatus || candidate.deletedAt) return false;
           if (
             typeof filter.workerType === "string" &&
             candidate.workerType !== filter.workerType
@@ -192,9 +194,16 @@ function makeCollections(
           return candidate.run.queuedQueueName === undefined;
         });
         for (const request of matches) {
-          request.run!.status = update.$set["run.status"] as "pending";
+          if (!request.run) continue;
+          for (const [key, value] of Object.entries(update.$set)) {
+            if (key === "updatedAt") {
+              request.updatedAt = value as Date;
+            } else if (key.startsWith("run.")) {
+              (request.run as any)[key.slice(4)] = value;
+            }
+          }
           if (update.$unset?.["run.queuedQueueName"] !== undefined) {
-            delete request.run!.queuedQueueName;
+            delete request.run.queuedQueueName;
           }
         }
         return { matchedCount: matches.length, modifiedCount: matches.length };
@@ -437,11 +446,13 @@ describe("RequestScheduler", () => {
     );
   });
 
-  it("leaves invalid targets pending and emits actionable telemetry", async () => {
+  it("terminalizes permanently invalid pinned targets but keeps recoverable targets pending", async () => {
     const requests = [
       makeRequest("unknown", "missing-worker", "v1"),
       makeRequest("versionless", "known-worker", undefined),
       makeRequest("inactive", "known-worker", "retired"),
+      makeRequest("temporarily-unavailable", "paused-worker", "v1"),
+      makeRequest("deleted", "deleted-worker", "v1"),
     ];
     const { requestCollection, agentCollection } = makeCollections(requests, [
       makeAgent("known-worker", [
@@ -452,6 +463,16 @@ describe("RequestScheduler", () => {
           status: "retired",
         },
       ]),
+      makeAgent(
+        "paused-worker",
+        [{ agentVersion: "v1", queueName: "paused-queue" }],
+        { available: false },
+      ),
+      makeAgent(
+        "deleted-worker",
+        [{ agentVersion: "v1", queueName: "deleted-queue" }],
+        { deletedAt: new Date() },
+      ),
     ]);
     const queue = makeQueueClient();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -464,16 +485,65 @@ describe("RequestScheduler", () => {
     await (scheduler as any).dispatch();
 
     expect(queue.sendMessage).not.toHaveBeenCalled();
-    expect(requests.every((request) => request.run?.status === "pending")).toBe(
-      true,
-    );
+    expect(requests[0].run?.status).toBe("pending");
+    expect(requests[1].run?.status).toBe("pending");
+    expect(requests[2].run).toMatchObject({
+      status: "done",
+      outcome: "failed",
+      errorCode: "agent_version_unavailable",
+    });
+    expect(requests[2].run?.error).toContain("retired");
+    expect(requests[3].run?.status).toBe("pending");
+    expect(requests[4].run).toMatchObject({
+      status: "done",
+      outcome: "failed",
+      errorCode: "agent_deleted",
+    });
+    expect(requests[2].run?.finishedAt).toBeInstanceOf(Date);
+    expect(requests[4].run?.finishedAt).toBeInstanceOf(Date);
     expect(warn.mock.calls.flat().join("\n")).toContain("agent_not_found");
     expect(warn.mock.calls.flat().join("\n")).toContain(
       "agent_version_missing",
     );
     expect(warn.mock.calls.flat().join("\n")).toContain(
-      "agent_version_unavailable",
+      "Terminalized 1 request(s)",
     );
+    expect(warn.mock.calls.flat().join("\n")).toContain("agent_unavailable");
+  });
+
+  it("dispatches an exact active version to its current queue without substituting versions", async () => {
+    const moved = makeRequest("moved", "worker", "v1");
+    const retired = makeRequest("retired", "worker", "v0");
+    const { requestCollection, agentCollection } = makeCollections(
+      [moved, retired],
+      [
+        makeAgent("worker", [
+          { agentVersion: "v0", queueName: "old-queue", status: "retired" },
+          { agentVersion: "v1", queueName: "new-queue" },
+          { agentVersion: "v2", queueName: "newest-queue" },
+        ]),
+      ],
+    );
+    const newQueue = makeQueueClient();
+    const newestQueue = makeQueueClient();
+    const scheduler = new RequestScheduler(
+      requestCollection,
+      agentCollection,
+      (queueName) => (queueName === "new-queue" ? newQueue : newestQueue),
+      { targetQueueDepth: 1 },
+    );
+
+    await (scheduler as any).dispatch();
+
+    expect(moved.run?.status).toBe("queued");
+    expect(moved.run?.queuedQueueName).toBe("new-queue");
+    expect(retired.run).toMatchObject({
+      status: "done",
+      outcome: "failed",
+      errorCode: "agent_version_unavailable",
+    });
+    expect(newQueue.sendMessage).toHaveBeenCalledTimes(1);
+    expect(newestQueue.sendMessage).not.toHaveBeenCalled();
   });
 
   it("does not route unavailable, deleted, or queue-less registry targets", async () => {
@@ -508,9 +578,13 @@ describe("RequestScheduler", () => {
     await (scheduler as any).dispatch();
 
     expect(factory).not.toHaveBeenCalled();
-    expect(requests.every((request) => request.run?.status === "pending")).toBe(
-      true,
-    );
+    expect(requests[0].run?.status).toBe("pending");
+    expect(requests[1].run).toMatchObject({
+      status: "done",
+      outcome: "failed",
+      errorCode: "agent_deleted",
+    });
+    expect(requests[2].run?.status).toBe("pending");
   });
 
   it("returns a claim to pending when queue send fails", async () => {
