@@ -797,9 +797,11 @@ jobs:
               - 'apps/portal/**'
             coder-acp-copilot:
               - 'apps/workers/coder-acp-copilot/**'
+              - 'packages/test-utils/**'
             coder-acp-claude-code:
               - 'apps/workers/coder-acp-claude-code/**'
               - 'packages/copilot-driver-ext/**'
+              - 'packages/test-utils/**'
             token-manager:
               - 'apps/token-manager/**'
             model-scanner-copilot:
@@ -819,6 +821,7 @@ jobs:
             coder-acp-copilot-windows:
               - 'apps/workers/coder-acp-copilot-windows/**'
               - 'apps/workers/coder-acp-copilot/versions.env'
+              - 'packages/test-utils/**'
             typescript:
               - 'apps/**'
               - '!apps/gateway/**'
