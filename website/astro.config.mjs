@@ -132,6 +132,7 @@ export default defineConfig({
 							collapsed: true,
 							items: [
 								{ label: 'Import MCP servers', slug: 'guides/importing-mcp-servers' },
+								{ label: 'Provision resources', slug: 'guides/provisioning-resources' },
 								{ label: 'Import skills', slug: 'guides/importing-skills' },
 								{ label: 'Import VS Code extensions', slug: 'guides/importing-extensions' },
 								{ label: 'Use tools, skills & extensions', slug: 'guides/mcp-skills-extensions' },

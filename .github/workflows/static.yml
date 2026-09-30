@@ -45,9 +45,14 @@ jobs:
       - name: Restore Astro build cache
         uses: actions/cache@v4
         with:
+          # Only the persistent data store is cached. `website/.astro` holds
+          # generated content-collection modules that import source files by
+          # name, so restoring it through the loose restore-keys below — which
+          # match a different source tree by design — resurrects imports for
+          # files that have since been renamed or deleted, and the build fails
+          # resolving them.
           path: |
             website/node_modules/.astro
-            website/.astro
           key: astro-${{ runner.os }}-${{ hashFiles('website/pnpm-lock.yaml') }}-${{ hashFiles('website/src/**') }}
           restore-keys: |
             astro-${{ runner.os }}-${{ hashFiles('website/pnpm-lock.yaml') }}-

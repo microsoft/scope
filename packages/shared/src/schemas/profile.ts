@@ -3,6 +3,7 @@
 
 import { z } from "zod";
 import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
+import { ResourceBindingSpecSchema } from "./resource.js";
 
 extendZodWithOpenApi(z);
 
@@ -16,6 +17,7 @@ export const CreateProfileInputSchema = z
     agentVersion: z.string().optional(),
     mcpServers: z.array(z.string()).optional(),
     skillRevisions: z.array(z.string()).optional(),
+    resources: z.array(ResourceBindingSpecSchema).optional(),
     extensions: z.array(z.string()).optional(),
   })
   .openapi("CreateProfileInput");
@@ -51,6 +53,7 @@ export const ProfileVersionResponseSchema = z
     agentVersion: z.string().optional(),
     mcpServers: z.array(z.string()).optional(),
     skillRevisions: z.array(z.string()).optional(),
+    resources: z.array(ResourceBindingSpecSchema).optional(),
     extensions: z.array(z.string()).optional(),
     createdAt: z.coerce.date(),
     projectId: z.string(),
