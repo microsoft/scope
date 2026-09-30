@@ -1577,6 +1577,37 @@ describe("API Endpoints", () => {
   // ===================================================================
 
   describe("POST /api/v1/requests?worker=... (profile)", () => {
+    const resourceRevision = {
+      _id: "rev-github-simulator-1",
+      resourceId: "res-github-simulator",
+      projectId: TEST_PROJECT_ID,
+      slug: "github-simulator",
+      revisionNumber: 1,
+      ref: "github-simulator@r1",
+      setup: { sh: "echo SIMULATOR_URL=http://sim >> $SCOPE_SETUP_ENV" },
+      exports: ["SIMULATOR_URL"],
+      parameters: [
+        { name: "REPO", required: true },
+        { name: "AS", required: false },
+      ],
+      contentSha256: "sha",
+      createdAt: new Date(),
+    };
+
+    function mockGithubSimulatorResource() {
+      (mocks.resourceStore.getBySlug as any).mockResolvedValue({
+        _id: "res-github-simulator",
+        projectId: TEST_PROJECT_ID,
+        slug: "github-simulator",
+        name: "GitHub Simulator",
+        revisionCounter: 1,
+        latestRevisionId: resourceRevision._id,
+        latestRevisionNumber: 1,
+        createdAt: new Date(),
+      });
+      (mocks.resourceRevisionStore.getLatest as any).mockResolvedValue(resourceRevision);
+    }
+
     it("applies profile fields server-side, ignoring client-omitted fields", async () => {
       (mocks.profileCollection.findOne as any).mockResolvedValue({
         _id: "profile-1",
@@ -1707,6 +1738,111 @@ describe("API Endpoints", () => {
       // Validation query must be scoped to the request's project.
       const filter = findSpy.mock.calls[0][0];
       expect(filter).toHaveProperty("projectId", TEST_PROJECT_ID);
+    });
+
+    it("returns 400 when a run resource param uses an unknown key", async () => {
+      mockGithubSimulatorResource();
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          model: "gpt-4o",
+          resources: [{ ref: "github-simulator", params: { REPO: "octo/api", REPOS: "typo/value" } }],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('unknown parameter "REPOS"');
+      expect(mocks.collection.insertOne).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when a required resource param is missing", async () => {
+      mockGithubSimulatorResource();
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          model: "gpt-4o",
+          resources: ["github-simulator"],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('missing required parameter "REPO"');
+      expect(mocks.collection.insertOne).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 with the parameter when a run overrides a profile-pinned resource param", async () => {
+      mockGithubSimulatorResource();
+      (mocks.profileCollection.findOne as any).mockResolvedValue({
+        _id: "profile-1",
+        name: "My Profile",
+        latestVersion: 1,
+      });
+      (mocks.profileVersionCollection.findOne as any).mockResolvedValue({
+        _id: "pv-1",
+        profileId: "profile-1",
+        version: 1,
+        workerType: "coder-acp-copilot",
+        model: "gpt-4o",
+        mcpServers: [],
+        skillRevisions: [],
+        resources: [{ ref: "github-simulator", params: { REPO: "pinned/repo" } }],
+        extensions: [],
+      });
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "profile-1",
+          resources: [{ ref: "github-simulator", params: { REPO: "run/repo" } }],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("controls these fields");
+      expect(res.body.conflicts).toEqual(
+        expect.arrayContaining([expect.stringContaining("resources.github-simulator@r1.REPO")])
+      );
+      expect(mocks.collection.insertOne).not.toHaveBeenCalled();
+    });
+
+    it("accepts a run filling a profile-unset resource param", async () => {
+      mockGithubSimulatorResource();
+      (mocks.profileCollection.findOne as any).mockResolvedValue({
+        _id: "profile-1",
+        name: "My Profile",
+        latestVersion: 1,
+      });
+      (mocks.profileVersionCollection.findOne as any).mockResolvedValue({
+        _id: "pv-1",
+        profileId: "profile-1",
+        version: 1,
+        workerType: "coder-acp-copilot",
+        model: "gpt-4o",
+        mcpServers: [],
+        skillRevisions: [],
+        resources: [{ ref: "github-simulator", params: { AS: "pinned/ns" } }],
+        extensions: [],
+      });
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "profile-1",
+          resources: [{ ref: "github-simulator", params: { REPO: "run/repo" } }],
+        });
+
+      expect(res.status).toBe(201);
+      const doc = (mocks.collection.insertOne as any).mock.calls[0][0];
+      expect(doc.resources).toEqual([
+        {
+          ref: "github-simulator@r1",
+          revisionId: "rev-github-simulator-1",
+          params: { REPO: "run/repo", AS: "pinned/ns" },
+        },
+      ]);
     });
   });
 

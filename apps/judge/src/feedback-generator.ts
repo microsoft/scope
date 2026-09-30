@@ -18,6 +18,21 @@ export interface FeedbackResult {
   selectedCriteriaIds: string[];
 }
 
+export interface FeedbackPromptRequest {
+  systemPrompt: string;
+  userPrompt: string;
+  fallbackFeedback: string;
+  selectedCriteriaIds: string[];
+}
+
+export interface FeedbackPromptInput {
+  judgeResults: CriterionResult[];
+  criteria: CriteriaConfig[];
+  personaInstructions?: string;
+  maxCriteria?: number;
+  includeDescendantGuard?: boolean;
+}
+
 /**
  * Default instructions for feedback generation
  */
@@ -43,6 +58,81 @@ Examples of bad feedback:
 - "Can you add a package.json file?" (asking a question they can't answer)
 - "It would be nice if..." (too indirect)`;
 
+export function buildFeedbackPromptRequest(
+  context: FeedbackContext,
+): FeedbackPromptRequest | null {
+  const {
+    judgeResults,
+    criteriaGraph,
+    criteriaRegistry,
+    personaInstructions,
+    maxCriteria = 1,
+    includeDescendantGuard = true,
+  } = context;
+
+  const rootFailures = criteriaGraph.getRootFailures(judgeResults);
+  if (rootFailures.length === 0) return null;
+
+  const selectedFailures = rootFailures.slice(0, maxCriteria);
+  const selectedCriteriaIds = selectedFailures.map(
+    (result) => result.criterionId,
+  );
+  const contextParts = ["What needs work:"];
+  for (const result of selectedFailures) {
+    contextParts.push(`- ${result.feedback}`);
+  }
+
+  const failureContext = contextParts.join("\n");
+
+  let systemPrompt = personaInstructions || DEFAULT_INSTRUCTIONS;
+  if (includeDescendantGuard) {
+    const descendantIds = new Set<string>();
+    for (const criterionId of selectedCriteriaIds) {
+      for (const descendantId of criteriaGraph.getDescendants(criterionId)) {
+        descendantIds.add(descendantId);
+      }
+    }
+    const descendantPrompts = [...descendantIds]
+      .map((id) => criteriaRegistry.get(id)?.prompt)
+      .filter((prompt): prompt is string => typeof prompt === "string");
+
+    if (descendantPrompts.length > 0) {
+      systemPrompt += `\n\n**CRITICAL CONSTRAINT**: Do NOT give any hints, clues, or directions about these requirements (they haven't been introduced yet):
+`;
+      for (const prompt of descendantPrompts) {
+        systemPrompt += `- ${prompt}\n`;
+      }
+      systemPrompt += `\nFocus ONLY on fixing the immediate issues. Do not mention anything related to the requirements listed above.`;
+    }
+  }
+
+  return {
+    systemPrompt,
+    userPrompt: `Based on the following issues with the code, provide clear, actionable feedback to the developer:
+
+${failureContext}
+
+Your feedback:`,
+    fallbackFeedback: failureContext,
+    selectedCriteriaIds,
+  };
+}
+
+export function buildFeedbackPromptRequestFromCriteria(
+  input: FeedbackPromptInput,
+): FeedbackPromptRequest | null {
+  return buildFeedbackPromptRequest({
+    judgeResults: input.judgeResults,
+    criteriaGraph: new DependencyGraph(input.criteria),
+    criteriaRegistry: new Map(
+      input.criteria.map((criterion) => [criterion.id, criterion]),
+    ),
+    personaInstructions: input.personaInstructions,
+    maxCriteria: input.maxCriteria,
+    includeDescendantGuard: input.includeDescendantGuard,
+  });
+}
+
 /**
  * FeedbackGenerator: Converts judge results into natural language feedback
  *
@@ -64,19 +154,8 @@ export class FeedbackGenerator {
   async generateFeedback(
     context: FeedbackContext
   ): Promise<FeedbackResult> {
-    const {
-      judgeResults,
-      criteriaGraph,
-      criteriaRegistry,
-      personaInstructions,
-      maxCriteria = 1,
-      includeDescendantGuard = true,
-    } = context;
-
-    // 1. Filter to root failures only
-    const rootFailures = criteriaGraph.getRootFailures(judgeResults);
-
-    if (rootFailures.length === 0) {
+    const request = buildFeedbackPromptRequest(context);
+    if (!request) {
       // All passed or no failures - should not happen but handle gracefully
       return {
         feedback: "All requirements met.",
@@ -84,99 +163,23 @@ export class FeedbackGenerator {
       };
     }
 
-    // 2. Limit to maxCriteria
-    const selectedFailures = rootFailures.slice(0, maxCriteria);
-    const selectedCriteriaIds = selectedFailures.map((r) => r.criterionId);
-
-    // 3. Build context from failures
-    const contextParts = ["What needs work:"];
-    for (const result of selectedFailures) {
-      contextParts.push(`- ${result.feedback}`);
-    }
-    const failureContext = contextParts.join("\n");
-
-    // 4. Build system prompt
-    const instructions = personaInstructions || DEFAULT_INSTRUCTIONS;
-    const systemPrompt = this.buildSystemPrompt(
-      instructions,
-      selectedCriteriaIds,
-      criteriaGraph,
-      criteriaRegistry,
-      includeDescendantGuard
-    );
-
-    // 5. Generate feedback using LLM
+    // Generate feedback using LLM
     const feedback = await this.generateNaturalFeedback(
-      systemPrompt,
-      failureContext
+      request.systemPrompt,
+      request.userPrompt,
+      request.fallbackFeedback,
     );
 
     return {
       feedback,
-      selectedCriteriaIds,
+      selectedCriteriaIds: request.selectedCriteriaIds,
     };
   }
 
-  private buildSystemPrompt(
-    baseInstructions: string,
-    selectedCriteriaIds: string[],
-    criteriaGraph: DependencyGraph,
-    criteriaRegistry: Map<string, CriteriaConfig>,
-    includeDescendantGuard: boolean
-  ): string {
-    let systemPrompt = baseInstructions;
-
-    // Add descendant guard if enabled
-    if (includeDescendantGuard) {
-      const descendantPrompts = this.getDescendantPrompts(
-        selectedCriteriaIds,
-        criteriaGraph,
-        criteriaRegistry
-      );
-
-      if (descendantPrompts.length > 0) {
-        systemPrompt += `\n\n**CRITICAL CONSTRAINT**: Do NOT give any hints, clues, or directions about these requirements (they haven't been introduced yet):
-`;
-        for (const prompt of descendantPrompts) {
-          systemPrompt += `- ${prompt}\n`;
-        }
-        systemPrompt += `\nFocus ONLY on fixing the immediate issues. Do not mention anything related to the requirements listed above.`;
-      }
-    }
-
-    return systemPrompt;
-  }
-
-  private getDescendantPrompts(
-    criteriaIds: string[],
-    graph: DependencyGraph,
-    registry: Map<string, CriteriaConfig>
-  ): string[] {
-    const descendantPrompts: string[] = [];
-    const allDescendants = new Set<string>();
-
-    // Collect all descendants of selected criteria
-    for (const cid of criteriaIds) {
-      const descendants = graph.getDescendants(cid);
-      for (const desc of descendants) {
-        allDescendants.add(desc);
-      }
-    }
-
-    // Get prompts for descendants
-    for (const descId of allDescendants) {
-      const criteria = registry.get(descId);
-      if (criteria) {
-        descendantPrompts.push(criteria.prompt);
-      }
-    }
-
-    return descendantPrompts;
-  }
-
-  private async generateNaturalFeedback(
+  protected async generateNaturalFeedback(
     systemPrompt: string,
-    failureContext: string
+    userPrompt: string,
+    fallbackFeedback: string,
   ): Promise<string> {
     const githubToken = await this.tokenClient.acquireToken("copilot-sdk");
     const client = new CopilotClient({ gitHubToken: githubToken });
@@ -195,12 +198,6 @@ export class FeedbackGenerator {
         }
       });
 
-      const userPrompt = `Based on the following issues with the code, provide clear, actionable feedback to the developer:
-
-${failureContext}
-
-Your feedback:`;
-
       const timeout = parseInt(process.env.JUDGE_TIMEOUT || "300000");
       await session.sendAndWait({ prompt: userPrompt }, timeout);
       await client.stop();
@@ -209,7 +206,7 @@ Your feedback:`;
     } catch (error) {
       console.error("[feedback-generator] Error:", error);
       // Fallback to raw feedback if LLM fails
-      return failureContext;
+      return fallbackFeedback;
     }
   }
 }
