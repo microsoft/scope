@@ -661,6 +661,15 @@ services:
     profiles: [claude-code]
     group_add:
       - "${DOCKER_GID:-0}"  # Docker socket GID (0 for macOS/Docker Desktop, set DOCKER_GID for Linux)
+    security_opt:
+      # The right GID is necessary but not sufficient when the daemon host
+      # enforces SELinux (a podman machine always does; RHEL/Fedora Docker Engine
+      # can): container_t may not open a var_run_t socket, so the mounted socket
+      # stays unusable and the agent cannot run containers at all. Ignored on
+      # hosts without SELinux, such as Docker Desktop.
+      # label=type:container_runtime_t also works and keeps confinement, but it
+      # requires container-selinux to provide that type.
+      - label=disable
     environment:
       <<: *worker-env
       WORKER_NAME: coder-acp-claude-code
@@ -767,6 +776,15 @@ services:
     profiles: [copilot]
     group_add:
       - "${DOCKER_GID:-0}"  # Docker socket GID (0 for macOS/Docker Desktop, set DOCKER_GID for Linux)
+    security_opt:
+      # The right GID is necessary but not sufficient when the daemon host
+      # enforces SELinux (a podman machine always does; RHEL/Fedora Docker Engine
+      # can): container_t may not open a var_run_t socket, so the mounted socket
+      # stays unusable and the agent cannot run containers at all. Ignored on
+      # hosts without SELinux, such as Docker Desktop.
+      # label=type:container_runtime_t also works and keeps confinement, but it
+      # requires container-selinux to provide that type.
+      - label=disable
     environment:
       <<: *worker-env
       WORKER_NAME: coder-acp-copilot

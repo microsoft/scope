@@ -14,9 +14,12 @@ yarn.lock
 .vscode/settings.json
 .azure/
 .venv/
+__pycache__/
+*.pyc
 downloads/
 ctrf/
 coverage/
+evaluations/static-prompts/results/
 .auth/
 test-videos/
 test-snapshots/
