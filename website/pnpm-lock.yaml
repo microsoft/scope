@@ -30,6 +30,9 @@ importers:
       httpsnippet-lite:
         specifier: ^3.0.5
         version: 3.0.5
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1
       starlight-openapi:
         specifier: ^0.25.1
         version: 0.25.1(@astrojs/markdown-remark@7.2.0)(@astrojs/starlight@0.39.2(astro@6.4.8(@types/node@24.12.3)(rollup@4.62.2)))(astro@6.4.8(@types/node@24.12.3)(rollup@4.62.2))(openapi-types@12.1.3)
