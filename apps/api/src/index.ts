@@ -9,9 +9,9 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
-import { TaskPromptStore, SkillRevisionStore, SkillResolver, CodebaseStore, CodebaseRevisionStore, CodebaseResolver, McpSecretClient, McpSecretUnavailableError, BlobStorage, RedisHeartbeatStore, ProjectStore, loadAuthConfigFromEnv } from "shared";
+import { TaskPromptStore, SkillRevisionStore, SkillResolver, CodebaseStore, CodebaseRevisionStore, CodebaseResolver, ResourceStore, ResourceRevisionStore, ResourceResolver, McpSecretClient, McpSecretUnavailableError, BlobStorage, RedisHeartbeatStore, ProjectStore, loadAuthConfigFromEnv } from "shared";
 import { initTelemetry } from "telemetry";
-import type { TaskPromptDocument, SkillDocument, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, ProfileDocument, ProfileVersionDocument, ProjectDocument, HeartbeatStore, AuthProvider, ProfileEnricher, UserDocument } from "shared";
+import type { TaskPromptDocument, SkillDocument, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, ResourceDocument, ResourceRevisionDocument, ProfileDocument, ProfileVersionDocument, ProjectDocument, HeartbeatStore, AuthProvider, ProfileEnricher, UserDocument } from "shared";
 import { UserStore } from "./auth/user-store.js";
 import { createAuthMiddleware, createUserAccessMiddleware } from "./auth/middleware.js";
 import { authErrorHandler } from "./auth/error-handler.js";
@@ -41,6 +41,7 @@ import { registerModelsRoutes } from "./routes/models.js";
 import { registerMcpServersRoutes } from "./routes/mcp-servers.js";
 import { registerSkillsRoutes } from "./routes/skills.js";
 import { registerCodebasesRoutes } from "./routes/codebases.js";
+import { registerResourcesRoutes } from "./routes/resources.js";
 import { registerExtensionsRoutes } from "./routes/extensions.js";
 import { registerInsightsRoutes } from "./routes/insights.js";
 import { registerSecretsRoutes } from "./routes/secrets.js";
@@ -126,6 +127,11 @@ let codebaseRevisionCollection: Collection<CodebaseRevisionDocument>;
 let codebaseStore: CodebaseStore;
 let codebaseRevisionStore: CodebaseRevisionStore;
 let codebaseResolver: CodebaseResolver;
+let resourceCollection: Collection<ResourceDocument>;
+let resourceRevisionCollection: Collection<ResourceRevisionDocument>;
+let resourceStore: ResourceStore;
+let resourceRevisionStore: ResourceRevisionStore;
+let resourceResolver: ResourceResolver;
 let blobStorage: BlobStorage;
 let heartbeatStore: HeartbeatStore;
 let reportQueueClient: QueueClient;
@@ -197,6 +203,12 @@ async function initializeClients(): Promise<void> {
   codebaseResolver = new CodebaseResolver({
     tokenProvider: acquireGitHubPublicApiToken,
   });
+
+  resourceCollection = db.collection<ResourceDocument>("resources");
+  resourceRevisionCollection = db.collection<ResourceRevisionDocument>("resource-revisions");
+  resourceStore = new ResourceStore(resourceCollection);
+  resourceRevisionStore = new ResourceRevisionStore(resourceRevisionCollection, resourceStore);
+  resourceResolver = new ResourceResolver();
 
   // Note: Collection indexes are managed by db-migrations (see 002-create-indexes.ts).
   // Run `pnpm migrate:up` to apply pending migrations.
@@ -294,6 +306,11 @@ const routeCtx: RouteContext = {
   get codebaseStore() { return codebaseStore; },
   get codebaseRevisionStore() { return codebaseRevisionStore; },
   get codebaseResolver() { return codebaseResolver; },
+  get resourceCollection() { return resourceCollection; },
+  get resourceRevisionCollection() { return resourceRevisionCollection; },
+  get resourceStore() { return resourceStore; },
+  get resourceRevisionStore() { return resourceRevisionStore; },
+  get resourceResolver() { return resourceResolver; },
   get projectStore() { return projectStore; },
   get reportQueueClient() { return reportQueueClient; },
   get blobStorage() { return blobStorage; },
@@ -340,6 +357,7 @@ registerModelsRoutes(routeCtx);
 registerMcpServersRoutes(routeCtx);
 registerSkillsRoutes(routeCtx);
 registerCodebasesRoutes(routeCtx);
+registerResourcesRoutes(routeCtx);
 registerExtensionsRoutes(routeCtx);
 registerInsightsRoutes(routeCtx);
 registerFeatureFlagRoutes(routeCtx);
@@ -431,6 +449,11 @@ export interface TestDependencies {
   codebaseStore?: CodebaseStore;
   codebaseRevisionStore?: CodebaseRevisionStore;
   codebaseResolver?: CodebaseResolver;
+  resourceCollection?: Collection<ResourceDocument>;
+  resourceRevisionCollection?: Collection<ResourceRevisionDocument>;
+  resourceStore?: ResourceStore;
+  resourceRevisionStore?: ResourceRevisionStore;
+  resourceResolver?: ResourceResolver;
   reportQueueClient?: QueueClient;
   blobStorage?: BlobStorage;
 }
@@ -467,6 +490,11 @@ export function _injectTestDependencies(deps: TestDependencies): void {
   if (deps.codebaseStore) codebaseStore = deps.codebaseStore;
   if (deps.codebaseRevisionStore) codebaseRevisionStore = deps.codebaseRevisionStore;
   if (deps.codebaseResolver) codebaseResolver = deps.codebaseResolver;
+  if (deps.resourceCollection) resourceCollection = deps.resourceCollection;
+  if (deps.resourceRevisionCollection) resourceRevisionCollection = deps.resourceRevisionCollection;
+  if (deps.resourceStore) resourceStore = deps.resourceStore;
+  if (deps.resourceRevisionStore) resourceRevisionStore = deps.resourceRevisionStore;
+  if (deps.resourceResolver) resourceResolver = deps.resourceResolver;
   if (deps.reportQueueClient) reportQueueClient = deps.reportQueueClient;
   if (deps.blobStorage) blobStorage = deps.blobStorage;
 }

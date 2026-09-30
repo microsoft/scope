@@ -1,0 +1,154 @@
+{
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/projects": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "type": "object" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/criteria": {
+      "get": {
+        "parameters": [{ "name": "projectId", "in": "query", "required": true }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "type": "object" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/prompt-features": {
+      "get": {
+        "parameters": [{ "name": "projectId", "in": "query", "required": true }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "type": "object" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/task-prompts": {
+      "get": {
+        "parameters": [{ "name": "projectId", "in": "query", "required": true }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items", "total", "limit", "offset"],
+                  "properties": {
+                    "items": { "type": "array" },
+                    "total": { "type": "number" },
+                    "limit": { "type": "number" },
+                    "offset": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/task-prompts/{id}/content": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id", "text"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/requests": {
+      "get": {
+        "parameters": [{ "name": "projectId", "in": "query", "required": true }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PaginatedRunsResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/requests/{id}/runs/{runId}/tool-calls": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports": {
+      "get": {
+        "parameters": [{ "name": "projectId", "in": "query", "required": false }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "type": "object" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/report-templates": {
+      "get": {
+        "parameters": [{ "name": "projectId", "in": "query", "required": true }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "type": "object" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PaginatedRunsResponse": {
+        "type": "object",
+        "required": ["data", "limit", "estimatedTotal", "cursors"],
+        "properties": {
+          "data": { "type": "array" },
+          "limit": { "type": "number" },
+          "estimatedTotal": { "type": "number" },
+          "cursors": { "type": "object" }
+        }
+      }
+    }
+  }
+}

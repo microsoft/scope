@@ -17,6 +17,9 @@ flowchart LR
     workers --> shared
     workers --> judge
     cli --> shared
+    prompt_evals["static-prompt-evals"] --> api
+    prompt_evals --> judge
+    prompt_evals --> workers
 ```
 
 | Package | Responsibility |
@@ -27,6 +30,8 @@ flowchart LR
 | `judge` | Evaluation engine — executes criteria against agent output |
 | `shared` | Types, database models, queue/blob/redis clients, config loaders, codebase/skill stores and clients |
 | `workers/*` | Coding agent adapters — each implements the same interface for a different agent |
+| `test-utils` | Shared ACP worker integration-test harness and Docker helpers |
+| `static-prompt-evals` | Mixed TypeScript/Python developer tooling for static prompt quality and user-controlled prompt red teaming |
 
 ## Data Model
 
@@ -65,10 +70,12 @@ erDiagram
     RUN }o--|| PERSONA : uses
     RUN }o--|| WORKER_TYPE : targets
     RUN }o--|| CODEBASE_REVISION : seeds
+    RUN }o--o{ RESOURCE_REVISION : provisions
     ITERATION ||--o{ CRITERION_RESULT : evaluated_by
     CRITERION ||--o{ CRITERION_RESULT : produces
     CRITERION }o--o{ CRITERION : depends_on
     CODEBASE ||--o{ CODEBASE_REVISION : has
+    RESOURCE ||--o{ RESOURCE_REVISION : has
 ```
 
 - **Run** — A single benchmark execution: one scenario + one persona + one worker
@@ -77,6 +84,9 @@ erDiagram
 - **CriterionResult** — Pass/fail result of evaluating a criterion against a specific iteration
 - **Codebase** — Mutable first-class project entity in `codebases`, with a unique slug, source type (`git` or `archive`), optional GitHub source/default branch, revision counter, latest revision pointer, and soft-delete metadata.
 - **CodebaseRevision** — Immutable snapshot in `codebase-revisions`. Every Git resolution or archive upload creates a fresh UUID revision with the next per-codebase `revisionNumber` and canonical `{slug}@r{N}` ref.
+- **Resource** — Mutable project-scoped lifecycle identity in `resources` with a unique slug, revision counter, latest revision pointer, and soft-delete metadata.
+- **ResourceRevision** — Immutable lifecycle snapshot in `resource-revisions` containing normalized setup/teardown scripts, exported names, parameter declarations, `contentSha256`, and canonical `{slug}@r{N}` ref. Revisions deduplicate against the latest revision only. See [resources](resources.md).
+- **ProfileVersion.resources** — Immutable resource binding specs (`{ref, params}`) stored with a profile version. Submit resolves them to pinned request `resources[]` and merges profile preset parameters with run-supplied values using profile-wins precedence.
 
 ### Typed prompts, AGENTS.md, and size-based storage
 
@@ -128,8 +138,8 @@ pass any `projectId`).
 
 | Class | Collections | How `projectId` is set |
 |-------|-------------|------------------------|
-| **Root** (no parent) | `requests`, `profiles`, `criteria`, `prompt-features`, `mcp-servers`, `report-templates`, `skills`, `extensions`, `codebases` | From the `?projectId=` query param at create time |
-| **Child** (references a parent) | `runs` (history), `profile-versions`, `codebase-revisions`, `reports`, `insights` | Copied from the parent doc's `projectId` |
+| **Root** (no parent) | `requests`, `profiles`, `criteria`, `prompt-features`, `mcp-servers`, `report-templates`, `skills`, `extensions`, `codebases`, `resources` | From the `?projectId=` query param at create time |
+| **Child** (references a parent) | `runs` (history), `profile-versions`, `codebase-revisions`, `resource-revisions`, `reports`, `insights` | Copied from the parent doc's `projectId` |
 | **Special** (deterministic key → per-project copies) | `task-prompts`, `skill-revisions` | From the run's `projectId`; see below |
 | **Unscoped** | `projects`, `agents`, `models`, tokens/accounts, feature-flags | n/a — never filtered by project |
 
@@ -212,7 +222,7 @@ mechanism — see [Per-project catalog isolation (migration 026)](#per-project-c
 Entities the pipeline **creates** are persisted with the run's `projectId` (derived from the
 request doc, never a query param): reports (report-generator / trigger endpoint), insights
 (judge / agent-authored via `sourceReportId`), demoted retry attempts (`insertHistoricalRun`),
-codebase-revisions, and profile-versions. The DoD asserts these land in the right project.
+codebase-revisions, resource-revisions, and profile-versions. The DoD asserts these land in the right project.
 
 ### Migration & rollout (migrate-then-enforce)
 
@@ -334,6 +344,39 @@ flowchart TD
     H --> J
     I --> J
 ```
+
+## Prompt Evaluation Architecture
+
+The application has two independent prompt-evaluation tracks:
+
+1. **Static prompt quality** covers ten Scope-owned runtime prompt families.
+   TypeScript adapters invoke production prompt builders, parsers, judge/report
+   sessions, and tools; Python runs deterministic checks and Azure AI Evaluation
+   SDK graders over generated JSONL.
+2. **User-controlled prompt red teaming** covers eight instruction-surface
+   categories. A reviewed profile selects a production composition adapter and
+   replaces only the untrusted field with a cloud-generated attack.
+
+This separation prevents ordinary quality scores from being interpreted as
+security results. User-authored task/gate prompts, `AGENTS.md`, criterion
+prompts, prompt-feature definitions, persona instructions, and report-template
+content are red-team inputs, not additional static prompt families.
+
+The red-team target is the actual composed request. Adapters preserve system
+and user roles, ordering, delimiters, mode-specific wrapper logic, and
+AI-facing tool descriptions/schemas. Benign contract fixtures compare every
+adapter with runtime composition. Task/gate prompts are ACP text requests;
+`AGENTS.md` is written to the workspace before the first turn; criterion and
+feature definitions are inserted into their real judge/extraction user
+messages; persona text occupies the feedback system-instruction position; and
+report templates preserve default, append, and override system-prompt modes.
+
+The package commits curated inputs and provenance, schemas, rubrics, profiles,
+attack configuration, and threshold policy. Per-run responses, SDK/cloud
+output, manifests, summaries, and findings stay in the ignored
+`evaluations/static-prompts/results/` tree. See
+[Prompt Evaluations](prompt-evaluations.md) for the full inventory, workflow,
+artifact contract, cloud canary limitation, commands, and completion criteria.
 
 ## Gates — multi-phase evaluation pipeline
 

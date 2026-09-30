@@ -125,11 +125,13 @@ export function requestedAgentCapabilities(input: {
   mcpServers?: readonly string[] | null;
   skillRevisions?: readonly string[] | null;
   extensions?: readonly string[] | null;
+  resources?: readonly unknown[] | null;
 }): AgentTargetRequirements {
   return {
     reasoningEffort: Boolean(input.reasoningEffort),
     mcpServers: Boolean(input.mcpServers?.length),
     skills: Boolean(input.skillRevisions?.length),
     extensions: Boolean(input.extensions?.length),
+    resources: Boolean(input.resources?.length),
   };
 }
