@@ -20,6 +20,7 @@
   "devDependencies": {
     "acorn": "^8.16.0",
     "httpsnippet-lite": "^3.0.5",
+    "remark-gfm": "^4.0.1",
     "starlight-openapi": "^0.25.1",
     "unist-util-visit": "^5.1.0",
     "worktree-env": "^0.1.0"
