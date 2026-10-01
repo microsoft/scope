@@ -11,6 +11,8 @@ import {
 	contributionLabels,
 	countLabel,
 	issueUrl,
+	pageCount,
+	pageItems,
 	parseIssues,
 	searchUrl,
 	sortForDisplay,
@@ -86,6 +88,23 @@ test('pluralizes the count label', () => {
 	assert.equal(countLabel(1), 'open call');
 	assert.equal(countLabel(0), 'open calls');
 	assert.equal(countLabel(4), 'open calls');
+});
+
+test('counts rotation pages', () => {
+	assert.equal(pageCount(0, 4), 0);
+	assert.equal(pageCount(3, 4), 1);
+	assert.equal(pageCount(4, 4), 1);
+	assert.equal(pageCount(9, 4), 3);
+	assert.equal(pageCount(9, 0), 0);
+});
+
+test('fills every rotation page, wrapping the last one', () => {
+	const items = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+	assert.deepEqual(pageItems(items, 0, 4), [1, 2, 3, 4]);
+	assert.deepEqual(pageItems(items, 1, 4), [5, 6, 7, 8]);
+	assert.deepEqual(pageItems(items, 2, 4), [9, 1, 2, 3]);
+	assert.deepEqual(pageItems([1, 2], 0, 4), [1, 2]);
+	assert.deepEqual(pageItems([], 0, 4), []);
 });
 
 test('the dev sample file is valid', () => {

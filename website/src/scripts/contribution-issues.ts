@@ -111,6 +111,23 @@ export function countLabel(count: number): string {
 	return count === 1 ? 'open call' : 'open calls';
 }
 
+/** Number of rotation pages needed to show `total` items `size` at a time. */
+export function pageCount(total: number, size: number): number {
+	if (total <= 0 || size <= 0) return 0;
+	return Math.ceil(total / size);
+}
+
+/**
+ * Items on a rotation page. A short last page wraps around to the start,
+ * so every page is full when there are at least `size` items.
+ */
+export function pageItems<T>(items: readonly T[], page: number, size: number): T[] {
+	if (!items.length || size <= 0) return [];
+	if (items.length <= size) return [...items];
+	const start = page * size;
+	return Array.from({ length: size }, (_, index) => items[(start + index) % items.length]!);
+}
+
 /** Fetches and parses the published list. Throws on network or HTTP errors. */
 export async function fetchIssues(url: string, timeoutMs = 8000): Promise<ParseResult> {
 	const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });

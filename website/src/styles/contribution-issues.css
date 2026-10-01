@@ -100,6 +100,23 @@
 .contrib-skeleton::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, var(--scope-brand) 9%, transparent) 50%, transparent 80%); transform: translateX(-100%); animation: contrib-shimmer 1.6s ease-in-out infinite; }
 @keyframes contrib-shimmer { to { transform: translateX(100%); } }
 
+/* Rotation controls (landing): one dot per set, the active one fills as a progress bar. */
+.contrib-rotation { display: flex; align-items: center; gap: 0.5rem; margin-top: 1.1rem; }
+.contrib-dots { display: flex; align-items: center; }
+.contrib-dot, .contrib-toggle { display: inline-grid; place-items: center; min-width: 1.5rem; height: 1.5rem; padding: 0 0.15rem; border: 0; border-radius: 100px; background: none; color: var(--scope-muted); cursor: pointer; }
+.contrib-dot:focus-visible, .contrib-toggle:focus-visible { outline: 2px solid var(--scope-brand); outline-offset: 1px; }
+.contrib-dot__track { position: relative; display: block; width: 0.5rem; height: 0.5rem; border-radius: 100px; background: var(--scope-border); overflow: hidden; transition: width 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.3s ease; }
+.contrib-dot:hover .contrib-dot__track { background: var(--scope-muted); }
+.contrib-dot[aria-current] .contrib-dot__track { width: 2.25rem; background: color-mix(in srgb, var(--scope-brand) 22%, var(--scope-border)); }
+.contrib-dot__fill { position: absolute; inset: 0; border-radius: inherit; background: var(--scope-brand); transform: scaleX(0); transform-origin: left; }
+.contrib-dot[aria-current] .contrib-dot__fill { transform: scaleX(1); }
+.contrib-toggle { margin-left: 0.25rem; border: 1px solid var(--scope-border); width: 1.75rem; height: 1.75rem; background: var(--scope-surface); transition: border-color 0.3s ease, color 0.3s ease; }
+.contrib-toggle:hover { border-color: var(--scope-brand); color: var(--scope-brand); }
+.contrib-toggle[hidden] { display: none; }
+/* Pause: two bars. Play: a triangle. */
+.contrib-toggle__icon { width: 0.55rem; height: 0.6rem; border-inline: 0.17rem solid currentColor; }
+.contrib-toggle[data-paused='true'] .contrib-toggle__icon { width: 0; height: 0; margin-left: 0.15rem; border-block: 0.32rem solid transparent; border-inline: 0.5rem solid currentColor; border-right-width: 0; }
+
 /* Landing section. */
 .scope-contrib__intro { max-width: 36ch; color: var(--scope-muted); font-size: 0.9rem; }
 .scope-contrib__all { margin-top: 1.5rem; }

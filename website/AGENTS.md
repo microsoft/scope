@@ -241,6 +241,11 @@ build:
   Set `PUBLIC_CONTRIBUTION_ISSUES_URL` to point at another file.
 - Display order is decided client-side: good first issues first, then
   newest. `area:`, `difficulty:`, and `type:` labels show as chips.
+- The landing section shows 4 issues at a time and rotates through all
+  of them every 7 seconds (`rotate` prop). The active page dot fills
+  as a progress bar. Rotation pauses on hover, on keyboard focus, when
+  off screen or the tab is hidden, and with the pause button. It never
+  autoplays under reduced motion; the dots still work.
 - In `pnpm run dev`, if the fetch fails (no branch yet, offline), the
   list falls back to
   [`contribution-issues.sample.jsonl`](src/data/contribution-issues.sample.jsonl)

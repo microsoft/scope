@@ -14,15 +14,17 @@ interface Props {
 	limit?: number;
 	/** `cards` for the animated landing grid, `list` for the docs page. */
 	variant?: 'cards' | 'list';
+	/** Cycle through all issues, `limit` at a time. Needs `limit`. */
+	rotate?: boolean;
 }
 
-const { limit, variant = 'cards' } = Astro.props;
+const { limit, variant = 'cards', rotate = false } = Astro.props;
 const src = import.meta.env.PUBLIC_CONTRIBUTION_ISSUES_URL || DATA_URL;
 const skeletons = Math.min(limit ?? 4, 4);
 const [goodFirst, helpWanted] = CONTRIBUTION_LABELS.map((label) => ({ label, href: searchUrl(label) }));
 ---
 
-<scope-contribution-issues class={`contrib contrib--${variant} not-content`} data-variant={variant} data-limit={limit} data-src={src} data-state="loading">
+<scope-contribution-issues class={`contrib contrib--${variant} not-content`} data-variant={variant} data-limit={limit} data-rotate={rotate && limit ? '' : undefined} data-src={src} data-state="loading">
 	<slot />
 	<p class="contrib-sample-tag" data-sample-tag hidden>Sample data · dev only</p>
 	<ul class="contrib-list" data-list aria-busy="true" aria-label="Open calls for contributions">

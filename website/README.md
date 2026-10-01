@@ -196,8 +196,9 @@ table of contents, code examples, and previous/next navigation.
   explicit rather than promising instant access to a hosted service.
 - **Motion:** limited to the silent showreel, the interactive
   example, and the open-calls cards (staggered entrance, count-up,
-  cursor glow), with pause controls where needed and reduced-motion
-  support. The logo and documentation chrome remain still.
+  cursor glow, a rotation through all open calls), with pause controls
+  and reduced-motion support. The logo and documentation chrome remain
+  still.
 - **Contribution:** a "Help build Scope" section lists open calls
   for contributions, refreshed hourly from a data branch without a
   redeploy. See "Contribution issues" in `AGENTS.md`.
