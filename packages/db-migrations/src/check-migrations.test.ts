@@ -66,7 +66,7 @@ describe("checkMigrations", () => {
     const result = await checkMigrations(db);
     expect(result.ready).toBe(true);
     expect(result.pending).toEqual([]);
-    expect(result.totalApplied).toBe(32);
+    expect(result.totalApplied).toBe(31);
     expect(result.applied).toEqual([
       "001-backfill-task-prompts.ts",
       "002-create-indexes.ts",
@@ -190,7 +190,7 @@ describe("checkMigrations", () => {
     const result = await checkMigrations(db);
     expect(result.ready).toBe(true);
     expect(result.pending).toEqual([]);
-    expect(result.totalApplied).toBe(31);
+    expect(result.totalApplied).toBe(32);
   });
 
   it("caches results within TTL", async () => {
