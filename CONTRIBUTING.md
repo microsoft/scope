@@ -47,6 +47,33 @@ Scope is a pnpm workspaces monorepo (TypeScript, with a Rust component for the A
   Copilot entitlement**; `gh auth login` alone does not grant Copilot access.
 - **Rust / Cargo** — only needed if you work on the AI gateway (`apps/gateway/`).
 
+### Quick start with the setup scripts
+
+Two scripts automate installing the prerequisites above:
+
+- **Windows (WSL2)**: run [`scripts/install-wsl-ubuntu.ps1`](./scripts/install-wsl-ubuntu.ps1)
+  from an elevated PowerShell prompt. It enables the WSL/Virtual Machine Platform
+  Windows features, installs or updates WSL2 and the Ubuntu distribution, and
+  handles reboot prompts. Add `-SkipReboot` to run it non-interactively (for
+  example on CI).
+- **Linux (including Ubuntu on WSL2)**: run
+  [`scripts/setup-linux-prereqs.sh`](./scripts/setup-linux-prereqs.sh) inside your
+  Linux shell. It detects your distro (apt, dnf, zypper, or pacman) and
+  architecture, then checks for and installs git, curl, Node.js 22, corepack +
+  pnpm 10.29.1, Docker Engine and Compose v2 (with `compose watch` support),
+  mkcert, and the GitHub CLI. Pass `--check` to only report what's missing
+  (exits non-zero if something is missing, useful in CI), `--yes` to skip
+  confirmation prompts, or `--skip-docker` / `--skip-gh` to opt out of those
+  steps.
+
+```bash
+# Windows: from an elevated PowerShell prompt
+./scripts/install-wsl-ubuntu.ps1
+
+# Then, inside the Ubuntu (WSL2) shell, or on native Linux:
+bash scripts/setup-linux-prereqs.sh
+```
+
 ## Getting started
 
 ```bash

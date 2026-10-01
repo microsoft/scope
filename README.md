@@ -109,6 +109,13 @@ grant Copilot access. You also need credentials with access to the models used
 by the Judge and other AI features. Provider usage may incur charges or consume
 quotas. The local backing services don't require an Azure subscription.
 
+**Setting up a new machine?** Use
+[`scripts/setup-linux-prereqs.sh`](./scripts/setup-linux-prereqs.sh) to check and
+install the tools above on Linux (or Ubuntu on WSL2). On Windows, run
+[`scripts/install-wsl-ubuntu.ps1`](./scripts/install-wsl-ubuntu.ps1) first to
+install WSL2 and Ubuntu. See [CONTRIBUTING.md](./CONTRIBUTING.md#quick-start-with-the-setup-scripts)
+for details.
+
 The commands below use a Bash-compatible shell. Rust is only required on the
 host if you build or modify the gateway outside Docker.
 
