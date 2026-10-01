@@ -48,6 +48,7 @@ import type { RunState, LogEvent, ResourceBinding, ResourceRunOutcome } from "@/
 import { useShiftModifier } from "@/hooks/useShiftModifier";
 import { getRetryButtonState } from "@/components/RetryButton";
 import { getRunSkillReferences } from "@/lib/skill-spec";
+import { matchingReportTemplates } from "@/lib/report-triggers";
 
 /** A compact labeled stat: a micro uppercase label above its value. */
 function MetaItem({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
@@ -283,6 +284,11 @@ export function RunDetail() {
     enabled: !!run?.profileId,
   });
 
+  // The run's MCP server slugs. Tools reach the model through the MCP gateway namespaced
+  // as `<serverSlug>__<toolName>` (see mcp-tool-name.ts), so the slug is the prefix we
+  // match on. Using the run's own list keeps labels working for since-deleted servers.
+  const mcpServerNames = run?.mcpServers;
+
   // Fetch all attempts when this request has been retried
   const hasMultipleAttempts = (run?.run?.attemptNumber ?? 1) > 1;
   const { data: rawAttempts } = useQuery({
@@ -370,6 +376,16 @@ export function RunDetail() {
     queryFn: () => api.listReportTemplates(),
   });
   const templateMap = new Map(reportTemplates?.map((t) => [t.id, t.name]));
+
+  // Templates whose trigger matches this run — these are the reports that would
+  // actually be generated when clicking "Generate Report". When empty, the run
+  // either has no templates configured or none of them match it.
+  const matchedTemplates = useMemo(
+    () => matchingReportTemplates(reportTemplates, run, taskPrompt),
+    [reportTemplates, run, taskPrompt],
+  );
+  const hasTemplates = (reportTemplates?.length ?? 0) > 0;
+  const canGenerate = matchedTemplates.length > 0;
 
   // Filter reports: "latest" keeps only the most recent per templateId
   const filteredReports = useMemo(() => {
@@ -950,20 +966,20 @@ export function RunDetail() {
         onValueChange={(value) => navigate(`/runs/${id}/${value}${selectedRunId ? `?runId=${selectedRunId}` : ""}`)}
       >
         <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="turns">
             Turns {activeRun?.turns ? `(${activeRun?.turns.length})` : ""}
           </TabsTrigger>
           {activeRun?.turns && activeRun?.turns.length > 0 && (
             <TabsTrigger value="conversation">Conversation</TabsTrigger>
           )}
+          <TabsTrigger value="reports">
+            Reports {reports && reports.length > 0 ? `(${reports.length})` : ""}
+          </TabsTrigger>
           {hasHarData && <TabsTrigger value="network">Network</TabsTrigger>}
           {hasHarData && <TabsTrigger value="tool-calls">Tool Calls</TabsTrigger>}
           {hasVideoData && <TabsTrigger value="video"><Video className="h-3.5 w-3.5 mr-1" />Videos ({videoCount})</TabsTrigger>}
           <TabsTrigger value="logs">Logs</TabsTrigger>
-          <TabsTrigger value="reports">
-            Reports {reports && reports.length > 0 ? `(${reports.length})` : ""}
-          </TabsTrigger>
-          <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
         {/* Turns tab */}
@@ -1016,7 +1032,7 @@ export function RunDetail() {
         {/* Conversation tab — chat-style view of agent/judge exchanges */}
         {activeRun?.turns && activeRun?.turns.length > 0 && (
           <TabsContent value="conversation" className="mt-4">
-            <ConversationView turns={activeRun?.turns} task={run.scenario?.task} runId={run._id} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
+            <ConversationView turns={activeRun?.turns} task={run.scenario?.task} runId={run._id} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} mcpServerNames={mcpServerNames} />
           </TabsContent>
         )}
 
@@ -1117,15 +1133,45 @@ export function RunDetail() {
                   <List className="h-4 w-4" />
                 </Button>
               </div>
-              <Button
-                size="sm"
-                onClick={() => generateReport.mutate()}
-                disabled={generateReport.isPending}
-                className="gap-1.5"
-              >
-                <Plus className="h-4 w-4" />
-                Generate Report
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {/* span wrapper so the tooltip still works while the button is disabled */}
+                    <span tabIndex={0}>
+                      <Button
+                        size="sm"
+                        onClick={() => generateReport.mutate()}
+                        disabled={generateReport.isPending || !canGenerate}
+                        className="gap-1.5"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Generate Report
+                        {canGenerate ? ` (${matchedTemplates.length})` : ""}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    {canGenerate ? (
+                      <div className="space-y-1">
+                        <p className="font-medium">
+                          {matchedTemplates.length === 1
+                            ? "This template would run:"
+                            : `These ${matchedTemplates.length} templates would run:`}
+                        </p>
+                        <ul className="list-disc pl-4">
+                          {matchedTemplates.map((t) => (
+                            <li key={t.id}>{t.name}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : hasTemplates ? (
+                      <p>No report template matches this run, so there is nothing to generate.</p>
+                    ) : (
+                      <p>No report templates exist yet. Create one to generate reports for this run.</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
 
@@ -1195,6 +1241,30 @@ export function RunDetail() {
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p>No reports for this run yet.</p>
+              {!hasTemplates ? (
+                <p className="mt-1 text-sm">
+                  Reports are generated from report templates, and none exist yet.{" "}
+                  <Link to="/reports/templates/new" className="text-primary hover:underline">
+                    Create a report template
+                  </Link>{" "}
+                  to get started.
+                </p>
+              ) : !canGenerate ? (
+                <p className="mt-1 text-sm">
+                  None of the existing report templates match this run, so there is nothing to
+                  generate. Add a matching{" "}
+                  <Link to="/reports/templates" className="text-primary hover:underline">
+                    report template
+                  </Link>{" "}
+                  to enable reports here.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm">
+                  {matchedTemplates.length === 1
+                    ? `Click "Generate Report" to run the "${matchedTemplates[0].name}" template.`
+                    : `Click "Generate Report" to run ${matchedTemplates.length} matching templates.`}
+                </p>
+              )}
             </div>
           )}
         </TabsContent>
