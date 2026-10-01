@@ -106,7 +106,9 @@ Use these patterns when extending list/detail or run-submission UX:
 
 2. **Prefer in-place creation over navigation breaks.**
    - For `/runs/new`, create profiles in a dialog and keep users on the page.
-   - Reuse shared forms (e.g. `ProfileCreateForm`) between full-page and modal flows to avoid behavior drift.
+   - Reuse shared forms (e.g. `ProfileCreateForm`, `McpServerForm`) between full-page and modal flows to avoid behavior drift.
+   - Keep entity sections visible when their list is empty: show an empty state plus the inline `New…` action instead of hiding the section.
+   - Inline-create dialogs mounted inside a page `<form>` (e.g. Submit Run) must call `e.stopPropagation()` in their own submit handler — React bubbles synthetic events through portals to the outer form — and mark their primary button with `data-command-enter` so page-level Cmd+Enter shortcuts don't fire underneath.
 
 3. **Treat action counts as source-of-truth UX.**
    - Any submit/CTA label must reflect the real backend effect (e.g. expanded run count, not just occurrence count).
