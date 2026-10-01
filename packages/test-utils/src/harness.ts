@@ -30,6 +30,7 @@ export interface HarnessSessionOptions {
 export interface HarnessSessionResult {
   response: string;
   stopReason: string;
+  initialModel?: string;
   confirmedModel?: string;
 }
 
@@ -149,6 +150,7 @@ export async function runTestHarness(config: TestHarnessConfig): Promise<never> 
         promptResult.success = true;
         promptResult.response = acpResult.response;
         promptResult.stopReason = acpResult.stopReason;
+        promptResult.initialModel = acpResult.initialModel;
         promptResult.confirmedModel = acpResult.confirmedModel;
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
