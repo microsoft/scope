@@ -306,7 +306,7 @@ sequenceDiagram
 |-------|------|---------|-------------|
 | `refreshBufferSecs` | int | `120` (env: `COPILOT_TOKEN_REFRESH_BUFFER_SECS`) | Seconds before expiry to proactively refresh |
 | `targetHosts` | string[] | `["api.githubcopilot.com", ...]` | Hosts to inject token on |
-| `maxSessionDurationSecs` | int | `3600` (env: `COPILOT_MAX_SESSION_DURATION_SECS`) | Max session lifetime; requests are rejected after this |
+| `maxSessionDurationSecs` | int | `7200` (env: `COPILOT_MAX_SESSION_DURATION_SECS`) | Max session lifetime; requests are rejected after this |
 
 The Token Manager URL is **not** a session setting — it comes from the `TOKEN_MANAGER_URL` environment variable (set in the gateway deployment, not per-session).
 
@@ -329,7 +329,7 @@ POST /api/v1/sessions
     "copilotToken": {
       "refreshBufferSecs": 120,
       "targetHosts": ["api.githubcopilot.com"],
-      "maxSessionDurationSecs": 3600
+      "maxSessionDurationSecs": 7200
     }
   }
 }
