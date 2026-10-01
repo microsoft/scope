@@ -203,7 +203,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       },
       "BulkReportStatusInput": {
         "properties": {
-          "reportIds": {
+          "requestIds": {
             "items": {
               "type": "string",
             },
@@ -211,7 +211,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "required": [
-          "reportIds",
+          "requestIds",
         ],
         "type": "object",
       },
@@ -2338,6 +2338,13 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
           "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "deletedAt": {
             "format": "date-time",
             "type": [
               "string",
