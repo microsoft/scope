@@ -3,6 +3,11 @@ import CommunityTeaser from './community/CommunityTeaser.astro';
 import FlowDemo from './FlowDemo.astro';
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+// CSS paints the active theme's poster, so first paint never shows the other theme's cut.
+const showreelPosters = {
+	'--showreel-poster-dark': `url("${base}scope-showreel-poster-dark.jpg")`,
+	'--showreel-poster-light': `url("${base}scope-showreel-poster-light.jpg")`,
+};
 const paths = [
 	{
 		number: '01',
@@ -45,11 +50,11 @@ const paths = [
 		</div>
 		<p class="scope-hero-note">Your tasks. Your criteria. Repeatable experiments.</p>
 		<scope-showreel>
-			<figure class="scope-showreel-frame">
+			<figure class="scope-showreel-frame" style={showreelPosters}>
 				<video
 					id="scope-showreel-video"
-					data-src={`${base}scope-showreel.mp4`}
-					poster={`${base}scope-showreel-poster.jpg`}
+					data-src-dark={`${base}scope-showreel-dark.mp4`}
+					data-src-light={`${base}scope-showreel-light.mp4`}
 					width="1920"
 					height="1080"
 					autoplay
