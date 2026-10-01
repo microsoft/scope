@@ -52,6 +52,8 @@ import {
   type GateConfig,
   type GateId,
 } from "@/lib/gates";
+import { CliCommand } from "@/components/CliCommand";
+import { buildRunSubmit } from "@/lib/cli/buildCommand";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -746,6 +748,44 @@ export function SubmitRun() {
   const submitRunCount = expandedRunCount;
   const lastVariationDraft = variationDrafts.length > 0 ? variationDrafts[variationDrafts.length - 1] : null;
 
+  // Equivalent `scope run submit` command for the "Copy as CLI" affordance.
+  // Mirrors the payload built in doSubmit() so the CLI submits the same run(s).
+  const submitCli = useMemo(() => {
+    const baseProfileSpec = selectedProfileId
+      ? selectedProfileVersion
+        ? `${selectedProfileId}@${selectedProfileVersion}`
+        : selectedProfileId
+      : null;
+    return buildRunSubmit({
+      task,
+      criteria: pickedCriteria,
+      worker,
+      model,
+      reasoningEffort,
+      maxIterations,
+      mcpServers: selectedMcpServers,
+      skills: selectedSkills,
+      extensions: selectedExtensions,
+      agentVersion: selectedAgentVersion || undefined,
+      codebase: selectedCodebaseSpec,
+      resources: selectedResourceSpecs,
+      agentsMd,
+      gates: gateConfigs,
+      baseProfileId: baseProfileSpec,
+      profileVariations: variationDrafts
+        .filter((v) => v.profileId.trim().length > 0)
+        .map((v) => (v.profileVersion ? `${v.profileId}@${v.profileVersion}` : v.profileId)),
+      occurrences,
+      priority,
+    });
+    // gateConfigs is rebuilt every render; key it by content instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    task, pickedCriteria, worker, model, reasoningEffort, maxIterations,
+    selectedMcpServers, selectedSkills, selectedExtensions, selectedAgentVersion,
+    selectedCodebaseSpec, selectedResourceSpecs, agentsMd, JSON.stringify(gateConfigs),
+    selectedProfileId, selectedProfileVersion, variationDrafts, occurrences, priority,
+  ]);
   const lastVariationName = lastVariationDraft
     ? profileList.find((p) => p._id === lastVariationDraft.profileId)?.name
     : null;
@@ -1990,6 +2030,7 @@ export function SubmitRun() {
                 </DialogContent>
               </Dialog>
             )}
+            <CliCommand command={submitCli} label="CLI" title="Submit from the CLI" align="end" disabled={!canSubmit} />
             <Button type="submit" disabled={!canSubmit} className="gap-1.5">
               {submitMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
