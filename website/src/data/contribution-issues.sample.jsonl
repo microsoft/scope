@@ -5,5 +5,8 @@
 {"labels":["difficulty: moderate","good first issue","topic: ux","type: enhancement"],"number":912,"title":"Token Manager: introduce a structured 'endpoint' secret type returning {endpoint, apiKey, deployment}"}
 {"labels":["good first issue","type: documentation"],"number":1275,"title":"Document model lifecycle and deprecation process"}
 {"labels":["good first issue","topic: ui","type: documentation"],"number":1276,"title":"Clarify that prompt features only categorize prompts, don't impact runs"}
+{"labels":["area: portal","difficulty: hard","help wanted","topic: ux","type: enhancement"],"number":1311,"title":"Portal: scale the project switcher and first-run picker to many projects (search/pagination)"}
 {"labels":["area: portal","good first issue","language: javascript"],"number":1386,"title":"Allow editing Azure AI Foundry model"}
+{"labels":["good first issue","help wanted"],"number":1419,"title":"Write a quick guide to help Windows devs setup their env with WSL"}
+{"labels":["help wanted"],"number":1420,"title":"Ensure we can run the project from a DevContainer/Codespaces"}
 {"labels":["difficulty: easy","good first issue"],"number":1455,"title":"Portal: Keys page layout shifts and list column gets squeezed when a key is selected"}

@@ -114,4 +114,8 @@ test('the dev sample file is valid', () => {
 	assert.ok(issues.length >= 4);
 	const numbers = issues.map((issue) => issue.number);
 	assert.deepEqual(numbers, [...numbers].sort((a, b) => a - b), 'sample is sorted by issue number like the published file');
+	const labelSets = issues.map((issue) => contributionLabels(issue).join('+'));
+	for (const combination of ['good first issue', 'help wanted', 'good first issue+help wanted']) {
+		assert.ok(labelSets.includes(combination), `sample covers issues labeled ${combination}`);
+	}
 });
