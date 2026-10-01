@@ -113,7 +113,7 @@ When you run a command:
 | `026-isolate-catalogs-per-project` | Per-project catalog isolation for `skills`, `extensions`, `criteria`, `prompt-features` — backfills `slug = _id`, swaps global-unique `{id}`/slug indexes to `{projectId,slug}` / `{projectId,id}` (see [db.md](db.md#per-project-catalog-isolation-migration-026)) |
 | `027-uuid-keys-mcp-profileversions` | Opaque UUID `_id` + reference key for `mcp-servers` (`slug`) and `profile-versions` (`ref`) with `{projectId,slug}` / `{projectId,ref}` indexes; drops dead `prompt-feature-extractions` (see [db.md](db.md#per-project-entity-keying-migration-027)) |
 | `028-isolate-mcp-secrets-per-project` | Reconciles the token-manager `mcp-secrets` unique index — drops the legacy global-unique `{mcpId,name}` and (re)creates the per-project `{projectId,mcpId,name}` (see [token-manager.md](token-manager.md#mcp-secrets)) |
-| `029-create-users-collection` | Creates the database-enforced unique identity index for authentication; uses Cosmos collection-creation extensions for continuous-backup accounts and preserves native MongoDB index creation (see below) |
+| `029-create-users-collection` | Creates the database-enforced unique identity index for authentication; uses Cosmos collection-creation extensions for continuous-backup accounts and preserves native MongoDB index creation (see below) |\n| `030-create-resource-indexes` | Creates lookup, sort, soft-delete, and project-scoping indexes for resources and resource revisions |\n| `031-add-reports-soft-delete-index` | Adds `{ deletedAt: 1 }` on `reports` so soft-deleted reports can be excluded efficiently |
 
 ### Migration 029: users identity uniqueness
 
