@@ -61,11 +61,12 @@ describe("checkMigrations", () => {
       "028-isolate-mcp-secrets-per-project.ts",
       "029-create-users-collection.ts",
       "030-create-resource-indexes.ts",
+      "031-add-reports-soft-delete-index.ts",
     ]);
     const result = await checkMigrations(db);
     expect(result.ready).toBe(true);
     expect(result.pending).toEqual([]);
-    expect(result.totalApplied).toBe(30);
+    expect(result.totalApplied).toBe(32);
     expect(result.applied).toEqual([
       "001-backfill-task-prompts.ts",
       "002-create-indexes.ts",
@@ -97,6 +98,7 @@ describe("checkMigrations", () => {
       "028-isolate-mcp-secrets-per-project.ts",
       "029-create-users-collection.ts",
       "030-create-resource-indexes.ts",
+      "031-add-reports-soft-delete-index.ts",
     ]);
   });
 
@@ -144,6 +146,7 @@ describe("checkMigrations", () => {
       "028-isolate-mcp-secrets-per-project.ts",
       "029-create-users-collection.ts",
       "030-create-resource-indexes.ts",
+      "031-add-reports-soft-delete-index.ts",
     ]);
     expect(result.applied).toEqual([]);
     expect(result.totalApplied).toBe(0);
@@ -181,6 +184,7 @@ describe("checkMigrations", () => {
       "028-isolate-mcp-secrets-per-project.ts",
       "029-create-users-collection.ts",
       "030-create-resource-indexes.ts",
+      "031-add-reports-soft-delete-index.ts",
       "999-future-migration.ts",
     ]);
     const result = await checkMigrations(db);
