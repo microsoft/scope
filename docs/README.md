@@ -2,6 +2,12 @@
 
 Central documentation hub for the Scope platform — an AI coding agent benchmarking system.
 
+## User Guide
+
+| Document | Description |
+|----------|-------------|
+| [User Onboarding](user-onboarding.md) | Getting started with Scope — submitting runs, reviewing results, managing criteria, generating reports |
+
 ## Architecture & Design
 
 | Document | Description |
