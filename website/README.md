@@ -148,25 +148,51 @@ table of contents, code examples, and previous/next navigation.
 
 The supplied Scope showreel plays in a framed 16:9 player below the
 hero calls to action, so the headline stays clean and the footage is
-shown without an overlay. The local [video](public/scope-showreel.mp4)
-is re-encoded as H.264 at half the original speed (30 seconds instead
-of 15), with the audio track removed and metadata moved to the front
-for web playback. It loops, is always muted, and plays inline on
-mobile. A visually hidden caption describes the scenes it shows.
+shown without an overlay. It comes in two cuts styled with the landing
+tokens: a [dark video](public/scope-showreel-dark.mp4) and a
+[light video](public/scope-showreel-light.mp4). Both show the same
+scenes and are re-encoded as H.264 at half the original speed (30
+seconds instead of 15), with the audio track removed and metadata moved
+to the front for web playback. The player loops, is always muted, and
+plays inline on mobile. A visually hidden caption describes the scenes.
 
-[showreel.ts](src/scripts/showreel.ts) starts playback when at least a
-quarter of the player is visible. A keyboard-accessible button pauses
-or resumes it. Scrolling it out of view or hiding the tab pauses
-playback; an explicit user pause persists when returning. The button
-overlays the bottom corner of the video, and moves below it on narrow
-screens so it does not cover the footage.
+The cut follows the active Starlight theme: the `data-theme` attribute
+on `<html>`, which Starlight sets before first paint, including when it
+resolves **Auto** from the system color scheme. The
+[dark poster](public/scope-showreel-poster-dark.jpg) and
+[light poster](public/scope-showreel-poster-light.jpg), taken from the
+closing Scope title card, are exposed to CSS as base-aware custom
+properties. The frame paints the active theme's poster, and the video
+stays transparent over it until it has a frame. Neither the first paint
+nor a theme change shows the other cut, and the browser only fetches the
+poster it paints.
 
-Reduced-motion visitors see the [poster](public/scope-showreel-poster.jpg),
-taken from the closing Scope title card, without downloading the video
-until they choose to play it. Without JavaScript, the poster remains
-visible and the playback button stays hidden. Blocked autoplay offers
-manual playback; media failures display a status message and log the
-error. Both media URLs use the configured deployment base.
+[showreel.ts](src/scripts/showreel.ts) keeps both video URLs in data
+attributes and assigns the active theme's source only when playback
+starts, when at least a quarter of the player is visible. A
+keyboard-accessible button pauses or resumes it. Scrolling it below a
+quarter visible or hiding the tab pauses playback; an explicit user
+pause persists when returning. Selecting Play still starts a player that
+is less than a quarter visible, and it keeps playing until it leaves the
+viewport. The button overlays the bottom corner of the video, and moves
+below it on narrow screens so it does not cover the footage. The
+controls and frame use the landing tokens, so they stay readable over
+either cut.
+
+When the theme changes, a `MutationObserver` on `data-theme` swaps a
+loaded player to the matching cut at the same position, keeping it
+playing or paused. A paused player loads only the frame at that
+position. A player that is off screen, or less than a quarter visible
+and not started with Play, switches to the new poster at once and keeps
+its current source until it is visible again. A player that has not
+loaded yet only changes its poster.
+
+Reduced-motion visitors see the poster for their theme without
+downloading either video until they choose to play it. Without
+JavaScript, the poster remains visible and the playback button stays
+hidden. Blocked autoplay offers manual playback; media failures display
+a status message and log the error. All media URLs use the configured
+deployment base.
 
 ### Interactive example
 
