@@ -2253,9 +2253,20 @@ apiRoute(ctx.app, ctx.registry, {
       const exists = await ctx.requestCollection.findOne({ _id: id });
       if (!exists) {
         res.status(404).json({ error: "Request not found" });
-      } else {
-        res.status(410).json({ error: "Request already deleted" });
+        return;
       }
+
+      // Retrying a delete after the request was already soft-deleted should still
+      // finish the report cascade. The first attempt may have deleted the request
+      // and then failed before reaching the report update.
+      const cascadeDeletedAt =
+        exists.deletedAt instanceof Date ? exists.deletedAt : deletedAt;
+      await ctx.reportCollection.updateMany(
+        { requestId: id, deletedAt: { $exists: false } },
+        { $set: { deletedAt: cascadeDeletedAt, updatedAt: cascadeDeletedAt } },
+      );
+
+      res.status(410).json({ error: "Request already deleted" });
       return;
     }
 

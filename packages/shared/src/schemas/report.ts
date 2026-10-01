@@ -66,7 +66,7 @@ export const BulkCreateReportsInputSchema = z
 
 export const BulkReportStatusInputSchema = z
   .object({
-    reportIds: z.array(z.string()),
+    requestIds: z.array(z.string()),
   })
   .openapi("BulkReportStatusInput");
 
