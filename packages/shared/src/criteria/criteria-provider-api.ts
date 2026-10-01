@@ -3,6 +3,7 @@
 
 import { CriteriaConfig } from '../types/types.js';
 import { CriteriaProvider } from './criteria-provider.js';
+import { stripTrailingSlashes } from '../utils/strings.js';
 
 interface CacheEntry {
   value: CriteriaConfig;
@@ -37,7 +38,7 @@ export class RestApiCriteriaProvider implements CriteriaProvider {
 
   constructor(apiUrl: string, options?: { maxSize?: number; ttlMs?: number; projectId?: string }) {
     // Strip trailing slash
-    this.apiUrl = apiUrl.replace(/\/+$/, '');
+    this.apiUrl = stripTrailingSlashes(apiUrl);
     this.maxSize = options?.maxSize ?? 200;
     this.ttlMs = options?.ttlMs ?? 60_000; // 1 minute
     this.projectId = options?.projectId;

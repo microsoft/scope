@@ -6,6 +6,7 @@ import type {
   ResourceDocument,
   ResourceRevisionDocument,
 } from "../types/resource.js";
+import { stripTrailingSlashes } from "../utils/strings.js";
 
 /**
  * Client for resolving resource specs via the Scope REST API.
@@ -27,7 +28,7 @@ export class ResourceClient {
   private readonly apiUrl: string;
 
   constructor(apiUrl: string) {
-    this.apiUrl = apiUrl.replace(/\/+$/, "");
+    this.apiUrl = stripTrailingSlashes(apiUrl);
   }
 
   private async getJson<T>(path: string, projectId: string): Promise<T | null> {

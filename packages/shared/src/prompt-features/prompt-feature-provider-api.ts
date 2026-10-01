@@ -3,6 +3,7 @@
 
 import { PromptFeatureConfig } from '../types/types.js';
 import { PromptFeatureProvider } from './prompt-feature-provider.js';
+import { stripTrailingSlashes } from '../utils/strings.js';
 
 interface CacheEntry {
   value: PromptFeatureConfig;
@@ -31,7 +32,7 @@ export class RestApiPromptFeatureProvider implements PromptFeatureProvider {
   private readonly ttlMs: number;
 
   constructor(apiUrl: string, options?: { maxSize?: number; ttlMs?: number }) {
-    this.apiUrl = apiUrl.replace(/\/+$/, '');
+    this.apiUrl = stripTrailingSlashes(apiUrl);
     this.maxSize = options?.maxSize ?? 200;
     this.ttlMs = options?.ttlMs ?? 60_000; // 1 minute
   }

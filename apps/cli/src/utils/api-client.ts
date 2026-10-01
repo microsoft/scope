@@ -29,6 +29,7 @@
  * See [docs/architecture/auth-rbac.md](../../../../docs/architecture/auth-rbac.md) §7.
  */
 import ky, { type KyInstance, type BeforeRequestHook } from "ky";
+import { stripTrailingSlashes } from "shared/strings";
 import { normalizeUrl } from "./shared.js";
 
 /** Init accepted by {@link apiFetch}. Adds a couple of client-only knobs to `RequestInit`. */
@@ -378,7 +379,7 @@ function ensureLeadingSlash(path: string): string {
 function normalizeBasePath(path: string): string {
   if (!path) return "";
   const withLeading = path.startsWith("/") ? path : `/${path}`;
-  return withLeading.replace(/\/+$/, "");
+  return stripTrailingSlashes(withLeading);
 }
 
 /**

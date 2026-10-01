@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { stripTrailingSlashes } from "shared/strings";
 import type { AgentDefinition } from "./types.js";
 
 /**
@@ -13,7 +14,7 @@ export async function fetchAgentsByProvider(
   apiUrl: string,
   modelProvider: string,
 ): Promise<AgentDefinition[]> {
-  const url = `${apiUrl.replace(/\/+$/, "")}/api/v1/agents?modelProvider=${encodeURIComponent(modelProvider)}`;
+  const url = `${stripTrailingSlashes(apiUrl)}/api/v1/agents?modelProvider=${encodeURIComponent(modelProvider)}`;
 
   const response = await fetch(url, {
     method: "GET",

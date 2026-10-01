@@ -13,6 +13,7 @@ import {
   type JWTVerifyGetKey,
   type JWTVerifyResult,
 } from "jose";
+import { stripTrailingSlashes } from "../utils/strings.js";
 import { AuthError, type AuthProvider, type VerifiedIdentity } from "./types.js";
 
 interface EntraJwk extends JWK {
@@ -91,7 +92,7 @@ export class EntraIdAuthProvider implements AuthProvider {
 
     const jwksUri =
       options.jwksUri ??
-      `${options.authority.replace(/\/+$/, "")}/discovery/v2.0/keys`;
+      `${stripTrailingSlashes(options.authority)}/discovery/v2.0/keys`;
     const jwks = options.jwks ?? createRemoteEntraJwks(new URL(jwksUri));
     this.resolveKey = withJwksRetrievalRetry(jwks.resolve);
     this.getCurrentJwks = () => jwks.getCurrentJwks();

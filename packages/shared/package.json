@@ -20,6 +20,11 @@
       "types": "./dist/gates/index.d.ts",
       "import": "./dist/gates/index.js"
     },
+    "./strings": {
+      "source": "./src/utils/strings.ts",
+      "types": "./dist/utils/strings.d.ts",
+      "import": "./dist/utils/strings.js"
+    },
     "./criteria-store": {
       "source": "./src/criteria/criteria-store.ts",
       "types": "./dist/criteria/criteria-store.d.ts",

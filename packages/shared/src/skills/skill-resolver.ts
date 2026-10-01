@@ -18,6 +18,7 @@ import { validateSkillFrontmatter } from './skill-validator.js';
 import { buildSkillRevisionRef } from './skill-revision-id.js';
 import { SkillRevisionStore } from './skill-revision-store.js';
 import type { SkillRevisionDocument } from '../types/skill.js';
+import { stripTrailingSlashes } from '../utils/strings.js';
 
 /** Options for the skill resolver */
 export interface SkillResolverOptions {
@@ -94,7 +95,8 @@ export class SkillResolver {
   private readonly tokenProvider?: () => Promise<string | undefined>;
 
   constructor(options?: SkillResolverOptions) {
-    this.githubApiUrl = options?.githubApiUrl?.replace(/\/+$/, '') ?? 'https://api.github.com';
+    const githubApiUrl = options?.githubApiUrl;
+    this.githubApiUrl = githubApiUrl != null ? stripTrailingSlashes(githubApiUrl) : 'https://api.github.com';
     this.baseHeaders = {
       'Accept': 'application/vnd.github.v3+json',
       'User-Agent': 'scope-mt-skill-resolver',

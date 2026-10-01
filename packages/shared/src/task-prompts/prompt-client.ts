@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { stripTrailingSlashes } from "../utils/strings.js";
+
 /**
  * Client for resolving prompt text (task or AGENTS.md) via the Scope REST API.
  *
@@ -13,7 +15,7 @@ export class PromptClient {
   private readonly apiUrl: string;
 
   constructor(apiUrl: string) {
-    this.apiUrl = apiUrl.replace(/\/+$/, "");
+    this.apiUrl = stripTrailingSlashes(apiUrl);
   }
 
   /**

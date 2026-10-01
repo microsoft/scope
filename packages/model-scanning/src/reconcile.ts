@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { stripTrailingSlashes } from "shared/strings";
 import type { ModelSyncRequest, ReconcileReport, ScanResult } from "./types.js";
 
 /**
@@ -20,7 +21,7 @@ export async function reconcileModels(
   provider: string,
   scanResult: ScanResult,
 ): Promise<ReconcileReport> {
-  const url = `${apiUrl.replace(/\/+$/, "")}/api/v1/models/sync`;
+  const url = `${stripTrailingSlashes(apiUrl)}/api/v1/models/sync`;
 
   const body: ModelSyncRequest = {
     agentId,

@@ -23,6 +23,7 @@ import { AzureKeyCredential } from "@azure/core-auth";
 import {
   TokenManagerClient,
   parseAzureAiFoundrySecret,
+  stripTrailingSlashes,
 } from "shared";
 
 const GITHUB_MODELS_ENDPOINT = "https://models.inference.ai.azure.com";
@@ -53,7 +54,7 @@ function isFoundryConfigured(): boolean {
  * has a path we pass through untouched.
  */
 function normalizeFoundryEndpoint(raw: string): string {
-  const trimmed = raw.trim().replace(/\/+$/, "");
+  const trimmed = stripTrailingSlashes(raw.trim());
   try {
     const url = new URL(trimmed);
     const hasPath = url.pathname && url.pathname !== "/";

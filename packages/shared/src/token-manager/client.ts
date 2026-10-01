@@ -9,6 +9,7 @@ import {
   KeyCapability,
   KeyType,
 } from "./types.js";
+import { stripTrailingSlashes } from "../utils/strings.js";
 
 /**
  * Client for acquiring keys from the Token Manager service.
@@ -22,11 +23,11 @@ export class TokenManagerClient {
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
-    this.baseUrl = (
+    this.baseUrl = stripTrailingSlashes(
       baseUrl ||
       process.env.TOKEN_MANAGER_URL ||
       ""
-    ).replace(/\/+$/, "");
+    );
   }
 
   /**

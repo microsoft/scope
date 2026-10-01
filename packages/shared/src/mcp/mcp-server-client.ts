@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { McpServerConfig, McpServerDocument } from '../types/mcp.js';
+import { stripTrailingSlashes } from '../utils/strings.js';
 
 /**
  * Client for resolving MCP server slugs via the Scope REST API.
@@ -14,7 +15,7 @@ export class McpServerClient {
   private readonly apiUrl: string;
 
   constructor(apiUrl: string) {
-    this.apiUrl = apiUrl.replace(/\/+$/, '');
+    this.apiUrl = stripTrailingSlashes(apiUrl);
   }
 
   /**

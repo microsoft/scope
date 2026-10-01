@@ -28,3 +28,19 @@ export function qs(params: Record<string, string | string[] | undefined>): strin
   }
   return parts.length ? `?${parts.join("&")}` : "";
 }
+
+/**
+ * Remove every trailing `/` (e.g. `"https://x.test///"` → `"https://x.test"`).
+ *
+ * Linear-time replacement for the trailing-slash regex replace, which
+ * backtracks polynomially on a long run of `/` that is not at the end of the
+ * input (CodeQL `js/polynomial-redos`). Mirrors `stripTrailingSlashes` in
+ * `packages/shared`, which the portal does not depend on.
+ */
+export function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 0x2f) {
+    end--;
+  }
+  return end === value.length ? value : value.slice(0, end);
+}
