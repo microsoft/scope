@@ -5,8 +5,14 @@ import { Command } from "commander";
 import { dimTimestamp, label, value } from "./style.js";
 import { generateOutputFormatsHelp } from "./helpFormatter.js";
 
-/** Strip trailing slashes from a URL to avoid double-slash issues when appending paths */
-export const normalizeUrl = (url: string): string => url.replace(/\/+$/, '');
+/** Require an explicitly configured API URL before constructing a request. */
+export function normalizeUrl(url: string | undefined): string {
+  const configured = url?.trim();
+  if (!configured) {
+    throw new Error("No API URL configured. Set SCOPE_API_URL or pass -u/--url (MCP server create/update: --api-url).");
+  }
+  return configured.replace(/\/+$/, "");
+}
 
 /**
  * Detect how the CLI was invoked and return the appropriate command prefix.
@@ -33,27 +39,15 @@ export function printFollowUpCommands(id: string): void {
   console.log(`  ${dimTimestamp('List all runs:')} ${cli} run list`);
 }
 
-/**
- * Default API URL. Computed lazily so that dotenv and applyApiPortFallback()
- * have a chance to populate process.env before this is read.
- * In dev mode this is localhost; the esbuild bundle replaces
- * SCOPE_DEFAULT_API_URL with the production URL at build time.
- */
-export function getDefaultApiUrl(): string {
-  return process.env.SCOPE_API_URL || process.env.SCOPE_DEFAULT_API_URL || "http://localhost:3100";
+/** Read explicit environment configuration after dotenv has loaded. */
+export function getDefaultApiUrl(): string | undefined {
+  return process.env.SCOPE_API_URL?.trim() || undefined;
 }
-
-// For backward compatibility — used in help text generation at setup time
-export const DEFAULT_API_URL: string = process.env.SCOPE_DEFAULT_API_URL || "http://localhost:3100";
 
 // Environment variable definitions surfaced in `--help`
 export const ENV_VARS = {
   SCOPE_API_URL: {
-    description: 'Default API base URL used by the -u, --url option of every command',
-    default: DEFAULT_API_URL,
-  },
-  SCOPE_API_PORT: {
-    description: 'When SCOPE_API_URL is unset, derive it as http://localhost:$SCOPE_API_PORT (useful for local docker-compose setups)',
+    description: 'API base URL. Required for API operations unless -u/--url is supplied; there is no default.',
   },
   SCOPE_MT_DOWNLOAD_OUTPUT_DIR: {
     description: 'Default download directory for `run get` / `run watch` when --download-output-dir is omitted',
@@ -62,24 +56,6 @@ export const ENV_VARS = {
     description: 'Project ID used to scope commands when --project is omitted. Overridden by --project; overrides the saved `project use` selection. Required (via one of these) for scoped lists and creates — there is no default project.',
   },
 } as const;
-
-/**
- * Derive the default `SCOPE_API_URL` from `SCOPE_API_PORT` when `SCOPE_API_URL`
- * is not already set. Useful for local docker-compose setups where the API
- * port is the only piece of configuration that varies.
- *
- * Mutates `env` in place when a port is present and the port string is purely
- * numeric. Whitespace around `SCOPE_API_PORT` is tolerated; non-numeric values
- * are ignored so a typo doesn't silently produce an unreachable URL.
- *
- * Idempotent: if `SCOPE_API_URL` is already defined, `env` is left untouched.
- */
-export function applyApiPortFallback(env: NodeJS.ProcessEnv = process.env): void {
-  if (env.SCOPE_API_URL || !env.SCOPE_API_PORT) return;
-  const port = env.SCOPE_API_PORT.trim();
-  if (!/^\d+$/.test(port)) return;
-  env.SCOPE_API_URL = `http://localhost:${port}`;
-}
 
 // Output format definitions with descriptions and categories
 export const OUTPUT_FORMATS = {

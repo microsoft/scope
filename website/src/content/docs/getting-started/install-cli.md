@@ -9,27 +9,32 @@ and manage profiles — all from your terminal.
 ## Prerequisites
 
 - **Node.js ≥ 20** — [nodejs.org](https://nodejs.org)
-- **GitHub CLI (`gh`)** — authenticated with access to the
-  `growth-ecosystems/scope-doc` repo.  
-  Alternatively, set a `GH_TOKEN` or `GITHUB_TOKEN` environment
-  variable with `repo` scope.
+- **curl** — no GitHub authentication or private repository access is
+  required to install the public CLI.
+
+Using the CLI with a Scope deployment is separate from installing it:
+your deployment administrator provides the API URL and any required
+credentials. See [Access](/getting-started/access/).
 
 ## One-liner install
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh \
-  -H "Accept: application/vnd.github.raw" | bash
+curl --fail --location https://raw.githubusercontent.com/microsoft/scope/main/install-cli.sh | bash
 ```
 
-This downloads and installs the latest release to
+This downloads and installs the latest published, non-prerelease `cli/v*`
+release from `microsoft/scope` to
 `~/.local/bin/scope`. Override the location with the
 `SCOPE_INSTALL_DIR` environment variable:
 
 ```bash
-SCOPE_INSTALL_DIR=~/bin \
-  gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh \
-  -H "Accept: application/vnd.github.raw" | bash
+curl --fail --location https://raw.githubusercontent.com/microsoft/scope/main/install-cli.sh | SCOPE_INSTALL_DIR=~/bin bash
 ```
+
+The installer checks the downloaded bundle's version before replacing an
+existing installation. Missing releases, download errors, and version
+mismatches fail without replacing your installed CLI. If no public CLI
+release has been published yet, the installer reports that explicitly.
 
 ## Add to PATH
 
@@ -58,7 +63,10 @@ scope update
 ```
 
 This downloads and installs the latest `cli/v*` release,
-replacing the current binary in place.
+replacing the current binary in place. This update command requires the
+GitHub CLI (`gh`) installed and authenticated (`gh auth login`), but no
+private repository access. Alternatively, rerun the public installer
+above without GitHub authentication.
 
 ## What's next
 

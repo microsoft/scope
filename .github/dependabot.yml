@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Keep version-update PRs disabled; these labels also apply to security updates.
+    open-pull-requests-limit: 0
+    labels:
+      - "type: dependencies"
+      - "language: javascript"
+  - package-ecosystem: npm
+    directory: /website
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    labels:
+      - "type: dependencies"
+      - "language: javascript"
+  - package-ecosystem: cargo
+    directory: /apps/gateway
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    labels:
+      - "type: dependencies"
+      - "language: rust"

@@ -345,7 +345,7 @@ criteria
   .description("Export criteria as import-compatible multi-document YAML")
   .option("--ids <ids...>", "Export only these criteria and their dependency ancestors")
   .option("-o, --output-file <path>", "Write to file instead of stdout")
-  .option("-u, --url <url>", "API base URL", process.env.SCOPE_API_URL || "http://localhost:3100")
+  .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
   .option("--project <id>", "Project ID for scoped operations (overrides SCOPE_PROJECT and the saved selection)")
   .action(async (options) => {
     try {

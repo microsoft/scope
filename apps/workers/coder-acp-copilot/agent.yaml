@@ -8,3 +8,4 @@ capabilities:
   supportsMcpServers: true
   supportsSkills: true
   supportsExtensions: false
+  supportsResources: true

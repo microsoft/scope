@@ -40,9 +40,11 @@ for the required setup.
 For terminal-based workflows, install the `scope` CLI:
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh \
-  -H "Accept: application/vnd.github.raw" | bash
+curl --fail --location https://raw.githubusercontent.com/microsoft/scope/main/install-cli.sh | bash
 ```
+
+Installing the public CLI does not require GitHub authentication. Using
+your deployment's API still requires its configured authentication.
 
 See [Install the CLI](/getting-started/install-cli/) for details.
 

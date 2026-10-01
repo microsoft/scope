@@ -5,10 +5,14 @@ The sophisticated criteria system can be configured via environment variables in
 ## CLI Configuration
 
 ### SCOPE_API_URL
-**Default:** `http://localhost:3100`
+**Default:** None
 **Type:** URL string
 
-Base URL of the Scope API used by all CLI commands. Override this to point the CLI at a remote or Docker-hosted API instance.
+Base URL of the Scope API used by CLI API operations. Set this explicitly or pass
+`-u/--url` to a command (`--api-url` for MCP server create/update). Both bundled
+and source-mode CLIs fail before making an API request when no URL is configured.
+Help, version, and CLI updates do not require a Scope API URL. The CLI no longer
+derives a localhost URL from `SCOPE_API_PORT` or uses `SCOPE_DEFAULT_API_URL`.
 
 ## Docker Development
 
@@ -178,6 +182,103 @@ The API discovers supported token-limit and sampling parameters from structured
 inference errors at runtime. Learned compatibility is cached in each API
 process by endpoint and deployment name. It is relearned after a process
 restart or when Azure rejects a previously accepted request shape.
+
+## Prompt Evaluation Configuration
+
+These variables are consumed only by the developer-run tooling in
+`evaluations/static-prompts`. They do not enable the suite in normal tests or
+CI. See [Prompt Evaluations](docs/architecture/prompt-evaluations.md) for the
+quality commands and artifact policy. Cloud red teaming is a separate follow-up.
+
+Run `az login` before cloud evaluation. The Python tooling uses Azure Identity;
+the quality graders also accept an explicit Azure OpenAI API key when required.
+Do not commit credentials, endpoints, tenant/subscription IDs, or a populated
+environment file.
+
+### PROMPT_EVAL_MODEL
+**Default:** resolved inference credential model, then `LLM_MODEL`, then `gpt-4.1`
+**Type:** string
+**Used by:** Static prompt TypeScript generation adapters
+
+Model/deployment used to generate production-path responses for the quality
+track. This setting is independent from the Azure-assisted evaluator deployment
+so generator and grader identities are explicit in result metadata.
+
+Generation uses the existing inference credential chain described in
+[LLM Configuration](#llm-configuration-portal-ai-features), including
+`AZURE_AI_INFERENCE_ENDPOINT` and `AZURE_AI_INFERENCE_API_KEY` when configured.
+
+### SCOPE_EVAL_AZURE_OPENAI_ENDPOINT
+**Required:** AI-assisted quality evaluation
+**Fallback:** `AZURE_OPENAI_ENDPOINT`
+**Type:** URL string
+**Used by:** Azure AI Evaluation SDK quality graders
+
+Azure OpenAI resource endpoint used by built-in and configurable quality
+graders. This is the model resource endpoint, not the Foundry project endpoint.
+
+### SCOPE_EVAL_AZURE_OPENAI_DEPLOYMENT
+**Required:** AI-assisted quality evaluation
+**Fallback:** `AZURE_OPENAI_DEPLOYMENT`
+**Type:** string
+**Used by:** Azure AI Evaluation SDK quality graders
+
+Deployment used to grade generated quality rows. Keep it distinct from
+`PROMPT_EVAL_MODEL` when evaluating one model's output with another.
+
+### SCOPE_EVAL_AZURE_OPENAI_API_KEY
+**Default:** unset
+**Fallback:** `AZURE_OPENAI_API_KEY`
+**Type:** string
+**Used by:** Azure AI Evaluation SDK quality graders
+
+Optional API key for the quality grader endpoint. When neither key variable is
+set, the runner uses `DefaultAzureCredential`; `az login` is the recommended
+local authentication path.
+
+### SCOPE_EVAL_AZURE_OPENAI_API_VERSION
+**Default:** SDK default
+**Fallback:** `AZURE_OPENAI_API_VERSION`
+**Type:** string
+**Used by:** Azure AI Evaluation SDK quality graders
+
+Optional Azure OpenAI API version override.
+
+### SCOPE_EVAL_AZURE_AI_PROJECT_ENDPOINT
+**Default:** unset
+**Fallback:** `AZURE_AI_PROJECT_ENDPOINT`
+**Type:** URL string
+**Used by:** Azure AI Evaluation SDK quality runs
+
+Optional Foundry project endpoint for publishing a quality evaluation portal
+view. Local JSON/JSONL artifacts remain the source of truth.
+
+### AZURE_AI_PROJECT_ENDPOINT
+**Default:** unset
+**Type:** URL string
+**Used by:** Azure AI Evaluation SDK quality runs
+
+Fallback for `SCOPE_EVAL_AZURE_AI_PROJECT_ENDPOINT` in quality runs.
+
+Use the project endpoint for the intended Foundry project, not an inference
+`/models` endpoint.
+
+### Quality runner diagnostic overrides
+
+`SCOPE_EVAL_GENERATOR_COMMAND` overrides the production JSONL generator command
+using `{dataset}`, `{output}`, `{samples}`, and `{smoke}` placeholders.
+`SCOPE_EVAL_GENERATOR_TIMEOUT_SECONDS` changes its 1,800-second timeout.
+`SCOPE_EVAL_GENERATED_ROWS` copies an existing JSONL file instead of invoking
+generation. These are test/debugging controls; normal baseline runs should use
+the declared package generator.
+
+### Harvester bearer token
+
+The dataset harvester accepts the **name** of an environment variable through
+its token option rather than reading a fixed secret name. This supports
+protected integration environments without establishing a repository-wide
+credential variable. Never pass the token value on the command line and never
+write it to curated rows, provenance, logs, or results.
 
 ## Prompt Storage Configuration
 

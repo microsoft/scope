@@ -44,6 +44,14 @@ describe("apiFetch URL handling", () => {
     resetApiClient();
   });
 
+  it.each([undefined, "", "  "])("rejects missing URL %j before any network request", async (url) => {
+    const mock = vi.fn();
+    vi.stubGlobal("fetch", mock);
+
+    await expect(apiFetch(url, "/projects")).rejects.toThrow("No API URL configured");
+    expect(mock).not.toHaveBeenCalled();
+  });
+
   it("joins base + path and normalizes trailing slashes", async () => {
     const mock = vi.fn().mockResolvedValue(okJson());
     vi.stubGlobal("fetch", mock);

@@ -1,0 +1,109 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import Byline from './Byline.astro';
+import { formatDate, isoDate, type Talk } from './community';
+
+interface Props {
+	talk: Talk;
+}
+
+const { data } = Astro.props.talk;
+---
+
+<article class="community-talk not-content">
+	<div class="community-talk__media">
+		{
+			data.youtubeId ? (
+				<iframe
+					src={`https://www.youtube-nocookie.com/embed/${data.youtubeId}`}
+					title={`Video: ${data.title}`}
+					loading="lazy"
+					allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+					referrerpolicy="strict-origin-when-cross-origin"
+					allowfullscreen
+				/>
+			) : (
+				<div class="community-talk__pending" role="img" aria-label="Video coming soon">
+					<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<rect x="2" y="5" width="15" height="14" rx="2" />
+						<path d="m17 10 5-3v10l-5-3" />
+					</svg>
+					<span>Video coming soon</span>
+				</div>
+			)
+		}
+	</div>
+	<div class="community-talk__body">
+		<h3 class="community-talk__title">{data.title}</h3>
+		<p class="community-talk__speakers"><Byline people={data.speakers} /></p>
+		<p class="community-talk__meta">
+			<a href={data.eventUrl} target="_blank" rel="noopener noreferrer">
+				{data.event}
+				<span class="sr-only"> (opens in a new tab)</span>
+			</a>
+			{' · '}
+			{data.venue}
+			{' · '}
+			<time datetime={isoDate(data.date)}>{formatDate(data.date)}</time>
+		</p>
+	</div>
+</article>
+
+<style>
+	.community-talk {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		border: 1px solid var(--sl-color-hairline);
+		border-radius: 0.75rem;
+		overflow: hidden;
+		background: var(--sl-color-bg);
+	}
+	.community-talk__media {
+		width: 100%;
+		aspect-ratio: 16 / 9;
+		background: var(--sl-color-gray-6);
+	}
+	.community-talk__media iframe {
+		display: block;
+		width: 100%;
+		height: 100%;
+		border: 0;
+	}
+	.community-talk__pending {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.6rem;
+		height: 100%;
+		color: var(--sl-color-gray-3);
+		font-size: var(--sl-text-sm);
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+	.community-talk__body {
+		padding: 1rem 1.15rem 1.15rem;
+	}
+	.community-talk__title {
+		margin: 0;
+		font-size: var(--sl-text-lg);
+		font-weight: 600;
+		line-height: 1.35;
+		color: var(--sl-color-white);
+	}
+	.community-talk__speakers {
+		margin: 0.4rem 0 0;
+		color: var(--sl-color-gray-2);
+	}
+	.community-talk__meta {
+		margin: 0.35rem 0 0;
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-3);
+	}
+	.community-talk__meta a {
+		color: var(--sl-color-text-accent);
+	}
+</style>

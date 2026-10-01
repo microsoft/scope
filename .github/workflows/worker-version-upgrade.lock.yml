@@ -24,13 +24,13 @@
 # by the check-worker-versions workflow. Copilot reads the issue body, updates
 # the versions.env file, runs integration tests, and opens a PR.
 #
-# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"0e2e0e58f90970c8881e8c9bb2cb9f9d17260feb95b5f9d57288338c3b478043","compiler_version":"v0.63.0","strict":true,"agent_id":"copilot"}
+# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"8da589511e1413ea0d84ab82a748d2a1cb11cddec70861ec5a55932d28afa462","compiler_version":"v0.63.0","strict":true,"agent_id":"copilot"}
 
 name: "Worker Version Upgrade"
 "on":
   issues:
     # names: # Label filtering applied via job conditions
-    # - worker-update # Label filtering applied via job conditions
+    # - "type: worker-update" # Label filtering applied via job conditions
     types:
     - opened
     - edited
@@ -39,8 +39,9 @@ name: "Worker Version Upgrade"
       # LABELS: ${{ toJSON(github.event.issue.labels.*.name) }}
     # id: label_check
     # if: github.event_name != 'workflow_dispatch'
-    # name: Check worker-update label
-    # run: echo "$LABELS" | grep -q '"worker-update"'
+    # name: Check worker update label
+    # run: |
+      # echo "$LABELS" | grep -q '"type: worker-update"'
   workflow_dispatch:
     inputs:
       aw_context:
@@ -998,10 +999,11 @@ jobs:
             setupGlobals(core, github, context, exec, io);
             const { main } = require('${{ runner.temp }}/gh-aw/actions/check_membership.cjs');
             await main();
-      - name: Check worker-update label
+      - name: Check worker update label
         id: label_check
         if: github.event_name != 'workflow_dispatch'
-        run: echo "$LABELS" | grep -q '"worker-update"'
+        run: |
+          echo "$LABELS" | grep -q '"type: worker-update"'
         env:
           LABELS: ${{ toJSON(github.event.issue.labels.*.name) }}
 

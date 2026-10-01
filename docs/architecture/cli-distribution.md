@@ -1,15 +1,19 @@
 # CLI Distribution
 
-How the Scope CLI is bundled, distributed, and updated as a standalone tool.
+How the Scope CLI is bundled, released, installed and updated from the public
+`microsoft/scope` repository without internal repository dependencies.
 
 ## Overview
 
-The CLI is bundled into a single `.mjs` file using [esbuild](https://esbuild.github.io/), distributed via GitHub Releases on the `scope-doc` repo, and installed using the `gh` CLI. This allows users to run the CLI without checking out the monorepo.
+The CLI is bundled into a single `.mjs` file using [esbuild](https://esbuild.github.io/).
+The manual release workflow builds and tests the bundle, then publishes it to
+GitHub Releases in the same repository. The installer and updater use that public
+release destination.
 
 ```mermaid
 flowchart LR
-    A[scope-core<br/>apps/cli/] -->|publish-cli.yml| B[GitHub Actions]
-    B -->|gh release create| C[scope-doc releases<br/>scope.mjs]
+    A[microsoft/scope<br/>publish-cli.yml] -->|Build and test| B[Validated bundle]
+    B -->|GITHUB_TOKEN| C[microsoft/scope releases<br/>scope.mjs]
     C -->|install-cli.sh| D[User workstation<br/>~/.local/bin/scope]
 ```
 
@@ -36,9 +40,9 @@ the CLI's `build` script runs `tsc --noEmit` **before** esbuild:
 "build:tsc": "tsc --noEmit",   // standalone typecheck alias
 ```
 
-Because every CI/release entry point invokes the CLI `build` script — `pnpm build` (`pnpm -r build`,
-used by the CI **Build** job and `publish-cli.yml`) and `pnpm build:cli` (used by the
-**CLI Bundle Integration Tests** job) — the CLI is now typechecked automatically wherever it is
+Because the OSS CI entry points invoke the CLI `build` script — `pnpm build` (`pnpm -r build`,
+used by the CI **Build** job) and `pnpm build:cli` (used by the
+**CLI Bundle Integration Tests** and release jobs) — the CLI is now typechecked automatically wherever it is
 built, with no separate CI step. `tsc` requires the `shared` package's `dist` to exist; every one
 of these entry points builds `shared` first (topologically for `pnpm -r`, explicitly for
 `build:cli`), which esbuild already required, so there is no new ordering constraint.
@@ -56,9 +60,15 @@ of these entry points builds `shared` first (topologically for `pnpm -r`, explic
 | Define | Source | Purpose |
 |--------|--------|---------|
 | `process.env.SCOPE_CLI_VERSION` | `apps/cli/package.json` version | Reported by `--version` |
-| `process.env.SCOPE_DEFAULT_API_URL` | `SCOPE_DEFAULT_API_URL` env var or `https://msscope.azurewebsites.net` | Default API URL in bundled builds |
 
-In dev mode (`pnpm cli` via tsx), these defines are not applied — the CLI falls back to `http://localhost:3100`.
+There is no build-time or runtime default API destination. Both the bundle and
+source-mode CLI require `SCOPE_API_URL` or a command's `-u/--url` option
+(`--api-url` for MCP server create/update); the command-line option takes
+precedence. Missing or blank URLs fail before an API request with configuration
+guidance. `SCOPE_DEFAULT_API_URL` is no longer injected or read, and
+`SCOPE_API_PORT` no longer derives a localhost destination. Local development
+must also configure `SCOPE_API_URL` explicitly. Help, version, and CLI updates
+remain available without API configuration.
 
 ### esbuild plugins
 
@@ -71,59 +81,103 @@ In dev mode (`pnpm cli` via tsx), these defines are not applied — the CLI fall
 
 - **ESM format** with a `createRequire` polyfill banner (CJS won't work due to Ink's top-level await)
 - **All dependencies bundled** — no `node_modules` needed at runtime
+- **Pure shared runtime imports** — CLI gate constants and helpers come from
+  `shared/types` and `shared/gates`, not the top-level `shared` barrel. The barrel
+  also initializes server-side modules with dynamic Redis imports that esbuild
+  cannot bundle. Type-only imports from `shared` are safe because they are erased.
 - **Node.js >= 20 required** at runtime
+
+### Standalone bundle validation
+
+Build first, then exercise the actual artifact:
+
+```bash
+pnpm build:cli
+node apps/cli/dist/scope.mjs --version
+pnpm exec vitest run --config vitest.integration.config.ts \
+  apps/cli/src/bundle.integration.test.ts \
+  apps/cli/src/utils/update-check.integration.test.ts
+```
+
+Both suites copy the bundle outside the checkout and run it from that temporary
+directory using `process.execPath`, empty `NODE_PATH`/`NODE_OPTIONS`, and
+`--no-global-search-paths`. This prevents pnpm's Vitest launcher from making
+workspace dependencies available to the child process and hiding missing bundled
+modules. Coverage includes the extensionless installed `scope` executable, mock
+API commands, missing-URL failures, explicit URL precedence, offline help/version,
+and update checks; no release is published by these tests.
 
 ## Versioning
 
-The **source of truth** for the CLI version is the git tag on `scope-core` using the `cli/v*` prefix (e.g. `cli/v0.2.0`). The `apps/cli/package.json` version is `0.0.0-dev` — a placeholder that CI resolves from the latest `cli/v*` tag and then bumps via `pnpm version` during the publish workflow. It is never committed back to `main`.
+The release workflow sorts valid `cli/v*` tags in `microsoft/scope` semantically
+and bumps the highest version by the selected `patch`, `minor` or `major` increment.
+Only when there are no matching tags does it bootstrap from the validated
+`apps/cli/package.json` version's major/minor/patch components, logging that
+decision and removing the development prerelease suffix before bumping. With the current
+`0.0.0-dev` baseline, the default minor bump produces `0.1.0`. Invalid tags,
+invalid package versions, and tag-read/fetch failures fail the workflow rather
+than masquerading as an empty release history.
+
+The version is written only in the release workspace before building; it is not
+committed back to `main`. The release tag targets the exact checked-out source SHA.
+Workflow-level concurrency serializes version selection through publication,
+without cancelling an in-progress release.
 
 - Local builds produce `0.0.0-dev` — clearly indicating a dev build.
 - Dev mode (`pnpm cli`) reports `0.1.0-dev`.
-- Only CI-built releases carry a real version number.
+- Release builds carry the selected version number.
 - The `cli/v*` prefix allows other monorepo components to have their own tag namespaces.
 
 ## Publishing
 
-The publish workflow (`.github/workflows/publish-cli.yml`) is triggered manually:
+Maintainers manually dispatch [Publish CLI](../../.github/workflows/publish-cli.yml)
+on upstream `main` and select a bump type (default: minor). The read-only build
+job checks out full tag history, installs locked dependencies, sets the version,
+runs the typechecked bundle build and bundle integration tests, and checks the
+bundle's reported version. The separate publish job downloads that exact artifact
+and creates `cli/v<version>` with `scope.mjs` attached.
 
-1. Select bump type: `patch` | `minor` | `major` (default: minor)
-2. Workflow resolves the current version from the latest `cli/v*` tag
-3. Bumps `apps/cli/package.json` via `pnpm version`
-4. Builds the bundle with prod API URL (`vars.SCOPE_API_URL`)
-5. Creates a git tag `cli/v<version>` on scope-core
-6. Creates a GitHub Release on `scope-doc` with `scope.mjs`
-
-### Required secrets/variables
-
-| Name | Type | Purpose |
-|------|------|---------|
-| `SCOPE_DOC_TOKEN` | Secret | PAT with `contents:write` on scope-doc repo |
-| `SCOPE_API_URL` | Variable | Production API URL injected at build time |
+Only the publish job gets `contents: write`, using this repository's
+`GITHUB_TOKEN`. Fork repositories and non-main refs cannot publish. No FLUX app,
+internal release repository, cloud environment, OIDC or custom secret is needed.
+Repository rules must permit the workflow token to create release tags; rules
+are not changed by this workflow. No release exists until a maintainer explicitly
+runs it successfully.
 
 ## Installation
 
-Users install via the `gh` CLI (required since the repo is EMU-protected):
+Use the public installer with Node.js >= 20 and `curl`:
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
+curl --fail --location https://raw.githubusercontent.com/microsoft/scope/main/install-cli.sh | bash
 ```
 
-The installer (`install-cli.sh` in scope-doc):
-1. Downloads `scope.mjs` from the latest `cli/v*` release
-2. Places it at `~/.local/bin/scope`
-3. Makes it executable
+The installer selects a published, non-prerelease `cli/v*` release and downloads
+`scope.mjs` with bounded retries. It verifies the reported version before
+atomically replacing `~/.local/bin/scope` (`SCOPE_INSTALL_DIR` overrides the
+directory). Missing releases, API/download errors and version mismatches fail
+explicitly without replacing an existing installation. Installation does not
+require GitHub authentication; public API rate limits still apply.
 
-Prerequisites: Node.js >= 20, `gh` CLI authenticated.
+The published website's onboarding pages use this same URL.
+`website/install-cli.sh` remains a compatibility entry point: it downloads
+the canonical root script completely before running it, rather than
+maintaining another release lookup or installation implementation.
+
+`scope update` retains its `gh release download` implementation, so updating
+in-place requires `gh` configured with GitHub authentication. Alternatively,
+rerun the public installer without `gh`.
 
 ## Update check
 
 After each command, the CLI performs a non-blocking check for newer versions:
 
-- Queries the GitHub Releases API on `scope-doc` (3s timeout)
+- Checks `cli/v*` releases in `microsoft/scope` (2s per background lookup attempt)
 - Compares the current embedded version against the latest release tag
 - If newer, prints a one-line notice with the upgrade command
 - Suppressed by `SCOPE_NO_UPDATE_CHECK=1`
-- Requires `GH_TOKEN` or `GITHUB_TOKEN` for private repo access (silently skips without it)
+- Uses `gh` when available, falling back to the public REST API; `GH_TOKEN` or
+  `GITHUB_TOKEN` is optional for that fallback
 
 This is the **one** place in the CLI that calls `fetch` directly rather than the
 centralized `apiFetch()` wrapper (`apps/cli/src/utils/api-client.ts`): it targets the
@@ -188,7 +242,7 @@ unique and need no project. See
 | Aspect | Dev (`pnpm cli`) | Bundled (`scope`) |
 |--------|-------------------|-------------------|
 | Runner | tsx (TypeScript direct) | Node.js (single .mjs) |
-| API default | `http://localhost:3100` | `https://msscope.azurewebsites.net` |
-| Version | `0.1.0-dev` | Actual semver from CI bump |
+| API default | None; configure `SCOPE_API_URL` or `-u` | None; configure `SCOPE_API_URL` or `-u` |
+| Version | `0.1.0-dev` | Embedded package version (`0.0.0-dev` locally) |
 | Command name | `pnpm cli` | `scope` |
 | Update check | Disabled | Enabled |

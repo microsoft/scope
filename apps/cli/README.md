@@ -5,14 +5,16 @@ Command-line interface for the Scope AI coding agent benchmarking platform.
 ## Installation
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
+curl --fail --location https://raw.githubusercontent.com/microsoft/scope/main/install-cli.sh | bash
 ```
 
 **Prerequisites:**
 - Node.js >= 20
-- `gh` CLI installed and authenticated (`gh auth login`)
+- `curl` (no GitHub authentication required for installation)
 
-The installer downloads the latest release and places `scope` in `~/.local/bin/`. Add it to your PATH if needed:
+The installer downloads the latest published `cli/v*` release from `microsoft/scope`
+and places `scope` in `~/.local/bin/` (override with `SCOPE_INSTALL_DIR`). It fails
+clearly if no CLI release has been published yet. Add it to your PATH if needed:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -20,7 +22,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ## Configuration
 
-Set the API URL to your Scope instance:
+There is no default API URL in either the installed CLI or source-mode
+development. Set the URL of your Scope instance explicitly:
 
 ```bash
 export SCOPE_API_URL=https://your-scope-api.example.com
@@ -31,6 +34,12 @@ Or pass it per-command with `-u`:
 ```bash
 scope run list -u https://your-scope-api.example.com
 ```
+
+API operations fail with configuration guidance when no URL is supplied.
+`--help`, `--version`, and `scope update` do not need a Scope API URL.
+`SCOPE_DEFAULT_API_URL` and `SCOPE_API_PORT` no longer select an API destination.
+For local development, set `SCOPE_API_URL=http://localhost:<your-api-port>`
+explicitly (in your environment or `.env`).
 
 ### Authentication
 
@@ -90,10 +99,12 @@ Update to the latest version:
 scope update
 ```
 
-Or re-run the install script:
+This command requires `gh` installed and authenticated (`gh auth login`) and
+downloads from the same public `microsoft/scope` repository.
+Alternatively, re-run the install script without `gh`:
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
+curl --fail --location https://raw.githubusercontent.com/microsoft/scope/main/install-cli.sh | bash
 ```
 
 The CLI will also notify you when a newer version is available. Suppress this with:
@@ -106,8 +117,7 @@ export SCOPE_NO_UPDATE_CHECK=1
 
 | Variable | Description |
 |----------|-------------|
-| `SCOPE_API_URL` | Default API base URL |
-| `SCOPE_API_PORT` | Derive API URL as `http://localhost:$PORT` when `SCOPE_API_URL` is unset |
+| `SCOPE_API_URL` | API base URL; required for API operations unless `-u` is provided. No default |
 | `SCOPE_TOKEN` | Caller-provided IdP access token for authenticated API calls; new identities must explicitly enroll |
 | `SCOPE_NO_UPDATE_CHECK` | Set to `1` to suppress update notifications |
 | `GH_TOKEN` / `GITHUB_TOKEN` | GitHub token for authenticated API calls (update checks, install script) |

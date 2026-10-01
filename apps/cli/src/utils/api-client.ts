@@ -472,7 +472,7 @@ function getClient(): KyInstance {
  * @returns The `fetch` `Response`. Callers keep their existing
  *          `response.ok` / `response.json()` / streaming handling.
  */
-export async function apiFetch(baseUrl: string, path: string, init?: ApiFetchInit): Promise<Response> {
+export async function apiFetch(baseUrl: string | undefined, path: string, init?: ApiFetchInit): Promise<Response> {
   const url = `${normalizeUrl(baseUrl)}${withProjectId(resolveApiPath(path), init?.projectId)}`;
 
   const headers = new Headers(init?.headers);

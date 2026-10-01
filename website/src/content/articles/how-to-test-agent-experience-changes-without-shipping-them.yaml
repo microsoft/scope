@@ -1,0 +1,11 @@
+title: How to test agent experience changes without shipping them
+url: https://developer.microsoft.com/blog/how-to-test-agent-experience-changes-without-shipping-them/
+publication: Microsoft for Developers
+authors:
+  - firstName: Waldek
+    lastName: Mastykarz
+    position: Principal Developer Advocate
+  - firstName: Garry
+    lastName: Trinder
+    position: Senior Developer Advocate
+date: 2026-07-21

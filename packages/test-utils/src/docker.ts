@@ -2,19 +2,15 @@
 // Licensed under the MIT License.
 
 /**
- * Shared Docker test helpers for coder-acp-copilot integration tests.
+ * Docker helpers shared by the ACP worker integration tests.
  */
 import { readFileSync } from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
 import Docker from "dockerode";
 import dotenv from "dotenv";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const VERSIONS_ENV_PATH = resolve(__dirname, "..", "versions.env");
-
-export function loadVersions(): Record<string, string> {
-  return dotenv.parse(readFileSync(VERSIONS_ENV_PATH));
+/** Parse a worker's versions.env file into Docker build args. */
+export function loadVersions(versionsEnvPath: string): Record<string, string> {
+  return dotenv.parse(readFileSync(versionsEnvPath));
 }
 
 export async function isDockerAvailable(): Promise<boolean> {
@@ -36,20 +32,21 @@ export async function imageExists(docker: Docker, tag: string): Promise<boolean>
   }
 }
 
+export interface BuildImageOptions {
+  context: string;
+  tag: string;
+  dockerfile: string;
+  buildargs: Record<string, string>;
+  target?: string;
+  /** Stream build output to stderr while building. Defaults to false. */
+  streamOutput?: boolean;
+}
+
 /**
  * Build a Docker image, checking for build-level errors that dockerode
  * otherwise swallows silently.
  */
-export async function buildImage(
-  docker: Docker,
-  opts: {
-    context: string;
-    tag: string;
-    dockerfile: string;
-    buildargs: Record<string, string>;
-    target?: string;
-  },
-): Promise<void> {
+export async function buildImage(docker: Docker, opts: BuildImageOptions): Promise<void> {
   const buildStream = await docker.buildImage(
     { context: opts.context, src: ["."] },
     {
@@ -71,7 +68,11 @@ export async function buildImage(
         }
         resolve();
       },
-      () => {},
+      (event: { stream?: string; error?: string }) => {
+        if (!opts.streamOutput) return;
+        if (event.stream) process.stderr.write(event.stream);
+        if (event.error) process.stderr.write(`ERROR: ${event.error}\n`);
+      },
     );
   });
 }
