@@ -7,7 +7,11 @@ Starlight-based documentation site for **Scope**.
 
 A static documentation site published to GitHub Pages.
 
-- Framework: **Astro 6.x** + **@astrojs/starlight**
+- Framework: **Astro 7.x** + **@astrojs/starlight**
+  - Astro 7 defaults to the Sätteri Markdown processor. The site keeps
+    `@astrojs/markdown-remark` as a direct dependency because
+    `markdown.remarkPlugins` (GFM, base-path, HTTP snippets) only run on
+    the unified/remark pipeline; removing it breaks `pnpm run build`.
 - Package manager: **pnpm** (pinned via `packageManager` in `package.json`)
 - TypeScript strict
 - Lives under the `website/` directory of the repo (all site sources,
