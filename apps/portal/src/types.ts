@@ -545,6 +545,8 @@ export interface KeyDocument {
   createdAt: string;
   updatedAt?: string;
   deletedAt?: string;
+  /** Non-secret Azure AI Foundry deployment / model name. */
+  model?: string;
 }
 
 export interface KeyValidationResult {
@@ -572,6 +574,8 @@ export interface UpdateKeyRequest {
   enabled?: boolean;
   expiresAt?: string | null;
   comment?: string | null;
+  /** Azure AI Foundry deployment / model name; null clears the override. */
+  model?: string | null;
 }
 
 export const KEY_TYPE_LABELS: Record<KeyType, string> = {
