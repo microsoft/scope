@@ -26,7 +26,8 @@ development, contribution, and support guidance live under
 ├── src/
 │   ├── assets/
 │   ├── components/                  # Astro landing, interactive example, header, page title, site footer
-│   │   └── community/               # article/talk lists + landing teaser
+│   │   ├── community/               # article/talk lists + landing teaser
+│   │   └── contribute/              # open calls for contributions (landing + page)
 │   ├── content/
 │   │   ├── docs/                    # all user-facing pages (.md / .mdx)
 │   │   │   ├── introduction/
@@ -37,13 +38,15 @@ development, contribution, and support guidance live under
 │   │   │   └── community/
 │   │   ├── articles/                # one YAML per published article
 │   │   └── talks/                   # one YAML per talk
+│   ├── data/                        # dev-only sample of the contribution issues list
 │   ├── openapi/scope-openapi.json   # artifact generated from the API registry
 │   ├── plugins/
 │   │   ├── remark-base-path.mjs    # applies the deployment base to internal links
 │   │   └── remark-http-snippets.mjs # turns ```http blocks into multi-language tabs
 │   ├── scripts/
 │   │   ├── analytics.ts            # consent-gated website-only 1DS analytics
-│   │   └── flow-demo.ts            # progressive-enhancement example controller
+│   │   ├── flow-demo.ts             # progressive-enhancement example controller
+│   │   └── contribution-issues*.ts  # open calls: data helpers + custom element
 │   ├── styles/landing.css           # shared brand tokens + scoped landing styles
 │   └── content.config.ts
 ├── astro.config.mjs                 # sidebar, plugins, starlight-openapi config
@@ -97,7 +100,7 @@ from the root pnpm workspace.
 | `pnpm dev`             | Start dev server at the worktree's `DOC_PORT` (fallback: 4300) |
 | `pnpm build`           | Build the production site to `./dist/`                     |
 | `pnpm preview`         | Preview the production build locally                       |
-| `pnpm test`            | Test site plugins with Node's built-in test runner          |
+| `pnpm test`            | Test site plugins and scripts with Node's built-in test runner |
 | `pnpm test:a11y`       | Build and check accessibility and privacy links in Chromium |
 | `pnpm refresh:openapi` | Generate the OpenAPI snapshot from this monorepo's API |
 
@@ -191,9 +194,13 @@ table of contents, code examples, and previous/next navigation.
 - **Onboarding:** a concrete example before terminology, followed by
   separate Portal, CLI, and API entry points. Access requirements are
   explicit rather than promising instant access to a hosted service.
-- **Motion:** limited to the silent showreel and the interactive
-  example, with pause controls and reduced-motion support. The logo
-  and documentation chrome remain still.
+- **Motion:** limited to the silent showreel, the interactive
+  example, and the open-calls cards (staggered entrance, count-up,
+  cursor glow), with pause controls where needed and reduced-motion
+  support. The logo and documentation chrome remain still.
+- **Contribution:** a "Help build Scope" section lists open calls
+  for contributions, refreshed hourly from a data branch without a
+  redeploy. See "Contribution issues" in `AGENTS.md`.
 
 ### Showreel
 

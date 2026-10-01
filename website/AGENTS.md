@@ -218,6 +218,39 @@ Published videos use a labeled Watch on YouTube link, not an iframe
 or remote thumbnail, so visiting a page does not load a third-party
 player or its scripts.
 
+### Contribution issues
+
+The landing page ("Help build Scope") and **Community → Contribute**
+list open, unassigned issues labeled `good first issue` or
+`help wanted`. The list is data, not content, so it isn't in the
+build:
+
+- [`.github/workflows/contribution-issues.yml`](../.github/workflows/contribution-issues.yml)
+  runs every hour, on issue events, and on demand. It writes
+  `issues.jsonl` to the orphan `website-data` branch and commits only
+  when the file changes. Run it once by hand (`workflow_dispatch`) to
+  create the branch.
+- `issues.jsonl` is deterministic so diffs stay small: one issue per
+  line, sorted by number, with sorted keys and only `number`, `title`,
+  and sorted `labels`. Don't add fields that change on every run
+  (timestamps, comment counts). An empty file means there are no open
+  calls.
+- The browser fetches the file from `raw.githubusercontent.com`
+  (`DATA_URL` in
+  [`contribution-issues.ts`](src/scripts/contribution-issues.ts)).
+  Set `PUBLIC_CONTRIBUTION_ISSUES_URL` to point at another file.
+- Display order is decided client-side: good first issues first, then
+  newest. `area:`, `difficulty:`, and `type:` labels show as chips.
+- In `pnpm run dev`, if the fetch fails (no branch yet, offline), the
+  list falls back to
+  [`contribution-issues.sample.jsonl`](src/data/contribution-issues.sample.jsonl)
+  and shows a "Sample data · dev only" tag. Production builds drop
+  that branch and the sample.
+- Titles and labels come from GitHub users. Render them with
+  `textContent` only, never `innerHTML`.
+- Motion uses the Web Animations API, with no animation library. Gate
+  any new motion on `prefers-reduced-motion`.
+
 ### Style
 
 - Hard-wrap prose at ~70–80 columns for readable diffs.
@@ -234,7 +267,7 @@ player or its scripts.
 
 ```sh
 pnpm install
-pnpm test                # plugin regressions, using Node's built-in test runner
+pnpm test                # plugin and script tests, using Node's built-in test runner
 pnpm test:a11y           # production build + Playwright/axe privacy and accessibility checks
 pnpm run build           # writes dist/
 pnpm run dev             # local preview at http://localhost:4321
@@ -256,7 +289,7 @@ or authenticated Website Management Center compliance reviews.
 Both `pnpm test` and `pnpm run build` must pass. The public build uses
 `SITE=https://microsoft.github.io BASE_PATH=/scope pnpm run build`;
 exercise that configuration when changing links or deployment settings,
-not just the local `/` default. The current snapshot produces **203
+not just the local `/` default. The current snapshot produces **215
 pages**, including the generated API reference. An unexpected drop in
 page count can indicate a content collection file failed to parse.
 
