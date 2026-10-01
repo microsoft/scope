@@ -1,0 +1,121 @@
+/*
+ * Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
+ *
+ * Open calls for contributions (<scope-contribution-issues>). Used on the
+ * landing page (cards) and the Community > Contribute page (list).
+ */
+
+.contrib { display: block; color: var(--scope-text); font-family: var(--sl-font); line-height: 1.6; }
+.contrib * { box-sizing: border-box; }
+.contrib :is(p, ul) { margin: 0; }
+.contrib a { text-decoration: none; }
+.contrib .contrib-message a, .contrib .contrib-fallback a { color: var(--scope-brand); font-weight: 600; text-decoration: underline; text-underline-offset: 0.2em; }
+
+/* States. Without JavaScript only the GitHub fallback links are shown. */
+.contrib-fallback, .contrib-message { display: none; }
+.contrib[data-state='empty'] .contrib-list, .contrib[data-state='error'] .contrib-list { display: none; }
+.contrib[data-state='empty'] .contrib-message--empty, .contrib[data-state='error'] .contrib-message--error { display: block; }
+@media (scripting: none) {
+	.contrib-list, .contrib-count { display: none !important; }
+	.contrib-fallback { display: block; }
+}
+.contrib[data-animate] :is([data-reveal], [data-reveal-item]):not([data-revealed]) { opacity: 0; }
+
+.contrib-message, .contrib-fallback { padding: 1.2rem 1.4rem; border: 1px dashed var(--scope-border); border-radius: 1rem; background: var(--scope-inset); color: var(--scope-muted); font-size: 0.9rem; }
+
+.contrib-sample-tag { display: inline-block; margin-bottom: 0.9rem !important; padding: 0.2rem 0.6rem; border: 1px dashed var(--scope-fail); border-radius: 100px; color: var(--scope-fail); font: 600 0.65rem var(--sl-font-mono); letter-spacing: 0.1em; text-transform: uppercase; }
+.contrib-sample-tag[hidden] { display: none; }
+
+/* Count pill (landing). */
+.contrib-count { display: inline-flex; align-items: center; gap: 0.55rem; margin-top: 1rem !important; padding: 0.35rem 0.85rem 0.35rem 0.7rem; border: 1px solid var(--scope-border); border-radius: 100px; background: var(--scope-surface); color: var(--scope-text); font-size: 0.8rem; font-weight: 600; visibility: hidden; }
+.contrib-count[data-shown] { visibility: visible; }
+.contrib-count__value { color: var(--scope-brand); font-family: var(--sl-font-mono); font-variant-numeric: tabular-nums; }
+.contrib-count__pulse { position: relative; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--scope-pass); }
+.contrib-count__pulse::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--scope-pass); animation: contrib-pulse 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+@keyframes contrib-pulse { from { transform: scale(1); opacity: 0.6; } to { transform: scale(3.2); opacity: 0; } }
+
+/* List and cards. */
+.contrib-list { display: grid; gap: 1rem; padding: 0 !important; list-style: none; }
+.contrib--cards .contrib-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.contrib-item { display: flex; min-width: 0; margin: 0 !important; }
+
+.contrib-card {
+	--x: 50%;
+	--y: 0%;
+	position: relative;
+	isolation: isolate;
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	width: 100%;
+	padding: 1.3rem 1.4rem 1.2rem;
+	border: 1px solid var(--scope-border);
+	border-radius: 1rem;
+	background: var(--scope-surface);
+	color: var(--scope-text);
+	overflow: hidden;
+	transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease, border-color 0.35s ease;
+}
+.contrib-card::before, .contrib-card::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity 0.35s ease; }
+/* Border glow that follows the cursor. */
+.contrib-card::before {
+	padding: 1px;
+	background: radial-gradient(16rem circle at var(--x) var(--y), var(--scope-brand), transparent 70%);
+	-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+	-webkit-mask-composite: xor;
+	mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+/* Soft spotlight behind the content. */
+.contrib-card::after { z-index: -1; background: radial-gradient(26rem circle at var(--x) var(--y), color-mix(in srgb, var(--scope-brand) 11%, transparent), transparent 65%); }
+.contrib-card:is(:hover, :focus-visible) { transform: translateY(-4px); border-color: color-mix(in srgb, var(--scope-brand) 45%, var(--scope-border)); box-shadow: var(--scope-shadow); }
+.contrib-card:is(:hover, :focus-visible)::before, .contrib-card:is(:hover, :focus-visible)::after { opacity: 1; }
+.contrib-card:focus-visible { outline: 2px solid var(--scope-brand); outline-offset: 3px; }
+
+/* The title comes first in the DOM so it leads the link's accessible name. */
+.contrib-card__top { order: -1; display: flex; align-items: center; gap: 0.75rem; }
+.contrib-card__title { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font-size: 1.02rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.4; text-wrap: pretty; }
+.contrib-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.contrib-badge { --badge: var(--scope-brand); padding: 0.15rem 0.55rem; border: 1px solid color-mix(in srgb, var(--badge) 40%, transparent); border-radius: 100px; background: color-mix(in srgb, var(--badge) 12%, transparent); color: var(--badge); font: 650 0.62rem/1.6 var(--sl-font-mono); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.contrib-badge[data-label='good-first-issue'] { --badge: var(--scope-pass); }
+.contrib-number { margin-left: auto; color: var(--scope-muted); font: 0.75rem var(--sl-font-mono); }
+
+.contrib-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.contrib-chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.1rem 0.55rem; border: 1px solid var(--scope-border); border-radius: 100px; background: var(--scope-inset); color: var(--scope-muted); font-size: 0.72rem; }
+.contrib-chip[data-kind='difficulty']::before { content: ''; width: 0.4rem; height: 0.4rem; border-radius: 50%; background: var(--scope-muted); }
+.contrib-chip[data-value='easy']::before { background: var(--scope-pass); }
+.contrib-chip[data-value='moderate']::before { background: var(--scope-brand); }
+.contrib-chip[data-value='hard']::before { background: var(--scope-fail); }
+
+.contrib-card__cta { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: auto; padding-top: 0.35rem; color: var(--scope-brand); font-size: 0.8rem; font-weight: 600; }
+.contrib-card__arrow { display: inline-block; transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.contrib-card:is(:hover, :focus-visible) .contrib-card__arrow { transform: translate(3px, -3px); }
+
+/* Loading skeleton with a shimmer. */
+.contrib-skeleton { position: relative; flex-direction: column; justify-content: center; gap: 0.8rem; min-height: 10.5rem; padding: 1.4rem; border: 1px solid var(--scope-border); border-radius: 1rem; background: var(--scope-surface); overflow: hidden; }
+.contrib--list .contrib-skeleton { min-height: 7.5rem; }
+.contrib-skeleton__line { display: block; width: 100%; height: 0.8rem; border-radius: 0.4rem; background: var(--scope-inset); }
+.contrib-skeleton__line--short { width: 35%; }
+.contrib-skeleton__line--mid { width: 65%; }
+.contrib-skeleton::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, var(--scope-brand) 9%, transparent) 50%, transparent 80%); transform: translateX(-100%); animation: contrib-shimmer 1.6s ease-in-out infinite; }
+@keyframes contrib-shimmer { to { transform: translateX(100%); } }
+
+/* Landing section. */
+.scope-contrib__intro { max-width: 36ch; color: var(--scope-muted); font-size: 0.9rem; }
+.scope-contrib__all { margin-top: 1.5rem; }
+
+/* Docs page list: same cards, one per row, a little tighter. */
+.contrib--list { margin-top: 1.5rem; }
+.contrib--list .contrib-card { padding: 1.1rem 1.25rem; }
+.contrib--list .contrib-card__title { -webkit-line-clamp: unset; }
+.contrib--list .contrib-card__cta { display: none; }
+
+@media (max-width: 48rem) {
+	.contrib--cards .contrib-list { grid-template-columns: 1fr; }
+	.scope-contrib__intro { margin-top: 1rem; max-width: 55ch; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.contrib *, .contrib *::before, .contrib *::after { animation: none !important; transition: none !important; }
+	.contrib-card:is(:hover, :focus-visible), .contrib-card:is(:hover, :focus-visible) .contrib-card__arrow { transform: none; }
+}

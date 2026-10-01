@@ -1,0 +1,28 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import ContributionIssues from './ContributionIssues.astro';
+
+const allHref = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/community/contribute/`;
+---
+
+<section class="scope-section scope-contrib" aria-labelledby="contrib-heading">
+	<ContributionIssues limit={4} variant="cards">
+		<div class="scope-section-heading">
+			<div data-reveal>
+				<p class="scope-eyebrow">Open source</p>
+				<h2 id="contrib-heading">Help build Scope</h2>
+			</div>
+			<div class="scope-contrib__intro" data-reveal>
+				<p>Pick an open call, then open a pull request that references it. No need to ask first.</p>
+				<p class="contrib-count" data-count-pill>
+					<span class="contrib-count__pulse" aria-hidden="true"></span>
+					<span aria-hidden="true"><span class="contrib-count__value" data-count>0</span> <span data-count-label>open calls</span></span>
+					<span class="sr-only" data-count-text></span>
+				</p>
+			</div>
+		</div>
+	</ContributionIssues>
+	<a class="scope-text-link scope-contrib__all" href={allHref}>See all open calls <span aria-hidden="true">&rarr;</span></a>
+</section>
