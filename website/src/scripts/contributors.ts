@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Data helpers for the community contributors thank-you section. The list is
+// Data helpers for the contributors thank-you section. The list is
 // published as JSON Lines on the `website-data` branch by
 // .github/workflows/contribution-issues.yml and fetched in the browser.
 // This module has no DOM dependencies so it can be unit-tested in Node.

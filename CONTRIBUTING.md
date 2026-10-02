@@ -309,7 +309,7 @@ unblock a PR.
 
 ### 6. Close the loop
 
-Thank the contributor and link any follow-up work. Once merged, external authors appear in the
+Thank the contributor and link any follow-up work. Once merged, the author appears in the
 "Thank you" section of the [Contribute page](https://microsoft.github.io/scope/community/contribute/#thank-you)
 and on the landing page within about an hour. The PR owner checks the post-merge result and
 coordinates a fix or revert if needed.

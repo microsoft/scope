@@ -151,9 +151,9 @@ table of contents, code examples, and previous/next navigation.
   and reduced-motion support. The logo and documentation chrome remain
   still.
 - **Contribution:** a "Help build Scope" section lists open calls
-  for contributions and thanks community contributors, refreshed
+  for contributions and thanks every contributor, refreshed
   hourly from a data branch without a redeploy. See "Contribution
-  issues" and "Community contributors" in `AGENTS.md`.
+  issues" and "Contributors" in `AGENTS.md`.
 
 ### Showreel
 
