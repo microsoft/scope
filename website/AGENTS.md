@@ -210,6 +210,70 @@ components open them in a new tab (`target="_blank"
 rel="noopener noreferrer"`) with a screen-reader "(opens in a new
 tab)" hint; keep that pattern for any new external link.
 
+### Contribution issues
+
+The landing page ("Help build Scope") and **Community → Contribute**
+list open, unassigned issues labeled `good first issue` or
+`help wanted`. The list is data, not content, so it isn't in the
+build:
+
+- [`.github/workflows/contribution-issues.yml`](../.github/workflows/contribution-issues.yml)
+  runs every hour, on issue events, and on demand. It writes
+  `issues.jsonl` to the orphan `website-data` branch and commits only
+  when the file changes. Run it once by hand (`workflow_dispatch`) to
+  create the branch.
+- `issues.jsonl` is deterministic so diffs stay small: one issue per
+  line, sorted by number, with sorted keys and only `number`, `title`,
+  and sorted `labels`. Don't add fields that change on every run
+  (timestamps, comment counts). An empty file means there are no open
+  calls.
+- The browser fetches the file from `raw.githubusercontent.com`
+  (`DATA_URL` in
+  [`contribution-issues.ts`](src/scripts/contribution-issues.ts)).
+  Set `PUBLIC_CONTRIBUTION_ISSUES_URL` to point at another file.
+- Display order is decided client-side: good first issues first, then
+  newest. `area:`, `difficulty:`, and `type:` labels show as chips.
+- The landing section shows 4 issues at a time and rotates through all
+  of them every 7 seconds (`rotate` prop). The active page dot fills
+  as a progress bar. Rotation pauses on hover, on keyboard focus, when
+  off screen or the tab is hidden, and with the pause button. It never
+  autoplays under reduced motion; the dots still work.
+- In `pnpm run dev`, if the fetch fails (no branch yet, offline), the
+  list falls back to
+  [`contribution-issues.sample.jsonl`](src/data/contribution-issues.sample.jsonl)
+  and shows a "Sample data · dev only" tag. Production builds drop
+  that branch and the sample.
+- Titles and labels come from GitHub users. Render them with
+  `textContent` only, never `innerHTML`.
+- Motion uses the Web Animations API, with no animation library. Gate
+  any new motion on `prefers-reduced-motion`.
+
+### Community contributors
+
+The landing page (an avatar wall under the open calls) and the
+"Thank you" section of **Community → Contribute** (a card grid)
+thank external authors of merged pull requests:
+
+- The same workflow writes `contributors.jsonl` to `website-data` in
+  the same commit as `issues.jsonl`. It counts merged PRs whose
+  author is a user, not a bot (`[bot]` suffix), and whose
+  `authorAssociation` isn't `MEMBER`, `OWNER`, or `COLLABORATOR`.
+- One line per person, `{"login":"…","prs":N}`, with sorted keys and
+  sorted by lowercase login. No avatar URLs or timestamps; avatars come
+  from `https://github.com/<login>.png`, and a failed image shows the
+  login's initial.
+- The browser sorts by merged PRs, then login. The wall shows up to
+  `limit` items; the last slot becomes a "+N" bubble that links to
+  the full grid. Each person links to their merged PRs.
+- Set `PUBLIC_CONTRIBUTORS_URL` to point at another file
+  ([`contributors.ts`](src/scripts/contributors.ts)). In
+  `pnpm run dev` a failed fetch falls back to
+  [`contributors.sample.jsonl`](src/data/contributors.sample.jsonl),
+  which lists real external contributors only; don't pad it with other
+  accounts.
+- Logins are user data: render them with `textContent` or attributes
+  only.
+
 ### Style
 
 - Hard-wrap prose at ~70–80 columns for readable diffs.
@@ -226,7 +290,7 @@ tab)" hint; keep that pattern for any new external link.
 
 ```sh
 pnpm install
-pnpm test                # plugin regressions, using Node's built-in test runner
+pnpm test                # plugin and script tests, using Node's built-in test runner
 pnpm run build           # writes dist/
 pnpm run dev             # local preview at http://localhost:4321
 pnpm run refresh:openapi # generate the OpenAPI snapshot from scope-core
@@ -235,7 +299,7 @@ pnpm run refresh:openapi # generate the OpenAPI snapshot from scope-core
 Both `pnpm test` and `pnpm run build` must pass. The public build uses
 `SITE=https://microsoft.github.io BASE_PATH=/scope pnpm run build`;
 exercise that configuration when changing links or deployment settings,
-not just the local `/` default. The current snapshot produces **203
+not just the local `/` default. The current snapshot produces **215
 pages**, including the generated API reference. An unexpected drop in
 page count can indicate a content collection file failed to parse.
 

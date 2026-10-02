@@ -309,7 +309,9 @@ unblock a PR.
 
 ### 6. Close the loop
 
-Thank the contributor and link any follow-up work. The PR owner checks the post-merge result and
+Thank the contributor and link any follow-up work. Once merged, external authors appear in the
+"Thank you" section of the [Contribute page](https://microsoft.github.io/scope/community/contribute/#thank-you)
+and on the landing page within about an hour. The PR owner checks the post-merge result and
 coordinates a fix or revert if needed.
 
 If a contribution is not a fit, explain why and close it promptly. When a PR is waiting on the
@@ -337,6 +339,7 @@ Automations depend on these exact names:
 | Test Improver issues, PRs, and monthly-summary searches | `type: automation`, `topic: testing` |
 | Dependabot | `type: dependencies`, plus `language: javascript` or `language: rust` |
 | Pull Request Labeler | Area, topic, language, and type labels from `.github/labeler.yml` |
+| Website open calls ([Contribute page](https://microsoft.github.io/scope/community/contribute/)) | Open, unassigned `good first issue` or `help wanted` issues |
 
 Use `area: reporting` for Scope's benchmark reporting component, not daily repository activity.
 Worker upgrade routing uses `type: worker-update`, not the broader `area: worker`.

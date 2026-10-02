@@ -1,0 +1,62 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Lists open, unassigned issues labeled "good first issue" or "help wanted".
+// The contribution-issues workflow publishes the list to the website-data
+// branch, and the browser fetches it, so it stays fresh without
+// redeploying the site. See website/AGENTS.md.
+import '../../styles/contribution-issues.css';
+import { CONTRIBUTION_LABELS, DATA_URL, searchUrl } from '../../scripts/contribution-issues';
+
+interface Props {
+	/** Maximum number of issues to show. Omit to show them all. */
+	limit?: number;
+	/** `cards` for the animated landing grid, `list` for the docs page. */
+	variant?: 'cards' | 'list';
+	/** Cycle through all issues, `limit` at a time. Needs `limit`. */
+	rotate?: boolean;
+}
+
+const { limit, variant = 'cards', rotate = false } = Astro.props;
+const src = import.meta.env.PUBLIC_CONTRIBUTION_ISSUES_URL || DATA_URL;
+const skeletons = Math.min(limit ?? 4, 4);
+const [goodFirst, helpWanted] = CONTRIBUTION_LABELS.map((label) => ({ label, href: searchUrl(label) }));
+---
+
+<scope-contribution-issues class={`contrib contrib--${variant} not-content`} data-variant={variant} data-limit={limit} data-rotate={rotate && limit ? '' : undefined} data-src={src} data-state="loading">
+	<slot />
+	<p class="contrib-sample-tag" data-sample-tag hidden>Sample data · dev only</p>
+	<ul class="contrib-list" data-list aria-busy="true" aria-label="Open calls for contributions">
+		{
+			Array.from({ length: skeletons }, () => (
+				<li class="contrib-item contrib-skeleton" aria-hidden="true">
+					<span class="contrib-skeleton__line contrib-skeleton__line--short" />
+					<span class="contrib-skeleton__line" />
+					<span class="contrib-skeleton__line contrib-skeleton__line--mid" />
+				</li>
+			))
+		}
+	</ul>
+	<p class="contrib-message contrib-message--empty">
+		Every open call is taken right now. Check back soon, or browse
+		<a href={`https://github.com/microsoft/scope/issues`} target="_blank" rel="noopener noreferrer">open issues on GitHub<span class="sr-only"> (opens in a new tab)</span></a>.
+	</p>
+	<p class="contrib-message contrib-message--error">
+		We couldn't load the list. Browse
+		<a href={goodFirst!.href} target="_blank" rel="noopener noreferrer">good first issues<span class="sr-only"> (opens in a new tab)</span></a>
+		or
+		<a href={helpWanted!.href} target="_blank" rel="noopener noreferrer">help wanted issues<span class="sr-only"> (opens in a new tab)</span></a>
+		on GitHub.
+	</p>
+	<p class="contrib-fallback">
+		Browse open calls on GitHub:
+		<a href={goodFirst!.href} target="_blank" rel="noopener noreferrer">good first issues<span class="sr-only"> (opens in a new tab)</span></a>
+		·
+		<a href={helpWanted!.href} target="_blank" rel="noopener noreferrer">help wanted<span class="sr-only"> (opens in a new tab)</span></a>
+	</p>
+</scope-contribution-issues>
+
+<script>
+	import '../../scripts/contribution-issues-element';
+</script>

@@ -1,0 +1,53 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Thanks community contributors: external authors of merged pull requests.
+// The contribution-issues workflow publishes the list to the website-data
+// branch, and the browser fetches it. See website/AGENTS.md.
+import '../../styles/contribution-issues.css';
+import '../../styles/contributors.css';
+import { CONTRIBUTORS_DATA_URL, CONTRIBUTORS_GRAPH_URL } from '../../scripts/contributors';
+
+interface Props {
+	/** `wall` for the landing avatar wall, `grid` for the docs page cards. */
+	variant?: 'wall' | 'grid';
+	/** Maximum number of items on the wall, including the "+N" bubble. */
+	limit?: number;
+}
+
+const { variant = 'wall', limit } = Astro.props;
+const src = import.meta.env.PUBLIC_CONTRIBUTORS_URL || CONTRIBUTORS_DATA_URL;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const moreHref = `${base}/community/contribute/#thank-you`;
+const openCallsHref = `${base}/community/contribute/#open-calls`;
+const skeletons = variant === 'wall' ? 8 : 3;
+---
+
+<scope-contributors class={`thanks thanks--${variant} not-content`} data-variant={variant} data-limit={limit} data-src={src} data-more-href={moreHref} data-state="loading">
+	<slot />
+	<p class="contrib-sample-tag" data-sample-tag hidden>Sample data · dev only</p>
+	<ul class="thanks-list" data-list aria-busy="true" aria-label="Community contributors">
+		{
+			Array.from({ length: skeletons }, () => (
+				<li class="thanks-item thanks-skeleton" aria-hidden="true" />
+			))
+		}
+	</ul>
+	<p class="contrib-message thanks-message--empty">
+		No community pull request has been merged yet. Be the first:
+		<a href={openCallsHref}>pick an open call</a>.
+	</p>
+	<p class="contrib-message thanks-message--error">
+		We couldn't load the list. See
+		<a href={CONTRIBUTORS_GRAPH_URL} target="_blank" rel="noopener noreferrer">contributors on GitHub<span class="sr-only"> (opens in a new tab)</span></a>.
+	</p>
+	<p class="contrib-fallback">
+		See
+		<a href={CONTRIBUTORS_GRAPH_URL} target="_blank" rel="noopener noreferrer">contributors on GitHub<span class="sr-only"> (opens in a new tab)</span></a>.
+	</p>
+</scope-contributors>
+
+<script>
+	import '../../scripts/contributors-element';
+</script>
