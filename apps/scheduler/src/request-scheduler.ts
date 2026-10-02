@@ -113,7 +113,7 @@ export class RequestScheduler {
         }
       }
 
-      await this.maybeReportInvalidPendingTargets(agents, queueTargets);
+      await this.maybeReportInvalidPendingTargets();
     } catch (error) {
       console.error("[Scheduler] Failed to refresh agent registry:", error);
       trackEvent({
@@ -232,10 +232,7 @@ export class RequestScheduler {
       }));
   }
 
-  private async maybeReportInvalidPendingTargets(
-    agents: CodingAgentDocument[],
-    queueTargets: QueueTarget[],
-  ): Promise<void> {
+  private async maybeReportInvalidPendingTargets(): Promise<void> {
     const now = Date.now();
     if (
       now - this.lastInvalidTargetReportAt <
@@ -246,7 +243,7 @@ export class RequestScheduler {
     this.lastInvalidTargetReportAt = now;
 
     try {
-      await this.reportInvalidPendingTargets(agents, queueTargets);
+      await this.reportInvalidPendingTargets();
     } catch (error) {
       console.error("[Scheduler] Failed to inspect invalid pending targets:", error);
       trackEvent({
@@ -522,21 +519,12 @@ export class RequestScheduler {
     }
   }
 
-  private async reportInvalidPendingTargets(
-    agents: CodingAgentDocument[],
-    queueTargets: QueueTarget[],
-  ): Promise<void> {
-    const validTargets = new Set(
-      queueTargets.flatMap((queue) =>
-        queue.targets.map((target) =>
-          this.targetKey(target.workerType, target.agentVersion),
-        ),
-      ),
-    );
+  private async reportInvalidPendingTargets(): Promise<void> {
     const pendingTargets = await this.requestCollection
       .aggregate<{
         _id: { workerType?: string; agentVersion?: string };
         count: number;
+        requestIds: string[];
       }>([
         {
           $match: {
@@ -551,11 +539,25 @@ export class RequestScheduler {
               agentVersion: "$agentVersion",
             },
             count: { $sum: 1 },
+            requestIds: { $push: "$_id" },
           },
         },
       ])
       .toArray();
 
+    // Re-read the registry only after collecting the pending candidates. The
+    // dispatch cycle may have spent time doing queue I/O, during which a new
+    // agent/version can register. Using a fresh registry here avoids
+    // terminalizing requests based on the cycle's older snapshot.
+    const agents = await this.agentCollection.find({}).toArray();
+    const queueTargets = this.buildQueueTargets(agents);
+    const validTargets = new Set(
+      queueTargets.flatMap((queue) =>
+        queue.targets.map((target) =>
+          this.targetKey(target.workerType, target.agentVersion),
+        ),
+      ),
+    );
     const agentsById = new Map(agents.map((agent) => [agent._id, agent]));
     const invalid = pendingTargets
       .filter(
@@ -564,7 +566,7 @@ export class RequestScheduler {
             this.targetKey(_id.workerType ?? "", _id.agentVersion ?? ""),
           ),
       )
-      .map(({ _id, count }) => {
+      .map(({ _id, count, requestIds }) => {
         const workerType = _id.workerType ?? "(missing)";
         const agentVersion = _id.agentVersion ?? "(missing)";
         const agent = agentsById.get(_id.workerType ?? "");
@@ -576,14 +578,17 @@ export class RequestScheduler {
         ) {
           reason = "agent_queue_conflict";
         } else if (agent?.deletedAt) reason = "agent_deleted";
-        else if (agent && agent.available !== true) reason = "agent_unavailable";
         else if (agent && !_id.agentVersion) reason = "agent_version_missing";
         else if (agent) {
           const version = (agent.versions ?? []).find(
             (candidate) => candidate.agentVersion === _id.agentVersion,
           );
           if (!version || version.status !== "active") {
+            // Missing/retired exact versions are permanently invalid even when
+            // the agent itself is temporarily unavailable.
             reason = "agent_version_unavailable";
+          } else if (agent.available !== true) {
+            reason = "agent_unavailable";
           } else if (!version.queueName?.trim()) {
             reason = "agent_queue_missing";
           }
@@ -594,6 +599,7 @@ export class RequestScheduler {
           rawWorkerType: _id.workerType,
           rawAgentVersion: _id.agentVersion,
           count,
+          requestIds,
           reason,
         };
       })
@@ -624,6 +630,7 @@ export class RequestScheduler {
           : `Agent version "${target.rawAgentVersion}" for "${target.rawWorkerType}" is no longer available`;
       const result = await this.requestCollection.updateMany(
         {
+          _id: { $in: target.requestIds },
           workerType: target.rawWorkerType,
           agentVersion: target.rawAgentVersion,
           "run.status": "pending",
