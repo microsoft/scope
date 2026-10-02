@@ -93,6 +93,14 @@ export function visible<T>(items: readonly T[], limit: number): { shown: T[]; hi
 	return { shown, hidden: items.length - shown.length };
 }
 
+/**
+ * First page of the grid: `limit` items, or all of them when at most one
+ * more would remain, so "Show all" never reveals a single card.
+ */
+export function firstPage<T>(items: readonly T[], limit: number): { shown: T[]; hidden: number } {
+	return visible(items, limit + 1);
+}
+
 /** Fetches and parses the published list. Throws on network or HTTP errors. */
 export async function fetchContributors(url: string, timeoutMs = 8000): Promise<ContributorsResult> {
 	const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
