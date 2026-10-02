@@ -101,6 +101,22 @@ export function firstPage<T>(items: readonly T[], limit: number): { shown: T[]; 
 	return visible(items, limit + 1);
 }
 
+/** Label of the grid's "Show all" button. */
+export function showAllLabel(total: number): string {
+	return `Show all ${total} ${contributorsLabel(total)}`;
+}
+
+/**
+ * Horizontal shift that keeps a tooltip, centered on an avatar and scaled
+ * by `scale` on hover, inside `[left, right]`. A tip wider than the bounds
+ * stays aligned to the left edge.
+ */
+export function tipShift(center: number, halfWidth: number, left: number, right: number, scale = 1): number {
+	const min = (left - center) / scale + halfWidth;
+	const max = (right - center) / scale - halfWidth;
+	return min > 0 ? min : max < 0 ? max : 0;
+}
+
 /** Fetches and parses the published list. Throws on network or HTTP errors. */
 export async function fetchContributors(url: string, timeoutMs = 8000): Promise<ContributorsResult> {
 	const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });

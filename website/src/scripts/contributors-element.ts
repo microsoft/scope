@@ -10,7 +10,9 @@ import {
 	parseContributors,
 	prsLabel,
 	prsUrl,
+	showAllLabel,
 	sortForDisplay,
+	tipShift,
 	totalPrs,
 	visible,
 	type Contributor,
@@ -131,8 +133,7 @@ class ScopeContributors extends HTMLElement {
 		if (!button) return;
 		button.hidden = !hidden;
 		const label = button.querySelector('[data-show-all-label]');
-		const total = this.contributors.length;
-		if (label) label.textContent = `Show all ${total} ${contributorsLabel(total)}`;
+		if (label) label.textContent = showAllLabel(this.contributors.length);
 	}
 
 	/** Appends the rest of the grid and moves focus to the first new card. */
@@ -164,11 +165,7 @@ class ScopeContributors extends HTMLElement {
 			if (!tip) continue;
 			const rect = link.getBoundingClientRect();
 			const center = rect.left + rect.width / 2;
-			const half = tip.offsetWidth / 2;
-			// Shift range that keeps the lifted (scaled) tip within the bounds.
-			const min = (bounds.left - center) / LIFT_SCALE + half;
-			const max = (bounds.right - center) / LIFT_SCALE - half;
-			const shift = min > 0 ? min : max < 0 ? max : 0;
+			const shift = tipShift(center, tip.offsetWidth / 2, bounds.left, bounds.right, LIFT_SCALE);
 			tip.style.setProperty('--tip-shift', `${Math.round(shift)}px`);
 		}
 	}

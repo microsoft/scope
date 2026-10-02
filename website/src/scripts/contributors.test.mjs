@@ -13,7 +13,9 @@ import {
 	parseContributors,
 	prsLabel,
 	prsUrl,
+	showAllLabel,
 	sortForDisplay,
+	tipShift,
 	totalPrs,
 	visible,
 } from './contributors.ts';
@@ -91,6 +93,37 @@ test('pages the grid without hiding a single card', () => {
 	assert.deepEqual(firstPage(items, 5), { shown: items, hidden: 0 });
 	assert.deepEqual(firstPage(items, Infinity), { shown: items, hidden: 0 });
 	assert.deepEqual(firstPage([], 30), { shown: [], hidden: 0 });
+});
+
+test('labels the show all button', () => {
+	assert.equal(showAllLabel(31), 'Show all 31 contributors');
+	assert.equal(showAllLabel(1), 'Show all 1 contributor');
+});
+
+test('keeps a centered tooltip in place', () => {
+	assert.equal(tipShift(500, 40, 0, 1000, 1.14), 0);
+	assert.equal(tipShift(500, 40, 0, 1000), 0);
+});
+
+test('shifts edge tooltips inside the bounds, even when scaled', () => {
+	const left = 10;
+	const right = 375;
+	const scale = 1.14;
+	const half = 60;
+	for (const center of [12, 30, 70, 190, 330, 360, 373]) {
+		const shift = tipShift(center, half, left, right, scale);
+		const tipLeft = center + scale * (shift - half);
+		const tipRight = center + scale * (shift + half);
+		assert.ok(tipLeft >= left - 1e-9, `left edge at center ${center}`);
+		assert.ok(tipRight <= right + 1e-9, `right edge at center ${center}`);
+	}
+	assert.ok(tipShift(12, half, left, right, scale) > 0);
+	assert.ok(tipShift(373, half, left, right, scale) < 0);
+});
+
+test('aligns a tooltip wider than the bounds to the left edge', () => {
+	const shift = tipShift(50, 80, 0, 100, 1);
+	assert.equal(50 + shift - 80, 0);
 });
 
 test('the dev sample file is valid and sorted like the published file', () => {
