@@ -39,7 +39,9 @@ any supported coding agent.
 
 - **Available models.** Each coding agent exposes its own model
   list. GitHub Copilot CLI and Claude Code CLI advertise the
-  models their respective agent supports.
+  models their respective agent supports. See
+  [Model lifecycle and deprecation](/guides/model-lifecycle/) for how Scope
+  discovers, retires, and restores models.
 - **Extension support.** Only VS Code Copilot accepts
   `extensions` in a profile. The two CLI-based agents reject
   extensions with HTTP 400 — see
