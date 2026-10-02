@@ -262,16 +262,17 @@ build:
 - Motion uses the Web Animations API, with no animation library. Gate
   any new motion on `prefers-reduced-motion`.
 
-### Community contributors
+### Contributors
 
 The landing page (an avatar wall under the open calls) and the
 "Thank you" section of **Community → Contribute** (a card grid)
-thank external authors of merged pull requests:
+thank every author of a merged pull request, community and
+Microsoft alike:
 
 - The same workflow writes `contributors.jsonl` to `website-data` in
   the same commit as `issues.jsonl`. It counts merged PRs whose
-  author is a user, not a bot (`[bot]` suffix), and whose
-  `authorAssociation` isn't `MEMBER`, `OWNER`, or `COLLABORATOR`.
+  author is a user, not a bot (`[bot]` suffix). Team members count
+  too; don't filter on `authorAssociation`.
 - One line per person, `{"login":"…","prs":N}`, with sorted keys and
   sorted by lowercase login. No avatar URLs or timestamps; avatars come
   from `https://github.com/<login>.png`, and a failed image shows the
@@ -283,7 +284,7 @@ thank external authors of merged pull requests:
   ([`contributors.ts`](src/scripts/contributors.ts)). In
   `pnpm run dev` a failed fetch falls back to
   [`contributors.sample.jsonl`](src/data/contributors.sample.jsonl),
-  which lists real external contributors only; don't pad it with other
+  which lists real contributors only; don't pad it with other
   accounts.
 - Logins are user data: render them with `textContent` or attributes
   only.

@@ -2,7 +2,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Thanks community contributors: external authors of merged pull requests.
+// Thanks contributors: everyone (bots aside) who got a pull request merged.
 // The contribution-issues workflow publishes the list to the website-data
 // branch, and the browser fetches it. See website/AGENTS.md.
 import '../../styles/contribution-issues.css';
@@ -27,7 +27,7 @@ const skeletons = variant === 'wall' ? 8 : 3;
 <scope-contributors class={`thanks thanks--${variant} not-content`} data-variant={variant} data-limit={limit} data-src={src} data-more-href={moreHref} data-state="loading">
 	<slot />
 	<p class="contrib-sample-tag" data-sample-tag hidden>Sample data · dev only</p>
-	<ul class="thanks-list" data-list aria-busy="true" aria-label="Community contributors">
+	<ul class="thanks-list" data-list aria-busy="true" aria-label="Contributors">
 		{
 			Array.from({ length: skeletons }, () => (
 				<li class="thanks-item thanks-skeleton" aria-hidden="true" />
@@ -35,7 +35,7 @@ const skeletons = variant === 'wall' ? 8 : 3;
 		}
 	</ul>
 	<p class="contrib-message thanks-message--empty">
-		No community pull request has been merged yet. Be the first:
+		No pull request has been merged yet. Be the first:
 		<a href={openCallsHref}>pick an open call</a>.
 	</p>
 	<p class="contrib-message thanks-message--error">

@@ -23,7 +23,7 @@ const COUNT_UP_MS = 900;
 const MAX_STAGGER_STEPS = 24;
 
 /**
- * Thanks the community: external authors of merged pull requests. Renders
+ * Thanks contributors: authors of merged pull requests, bots aside. Renders
  * an avatar wall (landing) or a card grid (Contribute page). Without
  * JavaScript a link to the GitHub contributors graph stays visible. Motion
  * is skipped entirely when the visitor prefers reduced motion.
