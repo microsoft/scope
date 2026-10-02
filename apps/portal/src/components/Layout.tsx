@@ -166,6 +166,7 @@ const FULL_BLEED_ROUTE_PATTERNS = [
   "/extensions",
   "/profiles",
   "/secrets/keys",
+  "/secrets/keys/:id/preview",
   "/secrets/accounts",
   "/reports",
   "/reports/templates",
