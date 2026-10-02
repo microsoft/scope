@@ -43,8 +43,13 @@ never seen before is inserted with a `firstSeenAt` timestamp. Models already in
 the catalog get their `lastSeenAt` timestamp and provider metadata refreshed.
 
 After reconciliation, the coding agent's `supportedModels` list is rebuilt from
-models that are currently active. The Portal and request APIs use that list for
-new submissions.
+models that are currently active. Request validation uses that agent-specific
+list when checking an explicitly selected model.
+
+The Portal gets model capability and selection data separately from the model
+catalog by querying `GET /api/v1/models` for the selected agent with
+`status=active`. That active-catalog query does not consume the agent's
+`supportedModels` field.
 
 ### Default model changes
 
@@ -73,30 +78,41 @@ model stops working, or temporarily omit a model from discovery.
 
 ## Submission behavior after a model disappears
 
-Scope deliberately has a short grace period for a newly disappeared model:
+Request submission first validates the selected model against the coding
+agent's current `supportedModels` list. Because reconciliation removes
+disappeared models from that list, a reconciled request can be rejected at this
+step with `agent_model_unsupported`.
+
+If the model still passes that agent-target validation, the request route also
+checks the model catalog's `disappearedAt` timestamp:
 
 - **Less than 24 hours since `disappearedAt`:** submission is allowed, but the
   request receives a warning that the model may not be available at runtime.
-- **24 hours or more since `disappearedAt`:** new submissions using that model
-  are rejected with `model_unavailable_for_worker`.
+- **24 hours or more since `disappearedAt`:** submission is rejected with
+  `model_unavailable_for_worker`.
 
-The grace period reduces false failures from scanner lag or a short provider
-inventory outage without allowing a known-unavailable model to remain
-selectable indefinitely.
+The 24-hour check is therefore a secondary safety net, not a guarantee that
+every disappeared model remains submittable for 24 hours. In the common case
+where agent reconciliation has already removed the model from
+`supportedModels`, the earlier agent-target validation rejects it first.
 
 If the model reappears in a later provider scan, its `disappearedAt` marker is
-cleared and it returns to the active list.
+cleared and it returns to the active model catalog and agent reconciliation can
+restore it to `supportedModels`.
 
 ## What users should expect
 
 ### Portal and inline submissions
 
-The model picker reflects the active models for the selected coding agent. If a
-model disappears, it will no longer be offered for new inline selections after
-reconciliation.
+Portal model capability and model-selection data comes from the active model
+catalog for the selected coding agent. Once a model is no longer active, it
+drops out of that catalog query.
 
-A request that explicitly references a model may receive the temporary warning
-or eventual hard rejection described above.
+Submission is validated independently against the agent's
+`supportedModels`. Historical configuration can still reference an older
+model, but a new request using it may be rejected by agent-target validation.
+Only models that pass that validation reach the later `disappearedAt`
+warning/rejection check described above.
 
 ### Profiles
 
