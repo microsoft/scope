@@ -6,6 +6,10 @@ description: How to reach the Scope Portal.
 You can access Scope through the web Portal, the REST API, or the
 `scope` CLI.
 
+This page assumes you have access to an existing deployment. To run Scope
+yourself, follow [Local development](/getting-started/local-development/) for
+prerequisites, setup, authentication, and a first evaluation.
+
 ## Requirements
 
 Your deployment administrator provides the Portal URL and any required
