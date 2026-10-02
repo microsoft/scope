@@ -6,6 +6,7 @@ import {
 	avatarUrl,
 	contributorsLabel,
 	fetchContributors,
+	firstPage,
 	parseContributors,
 	prsLabel,
 	prsUrl,
@@ -20,6 +21,8 @@ type State = 'loading' | 'ready' | 'empty' | 'error';
 
 const EASE_OUT_BACK = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 const COUNT_UP_MS = 900;
+// Matches the hover/focus scale of `.thanks-avatar` in contributors.css.
+const LIFT_SCALE = 1.14;
 const MAX_STAGGER_STEPS = 24;
 
 /**
@@ -36,6 +39,8 @@ class ScopeContributors extends HTMLElement {
 	private loaded = false;
 	private headingRevealed = false;
 	private itemsRevealed = false;
+	private expanded = false;
+	private resize: ResizeObserver | undefined;
 	private contributors: Contributor[] = [];
 
 	connectedCallback() {
@@ -50,11 +55,14 @@ class ScopeContributors extends HTMLElement {
 		}, { rootMargin: '0px 0px -12% 0px' });
 		this.observer.observe(this);
 		this.trackPointer(this.events.signal);
+		this.watchTips(this.events.signal);
+		this.querySelector('[data-show-all]')?.addEventListener('click', () => this.showAll(), { signal: this.events.signal });
 		void this.load();
 	}
 
 	disconnectedCallback() {
 		this.observer?.disconnect();
+		this.resize?.disconnect();
 		this.events?.abort();
 	}
 
@@ -93,14 +101,20 @@ class ScopeContributors extends HTMLElement {
 		const list = this.querySelector<HTMLElement>('[data-list]');
 		if (!list) throw new Error('Missing contributors list');
 		this.contributors = sortForDisplay(contributors);
-		const { shown, hidden } = visible(this.contributors, Number(this.dataset.limit) || Infinity);
+		const limit = Number(this.dataset.limit) || Infinity;
+		const grid = this.variant === 'grid';
+		const { shown, hidden } = grid
+			? (this.expanded ? { shown: this.contributors, hidden: 0 } : firstPage(this.contributors, limit))
+			: visible(this.contributors, limit);
 
 		if (this.animates && this.inView) {
 			await list.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-out' }).finished.catch(() => undefined);
 		}
-		const items = shown.map((contributor) => (this.variant === 'grid' ? this.card(contributor) : this.avatar(contributor)));
-		if (hidden) items.push(this.more(hidden));
+		const items = shown.map((contributor) => (grid ? this.card(contributor) : this.avatar(contributor)));
+		if (hidden && !grid) items.push(this.more(hidden));
 		list.replaceChildren(...items);
+		this.placeTips();
+		this.updateShowAll(grid ? hidden : 0);
 
 		const people = this.contributors.length;
 		const prs = totalPrs(this.contributors);
@@ -110,6 +124,66 @@ class ScopeContributors extends HTMLElement {
 		this.loaded = true;
 		this.setState(people ? 'ready' : 'empty');
 		this.reveal();
+	}
+
+	private updateShowAll(hidden: number) {
+		const button = this.querySelector<HTMLButtonElement>('[data-show-all]');
+		if (!button) return;
+		button.hidden = !hidden;
+		const label = button.querySelector('[data-show-all-label]');
+		const total = this.contributors.length;
+		if (label) label.textContent = `Show all ${total} ${contributorsLabel(total)}`;
+	}
+
+	/** Appends the rest of the grid and moves focus to the first new card. */
+	private showAll() {
+		const list = this.querySelector<HTMLElement>('[data-list]');
+		const button = this.querySelector<HTMLButtonElement>('[data-show-all]');
+		if (!list || !button || this.expanded) return;
+		this.expanded = true;
+		const rest = this.contributors.slice(list.children.length).map((contributor) => this.card(contributor));
+		list.append(...rest);
+		button.hidden = true;
+		this.enter(rest, 0, 40, 'rise');
+		rest[0]?.querySelector('a')?.focus();
+	}
+
+	/**
+	 * Keeps every tooltip, hidden or lifted on hover, inside the wall: a tip
+	 * centered on an edge avatar would otherwise stick out and make the page
+	 * scroll sideways on narrow screens. The arrow keeps pointing at the
+	 * avatar. Transforms on the avatars never move their center, so this is
+	 * safe to run mid-animation.
+	 */
+	private placeTips(links: Iterable<Element> = this.querySelectorAll('.thanks-avatar')) {
+		if (this.variant !== 'wall') return;
+		const bounds = this.getBoundingClientRect();
+		if (!bounds.width) return;
+		for (const link of links) {
+			const tip = link.querySelector<HTMLElement>('.thanks-tip');
+			if (!tip) continue;
+			const rect = link.getBoundingClientRect();
+			const center = rect.left + rect.width / 2;
+			const half = tip.offsetWidth / 2;
+			// Shift range that keeps the lifted (scaled) tip within the bounds.
+			const min = (bounds.left - center) / LIFT_SCALE + half;
+			const max = (bounds.right - center) / LIFT_SCALE - half;
+			const shift = min > 0 ? min : max < 0 ? max : 0;
+			tip.style.setProperty('--tip-shift', `${Math.round(shift)}px`);
+		}
+	}
+
+	private watchTips(signal: AbortSignal) {
+		if (this.variant !== 'wall') return;
+		this.resize = new ResizeObserver(() => this.placeTips());
+		this.resize.observe(this);
+		void document.fonts?.ready.then(() => { if (!signal.aborted) this.placeTips(); });
+		const one = (event: Event) => {
+			const link = event.target instanceof Element ? event.target.closest('.thanks-avatar') : null;
+			if (link) this.placeTips([link]);
+		};
+		this.addEventListener('pointerover', one, { signal, passive: true });
+		this.addEventListener('focusin', one, { signal });
 	}
 
 	private setState(state: State) {

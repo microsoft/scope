@@ -279,7 +279,14 @@ Microsoft alike:
   login's initial.
 - The browser sorts by merged PRs, then login. The wall shows up to
   `limit` items; the last slot becomes a "+N" bubble that links to
-  the full grid. Each person links to their merged PRs.
+  the full grid. The grid shows `limit` cards (30 on the Contribute
+  page) and a "Show all N contributors" button, unless only one card
+  would stay hidden. Each person links to their merged PRs.
+- Wall tooltips get a `--tip-shift` so they stay inside the wall (a
+  hidden tip on an edge avatar would otherwise make narrow pages scroll
+  sideways). The intro and count are hidden in the empty and error
+  states. Check 0, 1, a few, and more contributors than fit the width,
+  on desktop and mobile, when changing the layout.
 - Set `PUBLIC_CONTRIBUTORS_URL` to point at another file
   ([`contributors.ts`](src/scripts/contributors.ts)). In
   `pnpm run dev` a failed fetch falls back to

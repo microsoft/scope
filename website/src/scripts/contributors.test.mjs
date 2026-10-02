@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import {
 	avatarUrl,
 	contributorsLabel,
+	firstPage,
 	parseContributors,
 	prsLabel,
 	prsUrl,
@@ -81,6 +82,15 @@ test('keeps a slot for the overflow bubble', () => {
 	assert.deepEqual(visible(items, 6), { shown: items, hidden: 0 });
 	assert.deepEqual(visible(items, 4), { shown: [1, 2, 3], hidden: 3 });
 	assert.deepEqual(visible(items, Infinity), { shown: items, hidden: 0 });
+});
+
+test('pages the grid without hiding a single card', () => {
+	const items = [1, 2, 3, 4, 5, 6];
+	assert.deepEqual(firstPage(items, 3), { shown: [1, 2, 3], hidden: 3 });
+	assert.deepEqual(firstPage(items, 4), { shown: [1, 2, 3, 4], hidden: 2 });
+	assert.deepEqual(firstPage(items, 5), { shown: items, hidden: 0 });
+	assert.deepEqual(firstPage(items, Infinity), { shown: items, hidden: 0 });
+	assert.deepEqual(firstPage([], 30), { shown: [], hidden: 0 });
 });
 
 test('the dev sample file is valid and sorted like the published file', () => {

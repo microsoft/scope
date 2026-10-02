@@ -15,6 +15,7 @@
 
 /* States. Without JavaScript only the GitHub fallback link is shown. */
 .thanks[data-state='empty'] .thanks-list, .thanks[data-state='error'] .thanks-list { display: none; }
+.thanks:is([data-state='empty'], [data-state='error']) :is(.thanks-intro, [data-count-pill]) { display: none; }
 .thanks[data-state='empty'] .thanks-message--empty, .thanks[data-state='error'] .thanks-message--error { display: block; }
 @media (scripting: none) {
 	.thanks-list, .thanks .contrib-count { display: none !important; }
@@ -79,13 +80,14 @@
 	white-space: nowrap;
 	pointer-events: none;
 	opacity: 0;
-	transform: translate(-50%, 6px) scale(0.92);
+	/* --tip-shift is set by the element to keep the tip inside the wall. */
+	transform: translate(calc(-50% + var(--tip-shift, 0px)), 6px) scale(0.92);
 	transition: opacity 0.2s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.thanks-tip::after { content: ''; position: absolute; top: 100%; left: 50%; border: 5px solid transparent; border-top-color: var(--scope-text); transform: translateX(-50%); }
+.thanks-tip::after { content: ''; position: absolute; top: 100%; left: calc(50% - var(--tip-shift, 0px)); border: 5px solid transparent; border-top-color: var(--scope-text); transform: translateX(-50%); }
 .thanks-tip__login { font-weight: 650; }
 .thanks-tip__prs { opacity: 0.75; }
-.thanks-avatar:is(:hover, :focus-visible) .thanks-tip { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.thanks-avatar:is(:hover, :focus-visible) .thanks-tip { opacity: 1; transform: translate(calc(-50% + var(--tip-shift, 0px)), 0) scale(1); }
 
 /* Skeletons. */
 .thanks-skeleton { position: relative; overflow: hidden; background: var(--scope-inset); }
@@ -104,9 +106,13 @@
 .thanks-card__login { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .thanks-card__prs { color: var(--scope-muted); font-size: 0.78rem; }
 .thanks-card__arrow { margin-left: auto; color: var(--scope-brand); }
+.thanks-show-all { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem auto 0 !important; padding: 0.6rem 1.25rem; border: 1px solid var(--scope-border); border-radius: 999px; background: var(--scope-surface); color: var(--scope-brand); font: 600 0.9rem var(--sl-font); cursor: pointer; transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.thanks-show-all:is(:hover, :focus-visible) { border-color: var(--scope-brand); box-shadow: var(--scope-shadow); transform: translateY(-2px); }
+.thanks-show-all:focus-visible { outline: 2px solid var(--scope-brand); outline-offset: 3px; }
+.thanks-show-all[hidden] { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
 	.thanks *, .thanks *::before, .thanks *::after { animation: none !important; transition: none !important; }
-	.thanks-avatar:is(:hover, :focus-visible), .thanks-more:is(:hover, :focus-visible), .thanks .contrib-card:is(:hover, :focus-visible), .thanks .contrib-card:is(:hover, :focus-visible) .contrib-card__arrow { transform: none; }
-	.thanks-avatar:is(:hover, :focus-visible) .thanks-tip { transform: translate(-50%, 0); }
+	.thanks-show-all:is(:hover, :focus-visible), .thanks-avatar:is(:hover, :focus-visible), .thanks-more:is(:hover, :focus-visible), .thanks .contrib-card:is(:hover, :focus-visible), .thanks .contrib-card:is(:hover, :focus-visible) .contrib-card__arrow { transform: none; }
+	.thanks-avatar:is(:hover, :focus-visible) .thanks-tip { transform: translate(calc(-50% + var(--tip-shift, 0px)), 0); }
 }

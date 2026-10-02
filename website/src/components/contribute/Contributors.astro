@@ -12,7 +12,10 @@ import { CONTRIBUTORS_DATA_URL, CONTRIBUTORS_GRAPH_URL } from '../../scripts/con
 interface Props {
 	/** `wall` for the landing avatar wall, `grid` for the docs page cards. */
 	variant?: 'wall' | 'grid';
-	/** Maximum number of items on the wall, including the "+N" bubble. */
+	/**
+	 * Wall: maximum number of items, including the "+N" bubble.
+	 * Grid: cards shown before the "Show all" button.
+	 */
 	limit?: number;
 }
 
@@ -22,18 +25,27 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const moreHref = `${base}/community/contribute/#thank-you`;
 const openCallsHref = `${base}/community/contribute/#open-calls`;
 const skeletons = variant === 'wall' ? 8 : 3;
+const listId = `thanks-list-${variant}`;
 ---
 
 <scope-contributors class={`thanks thanks--${variant} not-content`} data-variant={variant} data-limit={limit} data-src={src} data-more-href={moreHref} data-state="loading">
 	<slot />
 	<p class="contrib-sample-tag" data-sample-tag hidden>Sample data · dev only</p>
-	<ul class="thanks-list" data-list aria-busy="true" aria-label="Contributors">
+	<ul class="thanks-list" id={listId} data-list aria-busy="true" aria-label="Contributors">
 		{
 			Array.from({ length: skeletons }, () => (
 				<li class="thanks-item thanks-skeleton" aria-hidden="true" />
 			))
 		}
 	</ul>
+	{
+		variant === 'grid' && (
+			<button type="button" class="thanks-show-all" data-show-all aria-controls={listId} hidden>
+				<span data-show-all-label>Show all contributors</span>
+				<span aria-hidden="true">&darr;</span>
+			</button>
+		)
+	}
 	<p class="contrib-message thanks-message--empty">
 		No pull request has been merged yet. Be the first:
 		<a href={openCallsHref}>pick an open call</a>.
