@@ -3,6 +3,7 @@
 // Licensed under the MIT License.
 
 import ContributionIssues from './ContributionIssues.astro';
+import Contributors from './Contributors.astro';
 
 const allHref = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/community/contribute/`;
 ---
@@ -27,4 +28,15 @@ const allHref = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/community/contri
 		</ContributionIssues>
 		<a class="scope-text-link scope-contrib__all" href={allHref}>See all open calls <span aria-hidden="true">&rarr;</span></a>
 	</div>
+	<Contributors variant="wall" limit={24}>
+		<div class="thanks-head" data-reveal>
+			<h3 id="thanks-heading"><span class="thanks-heart" aria-hidden="true">&hearts;</span> Thank you, contributors</h3>
+			<p class="contrib-count" data-count-pill>
+				<span class="contrib-count__pulse" aria-hidden="true"></span>
+				<span aria-hidden="true"><span class="contrib-count__value" data-count>0</span> <span data-count-label>contributors</span> · <span data-prs>0 merged PRs</span></span>
+				<span class="sr-only" data-count-text></span>
+			</p>
+		</div>
+		<p class="thanks-intro" data-reveal>Everyone below got a pull request merged into Scope. Hover an avatar to see how many.</p>
+	</Contributors>
 </section>

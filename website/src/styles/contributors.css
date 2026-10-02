@@ -1,0 +1,112 @@
+/*
+ * Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
+ *
+ * Community contributors (<scope-contributors>). An avatar wall on the
+ * landing page and a card grid on the Community > Contribute page. Shares
+ * the card, message and sample-tag styles in contribution-issues.css.
+ */
+
+.thanks { display: block; color: var(--scope-text); font-family: var(--sl-font); line-height: 1.6; }
+.thanks * { box-sizing: border-box; }
+.thanks :is(p, ul, h3) { margin: 0; }
+.thanks a { text-decoration: none; }
+.thanks .contrib-message a, .thanks .contrib-fallback a { color: var(--scope-brand); font-weight: 600; text-decoration: underline; text-underline-offset: 0.2em; }
+
+/* States. Without JavaScript only the GitHub fallback link is shown. */
+.thanks[data-state='empty'] .thanks-list, .thanks[data-state='error'] .thanks-list { display: none; }
+.thanks[data-state='empty'] .thanks-message--empty, .thanks[data-state='error'] .thanks-message--error { display: block; }
+@media (scripting: none) {
+	.thanks-list, .thanks .contrib-count { display: none !important; }
+	.thanks .contrib-fallback { display: block; }
+}
+.thanks[data-animate] :is([data-reveal], [data-reveal-item]):not([data-revealed]) { opacity: 0; }
+
+.thanks-list { display: flex; flex-wrap: wrap; padding: 0 !important; list-style: none; }
+.thanks-item { position: relative; display: flex; margin: 0 !important; }
+
+/* Avatar photo with an initial as fallback. */
+.thanks-photo { position: relative; display: grid; flex: none; place-items: center; width: var(--size); height: var(--size); border-radius: 50%; background: linear-gradient(135deg, var(--scope-brand), color-mix(in srgb, var(--scope-brand) 45%, var(--scope-pass))); overflow: hidden; }
+.thanks-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.thanks-photo[data-broken]::after { content: attr(data-initial); color: var(--scope-on-brand); font-weight: 700; font-size: calc(var(--size) * 0.42); }
+
+/* Landing heading. */
+.thanks-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1rem; margin-bottom: 1.25rem; }
+.thanks-head h3 { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--scope-text); font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; }
+.thanks-head .contrib-count { margin-top: 0 !important; }
+.thanks-heart { display: inline-block; color: #e5484d; transform-origin: center; animation: thanks-beat 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+@keyframes thanks-beat {
+	0%, 60%, 100% { transform: scale(1); }
+	10% { transform: scale(1.28); }
+	22% { transform: scale(0.96); }
+	34% { transform: scale(1.16); }
+}
+.thanks-intro { max-width: 60ch; margin-bottom: 1.25rem !important; color: var(--scope-muted); font-size: 0.9rem; }
+
+/* Wall: overlapping avatars with a ring in the page background colour. */
+.thanks--wall { --size: 3.5rem; margin-top: 4rem; padding-top: 2.5rem; border-top: 1px solid var(--scope-border); }
+.thanks--wall .thanks-list { row-gap: 0.75rem; padding-left: 0.6rem !important; }
+.thanks--wall .thanks-item { margin-left: -0.6rem !important; }
+.thanks--wall .thanks-item:hover, .thanks--wall .thanks-item:focus-within { z-index: 2; }
+.thanks-avatar, .thanks-more {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: var(--size);
+	height: var(--size);
+	border-radius: 50%;
+	box-shadow: 0 0 0 3px var(--scope-bg);
+	transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+}
+.thanks-avatar:is(:hover, :focus-visible), .thanks-more:is(:hover, :focus-visible) { transform: translateY(-6px) scale(1.14); box-shadow: 0 0 0 3px var(--scope-bg), 0 0 0 5px var(--scope-brand), var(--scope-shadow); }
+.thanks-avatar:focus-visible, .thanks-more:focus-visible { outline: none; }
+.thanks-more { background: var(--scope-surface); border: 1px dashed var(--scope-border); color: var(--scope-brand); font: 650 0.85rem var(--sl-font-mono); }
+
+/* Tooltip; also the link's accessible name. */
+.thanks-tip {
+	position: absolute;
+	bottom: calc(100% + 0.7rem);
+	left: 50%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 0.4rem 0.7rem;
+	border-radius: 0.6rem;
+	background: var(--scope-text);
+	color: var(--scope-bg);
+	font-size: 0.72rem;
+	line-height: 1.35;
+	white-space: nowrap;
+	pointer-events: none;
+	opacity: 0;
+	transform: translate(-50%, 6px) scale(0.92);
+	transition: opacity 0.2s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.thanks-tip::after { content: ''; position: absolute; top: 100%; left: 50%; border: 5px solid transparent; border-top-color: var(--scope-text); transform: translateX(-50%); }
+.thanks-tip__login { font-weight: 650; }
+.thanks-tip__prs { opacity: 0.75; }
+.thanks-avatar:is(:hover, :focus-visible) .thanks-tip { opacity: 1; transform: translate(-50%, 0) scale(1); }
+
+/* Skeletons. */
+.thanks-skeleton { position: relative; overflow: hidden; background: var(--scope-inset); }
+.thanks--wall .thanks-skeleton { width: var(--size); height: var(--size); border-radius: 50%; box-shadow: 0 0 0 3px var(--scope-bg); }
+.thanks--grid .thanks-skeleton { height: 5.5rem; border: 1px solid var(--scope-border); border-radius: 1rem; }
+.thanks-skeleton::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, var(--scope-brand) 9%, transparent) 50%, transparent 80%); transform: translateX(-100%); animation: contrib-shimmer 1.6s ease-in-out infinite; }
+
+/* Grid (docs page): cards with the shared pointer glow. */
+.thanks--grid { --size: 3rem; margin-top: 1.5rem; }
+.thanks--grid .thanks-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 1rem; }
+.thanks--grid .thanks-item { display: block; }
+.thanks-card.contrib-card { flex-direction: row; align-items: center; gap: 0.9rem; height: 100%; padding: 1rem 1.1rem; }
+.thanks-card .thanks-photo { box-shadow: 0 0 0 2px var(--scope-surface), 0 0 0 3px var(--scope-border); transition: box-shadow 0.3s ease; }
+.thanks-card:is(:hover, :focus-visible) .thanks-photo { box-shadow: 0 0 0 2px var(--scope-surface), 0 0 0 4px var(--scope-brand); }
+.thanks-card__body { display: flex; flex-direction: column; min-width: 0; }
+.thanks-card__login { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.thanks-card__prs { color: var(--scope-muted); font-size: 0.78rem; }
+.thanks-card__arrow { margin-left: auto; color: var(--scope-brand); }
+
+@media (prefers-reduced-motion: reduce) {
+	.thanks *, .thanks *::before, .thanks *::after { animation: none !important; transition: none !important; }
+	.thanks-avatar:is(:hover, :focus-visible), .thanks-more:is(:hover, :focus-visible), .thanks .contrib-card:is(:hover, :focus-visible), .thanks .contrib-card:is(:hover, :focus-visible) .contrib-card__arrow { transform: none; }
+	.thanks-avatar:is(:hover, :focus-visible) .thanks-tip { transform: translate(-50%, 0); }
+}
