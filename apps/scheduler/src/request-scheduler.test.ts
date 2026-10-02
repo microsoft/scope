@@ -85,6 +85,7 @@ function makeCollections(
               queuedQueueName?: string;
             };
             count: number;
+            requestIds: string[];
           }
         >();
         for (const request of requests.filter(
@@ -97,8 +98,10 @@ function makeCollections(
             `${request.workerType}\0${request.agentVersion ?? ""}` +
             `\0${queuedQueueName ?? ""}`;
           const current = grouped.get(key);
-          if (current) current.count++;
-          else {
+          if (current) {
+            current.count++;
+            current.requestIds.push(request._id);
+          } else {
             grouped.set(key, {
               _id: {
                 workerType: request.workerType,
@@ -108,6 +111,7 @@ function makeCollections(
                 ...(queuedQueueName ? { queuedQueueName } : {}),
               },
               count: 1,
+              requestIds: [request._id],
             });
           }
         }
@@ -166,6 +170,7 @@ function makeCollections(
     updateMany: vi.fn().mockImplementation(
       async (
         filter: {
+          _id?: { $in: string[] };
           workerType?: string;
           agentVersion?: string;
           "run.status"?: string;
@@ -179,6 +184,7 @@ function makeCollections(
         const matches = requests.filter((candidate) => {
           const expectedStatus = filter["run.status"] ?? "queued";
           if (candidate.run?.status !== expectedStatus || candidate.deletedAt) return false;
+          if (filter._id?.$in && !filter._id.$in.includes(candidate._id)) return false;
           if (
             typeof filter.workerType === "string" &&
             candidate.workerType !== filter.workerType
@@ -188,6 +194,7 @@ function makeCollections(
             candidate.agentVersion !== filter.agentVersion
           ) return false;
           const queueFilter = filter["run.queuedQueueName"];
+          if (queueFilter === undefined) return true;
           if (typeof queueFilter === "string") {
             return candidate.run.queuedQueueName === queueFilter;
           }
@@ -509,6 +516,125 @@ describe("RequestScheduler", () => {
       "Terminalized 1 request(s)",
     );
     expect(warn.mock.calls.flat().join("\n")).toContain("agent_unavailable");
+  });
+
+  it("terminalizes missing or retired exact versions even when the agent is unavailable", async () => {
+    const requests = [
+      makeRequest("active", "paused-worker", "v1"),
+      makeRequest("retired", "paused-worker", "v0"),
+      makeRequest("missing", "paused-worker", "v9"),
+    ];
+    const { requestCollection, agentCollection } = makeCollections(requests, [
+      makeAgent(
+        "paused-worker",
+        [
+          { agentVersion: "v0", queueName: "paused-queue", status: "retired" },
+          { agentVersion: "v1", queueName: "paused-queue" },
+        ],
+        { available: false },
+      ),
+    ]);
+    const scheduler = new RequestScheduler(
+      requestCollection,
+      agentCollection,
+      () => makeQueueClient(),
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await (scheduler as any).dispatch();
+
+    expect(requests[0].run?.status).toBe("pending");
+    for (const request of requests.slice(1)) {
+      expect(request.run).toMatchObject({
+        status: "done",
+        outcome: "failed",
+        errorCode: "agent_version_unavailable",
+      });
+    }
+  });
+
+  it("revalidates a target that registers after pending candidates are observed", async () => {
+    const request = makeRequest("late-registration", "worker", "v2");
+    const initialAgent = makeAgent("worker", [
+      { agentVersion: "v1", queueName: "queue-v1" },
+    ]);
+    const refreshedAgent = makeAgent("worker", [
+      { agentVersion: "v1", queueName: "queue-v1" },
+      { agentVersion: "v2", queueName: "queue-v2" },
+    ]);
+    const { requestCollection, agentCollection } = makeCollections(
+      [request],
+      [initialAgent],
+    );
+    agentCollection.find
+      .mockImplementationOnce(() => ({ toArray: async () => [initialAgent] }))
+      .mockImplementationOnce(() => ({ toArray: async () => [refreshedAgent] }));
+    const scheduler = new RequestScheduler(
+      requestCollection,
+      agentCollection,
+      () => makeQueueClient(),
+    );
+
+    await (scheduler as any).dispatch();
+
+    expect(request.run?.status).toBe("pending");
+  });
+
+  it("terminalizes only requests present in the inspected pending snapshot", async () => {
+    const requests = [makeRequest("observed", "worker", "retired")];
+    const { requestCollection, agentCollection } = makeCollections(requests, [
+      makeAgent("worker", [
+        {
+          agentVersion: "retired",
+          queueName: "old-queue",
+          status: "retired",
+        },
+      ]),
+    ]);
+    const updateMany = requestCollection.updateMany.getMockImplementation();
+    requestCollection.updateMany.mockImplementationOnce(async (...args: any[]) => {
+      requests.push(makeRequest("arrived-late", "worker", "retired"));
+      return updateMany!(...args);
+    });
+    const scheduler = new RequestScheduler(
+      requestCollection,
+      agentCollection,
+      () => makeQueueClient(),
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await (scheduler as any).dispatch();
+
+    expect(requests[0].run?.status).toBe("done");
+    expect(requests[1].run?.status).toBe("pending");
+  });
+
+  it("terminalization ignores a stale queuedQueueName when no queue filter is specified", async () => {
+    const request = makeRequest("resumed", "worker", "retired");
+    request.run!.queuedQueueName = "old-queue";
+    const { requestCollection, agentCollection } = makeCollections([request], [
+      makeAgent("worker", [
+        {
+          agentVersion: "retired",
+          queueName: "old-queue",
+          status: "retired",
+        },
+      ]),
+    ]);
+    const scheduler = new RequestScheduler(
+      requestCollection,
+      agentCollection,
+      () => makeQueueClient(),
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await (scheduler as any).dispatch();
+
+    expect(request.run).toMatchObject({
+      status: "done",
+      outcome: "failed",
+      errorCode: "agent_version_unavailable",
+    });
   });
 
   it("dispatches an exact active version to its current queue without substituting versions", async () => {
