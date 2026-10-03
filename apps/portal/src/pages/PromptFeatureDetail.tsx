@@ -130,6 +130,13 @@ export function PromptFeatureDetail() {
       onClose={closePanel}
     >
       <div className="space-y-5">
+        <p className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground">Metadata only.</span>{" "}
+          This feature categorizes task prompts so you can filter and slice runs
+          during analysis. It does not change the prompt given to an agent, how a
+          run executes, or how results are scored.
+        </p>
+
         {/* Header actions */}
         <div className="flex items-center justify-end gap-2">
           {!editing && (
