@@ -139,8 +139,7 @@ mod tests {
     #[tokio::test]
     async fn acquire_unreachable_server_returns_error() {
         let client = reqwest::Client::new();
-        let result =
-            acquire_github_token(&client, "http://127.0.0.1:1", "generic-cap").await;
+        let result = acquire_github_token(&client, "http://127.0.0.1:1", "generic-cap").await;
 
         let err = result.unwrap_err();
         assert!(err.to_string().contains("Failed to reach"));
