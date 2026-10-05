@@ -11,6 +11,7 @@ import { AuthContext } from "@/contexts/AuthContext";
 import { signedInAuth } from "@/contexts/authFixtures";
 import { ProjectProvider } from "@/contexts/ProjectContext";
 import { PROJECT_STORAGE_KEY } from "@/lib/project-scope";
+import type { CodingAgent } from "@/types";
 import { Layout } from "./Layout";
 
 // The portal defines these build-time constants via Vite `define`; the root
@@ -28,9 +29,33 @@ beforeAll(() => {
   );
 });
 
+function catalogAgent(overrides: Partial<CodingAgent> = {}): CodingAgent {
+  return {
+    _id: "agent-1",
+    name: "Agent 1",
+    available: true,
+    supportedModels: [],
+    versions: [
+      {
+        agentVersion: "v1",
+        workerVersion: "v1",
+        components: {},
+        gitCommit: "abcdef0",
+        buildTime: "20260101T000000Z",
+        imageTag: "v1",
+        queueName: "queue-agent-1",
+        status: "active",
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+    ],
+    createdAt: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
 function renderLayout(
   path = "/runs",
-  { projectId = "proj-1" }: { projectId?: string | null } = {},
+  { projectId = "proj-1", agents }: { projectId?: string | null; agents?: CodingAgent[] } = {},
 ) {
   // Layout gates project-scoped nav on a selected project, so seed one by
   // default; pass { projectId: null } to exercise the no-project state.
@@ -40,6 +65,7 @@ function renderLayout(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  if (agents) queryClient.setQueryData(["agents", "include-deleted"], agents);
   return render(
     <QueryClientProvider client={queryClient}>
       <AuthContext.Provider value={signedInAuth}>
@@ -174,5 +200,44 @@ describe("Layout", () => {
     // Navigated to the (stubbed) home route, and Layout left the selection alone.
     expect(screen.getByText("Home page")).toBeTruthy();
     expect(localStorage.getItem(PROJECT_STORAGE_KEY)).toBe("proj-1");
+  });
+
+  describe("Extensions nav item", () => {
+    it("is hidden when no agent is loaded", () => {
+      localStorage.setItem("scope:layout:sidebar-expanded", "1");
+
+      renderLayout("/runs");
+
+      const sidebar = screen.getByLabelText("Primary navigation");
+      expect(within(sidebar).queryByRole("link", { name: "Extensions" })).toBeNull();
+    });
+
+    it("is hidden when no available agent supports extensions", () => {
+      localStorage.setItem("scope:layout:sidebar-expanded", "1");
+
+      renderLayout("/runs", {
+        agents: [
+          catalogAgent(),
+          catalogAgent({ _id: "deleted", capabilities: { supportsExtensions: true }, deletedAt: "2026-01-02T00:00:00Z" }),
+          catalogAgent({ _id: "unavailable", capabilities: { supportsExtensions: true }, available: false }),
+        ],
+      });
+
+      const sidebar = screen.getByLabelText("Primary navigation");
+      expect(within(sidebar).queryByRole("link", { name: "Extensions" })).toBeNull();
+      expect(within(sidebar).getByRole("link", { name: "MCP" })).toBeTruthy();
+    });
+
+    it("is shown when an available agent supports extensions", () => {
+      localStorage.setItem("scope:layout:sidebar-expanded", "1");
+
+      renderLayout("/runs", {
+        agents: [catalogAgent(), catalogAgent({ _id: "vscode", capabilities: { supportsExtensions: true } })],
+      });
+
+      const sidebar = screen.getByLabelText("Primary navigation");
+      const link = within(sidebar).getByRole("link", { name: "Extensions" });
+      expect(link.getAttribute("href")).toBe("/extensions");
+    });
   });
 });

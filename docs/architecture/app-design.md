@@ -440,6 +440,18 @@ availability, active-version, and queue validation are always enforced.
 `strictAgentCapabilities`; Portal controls remain in compatibility mode unless
 that property is `true`.
 
+VS Code extensions are the exception in the Portal: they are gated **only** on
+agent capability, regardless of `strictAgentCapabilities` and with no feature
+flag (the `extensions` flag was removed by migration 031). The Extensions nav
+item and `/extensions` pages appear only while at least one available agent
+(not deleted, `available: true`, with an active queued version) declares
+`supportsExtensions: true` (`useExtensionsSupport`, fail-closed while the agent
+catalog loads). Submit Run, Resubmit, and the profile create/version forms show
+Extensions controls only when the selected agent declares that capability
+(`agentSupportsExtensions`); a locked profile or source run that already carries
+extensions still displays them read-only. API enforcement is unchanged and still
+follows `SCOPE_STRICT_AGENT_CAPABILITIES`.
+
 Profile-pinned `agentVersion` values take precedence over request-level version
 values and must still be active with a non-empty advertised queue. Legacy
 agent-version records may omit `queueName`; registry readers treat missing,

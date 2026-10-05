@@ -50,6 +50,7 @@ import { UserMenu } from "./UserMenu";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useFeatureFlags } from "@/contexts/FeatureFlagContext";
 import { useProjectContext } from "@/contexts/ProjectContext";
+import { useExtensionsSupport } from "@/hooks/useExtensionsSupport";
 
 interface NavItem {
   to: string;
@@ -57,6 +58,8 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   /** When set, this nav item is only shown if the corresponding feature flag is enabled */
   featureKey?: string;
+  /** When true, shown only while at least one available agent supports VS Code extensions */
+  requiresExtensionsSupport?: boolean;
 }
 
 interface NavGroup {
@@ -120,7 +123,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: "/resources", label: "Resources", icon: Boxes },
       { to: "/mcp-servers", label: "MCP", icon: Server, featureKey: "mcp" },
-      { to: "/extensions", label: "Extensions", icon: Puzzle, featureKey: "extensions" },
+      { to: "/extensions", label: "Extensions", icon: Puzzle, requiresExtensionsSupport: true },
     ],
   },
   {
@@ -248,6 +251,7 @@ function SidebarIconLink({
 export function Layout() {
   const location = useLocation();
   const { isFeatureEnabled } = useFeatureFlags();
+  const { enabled: extensionsSupported } = useExtensionsSupport();
   const { hasProject } = useProjectContext();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(() => {
@@ -267,7 +271,11 @@ export function Layout() {
   }, [sidebarExpanded]);
 
   const filterByFeature = (items: NavItem[]) =>
-    items.filter((item) => !item.featureKey || isFeatureEnabled(item.featureKey));
+    items.filter(
+      (item) =>
+        (!item.featureKey || isFeatureEnabled(item.featureKey))
+        && (!item.requiresExtensionsSupport || extensionsSupported),
+    );
 
   const visibleGroups = useMemo(
     () =>
@@ -278,7 +286,7 @@ export function Layout() {
         // separator/label is left behind.
         .filter((g) => (hasProject || !g.scoped) && g.items.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isFeatureEnabled, hasProject],
+    [isFeatureEnabled, hasProject, extensionsSupported],
   );
   // MDP points at /criteria/mdp (project-scoped), so hide the Dev section until
   // a project is selected.

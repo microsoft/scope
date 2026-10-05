@@ -52,7 +52,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useStrictAgentCapabilities } from "@/hooks/useStrictAgentCapabilities";
 import { useModelCapabilities, ModelSelectItems } from "@/components/ReasoningEffortSelect";
 import { formatDate, formatId, formatDuration, truncate, cn } from "@/lib/utils";
-import { isAgentAvailable, isAgentVersionAvailable, STATUS_LIST, OUTCOME_LIST } from "@/types";
+import { agentSupportsExtensions, isAgentAvailable, isAgentVersionAvailable, STATUS_LIST, OUTCOME_LIST } from "@/types";
 import type { Run, RunStatus, RunOutcome, IterationOp, BulkResubmitOverrides, RunSortField, RunFacetBucket } from "@/types";
 import { buildRunWorkerFilterOptions } from "./run-worker-filter-options";
 
@@ -1164,7 +1164,7 @@ export function RunsList() {
   const supportsReasoningEffort = !strictAgentCapabilities || effectiveCapabilities?.supportsReasoningEffort === true;
   const supportsMcpServers = !strictAgentCapabilities || effectiveCapabilities?.supportsMcpServers === true;
   const supportsSkills = !strictAgentCapabilities || effectiveCapabilities?.supportsSkills === true;
-  const supportsExtensions = !strictAgentCapabilities || effectiveCapabilities?.supportsExtensions === true;
+  const supportsExtensions = agentSupportsExtensions(effectiveAgent);
   const {
     capabilitiesMap: resubmitCapabilitiesMap,
     activeModelIds: resubmitActiveModelIds,
@@ -2837,7 +2837,7 @@ export function RunsList() {
                     if (strictAgentCapabilities && nextAgent?.capabilities?.supportsSkills !== true) {
                       next.skillRevisions = null;
                     }
-                    if (strictAgentCapabilities && nextAgent?.capabilities?.supportsExtensions !== true) {
+                    if (!agentSupportsExtensions(nextAgent)) {
                       next.extensions = null;
                     }
                     return next;
@@ -3177,7 +3177,7 @@ export function RunsList() {
                           : selectedRunsSummary.isMultiExtensions ? "Mixed (keep each)" : "None"}
                       </SelectItem>
                       <SelectItem value="__clear__">Clear (no extensions)</SelectItem>
-                      <SelectItem value="__custom__">Choose extensions…</SelectItem>
+                      {supportsExtensions && <SelectItem value="__custom__">Choose extensions…</SelectItem>}
                     </SelectContent>
                   </Select>
                   {resubmitOverrides.extensions !== undefined && resubmitOverrides.extensions !== null && (() => {

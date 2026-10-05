@@ -710,6 +710,20 @@ export function isAgentAvailable(agent: CodingAgent): boolean {
     && getActiveAgentVersions(agent).length > 0;
 }
 
+/**
+ * VS Code extensions are an explicit agent opt-in. Unlike the other
+ * capabilities, the portal ignores `strictAgentCapabilities` here: an agent
+ * that does not declare `supportsExtensions: true` never offers extensions.
+ */
+export function agentSupportsExtensions(agent: CodingAgent | undefined | null): boolean {
+  return agent?.capabilities?.supportsExtensions === true;
+}
+
+/** Extensions support is active only while at least one available agent opts in. */
+export function hasExtensionCapableAgent(agents: readonly CodingAgent[]): boolean {
+  return agents.some((agent) => isAgentAvailable(agent) && agentSupportsExtensions(agent));
+}
+
 export function isAgentVersionAvailable(
   agent: CodingAgent | undefined,
   agentVersion?: string,

@@ -175,7 +175,9 @@ lookups match `slug` first, then fall back to the legacy `_id`. The public API i
 Runtime feature flags. Seeded idempotently by the API on startup. Includes the
 portal-only gate visibility flags `gates-run` and `gates-deploy` (both default
 `enabled: false`) that hide the Run/Deploy gates from authoring surfaces until
-launch — see [gates design §4.1.1](../design/gates.md).
+launch — see [gates design §4.1.1](../design/gates.md). The former `extensions`
+flag was retired by migration 031: VS Code extensions visibility is driven by
+agent capabilities, not a flag.
 
 | Index | Key | Options | Migration |
 |-------|-----|---------|-----------|
