@@ -3,6 +3,7 @@
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
+import { Link, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { PROJECT_STORAGE_KEY } from "@/lib/project-scope";
 import { AuthContext } from "@/contexts/AuthContext";
 import { signedInAuth } from "@/contexts/authFixtures";
@@ -27,6 +28,56 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+// Synthetic content isolates the shell's route-dependent spacing from fetching
+// individual entities. Each story exercises the list and its nested preview.
+function nestedPreviewStory(route: string): Story {
+  return {
+    parameters: { layout: "fullscreen" },
+    render: () => (
+      <Routes>
+        <Route path="/" element={<Navigate to={route} replace />} />
+        <Route element={<Layout />}>
+          <Route path={route} element={
+            <div className="flex h-full">
+              <div className="flex-1 border-r p-4">
+                <h1 className="mb-4 text-lg font-semibold">Preview layout example</h1>
+                <Link to={`${route}/demo/preview`} className="text-primary underline">Open preview</Link>
+              </div>
+              <Outlet />
+            </div>
+          }>
+            <Route path=":id/preview" element={
+              <aside className="w-80 p-4" aria-label="Entity preview">
+                <p className="mb-4">Synthetic preview content</p>
+                <Link to={route} className="text-primary underline">Close preview</Link>
+              </aside>
+            } />
+          </Route>
+        </Route>
+      </Routes>
+    ),
+    play: async ({ canvas }) => {
+      const main = canvas.getByRole("main");
+      const listClasses = main.className;
+      await expect(listClasses).not.toContain("px-6");
+      await userEvent.click(await canvas.findByRole("link", { name: "Open preview" }));
+      await expect(canvas.getByRole("complementary", { name: "Entity preview" })).toBeVisible();
+      await expect(main.className).toBe(listClasses);
+      await userEvent.click(canvas.getByRole("link", { name: "Close preview" }));
+      await expect(canvas.queryByRole("complementary", { name: "Entity preview" })).toBeNull();
+      await expect(main.className).toBe(listClasses);
+    },
+  };
+}
+
+export const ReportPreview = nestedPreviewStory("/reports");
+export const InsightPreview = nestedPreviewStory("/insights");
+export const CriterionPreview = nestedPreviewStory("/criteria");
+export const TaskPromptPreview = nestedPreviewStory("/task-prompts");
+export const McpServerPreview = nestedPreviewStory("/mcp-servers");
+export const ExtensionPreview = nestedPreviewStory("/extensions");
+export const ProfilePreview = nestedPreviewStory("/profiles");
 
 export const Collapsed: Story = {
   play: async ({ canvas }) => {
