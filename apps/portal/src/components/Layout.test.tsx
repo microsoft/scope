@@ -4,7 +4,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthContext } from "@/contexts/AuthContext";
@@ -12,6 +12,16 @@ import { signedInAuth } from "@/contexts/authFixtures";
 import { ProjectProvider } from "@/contexts/ProjectContext";
 import { PROJECT_STORAGE_KEY } from "@/lib/project-scope";
 import { Layout } from "./Layout";
+
+const previewRoutes = [
+  "/reports",
+  "/insights",
+  "/criteria",
+  "/task-prompts",
+  "/mcp-servers",
+  "/extensions",
+  "/profiles",
+];
 
 // The portal defines these build-time constants via Vite `define`; the root
 // Vitest run doesn't apply that config, so stub them for <VersionFooter />.
@@ -50,6 +60,19 @@ function renderLayout(
                 <Route element={<Layout />}>
                   <Route path="/" element={<div>Home page</div>} />
                   <Route path="/runs" element={<div>Runs page</div>} />
+                  {previewRoutes.map((route) => (
+                    <Route key={route} path={route} element={
+                      <div>
+                        <Link to={`${route}/demo/preview`}>Open preview</Link>
+                        <Outlet />
+                      </div>
+                    }>
+                      <Route path=":id/preview" element={
+                        <Link to={route}>Close preview</Link>
+                      } />
+                    </Route>
+                  ))}
+                  <Route path="*" element={<div>Standalone page</div>} />
                 </Route>
               </Routes>
             </MemoryRouter>
@@ -66,6 +89,38 @@ afterEach(() => {
 });
 
 describe("Layout", () => {
+  it.each(previewRoutes)("keeps the full-bleed shell when opening and closing a %s preview", (route) => {
+    renderLayout(route);
+
+    const listClasses = screen.getByRole("main").className;
+    expect(listClasses).not.toContain("px-6");
+
+    fireEvent.click(screen.getByRole("link", { name: "Open preview" }));
+    expect(screen.getByRole("link", { name: "Close preview" })).toBeTruthy();
+    expect(screen.getByRole("main").className).toBe(listClasses);
+
+    fireEvent.click(screen.getByRole("link", { name: "Close preview" }));
+    expect(screen.getByRole("main").className).toBe(listClasses);
+  });
+
+  it.each(previewRoutes)("uses the full-bleed shell when loading a %s preview directly", (route) => {
+    renderLayout(`${route}/demo/preview`);
+
+    expect(screen.getByRole("link", { name: "Close preview" })).toBeTruthy();
+    expect(screen.getByRole("main").className).not.toContain("px-6");
+    expect(screen.getByRole("main").className).not.toContain("py-6");
+  });
+
+  it.each(previewRoutes)("preserves page padding for standalone %s routes", (route) => {
+    for (const suffix of ["demo", "new", "demo/preview/extra"]) {
+      const view = renderLayout(`${route}/${suffix}`);
+
+      expect(screen.getByRole("main").className).toContain("px-6");
+      expect(screen.getByRole("main").className).toContain("py-6");
+      view.unmount();
+    }
+  });
+
   it("shows the disclosure footer on full-bleed routes", () => {
     renderLayout("/runs");
 

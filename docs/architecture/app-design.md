@@ -609,6 +609,11 @@ Workers publish log events to Redis Pub/Sub channels keyed by run ID. The API su
 
 The Portal desktop shell uses a persistent left navigation sidebar. It defaults to the compact icon rail, and users can expand it to show navigation labels; the choice is stored in `localStorage` under `scope:layout:sidebar-expanded`. Mobile navigation remains a sheet-based menu with labels always visible.
 
+The Reports, Insights, Criteria, Prompts, MCP, Extensions and Profiles lists
+keep the same full-bleed shell on their nested preview routes. Opening, closing
+or directly loading a preview preserves the list's alignment with the sidebar;
+standalone detail and creation pages retain the standard page padding.
+
 ### Project scoping (selected project, no default)
 
 The Portal mirrors the API's fail-fast model: it holds a **selected project** (never a default) and injects it as `?projectId=` on every scoped request.
