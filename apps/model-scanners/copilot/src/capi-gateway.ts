@@ -13,6 +13,9 @@ import type { FetchFn } from "./scan.js";
  * Whether the scan should go through a gateway session with CAPI HMAC
  * (integration) auth. Mirrors the worker opt-in: the HMAC secret and
  * integration ID live only in the gateway, never in this process.
+ *
+ * Requires a gateway build that registers and configures the optional
+ * `capi_hmac` plugin; the default gateway binary does not register it.
  */
 export function isCapiHmacEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.GATEWAY_CAPI_HMAC_ENABLED === "true";
@@ -24,6 +27,20 @@ export function proxyAuthorizationFor(sessionId: string): string {
 }
 
 const SESSION_MAX_DURATION_SECS = 300;
+const ERROR_BODY_MAX_CHARS = 500;
+
+/**
+ * No token is sent in CAPI mode, so an auth rejection almost always means the
+ * gateway did not sign the request.
+ */
+async function capiAuthError(response: Response): Promise<Error> {
+  const body = (await response.text().catch(() => "")).slice(0, ERROR_BODY_MAX_CHARS);
+  return new Error(
+    `Copilot API rejected the CAPI HMAC request (HTTP ${response.status}). ` +
+      "GATEWAY_CAPI_HMAC_ENABLED=true requires a gateway with the capi_hmac plugin " +
+      `registered and configured (HMAC secret and integration ID). Response: ${body}`,
+  );
+}
 
 /**
  * Run `fn` with a fetch that tunnels through a short-lived gateway session
@@ -61,11 +78,16 @@ export async function withCapiGatewayFetch<T>(
       requestTls: { ca: [...rootCertificates, gatewayCa] },
     });
     const dispatcher = agent;
-    const fetchFn: FetchFn = (input, init) =>
-      undiciFetch(input, {
+    const fetchFn: FetchFn = async (input, init) => {
+      const response = (await undiciFetch(input, {
         ...(init as Parameters<typeof undiciFetch>[1]),
         dispatcher,
-      }) as unknown as Promise<Response>;
+      })) as unknown as Response;
+      if (response.status === 401 || response.status === 403) {
+        throw await capiAuthError(response);
+      }
+      return response;
+    };
 
     return await fn(fetchFn);
   } finally {

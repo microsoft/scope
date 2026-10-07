@@ -117,6 +117,33 @@ describe("withCapiGatewayFetch", () => {
     expect(gateway.deleteSession).toHaveBeenCalled();
   });
 
+  it.each([401, 403])(
+    "explains a missing capi_hmac plugin when the API returns %i",
+    async (status) => {
+      undici.fetch.mockResolvedValue(new Response("unauthorized", { status }));
+
+      await expect(
+        withCapiGatewayFetch(
+          (fetchFn) => fetchFn("https://api.githubcopilot.com/models"),
+          "http://gateway:8080",
+        ),
+      ).rejects.toThrow(
+        new RegExp(`HTTP ${status}.*capi_hmac plugin registered.*unauthorized`),
+      );
+      expect(gateway.deleteSession).toHaveBeenCalled();
+    },
+  );
+
+  it("passes non-auth error responses through unchanged", async () => {
+    undici.fetch.mockResolvedValue(new Response("busy", { status: 503 }));
+
+    const response = await withCapiGatewayFetch(
+      (fetchFn) => fetchFn("https://api.githubcopilot.com/models"),
+      "http://gateway:8080",
+    );
+    expect(response.status).toBe(503);
+  });
+
   it("cleans up the session when the callback throws", async () => {
     await expect(
       withCapiGatewayFetch(async () => {

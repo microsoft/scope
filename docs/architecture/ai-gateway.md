@@ -501,7 +501,7 @@ env:
 | Phase | Plugin | Status | Purpose |
 |-------|--------|--------|---------|
 | 1.b | Copilot Token Refresh | ✅ Shipped (#724) | Auto-mint and refresh Copilot session tokens |
-| 1.c | CAPI HMAC Signing | Planned | Sign requests with HMAC for Copilot API |
+| 1.c | CAPI HMAC Signing | Optional, not in default binary | Sign Copilot API requests with integration HMAC auth. Sessions opt in with `{"capi_hmac":{"enabled":true}}`, which workers and the Copilot model scanner send when `GATEWAY_CAPI_HMAC_ENABLED=true`. Set the flag only with a gateway build that registers and configures the plugin; otherwise the setting is ignored and requests fail with 401/403. |
 | 2.b | Rate Limiting | Planned | Budget-aware rate limiting for Claude Code (#659) |
 | 3 | Metrics | Planned | Prometheus `/metrics` — request counts, latency, bytes, error rates |
 
