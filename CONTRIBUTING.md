@@ -339,6 +339,7 @@ Automations depend on these exact names:
 | Test Improver issues, PRs, and monthly-summary searches | `type: automation`, `topic: testing` |
 | Dependabot | `type: dependencies`, plus `language: javascript` or `language: rust` |
 | Pull Request Labeler | Area, topic, language, and type labels from `.github/labeler.yml` |
+| Community Contribution Labeler | `community-contribution` |
 
 Use `area: reporting` for Scope's benchmark reporting component, not daily repository activity.
 Worker upgrade routing uses `type: worker-update`, not the broader `area: worker`.
@@ -381,7 +382,10 @@ does not enable security updates or change live labels.
 
 `.github/workflows/labeler.yml` runs on the unprivileged `pull_request` event and skips fork PRs.
 Do not switch it to `pull_request_target` just to label fork PRs; that would violate the fork-PR
-security boundary above.
+security boundary above. `.github/workflows/community-contribution-labeler.yml` follows completed
+labeler runs and uses GitHub metadata only to apply `community-contribution` to human authors whose
+association is `NONE`, `FIRST_TIMER`, `FIRST_TIME_CONTRIBUTOR`, or `CONTRIBUTOR`. It must not check
+out pull request code, download artifacts, or receive repository secrets.
 
 ## Third-party notices
 
