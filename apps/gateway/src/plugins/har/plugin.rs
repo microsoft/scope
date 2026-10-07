@@ -27,10 +27,11 @@ use super::storage::{BlobWriter, HarWriter, LocalWriter};
 use super::writer;
 
 /// Per-session metadata kept in the plugin (writer holds all data).
+///
+/// Only recording sessions have an entry. A session that opted out with
+/// `{"har": {"enabled": false}}` is never tracked, so every hook skips it and
+/// `GET .../har` returns 404.
 struct HarSession {
-    /// `false` when the session opted out with `{"har": {"enabled": false}}`:
-    /// nothing is written to storage and `GET .../har` returns 404.
-    recording: bool,
     redact: bool,
     finalized: bool,
     /// Set to true when the writer reports a hard failure (blob unreachable).
@@ -51,9 +52,7 @@ impl HarInner {
     ) -> Option<super::types::Har> {
         {
             let sessions = self.sessions.read();
-            if !sessions.get(session_id)?.recording {
-                return None;
-            }
+            sessions.get(session_id)?;
         }
         let mut entries = self.writer.read_entries_async(session_id, iteration).await;
         // Sort by startedDateTime so concurrent appends appear chronologically.
@@ -106,15 +105,8 @@ impl ProxyPlugin for HarPlugin {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
         if !recording {
-            self.inner.sessions.write().insert(
-                session_id.clone(),
-                HarSession {
-                    recording: false,
-                    redact: true,
-                    finalized: false,
-                    failed: false,
-                },
-            );
+            // Drop any entry left by an earlier start with the same id.
+            self.inner.sessions.write().remove(session_id);
             debug!("HAR plugin: recording disabled for session {}", session_id);
             return;
         }
@@ -130,7 +122,6 @@ impl ProxyPlugin for HarPlugin {
         sessions.insert(
             session_id.clone(),
             HarSession {
-                recording: true,
                 redact,
                 finalized: false,
                 failed: self.inner.writer.is_failed(session_id),
@@ -144,11 +135,8 @@ impl ProxyPlugin for HarPlugin {
         session_id: &SessionId,
         next_iteration: u32,
     ) -> anyhow::Result<()> {
-        let recording = {
-            let sessions = self.inner.sessions.read();
-            sessions.get(session_id).is_none_or(|s| s.recording)
-        };
-        if !recording {
+        // Sessions that opted out of recording have no entry.
+        if !self.inner.sessions.read().contains_key(session_id) {
             return Ok(());
         }
 
@@ -179,7 +167,7 @@ impl ProxyPlugin for HarPlugin {
         let redact = {
             let sessions = self.inner.sessions.read();
             match sessions.get(session_id) {
-                Some(s) if s.recording && !s.finalized => s.redact,
+                Some(s) if !s.finalized => s.redact,
                 _ => return,
             }
         };
