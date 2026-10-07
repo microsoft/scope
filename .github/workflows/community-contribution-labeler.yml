@@ -1,6 +1,8 @@
 name: Community Contribution Labeler
 
 on:
+  issues:
+    types: [opened, reopened]
   workflow_run:
     workflows: ["Pull Request Labeler"]
     types: [completed]
@@ -27,6 +29,40 @@ jobs:
               "FIRST_TIME_CONTRIBUTOR",
               "CONTRIBUTOR",
             ]);
+            const updateLabel = async (item) => {
+              const isCommunityContribution =
+                item.user?.type === "User" &&
+                communityAssociations.has(item.author_association);
+              const issue = {
+                ...context.repo,
+                issue_number: item.number,
+              };
+
+              if (isCommunityContribution) {
+                await github.rest.issues.addLabels({
+                  ...issue,
+                  labels: [label],
+                });
+                return;
+              }
+
+              try {
+                await github.rest.issues.removeLabel({
+                  ...issue,
+                  name: label,
+                });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            };
+
+            if (context.eventName === "issues") {
+              await updateLabel(context.payload.issue);
+              return;
+            }
+
             const workflowRun = context.payload.workflow_run;
             const headOwner = workflowRun.head_repository?.owner?.login;
 
@@ -51,30 +87,5 @@ jobs:
             }
 
             for (const pullRequest of matchingPullRequests) {
-              const isCommunityContribution =
-                pullRequest.user?.type === "User" &&
-                communityAssociations.has(pullRequest.author_association);
-              const issue = {
-                ...context.repo,
-                issue_number: pullRequest.number,
-              };
-
-              if (isCommunityContribution) {
-                await github.rest.issues.addLabels({
-                  ...issue,
-                  labels: [label],
-                });
-                continue;
-              }
-
-              try {
-                await github.rest.issues.removeLabel({
-                  ...issue,
-                  name: label,
-                });
-              } catch (error) {
-                if (error.status !== 404) {
-                  throw error;
-                }
-              }
+              await updateLabel(pullRequest);
             }
