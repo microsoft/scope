@@ -65,6 +65,7 @@ from the root pnpm workspace.
 | `pnpm build`           | Build the production site to `./dist/`                     |
 | `pnpm preview`         | Preview the production build locally                       |
 | `pnpm test`            | Test site plugins with Node's built-in test runner          |
+| `pnpm test:a11y`       | Build and check accessibility and privacy links in Chromium |
 | `pnpm refresh:openapi` | Generate the OpenAPI snapshot from this monorepo's API |
 
 ## Authoring docs
@@ -208,6 +209,43 @@ JavaScript, the poster remains visible and the playback button stays
 hidden. Blocked autoplay offers manual playback; media failures display
 a status message and log the error. All media URLs use the configured
 deployment base.
+
+### Privacy and accessibility
+
+The site-wide footer includes Microsoft's **Privacy & Cookies**,
+**Your Privacy Choices** (with the privacy-options icon), and
+**Consumer Health Privacy** links on landing, documentation, community,
+and generated API pages. Privacy choices are always visible; the static
+site does not infer a visitor's location.
+
+Community videos use labeled **Watch on YouTube** links instead of
+embedded players. No YouTube player, thumbnail, or third-party script
+loads on page visit. Opening a video is an explicit navigation to
+YouTube, with a new-tab hint for screen readers. Inline event links
+remain underlined so they are not identified by color alone.
+
+Install the test browser once, then run the regression suite:
+
+```sh
+pnpm exec playwright install chromium
+pnpm test:a11y
+```
+
+On Linux, use `pnpm exec playwright install --with-deps chromium` to
+install the browser's system dependencies as well. The suite builds
+with the production `/scope` base, starts an isolated preview server,
+and runs axe checks in light/dark themes at 1280px and 320px widths.
+It covers the landing page, expanded demo disclosures and results,
+representative documentation, community and API pages, privacy links,
+landmarks, horizontal reflow, keyboard navigation, reduced motion,
+and absence of automatic third-party requests. CI runs the same
+browser suite against its existing production build before deployment.
+
+Automated checks do not certify full accessibility or policy
+compliance. Retain manual keyboard, screen-reader, zoom, and
+Accessibility Insights reviews, and review the internal
+[Website Management Center requirements](https://aka.ms/wmc)
+with an authenticated Microsoft account before compliance sign-off.
 
 ### Interactive example
 

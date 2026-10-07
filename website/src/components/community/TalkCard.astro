@@ -16,14 +16,19 @@ const { data } = Astro.props.talk;
 	<div class="community-talk__media">
 		{
 			data.youtubeId ? (
-				<iframe
-					src={`https://www.youtube-nocookie.com/embed/${data.youtubeId}`}
-					title={`Video: ${data.title}`}
-					loading="lazy"
-					allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-					referrerpolicy="strict-origin-when-cross-origin"
-					allowfullscreen
-				/>
+				<a
+					class="community-talk__watch"
+					href={`https://www.youtube.com/watch?v=${data.youtubeId}`}
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="10" />
+						<path d="m10 8 6 4-6 4Z" />
+					</svg>
+					<span>Watch on YouTube</span>
+					<span class="sr-only">: {data.title} (opens in a new tab)</span>
+				</a>
 			) : (
 				<div class="community-talk__pending" role="img" aria-label="Video coming soon">
 					<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -66,12 +71,7 @@ const { data } = Astro.props.talk;
 		aspect-ratio: 16 / 9;
 		background: var(--sl-color-gray-6);
 	}
-	.community-talk__media iframe {
-		display: block;
-		width: 100%;
-		height: 100%;
-		border: 0;
-	}
+	.community-talk__watch,
 	.community-talk__pending {
 		display: flex;
 		flex-direction: column;
@@ -83,6 +83,14 @@ const { data } = Astro.props.talk;
 		font-size: var(--sl-text-sm);
 		font-weight: 600;
 		letter-spacing: 0.02em;
+	}
+	.community-talk__watch {
+		color: var(--sl-color-text-accent);
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
+	}
+	.community-talk__watch:focus-visible {
+		outline-offset: -4px;
 	}
 	.community-talk__body {
 		padding: 1rem 1.15rem 1.15rem;
@@ -105,5 +113,7 @@ const { data } = Astro.props.talk;
 	}
 	.community-talk__meta a {
 		color: var(--sl-color-text-accent);
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
 	}
 </style>

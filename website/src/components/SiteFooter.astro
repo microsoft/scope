@@ -55,6 +55,8 @@ const groups: { title: string; links: FooterLink[] }[] = [
 const legal: FooterLink[] = [
 	{ label: 'MIT License', href: `${repo}/blob/main/LICENSE` },
 	{ label: 'Privacy & Cookies', href: 'https://go.microsoft.com/fwlink/?LinkId=521839' },
+	{ label: 'Your Privacy Choices', href: 'https://aka.ms/yourcaliforniaprivacychoices' },
+	{ label: 'Consumer Health Privacy', href: 'https://go.microsoft.com/fwlink/?linkid=2259814' },
 	{ label: 'Terms of Use', href: 'https://go.microsoft.com/fwlink/?LinkID=206977' },
 	{ label: 'Trademarks', href: 'https://www.microsoft.com/trademarks' },
 ];
@@ -118,6 +120,14 @@ const resolve = (href: string) => (isExternal(href) ? href : `${base}${href}`);
 				legal.map((link) => (
 					<li>
 						<a href={link.href} target="_blank" rel="noopener noreferrer">
+							{link.label === 'Your Privacy Choices' && (
+								<svg class="scope-footer__privacy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 14" width="30" height="14" aria-hidden="true" focusable="false">
+									<rect x="0.6" y="0.6" width="28.8" height="12.8" rx="6.4" fill="#fff" stroke="#06f" stroke-width="1.2" />
+									<path d="M17 1.2h5.6a5.8 5.8 0 0 1 0 11.6h-8.7Z" fill="#06f" />
+									<path d="m5.5 7 2.7 2.4 4.5-5.3" fill="none" stroke="#06f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+									<path d="m19.5 4.5 5 5m0-5-5 5" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" />
+								</svg>
+							)}
 							{link.label}
 							<span class="sr-only"> (opens in a new tab)</span>
 						</a>
@@ -226,6 +236,15 @@ const resolve = (href: string) => (isExternal(href) ? href : `${base}${href}`);
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.35rem 1.25rem;
+	}
+	.scope-footer__legal a {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 24px;
+	}
+	.scope-footer__privacy-icon {
+		flex: none;
 	}
 
 	@container (min-width: 34rem) {

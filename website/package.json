@@ -9,6 +9,7 @@
     "build": "astro build",
     "preview": "worktree-env && astro preview",
     "test": "node --test src/plugins/*.test.mjs",
+    "test:a11y": "SITE=https://microsoft.github.io BASE_PATH=/scope pnpm build && playwright test",
     "astro": "astro",
     "refresh:openapi": "cd .. && pnpm --filter api generate:openapi"
   },
@@ -18,6 +19,8 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
     "acorn": "^8.16.0",
     "httpsnippet-lite": "^3.0.5",
     "remark-gfm": "^4.0.1",

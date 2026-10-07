@@ -3,12 +3,30 @@ title: Data collection and privacy
 description: What data Scope handles, why it is needed, and where it may be sent.
 ---
 
-Last updated: August 27, 2026
+Last updated: October 7, 2026
 
 Scope is deployable software. The organization operating your Scope
 deployment controls its data, chooses its connected services, and sets its
 retention and access policies. Contact your deployment administrator for the
 policies that apply to your organization.
+
+## This documentation website
+
+This documentation is a static website hosted on GitHub Pages, separate
+from any Scope deployment. Its theme preference is saved in your browser.
+The interactive landing-page example uses local mock data, and its
+showreel videos are served by the documentation site.
+
+Community videos are links to YouTube, not embedded players. Visiting a
+documentation page does not load a YouTube player or thumbnail. Following
+an article, event, or video link takes you to an external site governed by
+that site's privacy practices.
+
+Microsoft's [Privacy & Cookies](https://go.microsoft.com/fwlink/?LinkId=521839),
+[Your Privacy Choices](https://aka.ms/yourcaliforniaprivacychoices), and
+[Consumer Health Privacy](https://go.microsoft.com/fwlink/?linkid=2259814)
+links are available in the footer on every page. Your Privacy Choices
+includes information for California residents.
 
 ## Microsoft does not collect Scope deployment data
 

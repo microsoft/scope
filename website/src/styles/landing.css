@@ -249,6 +249,7 @@ scope-showreel { display: block; max-width: 60rem; margin: 3rem auto 0; }
 .scope-community .community-talk__speakers { color: var(--scope-text); }
 .scope-community .community-talk__meta { color: var(--scope-muted); }
 .scope-community .community-talk__meta a { color: var(--scope-brand); }
+.scope-community .community-talk__watch { color: var(--scope-brand); text-decoration: underline; }
 .scope-community__all { margin-top: 1.5rem; }
 .scope-cta { margin-top: 6rem; text-align: center; padding: 4rem 1.5rem; background: radial-gradient(ellipse at 50% 110%, color-mix(in srgb, var(--scope-brand) 12%, transparent), transparent 70%), var(--scope-surface); border: 1px solid var(--scope-border); border-radius: 1rem; }
 .scope-cta h2 { font-size: clamp(2rem, 4vw, 3.25rem); letter-spacing: -0.045em; font-weight: 600; line-height: 1.15; margin: 1rem 0; }

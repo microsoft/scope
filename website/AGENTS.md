@@ -43,6 +43,9 @@ A static documentation site published to GitHub Pages, within the
   `src/components/TwoColumnContent.astro`, so it is a page-level
   `contentinfo` landmark and stays out of the Pagefind index. Keep its
   internal links pointing at pages that exist in the sidebar.
+  Keep the Privacy & Cookies, Your Privacy Choices (including its
+  privacy-options icon), and Consumer Health Privacy links visible
+  site-wide.
 - `src/openapi/scope-openapi.json` — committed artifact generated from
   the Scope API's OpenAPI registry; drives the auto-generated REST
   API reference
@@ -211,6 +214,9 @@ fails `pnpm run build`. Article and event links are external, so the
 components open them in a new tab (`target="_blank"
 rel="noopener noreferrer"`) with a screen-reader "(opens in a new
 tab)" hint; keep that pattern for any new external link.
+Published videos use a labeled Watch on YouTube link, not an iframe
+or remote thumbnail, so visiting a page does not load a third-party
+player or its scripts.
 
 ### Style
 
@@ -229,6 +235,7 @@ tab)" hint; keep that pattern for any new external link.
 ```sh
 pnpm install
 pnpm test                # plugin regressions, using Node's built-in test runner
+pnpm test:a11y           # production build + Playwright/axe privacy and accessibility checks
 pnpm run build           # writes dist/
 pnpm run dev             # local preview at http://localhost:4321
 pnpm run refresh:openapi # generate the OpenAPI snapshot from this monorepo's API
@@ -238,6 +245,13 @@ For `refresh:openapi`, install the root workspace dependencies first.
 The script runs `pnpm --filter api generate:openapi` from the repository
 root, using [apps/api/src/openapi/generate.ts](../apps/api/src/openapi/generate.ts)
 to update [src/openapi/scope-openapi.json](src/openapi/scope-openapi.json).
+
+Install Chromium once with `pnpm exec playwright install chromium`
+(add `--with-deps` on Linux). Run `pnpm test:a11y` after changes to
+site components, styles, or privacy behavior. CI runs this browser suite
+against the production build before deployment. Automated checks do
+not replace manual Accessibility Insights, keyboard, screen-reader,
+or authenticated Website Management Center compliance reviews.
 
 Both `pnpm test` and `pnpm run build` must pass. The public build uses
 `SITE=https://microsoft.github.io BASE_PATH=/scope pnpm run build`;

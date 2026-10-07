@@ -23,6 +23,8 @@ evaluations/static-prompts/results/
 .auth/
 test-videos/
 test-snapshots/
+website/test-results/
+website/playwright-report/
 .worktrees/
 plan.md
 plan.md
