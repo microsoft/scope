@@ -8,6 +8,6 @@ allowBuilds:
 # nested copy to a non-vulnerable release without waiting for upstream.
 overrides:
   form-data: ">=4.0.6"
-  vite: ">=7.3.5 <8"
-  js-yaml: ">=4.2.0 <5"
+  vite: ">=8.0.16 <9"
+  js-yaml: ">=4.3.2 <5"
   esbuild: ">=0.28.1"
