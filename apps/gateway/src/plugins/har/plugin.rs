@@ -28,6 +28,9 @@ use super::writer;
 
 /// Per-session metadata kept in the plugin (writer holds all data).
 struct HarSession {
+    /// `false` when the session opted out with `{"har": {"enabled": false}}`:
+    /// nothing is written to storage and `GET .../har` returns 404.
+    recording: bool,
     redact: bool,
     finalized: bool,
     /// Set to true when the writer reports a hard failure (blob unreachable).
@@ -48,7 +51,9 @@ impl HarInner {
     ) -> Option<super::types::Har> {
         {
             let sessions = self.sessions.read();
-            sessions.get(session_id)?;
+            if !sessions.get(session_id)?.recording {
+                return None;
+            }
         }
         let mut entries = self.writer.read_entries_async(session_id, iteration).await;
         // Sort by startedDateTime so concurrent appends appear chronologically.
@@ -96,6 +101,24 @@ impl ProxyPlugin for HarPlugin {
     }
 
     async fn on_session_start(&self, session_id: &SessionId, settings: &serde_json::Value) {
+        let recording = settings
+            .get("enabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        if !recording {
+            self.inner.sessions.write().insert(
+                session_id.clone(),
+                HarSession {
+                    recording: false,
+                    redact: true,
+                    finalized: false,
+                    failed: false,
+                },
+            );
+            debug!("HAR plugin: recording disabled for session {}", session_id);
+            return;
+        }
+
         let redact = settings
             .get("redactCredentials")
             .and_then(|v| v.as_bool())
@@ -107,6 +130,7 @@ impl ProxyPlugin for HarPlugin {
         sessions.insert(
             session_id.clone(),
             HarSession {
+                recording: true,
                 redact,
                 finalized: false,
                 failed: self.inner.writer.is_failed(session_id),
@@ -120,6 +144,14 @@ impl ProxyPlugin for HarPlugin {
         session_id: &SessionId,
         next_iteration: u32,
     ) -> anyhow::Result<()> {
+        let recording = {
+            let sessions = self.inner.sessions.read();
+            sessions.get(session_id).is_none_or(|s| s.recording)
+        };
+        if !recording {
+            return Ok(());
+        }
+
         self.inner
             .writer
             .init_iteration(session_id, next_iteration)
@@ -147,7 +179,7 @@ impl ProxyPlugin for HarPlugin {
         let redact = {
             let sessions = self.inner.sessions.read();
             match sessions.get(session_id) {
-                Some(s) if !s.finalized => s.redact,
+                Some(s) if s.recording && !s.finalized => s.redact,
                 _ => return,
             }
         };
@@ -435,5 +467,43 @@ mod tests {
         // iter-1 still has 1.
         let har1_after = plugin.inner.build_har_for_session(&sid, 1).await.unwrap();
         assert_eq!(har1_after.log.entries.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn disabled_session_records_nothing() {
+        let tmp = TempDir::new().unwrap();
+        let plugin = HarPlugin::new(tmp.path().to_path_buf());
+        let sid = "scanner-session".to_string();
+
+        plugin
+            .on_session_start(&sid, &serde_json::json!({ "enabled": false }))
+            .await;
+        let mut headers = HeaderMap::new();
+        let uri = Uri::from_static("https://api.githubcopilot.com/models");
+        assert!(plugin.on_request(&sid, &uri, &mut headers).await.is_ok());
+        plugin.on_exchange(&sid, &make_exchange(), 1).await;
+        assert!(plugin.on_iteration_rotate(&sid, 2).await.is_ok());
+        plugin.on_session_stop(&sid).await;
+
+        assert!(plugin.inner.build_har_for_session(&sid, 1).await.is_none());
+        assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 0);
+
+        plugin.on_session_clear(&sid).await;
+        assert!(plugin.inner.sessions.read().get(&sid).is_none());
+    }
+
+    #[tokio::test]
+    async fn explicit_enabled_true_records() {
+        let tmp = TempDir::new().unwrap();
+        let plugin = HarPlugin::new(tmp.path().to_path_buf());
+        let sid = "10.0.0.1".to_string();
+
+        plugin
+            .on_session_start(&sid, &serde_json::json!({ "enabled": true }))
+            .await;
+        plugin.on_exchange(&sid, &make_exchange(), 1).await;
+
+        let har = plugin.inner.build_har_for_session(&sid, 1).await.unwrap();
+        assert_eq!(har.log.entries.len(), 1);
     }
 }
