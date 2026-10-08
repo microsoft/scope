@@ -121,7 +121,6 @@ export default defineConfig({
 								{ label: 'Submit from the CLI', slug: 'guides/submitting-requests-cli' },
 								{ label: 'Submit through the API', slug: 'guides/submitting-requests-api' },
 								{ label: 'Prioritize & pause', slug: 'guides/prioritizing-requests' },
-								{ label: 'Manage provider credentials', slug: 'guides/managing-credentials' },
 							],
 						},
 						{
@@ -145,6 +144,13 @@ export default defineConfig({
 								{ label: 'Import skills', slug: 'guides/importing-skills' },
 								{ label: 'Import VS Code extensions', slug: 'guides/importing-extensions' },
 								{ label: 'Use tools, skills & extensions', slug: 'guides/mcp-skills-extensions' },
+							],
+						},
+						{
+							label: 'Admin',
+							collapsed: true,
+							items: [
+								{ label: 'Manage provider credentials', slug: 'guides/managing-credentials' },
 							],
 						},
 					],
