@@ -58,6 +58,7 @@ async function runBundle(args: string[], tempDir: string) {
       SCOPE_API_URL: `http://127.0.0.1:${apiPort}`,
       SCOPE_PROJECT: "test-project",
       HOME: tempDir,
+      XDG_CONFIG_HOME: join(tempDir, ".config"),
     },
     timeout: 10000,
   });
@@ -125,6 +126,7 @@ describe("update-check (via bundle)", () => {
           SCOPE_API_URL: `http://127.0.0.1:${apiPort}`,
           SCOPE_PROJECT: "test-project",
           HOME: tempDir,
+          XDG_CONFIG_HOME: join(tempDir, ".config"),
         },
         timeout: 10000,
       });
