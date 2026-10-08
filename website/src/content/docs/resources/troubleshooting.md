@@ -89,3 +89,5 @@ If results vary *wildly*, double-check that:
 
 - [FAQ](/resources/faq/)
 - [Glossary](/resources/glossary/)
+- [Self-hosting operations](/self-hosting/operations/#troubleshoot) for
+  Kubernetes deployment problems
