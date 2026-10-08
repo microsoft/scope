@@ -59,6 +59,8 @@ an `active-environment` selector under:
 - Windows: `%LOCALAPPDATA%/scope`, or `~/AppData/Local/scope`.
 
 Files are plaintext and written with owner-only permissions where supported.
+The same directory also holds the legacy-mode `config.json` (selected project)
+and the update-check cooldown.
 Protect them like credentials. Names are lowercase letters/digits, hyphens and
 underscores, 1–64 characters, beginning with a letter or digit.
 

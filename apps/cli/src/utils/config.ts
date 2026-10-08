@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 /**
- * Persisted CLI configuration stored at `~/.config/scope/config.json`.
+ * Persisted CLI configuration stored at `config.json` in the CLI config dir
+ * (`$XDG_CONFIG_HOME/scope`, `~/.config/scope`, or `%LOCALAPPDATA%\scope`).
+ * A pre-existing `~/.config/scope/config.json` is still read until the first write.
  *
  * Today this holds only the **selected project** — the project whose data
  * scoped commands (`run list`, entity lists, root creates) operate on. The
@@ -28,14 +30,19 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { getCliName } from "./shared.js";
 import { currentEnvironment } from "./connection.js";
-import { EnvironmentStore } from "./environments.js";
+import { EnvironmentStore, environmentConfigDir } from "./environments.js";
 
-/** Directory holding all CLI state (shared with the update checker). */
-const CONFIG_DIR = join(homedir(), ".config", "scope");
-/** Path to the persisted CLI config document. */
-const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+/** Path to the persisted CLI config document in the shared CLI config dir. */
+function configFile(): string {
+  return join(environmentConfigDir(), "config.json");
+}
 
-/** Shape of `~/.config/scope/config.json`. Intentionally open for forward-compat. */
+/** Pre-XDG/Windows location, read only when the current file does not exist yet. */
+function legacyConfigFile(): string {
+  return join(homedir(), ".config", "scope", "config.json");
+}
+
+/** Shape of `<config dir>/config.json`. Intentionally open for forward-compat. */
 export interface ScopeConfig {
   /** Id of the project scoped commands operate on, when one has been selected. */
   selectedProjectId?: string;
@@ -44,8 +51,10 @@ export interface ScopeConfig {
 /** Read the persisted config, tolerating a missing or malformed file. */
 export function readConfig(): ScopeConfig {
   try {
-    if (!existsSync(CONFIG_FILE)) return {};
-    const parsed: unknown = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
+    const current = configFile();
+    const file = existsSync(current) ? current : legacyConfigFile();
+    if (!existsSync(file)) return {};
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf-8"));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as ScopeConfig;
     }
@@ -56,10 +65,11 @@ export function readConfig(): ScopeConfig {
   }
 }
 
-/** Persist the config, creating `~/.config/scope/` on first write. */
+/** Persist the config, creating the CLI config dir on first write. */
 export function writeConfig(config: ScopeConfig): void {
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_FILE, `${JSON.stringify(config, null, 2)}\n`);
+  const dir = environmentConfigDir();
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(configFile(), `${JSON.stringify(config, null, 2)}\n`);
 }
 
 /** The persisted selected project id, or `undefined` if none has been chosen. */

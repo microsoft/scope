@@ -123,8 +123,8 @@ describe("named environment commands and isolated storage", () => {
     expect(requests).toHaveLength(0);
   });
 
-  it("keeps legacy configuration in its existing path, separate from the named store", () => {
-    expect(JSON.parse(readFileSync(join(isolated.home, ".config/scope/config.json"), "utf8"))).toEqual({ selectedProjectId: "legacy-project" });
+  it("keeps legacy configuration in config.json, separate from the named environment files", () => {
+    expect(JSON.parse(readFileSync(join(isolated.home, "xdg/scope/config.json"), "utf8"))).toEqual({ selectedProjectId: "legacy-project" });
     expect(store.directory).toBe(join(isolated.home, "xdg", "scope"));
     const file = join(store.directory, "environments/local.env");
     expect(parse(readFileSync(file, "utf8"))).toEqual({ SCOPE_API_URL: "http://127.0.0.1:43127", SCOPE_TOKEN: "local-token", SCOPE_PROJECT: "local-project" });
@@ -242,7 +242,7 @@ describe("integrated environment resolution and precedence", () => {
     expect(store.read("local").project).toBe("local-project");
     expect(resolveProjectId()).toBe("ambient-project");
     await run("project", "use", "chosen", "-u", "https://legacy.example");
-    expect(JSON.parse(readFileSync(join(isolated.home, ".config/scope/config.json"), "utf8"))).toEqual({ selectedProjectId: "chosen" });
+    expect(JSON.parse(readFileSync(join(isolated.home, "xdg/scope/config.json"), "utf8"))).toEqual({ selectedProjectId: "chosen" });
   });
 
   it.each(["create", "update"])("MCP %s keeps resource --url and process --env independent from root/API selectors", async (action) => {
