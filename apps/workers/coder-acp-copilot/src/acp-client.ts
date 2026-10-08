@@ -127,8 +127,11 @@ export interface ACPClientOptions {
   mcpServers?: McpServerConfig[];
   /** Session timeout in milliseconds (default: 30 min). Set to 0 to disable. */
   sessionTimeoutMs?: number;
-  /** Model to select after the session is created (e.g. "gpt-5.4"). */
-  model?: string;
+  /**
+   * Model to select after the session is created, or a selector resolved from
+   * the new session response for session-scoped policies and integration probes.
+   */
+  model?: string | ACPModelSelector;
   /** Reasoning effort level to apply via ACP config option (e.g. "low", "medium", "high"). */
   reasoningEffort?: string;
   /** Use shell to spawn the process (required on Windows for .cmd shim resolution). */
@@ -140,7 +143,9 @@ export interface ACPClientOptions {
 export interface ACPSessionResult {
   response: string;
   stopReason: string;
-  /** Model that was successfully activated via ACP set_model, or undefined if model selection was not requested or did not succeed. */
+  /** Model active when the ACP session was created, when advertised by the agent. */
+  initialModel?: string;
+  /** Model successfully activated through ACP, or undefined if selection was not requested or did not succeed. */
   confirmedModel?: string;
 }
 
@@ -181,6 +186,83 @@ export async function discoverACPModels(options: ACPClientOptions): Promise<ACPM
     sessionTimeoutMs: options.sessionTimeoutMs ?? 30_000,
   });
   return extractModelDiscovery(session);
+}
+
+/**
+ * Select a model after ACP session creation, when session-scoped model
+ * capabilities are available.
+ */
+export type ACPModelSelector = (
+  sessionResult: acp.NewSessionResponse
+) => string | undefined;
+
+export function resolveRequestedModel(
+  model: string | ACPModelSelector | undefined,
+  sessionResult: acp.NewSessionResponse
+): string | undefined {
+  return typeof model === "function" ? model(sessionResult) : model;
+}
+
+export function getCurrentModelId(
+  sessionResult: acp.NewSessionResponse
+): string | undefined {
+  return (
+    sessionResult.models?.currentModelId ??
+    getModelConfigOption(sessionResult)?.currentValue
+  );
+}
+
+function getModelConfigOption(
+  sessionResult: acp.NewSessionResponse
+): acp.SessionConfigOption | undefined {
+  return sessionResult.configOptions?.find(
+    (option: acp.SessionConfigOption) => option.category === "model"
+  );
+}
+
+function getConfigOptionValues(
+  configOption: acp.SessionConfigOption
+): string[] {
+  return configOption.options.flatMap((option) =>
+    "value" in option
+      ? [option.value]
+      : option.options.map((groupedOption) => groupedOption.value)
+  );
+}
+
+export function hasModelSelectionCapability(
+  sessionResult: acp.NewSessionResponse
+): boolean {
+  return (
+    sessionResult.models != null ||
+    getModelConfigOption(sessionResult) !== undefined
+  );
+}
+
+/**
+ * Choose the first advertised model that differs from the session default.
+ *
+ * Intended for integration coverage that must exercise model switching without
+ * depending on a server-controlled model id.
+ */
+export function selectFirstAvailableNonDefaultModel(
+  sessionResult: acp.NewSessionResponse
+): string | undefined {
+  const models = sessionResult.models;
+  if (models) {
+    return models.availableModels.find(
+      (candidate) => candidate.modelId !== models.currentModelId
+    )?.modelId;
+  }
+
+  const modelConfigOption = getModelConfigOption(sessionResult);
+  if (!modelConfigOption) {
+    return undefined;
+  }
+
+  return getConfigOptionValues(modelConfigOption).find(
+    (value) => value !== modelConfigOption.currentValue
+  );
 }
 
 /**
@@ -334,28 +416,26 @@ export async function selectModel(
   }
 
   // Path 2: stable session/set_config_option with category "model"
-  if (sessionResult.configOptions) {
-    const modelConfigOption = sessionResult.configOptions.find(
-      (o) => o.category === "model"
-    );
-    if (modelConfigOption) {
-      try {
-        await connection.setSessionConfigOption({
-          sessionId: sessionResult.sessionId,
-          configId: modelConfigOption.id,
-          value: model,
-        });
-        onLog(`Model set to "${model}" via session/set_config_option (configId: ${modelConfigOption.id})`);
-        return model;
-      } catch (err) {
-        onLog(`Warning: session/set_config_option failed for model "${model}": ${err instanceof Error ? err.message : String(err)}`);
-        return undefined;
-      }
+  const modelConfigOption = getModelConfigOption(sessionResult);
+  if (modelConfigOption) {
+    try {
+      await connection.setSessionConfigOption({
+        sessionId: sessionResult.sessionId,
+        configId: modelConfigOption.id,
+        value: model,
+      });
+      onLog(`Model set to "${model}" via session/set_config_option (configId: ${modelConfigOption.id})`);
+      return model;
+    } catch (err) {
+      onLog(`Warning: session/set_config_option failed for model "${model}": ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
     }
   }
 
   // Neither mechanism available — warn and continue
-  onLog(`Warning: agent does not advertise model selection capability (no models field or model config option); model "${model}" may not be honoured`);
+  if (!hasModelSelectionCapability(sessionResult)) {
+    onLog(`Warning: agent does not advertise model selection capability (no models field or model config option); model "${model}" may not be honoured`);
+  }
   return undefined;
 }
 
@@ -624,10 +704,28 @@ async function runSession(
       onLog(`Session config options: ${sessionResult.configOptions.map((o: acp.SessionConfigOption) => `${o.id}${o.category ? ` (${o.category})` : ""}`).join(", ")}`);
     }
 
-    // Select model if requested
+    // Select model if requested. A selector is resolved only after newSession
+    // because the current and available models are session-scoped.
+    const initialModel = getCurrentModelId(sessionResult);
     let confirmedModel: string | undefined;
-    if (model) {
-      confirmedModel = await selectModel(connection, sessionResult, model, onLog);
+    const requestedModel = resolveRequestedModel(model, sessionResult);
+    if (requestedModel) {
+      confirmedModel = await selectModel(
+        connection,
+        sessionResult,
+        requestedModel,
+        onLog
+      );
+    } else if (typeof model === "function") {
+      if (hasModelSelectionCapability(sessionResult)) {
+        onLog(
+          "Warning: model selector did not choose a model from the advertised model options"
+        );
+      } else {
+        onLog(
+          "Warning: agent does not advertise model selection capability (no models field or model config option)"
+        );
+      }
     }
 
     // Set reasoning effort if requested
@@ -659,6 +757,7 @@ async function runSession(
     return {
       response: clientHandler.getResponse(),
       stopReason: promptResult.stopReason,
+      initialModel,
       confirmedModel,
     };
     };

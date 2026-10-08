@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { isUnexpected } from "@azure-rest/ai-inference";
+import { postAdaptiveChatCompletion } from "./adaptive-chat-completions.js";
 import { acquireInferenceClient, isLlmAvailable as inferenceAvailable } from "./llm-token.js";
 
 // ---------------------------------------------------------------------------
@@ -44,6 +45,16 @@ export interface GenerateTaskPromptResult {
   taskPrompt: string;
 }
 
+export interface TaskPromptRequest {
+  messages: [
+    { role: "system"; content: string },
+    { role: "user"; content: string },
+  ];
+  model: string;
+  temperature: number;
+  max_tokens: number;
+}
+
 export function isTaskPromptLlmAvailable(): boolean {
   return inferenceAvailable();
 }
@@ -76,6 +87,62 @@ function buildVariationUserMessage(existingPrompt: string, guidance?: string): s
   return parts.join("\n");
 }
 
+export function buildTaskPromptRequest(
+  opts: { description?: string; existingPrompt?: string },
+  existingPrompts: string[],
+  model: string,
+): TaskPromptRequest {
+  const { description, existingPrompt } = opts;
+  const isVariation = !!existingPrompt;
+  return {
+    messages: [
+      {
+        role: "system",
+        content: isVariation
+          ? VARIATION_SYSTEM_PROMPT
+          : GENERATE_SYSTEM_PROMPT,
+      },
+      {
+        role: "user",
+        content: isVariation
+          ? buildVariationUserMessage(existingPrompt, description)
+          : buildGenerateUserMessage(description, existingPrompts),
+      },
+    ],
+    model,
+    temperature: 0.7,
+    max_tokens: 1024,
+  };
+}
+
+export function parseTaskPromptResponse(
+  content: string,
+): GenerateTaskPromptResult {
+  const cleaned = content.replace(/```json\s*|```\s*/g, "").trim();
+  try {
+    const parsed: unknown = JSON.parse(cleaned);
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("taskPrompt" in parsed) ||
+      typeof parsed.taskPrompt !== "string" ||
+      parsed.taskPrompt.trim().length === 0
+    ) {
+      throw new Error("Missing required 'taskPrompt' field");
+    }
+
+    return {
+      taskPrompt: parsed.taskPrompt.trim(),
+    };
+  } catch (err) {
+    // If JSON parsing fails, try to use the raw content as the task prompt
+    if (cleaned.length > 10 && !cleaned.startsWith("{")) {
+      return { taskPrompt: cleaned };
+    }
+    throw new Error(`Failed to parse LLM response: ${(err as Error).message}\nRaw: ${cleaned}`);
+  }
+}
+
 export async function generateTaskPrompt(
   opts: { description?: string; existingPrompt?: string },
   existingPrompts: string[] = [],
@@ -83,27 +150,28 @@ export async function generateTaskPrompt(
 ): Promise<GenerateTaskPromptResult> {
   const { description, existingPrompt } = opts;
 
-  const { client: llm, model: foundryModel } = await acquireInferenceClient();
+  const {
+    client: llm,
+    endpoint,
+    model: foundryModel,
+  } = await acquireInferenceClient();
 
   // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
   const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
 
-  const isVariation = !!existingPrompt;
-  const systemPrompt = isVariation ? VARIATION_SYSTEM_PROMPT : GENERATE_SYSTEM_PROMPT;
-  const userMessage = isVariation
-    ? buildVariationUserMessage(existingPrompt!, description)
-    : buildGenerateUserMessage(description, existingPrompts);
+  const request = buildTaskPromptRequest(
+    { description, existingPrompt },
+    existingPrompts,
+    modelName,
+  );
 
-  const response = await llm.path("/chat/completions").post({
-    body: {
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      model: modelName,
-      temperature: 0.7,
-      max_tokens: 1024,
-    },
+  const response = await postAdaptiveChatCompletion({
+    endpoint,
+    model: request.model,
+    messages: request.messages,
+    temperature: request.temperature,
+    maxTokens: request.max_tokens,
+    send: (body) => llm.path("/chat/completions").post({ body }),
   });
 
   if (isUnexpected(response)) {
@@ -118,21 +186,5 @@ export async function generateTaskPrompt(
     throw new Error("LLM returned empty response");
   }
 
-  const cleaned = content.replace(/```json\s*|```\s*/g, "").trim();
-  try {
-    const parsed = JSON.parse(cleaned);
-    if (!parsed.taskPrompt || typeof parsed.taskPrompt !== "string") {
-      throw new Error("Missing required 'taskPrompt' field");
-    }
-
-    return {
-      taskPrompt: parsed.taskPrompt.trim(),
-    };
-  } catch (err) {
-    // If JSON parsing fails, try to use the raw content as the task prompt
-    if (cleaned.length > 10 && !cleaned.startsWith("{")) {
-      return { taskPrompt: cleaned };
-    }
-    throw new Error(`Failed to parse LLM response: ${(err as Error).message}\nRaw: ${cleaned}`);
-  }
+  return parseTaskPromptResponse(content);
 }

@@ -13,4 +13,15 @@ export const mswHandlers = [
       { _id: "demo-project", id: "demo-project", name: "Demo Project" },
     ]),
   ),
+  http.get("/api/v1/agents", () =>
+    HttpResponse.json([
+      {
+        _id: "coder-acp-copilot",
+        id: "coder-acp-copilot",
+        name: "GitHub Copilot CLI",
+        supportedModels: ["gpt-5.6-sol"],
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]),
+  ),
 ];

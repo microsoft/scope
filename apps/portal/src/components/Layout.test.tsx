@@ -4,26 +4,17 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { PublicClientApplication } from "@azure/msal-browser";
-import { MsalProvider } from "@azure/msal-react";
+import { Link, MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthContext } from "@/contexts/AuthContext";
+import { signedInAuth } from "@/contexts/authFixtures";
 import { ProjectProvider } from "@/contexts/ProjectContext";
 import { PROJECT_STORAGE_KEY } from "@/lib/project-scope";
 import { Layout } from "./Layout";
 
-// The header renders <UserMenu />, which reads auth state via useAuth ->
-// MsalProvider. Provide a minimal, un-authenticated MSAL instance so Layout can
-// render in isolation without a live IdP.
-const msalInstance = new PublicClientApplication({
-  auth: { clientId: "test-client-id" },
-});
-
 // The portal defines these build-time constants via Vite `define`; the root
-// Vitest run doesn't apply that config, so stub them for the routes (e.g. "/")
-// where <VersionFooter /> renders (non-full-bleed).
+// Vitest run doesn't apply that config, so stub them for <VersionFooter />.
 beforeAll(() => {
   vi.stubGlobal("__GIT_COMMIT__", "test-commit");
   vi.stubGlobal("__BUILD_TIME__", "1970-01-01T00:00:00Z");
@@ -45,29 +36,38 @@ function renderLayout(
   // default; pass { projectId: null } to exercise the no-project state.
   if (projectId) localStorage.setItem(PROJECT_STORAGE_KEY, projectId);
   // Layout now hosts <ProjectSwitcher /> (react-query + ProjectContext) and
-  // <UserMenu /> (MSAL + AuthContext), so the harness provides all of them
-  // (mirroring main.tsx).
+  // <UserMenu /> (AuthContext). Use an already-resolved Scope identity.
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MsalProvider instance={msalInstance}>
-        <AuthProvider>
-          <ThemeProvider defaultTheme="light">
-            <ProjectProvider>
-              <MemoryRouter initialEntries={[path]}>
-                <Routes>
-                  <Route element={<Layout />}>
-                    <Route path="/" element={<div>Home page</div>} />
-                    <Route path="/runs" element={<div>Runs page</div>} />
+      <AuthContext.Provider value={signedInAuth}>
+        <ThemeProvider defaultTheme="light">
+          <ProjectProvider>
+            <MemoryRouter initialEntries={[path]}>
+              <Routes>
+                <Route element={<Layout />}>
+                  <Route path="/" element={<div>Home page</div>} />
+                  <Route path="/runs" element={<div>Runs page</div>} />
+                  <Route path="/secrets/keys" element={
+                    <div>
+                      <Link to="/secrets/keys/demo-key/preview">Preview key</Link>
+                      <Outlet />
+                    </div>
+                  }>
+                    <Route path=":id/preview" element={
+                      <Link to="/secrets/keys">Close preview</Link>
+                    } />
                   </Route>
-                </Routes>
-              </MemoryRouter>
-            </ProjectProvider>
-          </ThemeProvider>
-        </AuthProvider>
-      </MsalProvider>
+                  <Route path="/secrets/keys/new" element={<div>Register key</div>} />
+                  <Route path="/secrets/keys/:id" element={<div>Key details</div>} />
+                </Route>
+              </Routes>
+            </MemoryRouter>
+          </ProjectProvider>
+        </ThemeProvider>
+      </AuthContext.Provider>
     </QueryClientProvider>,
   );
 }
@@ -78,6 +78,48 @@ afterEach(() => {
 });
 
 describe("Layout", () => {
+  it("keeps the full-bleed shell when opening and closing a key preview", () => {
+    renderLayout("/secrets/keys");
+
+    const listClasses = screen.getByRole("main").className;
+    expect(listClasses).not.toContain("px-6");
+
+    fireEvent.click(screen.getByRole("link", { name: "Preview key" }));
+    expect(screen.getByRole("link", { name: "Close preview" })).toBeTruthy();
+    expect(screen.getByRole("main").className).toBe(listClasses);
+
+    fireEvent.click(screen.getByRole("link", { name: "Close preview" }));
+    expect(screen.getByRole("main").className).toBe(listClasses);
+  });
+
+  it("uses the full-bleed shell on a directly opened key preview", () => {
+    renderLayout("/secrets/keys/demo-key/preview");
+
+    expect(screen.getByRole("link", { name: "Close preview" })).toBeTruthy();
+    expect(screen.getByRole("main").className).not.toContain("px-6");
+  });
+
+  it.each(["/secrets/keys/new", "/secrets/keys/demo-key"])(
+    "preserves page padding for %s",
+    (path) => {
+      renderLayout(path);
+
+      expect(screen.getByRole("main").className).toContain("px-6");
+      expect(screen.getByRole("main").className).toContain("py-6");
+    },
+  );
+
+  it("shows the disclosure footer on full-bleed routes", () => {
+    renderLayout("/runs");
+
+    expect(
+      screen.getByText(/This is an AI evaluation platform\./),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Data collection and privacy" }),
+    ).toBeTruthy();
+  });
+
   it("expands the desktop sidebar to show navigation labels", () => {
     renderLayout();
 
@@ -127,6 +169,10 @@ describe("Layout", () => {
     expect(within(sidebar).getByText("Activity")).toBeTruthy();
     expect(within(sidebar).getByRole("link", { name: "Runs" })).toBeTruthy();
     expect(within(sidebar).getByRole("link", { name: "MCP" })).toBeTruthy();
+    // The Integrations group holds Resources alongside MCP and Extensions; the
+    // group and its Resources item deliberately no longer share a label.
+    expect(within(sidebar).getByText("Integrations")).toBeTruthy();
+    expect(within(sidebar).getByRole("link", { name: "Resources" })).toBeTruthy();
     // Global group is present too.
     expect(within(sidebar).getByText("Platform")).toBeTruthy();
   });
@@ -146,9 +192,10 @@ describe("Layout", () => {
     // Scoped groups and their items are hidden.
     expect(within(sidebar).queryByText("Activity")).toBeNull();
     expect(within(sidebar).queryByText("Library")).toBeNull();
-    expect(within(sidebar).queryByText("Resources")).toBeNull();
+    expect(within(sidebar).queryByText("Integrations")).toBeNull();
     expect(within(sidebar).queryByRole("link", { name: "Runs" })).toBeNull();
     expect(within(sidebar).queryByRole("link", { name: "Prompts" })).toBeNull();
+    expect(within(sidebar).queryByRole("link", { name: "Resources" })).toBeNull();
     expect(within(sidebar).queryByRole("link", { name: "MCP" })).toBeNull();
     // The New Run CTA is scoped too, so it's gone until a project is picked.
     expect(within(sidebar).queryByRole("link", { name: "New Run" })).toBeNull();

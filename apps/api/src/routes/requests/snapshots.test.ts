@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import supertest from "supertest";
 import { app, _injectTestDependencies } from "../../index.js";
+import { useTestServer } from "../../test-server.js";
 import { createAllMockDependencies } from "../../test-helpers.js";
 import { readableFrom, blobUrl, VARIANTS, rewireBlobMocks } from "./test-blob-helpers.js";
 
@@ -42,6 +43,7 @@ vi.mock("@azure/storage-blob", async (importOriginal) => {
 });
 
 describe("Snapshots endpoints", () => {
+  const testServer = useTestServer(app);
   let mocks: ReturnType<typeof createAllMockDependencies>;
 
   beforeAll(() => {
@@ -63,21 +65,21 @@ describe("Snapshots endpoints", () => {
 
     it("returns 404 when request not found", async () => {
       (mocks.collection.findOne as any).mockResolvedValue(null);
-      const res = await supertest(app).get(snapUrl("missing", 1));
+      const res = await supertest(testServer()).get(snapUrl("missing", 1));
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ error: "Request not found" });
     });
 
     it("returns 400 for invalid iteration number", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", turns: [] });
-      const res = await supertest(app).get(snapUrl("req-1", "abc"));
+      const res = await supertest(testServer()).get(snapUrl("req-1", "abc"));
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ error: "Invalid iteration number" });
     });
 
     it("returns 404 when no snapshot for the iteration", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", turns: [{ iteration: 1 }] });
-      const res = await supertest(app).get(snapUrl("req-1", 1));
+      const res = await supertest(testServer()).get(snapUrl("req-1", 1));
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ error: "No snapshot for iteration 1" });
     });
@@ -88,7 +90,7 @@ describe("Snapshots endpoints", () => {
         turns: [{ iteration: 1, snapshotUrl: blobUrl("req-1/iter-1-snapshot.tar.gz") }],
       });
 
-      const res = await supertest(app).get(snapUrl("req-1", 1));
+      const res = await supertest(testServer()).get(snapUrl("req-1", 1));
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch("application/gzip");
       expect(res.headers["content-disposition"]).toContain("req-1-iteration-1.tar.gz");

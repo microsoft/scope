@@ -19,7 +19,6 @@ import {
   RequestResponseSchema,
   RequestStatusSchema,
   RequestOutcomeSchema,
-  WorkerTypeSchema,
   LogEventSchema,
   TokenUsageSchema,
   ConversationTurnSchema,
@@ -231,19 +230,6 @@ describe("request schemas", () => {
     it("rejects unknown outcome", () => {
       expect(() => RequestOutcomeSchema.parse("completed")).toThrow();
       expect(() => RequestOutcomeSchema.parse("cancelled")).toThrow();
-    });
-  });
-
-  describe("WorkerTypeSchema", () => {
-    it.each(["coder-acp-claude-code", "coder-acp-copilot", "coder-acp-copilot"])(
-      "accepts '%s'",
-      (w) => {
-        expect(WorkerTypeSchema.parse(w)).toBe(w);
-      },
-    );
-
-    it("rejects unknown worker", () => {
-      expect(() => WorkerTypeSchema.parse("unknown-worker")).toThrow();
     });
   });
 
@@ -960,6 +946,36 @@ describe("agent schemas", () => {
         createdAt: NOW,
       });
       expect(result.status).toBe("active");
+    });
+
+    it("accepts legacy response records without a queue name", () => {
+      const result = AgentVersionSchema.parse({
+        agentVersion: "1.0.0",
+        workerVersion: "2.0.0",
+        components: {},
+        gitCommit: "abc123",
+        buildTime: NOW,
+        imageTag: "v1",
+        status: "active",
+        createdAt: NOW,
+      });
+      expect(result.queueName).toBeUndefined();
+    });
+
+    it("still rejects registrations without a non-empty queue name", () => {
+      const registration = {
+        agentVersion: "1.0.0",
+        workerVersion: "2.0.0",
+        components: {},
+        gitCommit: "abc123",
+        buildTime: NOW,
+        imageTag: "v1",
+      };
+
+      expect(() => RegisterAgentVersionInputSchema.parse(registration)).toThrow();
+      expect(() =>
+        RegisterAgentVersionInputSchema.parse({ ...registration, queueName: " " }),
+      ).toThrow();
     });
 
     it("rejects invalid status", () => {

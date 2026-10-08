@@ -20,6 +20,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./types": {
+      "source": "./src/types/index.ts",
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.js"
+    },
+    "./gates": {
+      "source": "./src/gates/index.ts",
+      "types": "./dist/gates/index.d.ts",
+      "import": "./dist/gates/index.js"
+    },
     "./criteria-store": {
       "source": "./src/criteria/criteria-store.ts",
       "types": "./dist/criteria/criteria-store.d.ts",
@@ -49,6 +59,7 @@
     "cockatiel": "^3.2.1",
     "gray-matter": "^4.0.3",
     "ioredis": "^5.4.1",
+    "jose": "^5.9.6",
     "mongodb": "^6.12.0",
     "tar": "^7.5.8",
     "uuid": "^11.1.1",

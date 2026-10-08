@@ -7,7 +7,6 @@
  * These types are shared between the Token Manager service and its clients
  * (workers, judge, API proxy).
  */
-
 /**
  * The kind of credential stored (key format).
  */
@@ -181,7 +180,10 @@ export function parseAzureAiFoundrySecret(raw: string): AzureAiFoundrySecretValu
       return {
         endpoint: trimTrailingSlashes(parsed.endpoint.trim()),
         apiKey: parsed.apiKey.trim(),
-        model: "model" in parsed && typeof parsed.model === "string" && parsed.model.trim() ? parsed.model.trim() : undefined,
+        model:
+          "model" in parsed && typeof parsed.model === "string" && parsed.model.trim()
+            ? parsed.model.trim()
+            : undefined,
       };
     }
     return null;

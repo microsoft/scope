@@ -1,0 +1,21 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import ContentPanel from '@astrojs/starlight/components/ContentPanel.astro';
+import DefaultTwoColumnContent from '@astrojs/starlight/components/TwoColumnContent.astro';
+import SiteFooter from './SiteFooter.astro';
+
+// The site footer is placed after `<main>` (rather than through the `Footer`
+// override, which renders inside it) so it is a page-level `contentinfo`
+// landmark, stays out of the Pagefind search index, and aligns with the
+// content column without sitting under the fixed sidebars.
+---
+
+<DefaultTwoColumnContent>
+	<slot name="right-sidebar" slot="right-sidebar" />
+	<slot />
+	<ContentPanel>
+		<SiteFooter />
+	</ContentPanel>
+</DefaultTwoColumnContent>

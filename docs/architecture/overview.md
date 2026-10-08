@@ -79,8 +79,33 @@ flowchart TB
 | `workers/coder-acp-claude-code` | Claude Code agent via Agent Client Protocol (ACP) |
 | `workers/coder-acp-copilot` | GitHub Copilot agent via Agent Client Protocol (ACP) |
 | `gateway` | AI Gateway — shared Rust TLS-intercepting proxy with plugin architecture (HAR capture, future: token refresh, rate limiting) |
+| `evaluations/static-prompts` | Developer-run static prompt quality and user-controlled prompt red-team suites |
 
 ## Data Flow
+
+### User authentication
+
+Configured human callers send the **IdP access token unchanged** on each API call.
+The API verifies its signature/claims before resolving an active Scope UUID and role
+through Redis (hit: no Mongo) or an exact `(idp, tid, oid)` Mongo lookup (miss/outage).
+Only `POST /api/v1/users/me` performs JIT/profile/`lastLoginAt`/bootstrap writes.
+Every GET is read-only. Enrollment responses use no-store, and clients must not 
+prefetch or poll the POST.
+
+The Portal calls that POST first after an IdP callback; cached-account
+reloads use plain `/users/me`. All application queries wait for the handshake, and
+the API response—not MSAL claims—owns the Scope identity/role. Enrolled CLI bearers
+remain compatible; new identities must explicitly enroll. Full RBAC/ownership,
+interactive CLI login, and Scope internal-token plans are deferred; existing public
+and anonymous rollout behavior is preserved.
+
+The access cache has a fixed/non-sliding TTL (`AUTH_USER_CACHE_TTL_SECONDS`, default
+300 seconds), is namespaced by the Mongo database and identity tuple, and never
+stores tokens. DB-only role/disable changes can remain stale until expiry; Redis
+failure falls back to Mongo. See [Authentication & RBAC](auth-rbac.md) for the method
+walkthrough, failures, cache isolation, and implemented/deferred boundary.
+
+### Benchmark execution
 
 1. **Submit** — A user submits a task via CLI or Portal, selecting a worker, model, criteria, and optionally an agent version. The API validates the selection (model must be in `supportedModels`, version must be active, at least one criterion required), resolves the agent version's queue, creates a run record in CosmosDB, and enqueues a message.
 2. **Execute** — KEDA scales the target worker pod from 0→N. The worker dequeues the message, spins up the coding agent, and executes the task. The worker stamps `workerVersion` (exact build identity) on the run.
@@ -94,6 +119,24 @@ flowchart TB
 > gate configuration run as a single Select gate (identical to before). See the
 > [gates design doc](../design/gates.md) and
 > [app-design.md](app-design.md#gates--multi-phase-evaluation-pipeline).
+
+## Prompt Evaluation
+
+Scope's own prompt templates and its user-controlled AI instruction boundaries
+are tested by separate developer-run tracks:
+
+- **Static quality** executes production TypeScript prompt composition, then
+  grades generated outputs with deterministic checks and the Python Azure AI
+  Evaluation SDK.
+- **Cloud red teaming** inserts generated attacks at reviewed user-controlled
+  fields while preserving the production wrapper, roles, ordering, and tools.
+
+Curated inputs, rubrics, profiles, and policy are committed. Generated model
+responses, cloud downloads, manifests, summaries, and findings are written
+under the ignored `evaluations/static-prompts/results/` tree. These suites are
+explicit local workflows, not part of normal tests or CI. See
+[Prompt Evaluations](prompt-evaluations.md) for the inventory, exact request
+composition, commands, limitations, and maintenance rules.
 
 ## Benchmarking Configuration
 

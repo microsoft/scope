@@ -13,12 +13,14 @@ const postSpy = vi.fn();
 vi.mock("./llm-token.js", () => ({
   acquireInferenceClient: vi.fn(async () => ({
     client: { path: () => ({ post: postSpy }) },
+    endpoint: "https://test.example.com/models",
     model: "test-model",
   })),
   isLlmAvailable: () => true,
 }));
 
 import { generateCriteriaPrompt, type ExistingCriterion } from "./llm.js";
+import { clearChatCompletionCompatibilityCache } from "./adaptive-chat-completions.js";
 
 /** Wrap a JSON payload in the chat-completions response envelope. */
 function reply(payload: unknown) {
@@ -36,6 +38,7 @@ function kindOf(body: any): "author" | "parents" | "children" {
 
 beforeEach(() => {
   postSpy.mockReset();
+  clearChatCompletionCompatibilityCache();
 });
 
 describe("generateCriteriaPrompt — gate-aware suggestions", () => {
@@ -111,6 +114,25 @@ describe("generateCriteriaPrompt — gate-aware suggestions", () => {
 
     await generateCriteriaPrompt("behave", existing, ["select"]);
     expect(postSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses the model-independent modern request shape initially", async () => {
+    postSpy.mockImplementation(async ({ body }: any) => {
+      const kind = kindOf(body);
+      if (kind === "author") return reply({ prompt: "p", suggestedId: "x" });
+      return reply({ suggestions: [] });
+    });
+
+    await generateCriteriaPrompt("behave", existing, undefined, "gpt-5.4-mini");
+
+    for (const [{ body }] of postSpy.mock.calls) {
+      expect(body).toMatchObject({
+        model: "gpt-5.4-mini",
+        max_completion_tokens: 512,
+        temperature: 0.3,
+      });
+      expect(body).not.toHaveProperty("max_tokens");
+    }
   });
 
   it("degrades a failed suggestion call to [] without failing generation", async () => {

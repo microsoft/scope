@@ -65,6 +65,12 @@ const noopReauthHandler: ReauthHandler = () => {};
 // bootstrap via wireApiAuth(); until then requests go out unauthenticated.
 let tokenProvider: TokenProvider = noopTokenProvider;
 let reauthHandler: ReauthHandler = noopReauthHandler;
+let sessionSignal: AbortSignal | undefined;
+
+/** Cancel every account-bound request, even query functions without a signal. */
+export function setApiSessionSignal(signal: AbortSignal | undefined): void {
+  sessionSignal = signal;
+}
 
 /** Override how bearer tokens are resolved (wired by Portal auth). */
 export function setApiTokenProvider(provider: TokenProvider): void {
@@ -80,19 +86,29 @@ export function setReauthHandler(handler: ReauthHandler): void {
 export function resetApiClient(): void {
   tokenProvider = noopTokenProvider;
   reauthHandler = noopReauthHandler;
+  sessionSignal = undefined;
 }
 
 const authHook: BeforeRequestHook = async ({ request }) => {
-  if (request.headers.has("authorization")) return;
-  const token = await tokenProvider();
-  if (token) request.headers.set("authorization", `Bearer ${token}`);
+  const signal = sessionSignal
+    ? AbortSignal.any([request.signal, sessionSignal])
+    : request.signal;
+  signal.throwIfAborted();
+  if (!request.headers.has("authorization")) {
+    const token = await tokenProvider();
+    if (token) request.headers.set("authorization", `Bearer ${token}`);
+  }
+  signal.throwIfAborted();
+  return new Request(request, { signal });
 };
 
 // On a 401, force a fresh token so ky retries the request with it. ky owns
 // request/body reconstruction for the retry, so this is safe for POSTs. The
 // mutated request is returned so ky retries with the refreshed header.
 const reauthRetryHook: BeforeRetryHook = async ({ request }) => {
+  request.signal.throwIfAborted();
   const token = await tokenProvider({ forceRefresh: true });
+  request.signal.throwIfAborted();
   if (token) request.headers.set("authorization", `Bearer ${token}`);
   return request;
 };
@@ -105,7 +121,8 @@ const reauthRetryHook: BeforeRetryHook = async ({ request }) => {
 //     force-refreshes the token before the second attempt.
 //   - 401 after the retry (retryCount > 0): give up and hand off to the
 //     interactive re-auth handler (redirect), returning the 401 to the caller.
-const handle401Hook: AfterResponseHook = async ({ response, retryCount }) => {
+const handle401Hook: AfterResponseHook = async ({ request, response, retryCount }) => {
+  request.signal.throwIfAborted();
   if (response.status !== 401) return response;
   if (retryCount === 0) {
     return ky.retry({ delay: 0 });
@@ -127,6 +144,9 @@ export const apiClient: KyInstance = ky.create({
   // cockatiel `withRetry`/`@Retry`, so the two layers never compound.
   retry: {
     limit: 1,
+    // Forced ky.retry() on 401 bypasses this. Network failures must not replay
+    // an enrollment POST whose database write may already have succeeded.
+    shouldRetry: () => false,
   },
   hooks: {
     beforeRequest: [authHook],

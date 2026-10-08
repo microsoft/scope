@@ -156,7 +156,7 @@ export function applicationImage(
     name: `scope-local/${name}:${imageTag(options.manifest)}`,
     build: {
       context,
-      dockerfile: `${dockerfile}.scope`,
+      dockerfile,
       args: {
         NPM_CONFIG_REGISTRY: options.registry,
         ...options.manifest.versions,
@@ -339,6 +339,15 @@ const {QueueServiceClient}=require('@azure/storage-queue');
   ];
 }
 
+/** Registry agent version for a Docker worker, derived from its pinned component versions. */
+export function dockerAgentVersion(id: TargetId, manifest: AssetManifest): string {
+  if (id.endsWith("-host")) throw new Error(`Not a Docker target: ${id}`);
+  return id === "coder-acp-copilot"
+    ? `copilot-${manifest.versions.COPILOT_CLI_VERSION}`
+    : `claude-agent-acp-${manifest.versions.CLAUDE_CODE_ACP_VERSION}` +
+      `-sdk-${manifest.versions.CLAUDE_AGENT_SDK_VERSION}`;
+}
+
 /** Build the service definition for an explicitly enabled Docker coding worker. */
 export function dockerWorker(id: TargetId, options: StackOptions): Service {
   if (id.endsWith("-host")) throw new Error(`Not a Docker target: ${id}`);
@@ -366,6 +375,7 @@ export function dockerWorker(id: TargetId, options: StackOptions): Service {
       DEV_PROXY_API_URL: "http://gateway:18000",
       ...(id === "coder-acp-copilot" ? { GATEWAY_TOKEN_PLUGIN_ENABLED: "false" } : {}),
       WORKER_NAME: id,
+      SCOPE_AGENT_VERSION: dockerAgentVersion(id, options.manifest),
       NPM_CONFIG_REGISTRY: options.registry,
     },
     mounts: [{ source: join(options.data, "workspaces", id), target: "/workspace" }],

@@ -1,6 +1,12 @@
 # Shared Portal dependency layer
 FROM node:20-alpine AS deps
-RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
+ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
+ENV npm_config_registry=${NPM_CONFIG_REGISTRY} \
+    COREPACK_NPM_REGISTRY=${NPM_CONFIG_REGISTRY}
+# corepack bootstraps pnpm from the registry's per-version metadata endpoint,
+# which some private registry proxies don't serve; fall back to a pinned global
+# install (honors npm_config_registry) so restricted networks can still build.
+RUN corepack enable && (corepack prepare pnpm@10.29.1 --activate || npm install -g pnpm@10.29.1 --force)
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/portal/package.json apps/portal/
@@ -32,6 +38,16 @@ ENV BUILD_TIME=$BUILD_TIME
 ENV GIT_BRANCH=$GIT_BRANCH
 
 COPY apps/portal/ apps/portal/
+# Public MSAL settings are available to Vite only while building the bundle.
+# The nginx runtime receives neither these variables nor any client secret.
+ARG VITE_AUTH_CLIENT_ID
+ARG VITE_AUTH_AUTHORITY
+ARG VITE_AUTH_KNOWN_AUTHORITIES
+ARG VITE_AUTH_SCOPES
+ARG VITE_AUTH_PROTOCOL_MODE
+ARG VITE_AUTH_REDIRECT_URI
+ARG VITE_AUTH_POST_LOGOUT_REDIRECT_URI
+ARG VITE_AUTH_CACHE_LOCATION
 RUN pnpm --filter portal build
 
 # Stage 2: Serve with nginx

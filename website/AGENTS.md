@@ -3,71 +3,95 @@
 Project context for AI coding agents working on **scope-doc**, the
 Starlight-based documentation site for **Scope**.
 
-## What this repo is
+## What this directory is
 
-A static documentation site published to GitHub Pages.
+A static documentation site published to GitHub Pages, within the
+[microsoft/scope](https://github.com/microsoft/scope) monorepo.
 
 - Framework: **Astro 6.x** + **@astrojs/starlight**
 - Package manager: **pnpm** (pinned via `packageManager` in `package.json`)
 - TypeScript strict
 - Lives under the `website/` directory of the repo (all site sources,
   config, and `package.json` are rooted here; run every command from
-  `website/`)
-- Deployed by `.github/workflows/static.yml` (build + deploy jobs),
+  `website/` unless explicitly directed to the repository root).
+  The site has its own lockfile and is not part of the root pnpm workspace.
+- Deployed by [../.github/workflows/static.yml](../.github/workflows/static.yml)
+  (build + deploy jobs),
   which builds from `website/` via a `working-directory` default and
-  `website/**` path filters; `site` and `base` are driven by
-  `actions/configure-pages` outputs with safe localhost defaults
+  `website/**` path filters; both PR and production builds explicitly use
+  `SITE=https://microsoft.github.io` and `BASE_PATH=/scope`.
+  Do not derive these from `actions/configure-pages` outputs, which can
+  report an isolated hostname instead of the public project URL.
+  Local development keeps localhost and `/` defaults.
 
 ## Where things live
 
 - `src/content/docs/` — all user-facing pages (`.md` and `.mdx`)
-  - `introduction/`, `getting-started/`, `guides/`, `reference/`, `resources/`
+  - `introduction/`, `getting-started/`, `guides/`, `reference/`,
+    `resources/`, `community/`
+- `src/content/articles/`, `src/content/talks/` — one YAML file per
+  published article / talk, schema-validated by the `articles` and
+  `talks` collections in `src/content.config.ts` (see
+  "Articles & talks" below)
+- `src/components/community/` — `ArticleList`, `TalkList`,
+  `TalkCard`, and `CommunityTeaser` (the landing-page section), all
+  reading those collections
   - Sidebar order is defined in `astro.config.mjs`, not by directory order
+- `src/components/SiteFooter.astro` — the site-wide footer (brand,
+  link columns, Microsoft legal links). It is injected after `<main>`
+  by the `TwoColumnContent` override in
+  `src/components/TwoColumnContent.astro`, so it is a page-level
+  `contentinfo` landmark and stays out of the Pagefind index. Keep its
+  internal links pointing at pages that exist in the sidebar.
+  Keep the Privacy & Cookies, Your Privacy Choices (including its
+  privacy-options icon), and Consumer Health Privacy links visible
+  site-wide.
 - `src/openapi/scope-openapi.json` — committed artifact generated from
   the Scope API's OpenAPI registry; drives the auto-generated REST
   API reference
 - `src/plugins/remark-http-snippets.mjs` — custom remark plugin that
   expands fenced ` ```http ` blocks into multi-language Starlight
   `<Tabs>` (curl, JS fetch, Python, Go, Java, C#)
+- `src/plugins/remark-base-path.mjs`: prefixes internal Markdown URLs and
+  literal MDX `href`/`src` attributes with the configured deployment base
 - `astro.config.mjs` — sidebar, plugins, `markdown.remarkPlugins`,
   `starlight-openapi` config
 - `dist/` — build output (gitignored)
 
-## The source of truth: scope-core
+## The source of truth: microsoft/scope
 
-The product itself lives in the
-[scope-core](https://github.com/growth-ecosystems/scope-core)
-repository. When writing docs, **read scope-core before writing any
-factual claim**. Everything in the documentation \u2014 endpoints, field
-names, statuses, worker IDs, behaviors, defaults, error messages,
-anything \u2014 MUST be grounded in the source code. Do not invent. If
-the source doesn't say it, it doesn't go in the docs; ask the user
-or leave it out.
+The product and this documentation site live in this same
+[microsoft/scope](https://github.com/microsoft/scope) checkout. When writing
+docs, **read the local product source before writing any factual claim**.
+Everything in the documentation, including endpoints, field names,
+statuses, worker IDs, behaviors, defaults, and error messages, MUST be
+grounded in the source code. Do not invent. If the source doesn't say it,
+it doesn't go in the docs; ask the user or leave it out.
 
-## Where to look in scope-core
+## Where to look in this monorepo
 
-Anything that comes from the source — endpoints, field names,
-status enums, defaults, validation rules — must be read from
-scope-core at the time you write it, not copied from this file.
+Read endpoints, field names, status enums, defaults, and validation rules
+from this checkout at the time you write, not from this file.
 Use this map as a starting point; do not treat it as a substitute
-for opening the file.
+for opening the file. Paths in the table are relative to the repository
+root, one directory above `website/`; site paths elsewhere in this guide
+are relative to `website/`.
 
-| Topic | File(s) in scope-core |
+| Topic | File(s) from the repository root |
 | --- | --- |
-| Workers (allowed IDs, validation) | `packages/shared/src/schemas/request.ts` (`VALID_WORKERS`) |
-| Worker display names / labels | the `"name"` field in each worker's agent registration (upsert) payload (e.g. "GitHub Copilot CLI", "Claude Code CLI", "VS Code Copilot") |
-| Worker software stacks (pre-installed tools) | `apps/workers/*/src/test-worker.ts` — the `checkTools([...])` array lists every runtime and build tool baked into the container image |
-| Request payload, scenario shape | `packages/shared/src/schemas/request.ts` (`CreateRequestInputSchema`, `ScenarioSchema`) |
-| Request status / outcome enums | `packages/shared/src/schemas/request.ts` (`RequestStatusSchema`, `RequestOutcomeSchema`) |
-| Request lifecycle / scheduler | `apps/api/src/index.ts`, `docs/architecture/queue-scheduler.md` |
-| Profile + version schemas | `packages/shared/src/schemas/profile.ts` |
-| Criterion schema, DAG rules | `packages/shared/src/schemas/criteria.ts` |
-| Route handlers, validation, error codes | `apps/api/src/routes/*.ts` |
-| VS Code worker behavior | `docs/architecture/vscode-electron-worker.md`, `vscode-web-worker.md`, `worker-requirements.md` |
-| OpenAPI source | `apps/api/src/openapi/registry.ts`; generated snapshot at `src/openapi/scope-openapi.json` |
-| Swagger UI | served by the API; check `apps/api/src/index.ts` for the route |
+| Agent IDs, names, and registration validation | [packages/shared/src/schemas/agent.ts](../packages/shared/src/schemas/agent.ts), [apps/api/src/routes/agents.ts](../apps/api/src/routes/agents.ts) |
+| Worker software stacks (pre-installed tools) | `apps/workers/*/src/test-worker.ts`: the `checkTools([...])` arrays list the tools checked by each worker's smoke test |
+| Request payload, scenario shape | [packages/shared/src/schemas/request.ts](../packages/shared/src/schemas/request.ts) (`CreateRequestInputSchema`), [packages/shared/src/schemas/scenario.ts](../packages/shared/src/schemas/scenario.ts) (`ScenarioSchema`) |
+| Request status / outcome enums | [packages/shared/src/schemas/request.ts](../packages/shared/src/schemas/request.ts) (`RequestStatusSchema`, `RequestOutcomeSchema`) |
+| Request lifecycle / scheduler | [apps/api/src/index.ts](../apps/api/src/index.ts), [apps/scheduler/src/request-scheduler.ts](../apps/scheduler/src/request-scheduler.ts), [docs/architecture/queue-scheduler.md](../docs/architecture/queue-scheduler.md) |
+| Profile + version schemas | [packages/shared/src/schemas/profile.ts](../packages/shared/src/schemas/profile.ts) |
+| Criterion schema, DAG rules | [packages/shared/src/schemas/criteria.ts](../packages/shared/src/schemas/criteria.ts) |
+| Route handlers, validation, error codes | [apps/api/src/routes/](../apps/api/src/routes/) |
+| Coding worker behavior | [apps/workers/](../apps/workers/), [docs/architecture/worker-requirements.md](../docs/architecture/worker-requirements.md) |
+| OpenAPI source | [apps/api/src/openapi/registry.ts](../apps/api/src/openapi/registry.ts); generated snapshot at [website/src/openapi/scope-openapi.json](src/openapi/scope-openapi.json) |
+| Swagger UI | Served by the API; check [apps/api/src/index.ts](../apps/api/src/index.ts) for the route |
 
-When in doubt, `grep` scope-core for the symbol or string before
+When in doubt, search this checkout for the symbol or string before
 writing anything in the docs.
 
 ## Standing user rulings
@@ -125,6 +149,8 @@ Plain JSON examples (response shapes, profile config) stay as
 
 ### REST API reference page
 
+- Link to `/reference/api/` for the generated reference landing page.
+  `/reference/api/operations/` is not a page.
 - **Auto-generated** per-endpoint pages live under
   `/reference/api/...` (built from
   `src/openapi/scope-openapi.json` by `starlight-openapi`).
@@ -132,11 +158,65 @@ Plain JSON examples (response shapes, profile config) stay as
   with cross-links to the auto-generated pages and the live Swagger.
   Don't duplicate the per-endpoint detail there.
 
+### Internal links
+
+Use site-root paths such as `/getting-started/access/` in Markdown links
+and literal MDX `href`/`src` attributes. The base-path remark plugin adds
+`/scope` in the public build while keeping local root deployments working.
+Do not hard-code the deployment prefix in content or code examples.
+
 ### Sidebar
 
 Sidebar order is set in `astro.config.mjs`. Adding a new page
 requires updating the sidebar array. The auto-generated REST API
 groups are spread via `...openAPISidebarGroups`.
+
+### Articles & talks
+
+The `community/articles-and-talks` page and the "From the community"
+section on the landing page are generated from two content
+collections. To add an entry, add one YAML file. No code changes are
+needed.
+
+- **Article**: `src/content/articles/<title-slug>.yaml`
+  ```yaml
+  title: Building AX evals that actually work
+  url: https://developer.microsoft.com/blog/building-ax-evals-that-actually-work/
+  publication: Microsoft for Developers   # blog name
+  authors:                                 # as credited, byline order
+    - firstName: Waldek
+      lastName: Mastykarz
+      position: Principal Developer Advocate
+  date: 2026-07-15                         # publish date (optional)
+  ```
+- **Talk**: `src/content/talks/<yyyy-mm-dd>-<event-slug>.yaml`
+  ```yaml
+  title: "From Findings to Fixes: ..."
+  speakers:                                       # same shape as authors
+    - firstName: Jay
+      lastName: Gordon
+      position: Senior Program Manager, Azure Cosmos DB
+  event: Global AI New York
+  venue: Microsoft Lafayette, New York City
+  date: 2026-09-21
+  eventUrl: https://globalai.community/e/783bfa20  # GAIC event page
+  youtubeId: SxaKOmqX-rk                          # omit while pending
+  ```
+
+Take title, blog name, authors (name and position from the article's
+author section), and publish date from the article page itself.
+Take speaker positions from the event page or the speaker's event
+profile (e.g. their Luma bio).
+If a date can't be confirmed, leave `date` out; undated articles
+sort last. A talk without `youtubeId` shows "Video coming soon".
+Both lists sort newest first. A missing field, bad URL, or bad date
+fails `pnpm run build`. Article and event links are external, so the
+components open them in a new tab (`target="_blank"
+rel="noopener noreferrer"`) with a screen-reader "(opens in a new
+tab)" hint; keep that pattern for any new external link.
+Published videos use a labeled Watch on YouTube link, not an iframe
+or remote thumbnail, so visiting a page does not load a third-party
+player or its scripts.
 
 ### Style
 
@@ -154,25 +234,41 @@ groups are spread via `...openAPISidebarGroups`.
 
 ```sh
 pnpm install
+pnpm test                # plugin regressions, using Node's built-in test runner
+pnpm test:a11y           # production build + Playwright/axe privacy and accessibility checks
 pnpm run build           # writes dist/
 pnpm run dev             # local preview at http://localhost:4321
-pnpm run refresh:openapi # generate the OpenAPI snapshot from scope-core
+pnpm run refresh:openapi # generate the OpenAPI snapshot from this monorepo's API
 ```
 
-A green `pnpm run build` is the gate. As of the last edit it produces
-**164 pages** (≈ 23 hand-written + the rest auto-generated from the
-OpenAPI spec). A drop in page count usually means a content collection
-file failed to parse.
+For `refresh:openapi`, install the root workspace dependencies first.
+The script runs `pnpm --filter api generate:openapi` from the repository
+root, using [apps/api/src/openapi/generate.ts](../apps/api/src/openapi/generate.ts)
+to update [src/openapi/scope-openapi.json](src/openapi/scope-openapi.json).
+
+Install Chromium once with `pnpm exec playwright install chromium`
+(add `--with-deps` on Linux). Run `pnpm test:a11y` after changes to
+site components, styles, or privacy behavior. CI runs this browser suite
+against the production build before deployment. Automated checks do
+not replace manual Accessibility Insights, keyboard, screen-reader,
+or authenticated Website Management Center compliance reviews.
+
+Both `pnpm test` and `pnpm run build` must pass. The public build uses
+`SITE=https://microsoft.github.io BASE_PATH=/scope pnpm run build`;
+exercise that configuration when changing links or deployment settings,
+not just the local `/` default. The current snapshot produces **203
+pages**, including the generated API reference. An unexpected drop in
+page count can indicate a content collection file failed to parse.
 
 ## Workflow
 
 - Each logical change is its own commit. Push to refresh the PR; CI
-  rebuilds and redeploys to GH Pages.
+  tests and builds the site. Deployment to GitHub Pages runs on `main`.
 - `main` is protected — open a PR, don't push directly.
 
 ## When in doubt
 
-1. Read the relevant file in scope-core (schemas first, then route
+1. Read the relevant file in this checkout (schemas first, then route
    handlers).
 2. Generate the OpenAPI snapshot with `pnpm run refresh:openapi` and
    inspect `src/openapi/scope-openapi.json`.

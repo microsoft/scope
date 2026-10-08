@@ -9,6 +9,7 @@ import type { Model } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Cpu } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { AgentBadge } from "@/components/AgentBadge";
 import {
   ListLayout,
   FilterRail,
@@ -35,14 +36,33 @@ export function ModelList() {
     queryKey: ["models"],
     queryFn: () => api.listModels(),
   });
+  const { data: agents = [] } = useQuery({
+    queryKey: ["agents", "include-deleted"],
+    queryFn: () => api.listAgents({ includeDeleted: true }),
+    staleTime: 60_000,
+  });
+  const agentById = useMemo(
+    () => new Map(agents.map((agent) => [agent._id, agent])),
+    [agents],
+  );
 
   const providerOptions = useMemo(() => {
     const map = new Map<string, number>();
     for (const m of models) map.set(m.provider, (map.get(m.provider) ?? 0) + 1);
     return [...map.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([value, count]) => ({ value, label: value, count }));
-  }, [models]);
+      .map(([value, count]) => ({
+        value,
+        label: (
+          <AgentBadge
+            agentId={value}
+            agent={agentById.get(value)}
+            triggerLink={false}
+          />
+        ),
+        count,
+      }));
+  }, [models, agentById]);
 
   const agentOptions = useMemo(() => {
     const map = new Map<string, number>();
@@ -126,7 +146,7 @@ export function ModelList() {
       header: "Agent",
       sortable: true,
       width: "160px",
-      cell: (m) => <span className="font-mono text-xs">{m.agentId}</span>,
+      cell: (m) => <AgentBadge agentId={m.agentId} />,
     },
     {
       id: "status",

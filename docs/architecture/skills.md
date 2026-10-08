@@ -70,6 +70,10 @@ erDiagram
 - **SkillRevision** — An immutable, content-addressed snapshot of a skill at a specific commit. The `ref` format is `owner/repo/skillName@commitHash`.
 - **Run.skillRevisions** — Array of skill revision refs attached to a run. These are resolved at submit time and remain immutable throughout the run lifecycle.
 
+### Portal display
+
+Run details display each skill slug with the first seven characters of its pinned commit hash. Legacy runs containing only bare `skills` slugs remain supported.
+
 ## Import Paths
 
 Skills can be added to Scope's internal library through two distinct flows. In both cases, **GitHub is always the source of skill content** — the actual SKILL.md files live in GitHub repositories. Skills.sh is a separate search/discovery registry that indexes publicly available skills.
@@ -117,6 +121,12 @@ Used when the user doesn't know which repo contains the skill they want.
 2. API queries both the internal DB and the [skills.sh](https://skills.sh) external registry
 3. User selects a result from skills.sh
 4. API imports it the same way as Path 1 — registers the skill and resolves content from GitHub
+
+When selecting skills for a profile, the Portal keeps the current search term
+and result list open after each selection so related skills can be added in one
+pass. The result list is rendered in a fixed portal so scrollable forms cannot
+clip it; it stays within the available viewport space and opens above the
+search field when there is not enough room below it.
 
 The skill's `origin` is set to `"skills-sh"` to indicate it was discovered through that registry.
 

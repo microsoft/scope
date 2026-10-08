@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import supertest from "supertest";
 import { app, _injectTestDependencies } from "../../index.js";
+import { useTestServer } from "../../test-server.js";
 import { createAllMockDependencies } from "../../test-helpers.js";
 import { readableFrom, rawParser, blobUrl, VARIANTS, rewireBlobMocks } from "./test-blob-helpers.js";
 
@@ -42,6 +43,7 @@ vi.mock("@azure/storage-blob", async (importOriginal) => {
 });
 
 describe("ATIF endpoints", () => {
+  const testServer = useTestServer(app);
   let mocks: ReturnType<typeof createAllMockDependencies>;
 
   beforeAll(() => {
@@ -63,34 +65,34 @@ describe("ATIF endpoints", () => {
 
     it("returns 404 when request not found", async () => {
       (mocks.collection.findOne as any).mockResolvedValue(null);
-      const res = await supertest(app).get(atifUrl("missing", "?iteration=1"));
+      const res = await supertest(testServer()).get(atifUrl("missing", "?iteration=1"));
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ error: "Request not found" });
     });
 
     it("returns 400 when iteration query parameter is missing", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
-      const res = await supertest(app).get(atifUrl("req-1"));
+      const res = await supertest(testServer()).get(atifUrl("req-1"));
       expect(res.status).toBe(400);
     });
 
     it("returns 400 for invalid iteration number", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
-      const res = await supertest(app).get(atifUrl("req-1", "?iteration=abc"));
+      const res = await supertest(testServer()).get(atifUrl("req-1", "?iteration=abc"));
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ error: "Invalid iteration number" });
     });
 
     it("returns 400 for iteration zero", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
-      const res = await supertest(app).get(atifUrl("req-1", "?iteration=0"));
+      const res = await supertest(testServer()).get(atifUrl("req-1", "?iteration=0"));
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ error: "Invalid iteration number" });
     });
 
     it("returns 404 when no ATIF available for iteration", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", turns: [{ iteration: 1 }] });
-      const res = await supertest(app).get(atifUrl("req-1", "?iteration=1"));
+      const res = await supertest(testServer()).get(atifUrl("req-1", "?iteration=1"));
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ error: "No ATIF trajectory available" });
     });
@@ -104,7 +106,7 @@ describe("ATIF endpoints", () => {
         ],
       });
 
-      const res = await supertest(app).get(atifUrl("req-1", "?iteration=2")).buffer(true).parse(rawParser);
+      const res = await supertest(testServer()).get(atifUrl("req-1", "?iteration=2")).buffer(true).parse(rawParser);
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch("application/json");
       expect(res.headers["content-disposition"]).toContain("req-1-iteration-2.atif.trajectory.json");
@@ -119,7 +121,7 @@ describe("ATIF endpoints", () => {
       const { RestError } = await import("@azure/storage-blob");
       mockDownload.mockRejectedValue(Object.assign(new RestError("not found", { statusCode: 404, code: "BlobNotFound" } as any)));
 
-      const res = await supertest(app).get(atifUrl("req-1", "?iteration=1"));
+      const res = await supertest(testServer()).get(atifUrl("req-1", "?iteration=1"));
       expect(res.status).toBe(404);
       expect(res.body.error).toMatch(/ATIF file not found/);
     });

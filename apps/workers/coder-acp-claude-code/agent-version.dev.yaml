@@ -1,0 +1,9 @@
+agentVersion: claude-agent-acp-dev-sdk-dev
+workerVersion: claude-agent-acp-dev-sdk-dev-local-dev
+components:
+  CLAUDE_CODE_ACP_VERSION: dev
+  CLAUDE_AGENT_SDK_VERSION: dev
+gitCommit: local
+buildTime: local
+imageTag: dev
+queueName: queue-coder-acp-claude-code

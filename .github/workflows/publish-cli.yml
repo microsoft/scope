@@ -4,133 +4,111 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: "Version bump type"
+        description: Version bump type
         required: true
-        default: "minor"
+        default: minor
         type: choice
-        options:
-          - patch
-          - minor
-          - major
+        options: [patch, minor, major]
 
 permissions:
-  contents: write
+  contents: read
 
-env:
-  SCOPE_DOC_REPO: growth-ecosystems/scope-doc
+concurrency:
+  group: publish-cli
+  cancel-in-progress: false
 
 jobs:
   test:
-    name: Build & Test CLI
+    name: Build and test release bundle
+    if: github.repository == 'microsoft/scope' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Install pnpm
         run: |
           corepack enable
           corepack prepare pnpm@10.29.1 --activate
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: "pnpm"
-
+          node-version: "22"
+          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Resolve current CLI version from git tag
-        working-directory: apps/cli
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          CURRENT=$(gh api repos/${{ github.repository }}/git/matching-refs/tags/cli/v \
-            --jq '[.[].ref | sub("refs/tags/cli/v"; "")] | sort_by(split(".") | map(tonumber)) | last')
-          if [ -z "$CURRENT" ] || [ "$CURRENT" = "null" ]; then
-            echo "::error::No cli/v* tag found. Create an initial tag (e.g. cli/v0.0.0) before publishing."
-            exit 1
-          fi
-          echo "Resolved current CLI version from tag: ${CURRENT}"
-          pnpm version "${CURRENT}" --no-git-tag-version --allow-same-version
-
-      - name: Bump version
+      - name: Resolve next CLI version
         id: version
         working-directory: apps/cli
-        run: |
-          NEW_VERSION=$(pnpm version ${{ inputs.bump }} --no-git-tag-version | tr -d 'v')
-          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Build CLI bundle
-        working-directory: apps/cli
         env:
-          SCOPE_DEFAULT_API_URL: ${{ vars.SCOPE_API_URL }}
-        run: pnpm build
-
-      - name: Run integration tests
-        run: pnpm vitest run --config vitest.integration.config.ts apps/cli/src/bundle.integration.test.ts
-
-      - name: Upload bundle
+          BUMP: ${{ inputs.bump }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync, appendFileSync } from 'node:fs';
+          import semver from 'semver';
+          if (!['patch', 'minor', 'major'].includes(process.env.BUMP)) throw new Error('Invalid version bump');
+          const tags = execFileSync('git', ['tag', '--list', 'cli/v*'], { encoding: 'utf8' }).trim();
+          const versions = tags ? tags.split('\n').map(tag => {
+            const version = tag.slice('cli/v'.length);
+            if (!semver.valid(version)) throw new Error(`Invalid CLI tag: ${tag}`);
+            return version;
+          }) : [];
+          let current = versions.sort(semver.rcompare)[0];
+          if (!current) {
+            const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+            const baseline = semver.parse(pkg.version);
+            if (!baseline) throw new Error('Invalid package version for initial release');
+            current = `${baseline.major}.${baseline.minor}.${baseline.patch}`;
+            console.log(`No cli/v* tags: bootstrapping from package version ${pkg.version} (release baseline ${current})`);
+          }
+          const version = semver.inc(current, process.env.BUMP);
+          if (!version) throw new Error('Unable to increment CLI version');
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+          NODE
+      - name: Set release version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: pnpm --dir apps/cli version "$VERSION" --no-git-tag-version
+      - name: Build CLI bundle
+        run: pnpm build:cli
+      - name: Test release bundle
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SCOPE_NO_UPDATE_CHECK: "1"
+        run: |
+          test "$(node apps/cli/dist/scope.mjs --version)" = "$VERSION"
+          pnpm exec vitest run --config vitest.integration.config.ts apps/cli/src/bundle.integration.test.ts
+      - name: Upload tested bundle
         uses: actions/upload-artifact@v4
         with:
-          name: cli-bundle
+          name: cli-release-bundle
           path: apps/cli/dist/scope.mjs
-
-    outputs:
-      version: ${{ steps.version.outputs.version }}
+          if-no-files-found: error
 
   publish:
-    name: Publish Release
+    name: Publish public CLI release
     needs: test
+    if: github.repository == 'microsoft/scope' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
     steps:
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v1
+      - uses: actions/download-artifact@v4
         with:
-          app-id: ${{ secrets.FLUX_APP_ID }}
-          private-key: ${{ secrets.FLUX_APP_PRIVATE_KEY }}
-          owner: growth-ecosystems
-          repositories: scope-core,scope-doc
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Download bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: cli-bundle
-          path: apps/cli/dist
-
-      - name: Create tag
+          name: cli-release-bundle
+          path: bundle
+      - name: Create release in this repository
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.test.outputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "cli/v${VERSION}" -m "CLI release v${VERSION}"
-          git push origin "cli/v${VERSION}"
-
-      - name: Create release on scope-doc
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          VERSION: ${{ needs.test.outputs.version }}
+          COMMIT: ${{ github.sha }}
         run: |
           gh release create "cli/v${VERSION}" \
-            --repo "$SCOPE_DOC_REPO" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$COMMIT" \
             --title "Scope CLI v${VERSION}" \
-            --notes "## Installation
-
-          \`\`\`bash
-          gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh -H \"Accept: application/vnd.github.raw\" | bash
-          \`\`\`
-
-          Or download \`scope.mjs\` from this release and place it in your PATH.
-
-          Requires Node.js >= 20." \
-            apps/cli/dist/scope.mjs
+            --notes "Standalone Scope CLI. Install: https://github.com/microsoft/scope/blob/main/apps/cli/README.md#installation" \
+            bundle/scope.mjs

@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useOutlet, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
-import type { CodingAgent } from "@/types";
+import { isAgentAvailable, type CodingAgent } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -56,8 +56,8 @@ export function AgentList() {
   );
 
   const availabilityOptions = useMemo(() => {
-    const available = activeAgents.filter((a) => a.available !== false).length;
-    const unavailable = activeAgents.filter((a) => a.available === false).length;
+    const available = activeAgents.filter(isAgentAvailable).length;
+    const unavailable = activeAgents.length - available;
     return [
       { value: "available", label: "Available", count: available },
       { value: "unavailable", label: "Unavailable", count: unavailable },
@@ -81,7 +81,7 @@ export function AgentList() {
 
     return activeAgents.filter((a) => {
       if (availability.length > 0) {
-        const status = a.available === false ? "unavailable" : "available";
+        const status = isAgentAvailable(a) ? "available" : "unavailable";
         if (!availability.includes(status)) return false;
       }
       if (providers.length > 0 && (!a.modelProvider || !providers.includes(a.modelProvider))) {
@@ -137,7 +137,7 @@ export function AgentList() {
       header: "Availability",
       width: "120px",
       cell: (a) =>
-        a.available === false ? (
+        !isAgentAvailable(a) ? (
           <Badge variant="secondary" className="text-xs">Unavailable</Badge>
         ) : (
           <Badge variant="default" className="text-xs">Available</Badge>

@@ -5,30 +5,27 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { extractSkillsToWorkspace } from './skill-extractor.js';
 import type { SkillConfig } from '../types/skill.js';
 import { SkillClient } from './skill-client.js';
-import { mkdirSync, existsSync, rmSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, mkdtempSync, writeFileSync, existsSync, rmSync, readFileSync } from 'fs';
+import { join, dirname } from 'path';
 import { tmpdir } from 'os';
-import { execSync } from 'child_process';
+import { create as tarCreate } from 'tar';
 
 // Create a real tar.gz archive in memory for integration-style tests
 function createTestArchive(skillName: string, files: Record<string, string>): Buffer {
-  const tmpDir = mkdirSync(join(tmpdir(), `skill-extractor-test-${Date.now()}`), { recursive: true }) as unknown as string
-    || join(tmpdir(), `skill-extractor-test-${Date.now()}`);
+  const tmpDir = mkdtempSync(join(tmpdir(), 'skill-extractor-test-'));
   const skillDir = join(tmpDir, skillName);
   mkdirSync(skillDir, { recursive: true });
 
   for (const [name, content] of Object.entries(files)) {
     const filePath = join(skillDir, name);
-    const dir = filePath.substring(0, filePath.lastIndexOf('/'));
-    if (dir !== skillDir) {
-      mkdirSync(dir, { recursive: true });
-    }
-    require('fs').writeFileSync(filePath, content);
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, content);
   }
 
-  // Create tar.gz
+  // Create tar.gz in-process (no `tar` subprocess spawn) so archive creation
+  // stays fast and deterministic under parallel test load.
   const archivePath = join(tmpDir, `${skillName}.tar.gz`);
-  execSync(`tar czf "${archivePath}" -C "${tmpDir}" "${skillName}"`, { stdio: 'pipe' });
+  tarCreate({ file: archivePath, cwd: tmpDir, gzip: true, sync: true }, [skillName]);
   const buffer = readFileSync(archivePath);
 
   // Cleanup tmp dir

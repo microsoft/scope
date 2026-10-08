@@ -16,6 +16,40 @@ Run it with `pnpm cli` from the repository root (`scope-core`).
 
 ---
 
+## Authentication and enrollment
+
+The CLI's shared API transport can attach a caller-provided `SCOPE_TOKEN` containing
+an **IdP access token**. Already-enrolled users keep using that bearer unchanged;
+there is no Scope-token exchange or new CLI login implementation in this milestone.
+Do not assume the deferred `scope auth login`/keychain commands exist.
+
+A new identity must explicitly call **`POST /api/v1/users/me`** using its
+IdP bearer before ordinary authenticated commands. Use the configured Scope API URL:
+
+```bash
+curl --fail-with-body -sS \
+  -X POST \
+  -H "Authorization: Bearer $SCOPE_TOKEN" \
+  -H "Cache-Control: no-store" \
+  "${SCOPE_API_URL%/}/api/v1/users/me"
+```
+
+This POST creates/refreshes the user, profile, `lastLoginAt`, and eligible bootstrap
+promotion; never prefetch, poll, or automatically use it to recover an ordinary
+lookup. GET `/users/me` only checks existing access. `403 user_not_enrolled` calls
+for explicit enrollment; `403 user_disabled` is a denial, not a refresh-token prompt.
+Invalid/expired bearer → `401`; required Mongo/JWKS outage → `503`.
+
+All non-public bearer calls verify the IdP token before Redis/Mongo resolution.
+The active-user cache is fixed/non-sliding (300 seconds by default), so DB-only
+role/disable edits may remain stale until expiry. No raw bearer is cached by the API.
+Never echo tokens or include them in URLs/debug output. Public and anonymous rollout
+behavior is unchanged; full RBAC and interactive CLI auth remain deferred.
+
+See [Authentication & RBAC](../../../docs/architecture/auth-rbac.md).
+
+---
+
 ## Quick Reference
 
 In order to get the full updated reference, run `pnpm cli --help` or `pnpm cli <command> --help` for specific commands. Below is a summary of the most common commands.

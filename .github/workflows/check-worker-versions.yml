@@ -142,10 +142,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # List open issues with the worker-update label and filter by title prefix.
+          # List open issues with the type: worker-update label and filter by title prefix.
           # Using list + jq instead of --search to avoid GitHub search index lag
           # which can cause duplicate issues when runs happen close together.
-          ISSUE_JSON=$(gh issue list --state open --label worker-update --json title,url,number \
+          ISSUE_JSON=$(gh issue list --state open --label "type: worker-update" --json title,url,number \
             --jq '[.[] | select(.title | startswith("chore(${{ matrix.worker }}): update to"))] | .[0] // empty')
           if [ -n "$ISSUE_JSON" ]; then
             ISSUE_URL=$(echo "$ISSUE_JSON" | jq -r '.url')
@@ -203,7 +203,7 @@ jobs:
           ISSUE_URL=$(gh issue create \
             --title "${{ steps.check.outputs.title }}" \
             --body-file /tmp/issue-body.md \
-            --label "worker-update")
+            --label "type: worker-update")
           echo "issue_url=$ISSUE_URL" >> $GITHUB_OUTPUT
 
       - name: Close superseded issue

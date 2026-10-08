@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import supertest from "supertest";
 import { app, _injectTestDependencies } from "../../index.js";
+import { useTestServer } from "../../test-server.js";
 import { createAllMockDependencies } from "../../test-helpers.js";
 import { readableFrom, blobUrl, VARIANTS, rewireBlobMocks } from "./test-blob-helpers.js";
 
@@ -42,6 +43,7 @@ vi.mock("@azure/storage-blob", async (importOriginal) => {
 });
 
 describe("Tool-calls endpoints", () => {
+  const testServer = useTestServer(app);
   let mocks: ReturnType<typeof createAllMockDependencies>;
 
   beforeAll(() => {
@@ -63,28 +65,28 @@ describe("Tool-calls endpoints", () => {
 
     it("returns 404 when request not found", async () => {
       (mocks.collection.findOne as any).mockResolvedValue(null);
-      const res = await supertest(app).get(tcUrl("missing", "?iteration=1"));
+      const res = await supertest(testServer()).get(tcUrl("missing", "?iteration=1"));
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ error: "Request not found" });
     });
 
     it("returns 400 when iteration query parameter is missing", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
-      const res = await supertest(app).get(tcUrl("req-1"));
+      const res = await supertest(testServer()).get(tcUrl("req-1"));
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ error: "iteration query parameter is required" });
     });
 
     it("returns 400 for invalid iteration number", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
-      const res = await supertest(app).get(tcUrl("req-1", "?iteration=0"));
+      const res = await supertest(testServer()).get(tcUrl("req-1", "?iteration=0"));
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ error: "Invalid iteration number" });
     });
 
     it("returns 404 when no tool-calls available for iteration", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", turns: [{ iteration: 1 }] });
-      const res = await supertest(app).get(tcUrl("req-1", "?iteration=1"));
+      const res = await supertest(testServer()).get(tcUrl("req-1", "?iteration=1"));
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ error: "No tool-calls JSONL available for this iteration" });
     });
@@ -95,7 +97,7 @@ describe("Tool-calls endpoints", () => {
         turns: [{ iteration: 1, toolCallsUrl: blobUrl("req-1/iter-1-tool-calls.jsonl") }],
       });
 
-      const res = await supertest(app).get(tcUrl("req-1", "?iteration=1"));
+      const res = await supertest(testServer()).get(tcUrl("req-1", "?iteration=1"));
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch("application/x-ndjson");
       expect(res.headers["content-disposition"]).toContain("tool-calls.jsonl");

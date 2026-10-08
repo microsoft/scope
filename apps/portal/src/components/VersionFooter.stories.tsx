@@ -32,6 +32,15 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   play: async ({ canvas }) => {
     await expect(canvas.getByText(/Portal:/)).toBeVisible();
+    await expect(
+      canvas.getByText(/This is an AI evaluation platform\./),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("link", { name: "Data collection and privacy" }),
+    ).toHaveAttribute(
+      "href",
+      "https://github.com/microsoft/scope/blob/main/website/src/content/docs/resources/data-collection.md",
+    );
   },
 };
 

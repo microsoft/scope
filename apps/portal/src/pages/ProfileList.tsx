@@ -6,7 +6,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useOutlet, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import type { ProfileWithVersion } from "@/types";
-import { WORKER_TYPES } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2 } from "lucide-react";
@@ -34,6 +33,7 @@ import {
   type CustomizeColumnsOption,
 } from "@/components/list-layout";
 import { HelpTooltip } from "@/components/HelpTooltip";
+import { AgentBadge } from "@/components/AgentBadge";
 
 const FILTER_KEYS = ["worker"] as const;
 
@@ -65,6 +65,15 @@ export function ProfileList() {
     queryKey: ["profiles"],
     queryFn: () => api.listProfiles(),
   });
+  const { data: agents = [] } = useQuery({
+    queryKey: ["agents", "include-deleted"],
+    queryFn: () => api.listAgents({ includeDeleted: true }),
+    staleTime: 60_000,
+  });
+  const agentById = useMemo(
+    () => new Map(agents.map((agent) => [agent._id, agent])),
+    [agents],
+  );
 
   const deleteMutation = useMutation({
     mutationFn: (profileId: string) => api.deleteProfile(profileId),
@@ -100,12 +109,24 @@ export function ProfileList() {
       const wt = p.version?.workerType;
       if (wt) map.set(wt, (map.get(wt) ?? 0) + 1);
     }
-    return WORKER_TYPES.map((wt) => ({
-      value: wt,
-      label: wt,
-      count: map.get(wt) ?? 0,
-    })).filter((o) => o.count > 0);
-  }, [profiles]);
+    return [...map.entries()]
+      .sort(([a], [b]) =>
+        (agentById.get(a)?.name ?? "Unknown agent").localeCompare(
+          agentById.get(b)?.name ?? "Unknown agent",
+        ),
+      )
+      .map(([workerId, count]) => ({
+        value: workerId,
+        label: (
+          <AgentBadge
+            agentId={workerId}
+            agent={agentById.get(workerId)}
+            triggerLink={false}
+          />
+        ),
+        count,
+      }));
+  }, [profiles, agentById]);
 
   const filteredProfiles = useMemo(() => {
     const workers = state.getFilterList("worker");
@@ -180,7 +201,11 @@ export function ProfileList() {
       header: "Worker",
       sortable: true,
       cell: (p: ProfileWithVersion) => (
-        <span className="font-mono text-xs">{p.version.workerType}</span>
+        <AgentBadge
+          agentId={p.version.workerType}
+          version={p.version.agentVersion}
+          className="text-xs"
+        />
       ),
     }] : []),
     ...(!columnVisibility.isHidden("model") ? [{

@@ -1,0 +1,91 @@
+name: Community Contribution Labeler
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_run:
+    workflows: ["Pull Request Labeler"]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  label:
+    name: Label community contributions
+    runs-on: ubuntu-latest
+    steps:
+      # This privileged follow-up must never check out or execute pull request code.
+      - name: Update community contribution label
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const label = "community-contribution";
+            const communityAssociations = new Set([
+              "NONE",
+              "FIRST_TIMER",
+              "FIRST_TIME_CONTRIBUTOR",
+              "CONTRIBUTOR",
+            ]);
+            const updateLabel = async (item) => {
+              const isCommunityContribution =
+                item.user?.type === "User" &&
+                communityAssociations.has(item.author_association);
+              const issue = {
+                ...context.repo,
+                issue_number: item.number,
+              };
+
+              if (isCommunityContribution) {
+                await github.rest.issues.addLabels({
+                  ...issue,
+                  labels: [label],
+                });
+                return;
+              }
+
+              try {
+                await github.rest.issues.removeLabel({
+                  ...issue,
+                  name: label,
+                });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            };
+
+            if (context.eventName === "issues") {
+              await updateLabel(context.payload.issue);
+              return;
+            }
+
+            const workflowRun = context.payload.workflow_run;
+            const headOwner = workflowRun.head_repository?.owner?.login;
+
+            if (!headOwner) {
+              core.notice("The workflow run has no source repository.");
+              return;
+            }
+
+            const pullRequests = await github.paginate(github.rest.pulls.list, {
+              ...context.repo,
+              state: "open",
+              head: `${headOwner}:${workflowRun.head_branch}`,
+              per_page: 100,
+            });
+            const matchingPullRequests = pullRequests.filter(
+              (pullRequest) => pullRequest.head.sha === workflowRun.head_sha,
+            );
+
+            if (matchingPullRequests.length === 0) {
+              core.notice("No open pull request matches this workflow run.");
+              return;
+            }
+
+            for (const pullRequest of matchingPullRequests) {
+              await updateLabel(pullRequest);
+            }

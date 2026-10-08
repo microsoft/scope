@@ -66,11 +66,22 @@ The `azure-ai-foundry` secret stores a JSON blob:
 { "endpoint": "https://<resource>.services.ai.azure.com/models", "apiKey": "…", "model": "gpt-4.1-mini" }
 ```
 
-It is registered from the Portal at `/secrets/keys/new`. The API
-validates new keys by issuing a single `chat/completions` probe against
-the endpoint with `max_tokens=1`, so a misconfigured endpoint (missing
-`/models` suffix) or a wrong deployment name surfaces immediately at
-registration time.
+It is registered from the Portal at `/secrets/keys/new`. Credential validation
+uses a 16-token completion budget, starts with `max_completion_tokens` and
+configured sampling controls, then retries only when Foundry returns a
+structured unsupported-parameter error. Output-limit and other unrelated
+client errors remain validation failures.
+The API uses the same negotiation at runtime and caches the learned shape in
+memory by endpoint and deployment. The cache has no time-based expiration:
+compatibility is relearned after an API process restart or when Azure rejects a
+cached shape. A cached downgrade (for example, omitting `temperature`) cannot
+detect that an Azure deployment changed in place to support the parameter,
+because the downgraded request continues to succeed. Normal application
+deployments restart the API and therefore renegotiate automatically. If a
+Foundry deployment is upgraded or repointed under the same endpoint and model
+name without restarting Scope, restart the API replicas to clear the cache and
+relearn the preferred request shape. Credentials written by earlier versions
+may contain a `requestProfile` field; the parser accepts and ignores it.
 
 ### Capabilities
 

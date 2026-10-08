@@ -477,7 +477,7 @@ function getClient(): KyInstance {
  * @returns The `fetch` `Response`. Callers keep their existing
  *          `response.ok` / `response.json()` / streaming handling.
  */
-export async function apiFetch(baseUrl: string, path: string, init?: ApiFetchInit): Promise<Response> {
+export async function apiFetch(baseUrl: string | undefined, path: string, init?: ApiFetchInit): Promise<Response> {
   const environment = currentEnvironment();
   const url = `${normalizeUrl(resolveApiUrl(baseUrl))}${withProjectId(resolveApiPath(path), init?.projectId)}`;
 
@@ -501,12 +501,16 @@ export async function apiFetch(baseUrl: string, path: string, init?: ApiFetchIni
   return response;
 }
 
-/** EventSource owns reconnects; its fixed URL and headers retain this operation's connection. */
-export async function apiEventSource(baseUrl: string, path: string): Promise<EventSource> {
+/**
+ * EventSource owns reconnects; its fixed URL and headers retain this operation's
+ * connection. Uses the same bearer as {@link apiFetch}: the named environment's
+ * token, otherwise the legacy {@link tokenProvider}.
+ */
+export async function apiEventSource(baseUrl: string | undefined, path: string): Promise<EventSource> {
   const environment = currentEnvironment();
   const url = `${normalizeUrl(resolveApiUrl(baseUrl))}${resolveApiPath(path)}`;
-  // Preserve legacy SSE's existing unauthenticated behavior.
-  const headers = environment?.token ? { Authorization: `Bearer ${environment.token}` } : undefined;
+  const token = environment ? environment.token : await tokenProvider();
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
   return new EventSource(url, headers ? { headers } : undefined);
 }
 

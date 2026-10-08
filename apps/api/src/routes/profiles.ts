@@ -12,11 +12,14 @@ import {
   ExtensionClient,
   parseExtensionSpec,
 } from "shared";
-import type { ProfileDocument, ProfileVersionDocument } from "shared";
+import type { ProfileDocument, ProfileVersionDocument, ResourceBindingSpec } from "shared";
 import { apiRoute } from "../openapi/api-route.js";
 import type { RouteContext } from "../route-context.js";
 import { resolveSkillSpecs } from "../utils/skill-helpers.js";
-import { validateAgentForModel } from "../utils/agent-helpers.js";
+import {
+  requestedAgentCapabilities,
+  validateAgentTarget,
+} from "../utils/agent-helpers.js";
 import { ProjectIdQuerySchema, getQueryProjectId } from "../utils/project-scope.js";
 
 export function registerProfilesRoutes(ctx: RouteContext): void {
@@ -39,6 +42,29 @@ const versionResponse = <T extends ProfileVersionDocument>(v: T): T => ({
   _id: v.ref ?? v._id,
 });
 
+function normalizeResourceBindingSpecs(input: unknown): ResourceBindingSpec[] | undefined {
+  if (!Array.isArray(input) || input.length === 0) return undefined;
+  const specs = input
+    .map((item) => {
+      if (typeof item === "string") {
+        const ref = item.trim();
+        return ref ? { ref } : undefined;
+      }
+      if (item && typeof item === "object" && typeof (item as { ref?: unknown }).ref === "string") {
+        const ref = (item as { ref: string }).ref.trim();
+        if (!ref) return undefined;
+        const params = (item as { params?: unknown }).params;
+        return {
+          ref,
+          ...(params && typeof params === "object" ? { params: params as Record<string, string> } : {}),
+        };
+      }
+      return undefined;
+    })
+    .filter((spec): spec is ResourceBindingSpec => spec !== undefined);
+  return specs.length > 0 ? specs : undefined;
+}
+
 // POST /api/v1/profiles — create a new profile (+ version 1)
 apiRoute(ctx.app, ctx.registry, {
   method: "post",
@@ -50,25 +76,30 @@ apiRoute(ctx.app, ctx.registry, {
   response: ProfileWithVersionResponseSchema,
   handler: async (req, res, next) => {
     try {
-      const { name, description, workerType, model, reasoningEffort, agentVersion, mcpServers, skillRevisions, extensions } = req.body;
+      const { name, description, workerType, model, reasoningEffort, agentVersion, mcpServers, skillRevisions, resources, extensions } = req.body;
       const projectId = getQueryProjectId(req);
-
-      // Extensions are only supported by VS Code workers
-      if (extensions && extensions.length > 0 && !workerType.includes("vscode")) {
-        res.status(400).json({ error: `Worker type "${workerType}" does not support VS Code extensions` });
-        return;
-      }
+      const resourceBindings = normalizeResourceBindingSpecs(resources);
 
       // A profile must be self-sufficient to submit a run, which requires a
       // model. Agents that don't declare any supportedModels can't satisfy
       // that contract, so creating a profile for them is rejected upfront.
-      const agentCheck = await validateAgentForModel(ctx.agentCollection, workerType, model, "profiles");
+      const agentCheck = await validateAgentTarget(ctx.agentCollection, {
+        workerType,
+        requestedVersion: agentVersion,
+        model,
+        requireModel: true,
+        subjectPlural: "profiles",
+        requirements: requestedAgentCapabilities({
+          reasoningEffort,
+          mcpServers,
+          skillRevisions,
+          extensions,
+        }),
+        strictCapabilities: ctx.strictAgentCapabilities,
+      });
       if (!agentCheck.ok) {
-        const payload: Record<string, unknown> = { error: agentCheck.error };
-        if ("supportedModels" in agentCheck && agentCheck.supportedModels) {
-          payload.supportedModels = agentCheck.supportedModels;
-        }
-        res.status(agentCheck.status).json(payload);
+        const { ok: _ok, status, ...payload } = agentCheck;
+        res.status(status).json(payload);
         return;
       }
 
@@ -124,11 +155,12 @@ apiRoute(ctx.app, ctx.registry, {
         profileId,
         version: 1,
         workerType,
-        model,
+        model: agentCheck.model ?? model,
         ...(reasoningEffort ? { reasoningEffort } : {}),
-        ...(agentVersion ? { agentVersion } : {}),
+        agentVersion: agentCheck.agentVersion,
         ...(mcpServers && mcpServers.length > 0 ? { mcpServers } : {}),
         ...(resolvedSkillRevisions && resolvedSkillRevisions.length > 0 ? { skillRevisions: resolvedSkillRevisions } : {}),
+        ...(resourceBindings && resourceBindings.length > 0 ? { resources: resourceBindings } : {}),
         ...(resolvedExtensions && resolvedExtensions.length > 0 ? { extensions: resolvedExtensions } : {}),
         createdAt: now,
       };
@@ -280,23 +312,28 @@ apiRoute(ctx.app, ctx.registry, {
         return;
       }
 
-      const { workerType, model, reasoningEffort, agentVersion, mcpServers, skillRevisions, extensions } = req.body;
-
-      // Extensions are only supported by VS Code workers
-      if (extensions && extensions.length > 0 && !workerType.includes("vscode")) {
-        res.status(400).json({ error: `Worker type "${workerType}" does not support VS Code extensions` });
-        return;
-      }
+      const { workerType, model, reasoningEffort, agentVersion, mcpServers, skillRevisions, resources, extensions } = req.body;
+      const resourceBindings = normalizeResourceBindingSpecs(resources);
 
       // Same self-sufficiency rule as POST /profiles: a profile (and any new
       // version) must carry a model, so reject agents that don't expose any.
-      const agentCheck = await validateAgentForModel(ctx.agentCollection, workerType, model, "profile versions");
+      const agentCheck = await validateAgentTarget(ctx.agentCollection, {
+        workerType,
+        requestedVersion: agentVersion,
+        model,
+        requireModel: true,
+        subjectPlural: "profile versions",
+        requirements: requestedAgentCapabilities({
+          reasoningEffort,
+          mcpServers,
+          skillRevisions,
+          extensions,
+        }),
+        strictCapabilities: ctx.strictAgentCapabilities,
+      });
       if (!agentCheck.ok) {
-        const payload: Record<string, unknown> = { error: agentCheck.error };
-        if ("supportedModels" in agentCheck && agentCheck.supportedModels) {
-          payload.supportedModels = agentCheck.supportedModels;
-        }
-        res.status(agentCheck.status).json(payload);
+        const { ok: _ok, status, ...payload } = agentCheck;
+        res.status(status).json(payload);
         return;
       }
 
@@ -343,11 +380,12 @@ apiRoute(ctx.app, ctx.registry, {
         profileId: profile._id,
         version: newVersion,
         workerType,
-        model,
+        model: agentCheck.model ?? model,
         ...(reasoningEffort ? { reasoningEffort } : {}),
-        ...(agentVersion ? { agentVersion } : {}),
+        agentVersion: agentCheck.agentVersion,
         ...(mcpServers && mcpServers.length > 0 ? { mcpServers } : {}),
         ...(resolvedSkillRevisions && resolvedSkillRevisions.length > 0 ? { skillRevisions: resolvedSkillRevisions } : {}),
+        ...(resourceBindings && resourceBindings.length > 0 ? { resources: resourceBindings } : {}),
         ...(resolvedExtensions && resolvedExtensions.length > 0 ? { extensions: resolvedExtensions } : {}),
         createdAt: now,
       };

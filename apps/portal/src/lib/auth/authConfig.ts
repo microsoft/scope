@@ -83,11 +83,11 @@ const ENTRA_LOCAL_DEFAULTS = {
   /** Custom (non-Microsoft) authority host must be allow-listed for MSAL. */
   knownAuthorities: ["localhost:8443"],
   /**
-   * Fully-qualified scope for the seeded SPA's exposed `access_as_user` scope.
-   * MSAL needs the resource-qualified form (`api://<appId>/<scope>`) to resolve
-   * the access token's audience.
+   * Fully-qualified scope for the seeded API app's exposed `access_as_user`
+   * scope. MSAL needs the resource-qualified form (`api://<appId>/<scope>`) to
+   * resolve the API access token's audience.
    */
-  scopes: ["api://cccccccc-0000-0000-0000-000000000001/access_as_user"],
+  scopes: ["api://cccccccc-0000-0000-0000-000000000005/access_as_user"],
   /** entra-local speaks generic OIDC, not the AAD-specific protocol. */
   protocolMode: "OIDC" as ProtocolMode,
 };
@@ -176,20 +176,20 @@ function resolveConfig(): PortalAuthConfig {
     envList(env.VITE_AUTH_SCOPES as string | undefined) ??
     (isDev ? ENTRA_LOCAL_DEFAULTS.scopes : []);
   const protocolMode =
-    (env.VITE_AUTH_PROTOCOL_MODE as ProtocolMode | undefined) ??
+    (env.VITE_AUTH_PROTOCOL_MODE as ProtocolMode | undefined) ||
     (isDev ? ENTRA_LOCAL_DEFAULTS.protocolMode : "AAD");
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const redirectUri =
-    (env.VITE_AUTH_REDIRECT_URI as string | undefined) ?? origin;
+    (env.VITE_AUTH_REDIRECT_URI as string | undefined) || origin;
   const postLogoutRedirectUri =
-    (env.VITE_AUTH_POST_LOGOUT_REDIRECT_URI as string | undefined) ?? origin;
+    (env.VITE_AUTH_POST_LOGOUT_REDIRECT_URI as string | undefined) || origin;
 
   const cacheLocation =
     (env.VITE_AUTH_CACHE_LOCATION as
       | "localStorage"
       | "sessionStorage"
-      | undefined) ?? "localStorage";
+      | undefined) || "localStorage";
 
   return {
     clientId,

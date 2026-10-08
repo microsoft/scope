@@ -63,6 +63,30 @@ describe("apiRoute — OpenAPI registration", () => {
     expect(doc.paths?.["/api/v1/items"]?.get).toBeDefined();
     expect(doc.paths?.["/api/v1/items"]?.get?.tags).toEqual(["Items"]);
     expect(doc.paths?.["/api/v1/items"]?.get?.summary).toBe("List items");
+    expect(doc.paths?.["/api/v1/items"]?.get).not.toHaveProperty("security");
+    expect(doc).not.toHaveProperty("security");
+  });
+
+  it.each([
+    { name: "bearer authentication", security: [{ bearerAuth: [] }] },
+    { name: "an explicit anonymous override", security: [] },
+  ])("forwards $name as operation-scoped documentation only", async ({ security }) => {
+    apiRoute(app, registry, {
+      method: "get",
+      path: "/api/v1/security-docs",
+      tags: ["Test"],
+      summary: "Security documentation",
+      security,
+      response: z.object({ ok: z.boolean() }),
+      handler: (_req, res) => {
+        res.json({ ok: true });
+      },
+    });
+
+    const doc = generateDoc(registry);
+    expect(doc.paths?.["/api/v1/security-docs"]?.get?.security).toEqual(security);
+    expect(doc).not.toHaveProperty("security");
+    expect((await request(app).get("/api/v1/security-docs")).status).toBe(200);
   });
 
   it("registers path params in OpenAPI format", () => {

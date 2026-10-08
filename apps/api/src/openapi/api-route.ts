@@ -3,7 +3,7 @@
 
 import { z, type ZodType, type ZodObject } from "zod";
 import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
-import type { OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
+import type { OpenAPIRegistry, RouteConfig } from "@asteasolutions/zod-to-openapi";
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 
 extendZodWithOpenApi(z);
@@ -33,6 +33,9 @@ export interface ApiRouteConfig<
   tags: string[];
   summary: string;
   description?: string;
+
+  /** OpenAPI-only security requirements; enforcement remains in auth middleware/handlers. */
+  security?: RouteConfig["security"];
 
   // Schemas (all optional)
   body?: TBody;
@@ -134,6 +137,7 @@ export function apiRoute<
     tags,
     summary,
     description,
+    security,
     body,
     query,
     params,
@@ -190,6 +194,7 @@ export function apiRoute<
     tags,
     summary,
     ...(description ? { description } : {}),
+    ...(security !== undefined ? { security } : {}),
     ...(Object.keys(request).length > 0 ? { request } : {}),
     responses,
   } as Parameters<typeof registry.registerPath>[0]);

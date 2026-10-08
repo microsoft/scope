@@ -29,6 +29,9 @@ ctrf
 .env.*
 !.env.example
 
+# Local development TLS material is mounted at runtime, never built into images.
+.certs
+
 # Documentation (not needed in images)
 docs
 

@@ -3,7 +3,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import os from "node:os";
-import { CodingAgentQueueProcessor } from "./queue-processor.js";
+import { CodingAgentQueueProcessor, pairBindingsWithConfigs } from "./queue-processor.js";
 import type { QueueProcessorConfig, WorkerProcessor, WorkerResult } from "../types/types.js";
 import type { VisibilityHeartbeat } from "./visibility-heartbeat.js";
 import { InMemoryHeartbeatStore } from "./heartbeat-store.js";
@@ -34,6 +34,10 @@ const stubProcessor: WorkerProcessor = {
 };
 
 describe("CodingAgentQueueProcessor.getVersionFields", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("includes os info with platform, release, and arch", () => {
     const qp = new CodingAgentQueueProcessor(testConfig, stubProcessor);
     const fields = (qp as any).getVersionFields();
@@ -52,7 +56,8 @@ describe("CodingAgentQueueProcessor.getVersionFields", () => {
     expect(fields.workerVersion).toMatch(/^test-1\.0\.0-/);
   });
 
-  it("omits workerVersion when agentVersion is not available", () => {
+  it("uses SCOPE_AGENT_VERSION when the processor does not expose a version", () => {
+    vi.stubEnv("SCOPE_AGENT_VERSION", "registered-v2");
     const noVersionProcessor: WorkerProcessor = {
       workerName: "test-worker",
       async processMessage(): Promise<WorkerResult> {
@@ -62,23 +67,21 @@ describe("CodingAgentQueueProcessor.getVersionFields", () => {
     const qp = new CodingAgentQueueProcessor(testConfig, noVersionProcessor);
     const fields = (qp as any).getVersionFields();
 
-    expect(fields.workerVersion).toBeUndefined();
+    expect(fields.workerVersion).toMatch(/^registered-v2-/);
     expect(fields.os).toBeDefined();
   });
 
-  it("always captures os even without agentVersion", () => {
+  it("fails at startup when no registry runtime identity is available", () => {
+    vi.stubEnv("SCOPE_AGENT_VERSION", "");
     const noVersionProcessor: WorkerProcessor = {
       workerName: "test-worker",
       async processMessage(): Promise<WorkerResult> {
         return { response: "ok" };
       },
     };
-    const qp = new CodingAgentQueueProcessor(testConfig, noVersionProcessor);
-    const fields = (qp as any).getVersionFields();
-
-    expect(fields.os.platform).toBe(os.platform());
-    expect(fields.os.release).toBe(os.release());
-    expect(fields.os.arch).toBe(os.arch());
+    expect(
+      () => new CodingAgentQueueProcessor(testConfig, noVersionProcessor),
+    ).toThrow(/SCOPE_AGENT_VERSION or getAgentVersion/);
   });
 });
 
@@ -147,13 +150,15 @@ describe("CodingAgentQueueProcessor.handleRequest redelivery handling", () => {
     const requestDoc = {
       _id: requestId,
       projectId: "proj-1",
-      workerType: "coder-acp-copilot",
+      workerType: "test-worker",
+      agentVersion: "test-1.0.0",
       scenario: { criteria: [], task: "x" },
       run: { _id: runId, status: runStatus, attemptNumber: 1, ...runOverrides },
     } as any;
 
     const findOneAndUpdate = vi.fn().mockResolvedValue(requestDoc);
-    const collection = { findOneAndUpdate } as any;
+    const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
+    const collection = { findOneAndUpdate, updateOne } as any;
 
     const safeDeleteMessage = vi.fn().mockResolvedValue(undefined);
     const safeDeferMessage = vi.fn().mockResolvedValue(undefined);
@@ -177,8 +182,105 @@ describe("CodingAgentQueueProcessor.handleRequest redelivery handling", () => {
     // would be invoked. Stub it so any accidental call is observable.
     (qp as any).processMultiTurn = vi.fn().mockResolvedValue(undefined);
 
-    return { qp, requestDoc, message, heartbeat, stop, log, findOneAndUpdate, safeDeleteMessage, safeDeferMessage, heartbeatStore, runId, requestId };
+    return { qp, requestDoc, message, heartbeat, stop, log, findOneAndUpdate, updateOne, safeDeleteMessage, safeDeferMessage, heartbeatStore, runId, requestId };
   }
+
+  it("defers a legacy misrouted message for another worker", async () => {
+    const h = makeHarness("queued");
+    h.requestDoc.workerType = "other-worker";
+
+    await (h.qp as any).handleRequest(
+      h.requestDoc,
+      h.message,
+      h.heartbeat,
+      h.log,
+      { runId: h.runId },
+    );
+
+    expect(h.stop).toHaveBeenCalledTimes(1);
+    expect(h.safeDeferMessage).toHaveBeenCalledWith(
+      "msg-1",
+      "frozen-pop-1",
+      0,
+    );
+    expect((h.qp as any).processMultiTurn).not.toHaveBeenCalled();
+  });
+
+  it("defers a legacy misrouted message for another agent version", async () => {
+    const h = makeHarness("queued");
+    h.requestDoc.agentVersion = "test-2.0.0";
+
+    await (h.qp as any).handleRequest(
+      h.requestDoc,
+      h.message,
+      h.heartbeat,
+      h.log,
+      { runId: h.runId },
+    );
+
+    expect(h.stop).toHaveBeenCalledTimes(1);
+    expect(h.safeDeferMessage).toHaveBeenCalledWith(
+      "msg-1",
+      "frozen-pop-1",
+      0,
+    );
+    expect((h.qp as any).processMultiTurn).not.toHaveBeenCalled();
+  });
+
+  it("deletes a stale message after the scheduler returns its run to pending", async () => {
+    const h = makeHarness("pending");
+    h.requestDoc.workerType = "other-worker";
+
+    await (h.qp as any).handleRequest(
+      h.requestDoc,
+      h.message,
+      h.heartbeat,
+      h.log,
+      { runId: h.runId },
+    );
+
+    expect(h.safeDeleteMessage).toHaveBeenCalledWith("msg-1", "pop-1");
+    expect(h.safeDeferMessage).not.toHaveBeenCalled();
+    expect((h.qp as any).processMultiTurn).not.toHaveBeenCalled();
+  });
+
+  it("deletes a stale message after the target moves to another queue", async () => {
+    const h = makeHarness("queued", { queuedQueueName: "new-queue" });
+
+    await (h.qp as any).handleRequest(
+      h.requestDoc,
+      h.message,
+      h.heartbeat,
+      h.log,
+      { runId: h.runId },
+    );
+
+    expect(h.safeDeleteMessage).toHaveBeenCalledWith("msg-1", "pop-1");
+    expect(h.updateOne).not.toHaveBeenCalled();
+    expect((h.qp as any).processMultiTurn).not.toHaveBeenCalled();
+  });
+
+  it("binds the atomic processing claim to the worker queue", async () => {
+    const h = makeHarness("queued", { queuedQueueName: "test-queue" });
+
+    await (h.qp as any).handleRequest(
+      h.requestDoc,
+      h.message,
+      h.heartbeat,
+      h.log,
+      { runId: h.runId },
+    );
+
+    expect(h.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: h.requestId,
+        "run._id": h.runId,
+        "run.status": "queued",
+        "run.queuedQueueName": "test-queue",
+      }),
+      expect.any(Object),
+    );
+  });
 
   it("marks run failed when no heartbeat AND startedAt is older than the staleness threshold", async () => {
     // No Redis heartbeat AND startedAt is way back — this is the legitimate
@@ -352,8 +454,102 @@ describe("CodingAgentQueueProcessor.handleRequest redelivery handling", () => {
     await (h.qp as any).handleRequest(h.requestDoc, h.message, h.heartbeat, h.log, { runId: h.runId });
 
     expect(h.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(h.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: h.requestId,
+        "run._id": h.runId,
+        "run.status": "queued",
+      }),
+      expect.objectContaining({
+        $set: expect.objectContaining({ "run.status": "processing" }),
+      }),
+    );
     expect(h.safeDeleteMessage).not.toHaveBeenCalled();
     expect((h.qp as any).processMultiTurn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CodingAgentQueueProcessor pre-processing failures", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("claims the exact run before extension resolution and terminalizes a resolver error", async () => {
+    const requestId = "req-extension-failure";
+    const runId = "run-extension-failure";
+    const requestDoc = {
+      _id: requestId,
+      projectId: "project with spaces",
+      workerType: "test-worker",
+      agentVersion: "test-1.0.0",
+      extensions: ["ms-python.python"],
+      scenario: { criteria: [], task: "x" },
+      run: { _id: runId, status: "queued", attemptNumber: 1 },
+    } as any;
+
+    const updateOne = vi
+      .fn()
+      .mockResolvedValueOnce({ matchedCount: 1 })
+      .mockResolvedValueOnce({ matchedCount: 1 });
+    const deleteMessage = vi.fn().mockResolvedValue(undefined);
+    const qp = new CodingAgentQueueProcessor(
+      { ...testConfig, apiBaseUrl: "http://api:80" },
+      stubProcessor,
+    );
+    (qp as any).collection = {
+      findOne: vi.fn().mockResolvedValue(requestDoc),
+      updateOne,
+    };
+    (qp as any).queueClient = {
+      updateMessage: vi.fn().mockResolvedValue({ popReceipt: "next-receipt" }),
+      deleteMessage,
+    };
+    (qp as any).logPublisher = {
+      publish: vi.fn().mockResolvedValue(undefined),
+      evictRun: vi.fn(),
+    };
+    (qp as any).heartbeatStore = new InMemoryHeartbeatStore();
+    (qp as any).processMultiTurn = vi.fn().mockResolvedValue(undefined);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: "Bad Request",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const message = {
+      messageId: "message-1",
+      popReceipt: "receipt-1",
+      messageText: Buffer.from(JSON.stringify({ requestId, runId })).toString("base64"),
+    } as any;
+
+    await (qp as any).processMessage(message);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://api:80/api/v1/extensions/ms-python.python?projectId=project%20with%20spaces",
+    );
+    expect(updateOne).toHaveBeenCalledTimes(2);
+    expect(updateOne.mock.calls[0][0]).toEqual({
+      _id: requestId,
+      "run._id": runId,
+      "run.status": "queued",
+      "run.queuedQueueName": "test-queue",
+    });
+    expect(updateOne.mock.calls[1][0]).toEqual({
+      _id: requestId,
+      "run._id": runId,
+      "run.status": "processing",
+      "run.worker.instanceId": (qp as any).instanceId,
+    });
+    expect(updateOne.mock.calls[1][1].$set).toMatchObject({
+      "run.status": "done",
+      "run.outcome": "failed",
+      "run.error": expect.stringMatching(/400 Bad Request/),
+      "run.durationMs": expect.any(Number),
+    });
+    expect((qp as any).processMultiTurn).not.toHaveBeenCalled();
+    expect(deleteMessage).toHaveBeenCalledWith("message-1", "receipt-1");
   });
 });
 
@@ -414,7 +610,8 @@ describe("CodingAgentQueueProcessor.enqueuePostProcessing", () => {
     const runId = "run-stale";
     const requestDoc = {
       _id: requestId,
-      workerType: "coder-acp-copilot",
+      workerType: "test-worker",
+      agentVersion: "test-1.0.0",
       scenario: { criteria: [], task: "x" },
       run: {
         _id: runId,
@@ -452,5 +649,134 @@ describe("CodingAgentQueueProcessor.enqueuePostProcessing", () => {
       Buffer.from(sendMessage.mock.calls[0][0], "base64").toString(),
     );
     expect(decoded).toEqual({ type: "atif", requestId, runId });
+  });
+});
+
+describe("pairBindingsWithConfigs", () => {
+  const config = (slug: string, revisionId: string) => ({
+    ref: `${slug}@r1`,
+    resourceId: `res-${slug}`,
+    revisionId,
+    slug,
+    name: slug,
+    setup: { sh: "echo setup" },
+    exports: [],
+  });
+
+  it("attaches each binding's parameters to its config", () => {
+    const paired = pairBindingsWithConfigs(
+      [{ ref: "sim@r1", revisionId: "rev-1", params: { REPO: "alpha" } }],
+      [config("sim", "rev-1")],
+    );
+    expect(paired).toHaveLength(1);
+    expect(paired[0].params).toEqual({ REPO: "alpha" });
+  });
+
+  it("keeps duplicate bindings of one revision independent", () => {
+    // Regression: matching configs to bindings with find() by revisionId gave both
+    // occurrences the first binding's parameters, so two simulators intended for
+    // different repos both silently targeted the first one.
+    const paired = pairBindingsWithConfigs(
+      [
+        { ref: "sim@r1", revisionId: "rev-1", params: { REPO: "alpha" } },
+        { ref: "sim@r1", revisionId: "rev-1", params: { REPO: "beta" } },
+      ],
+      [config("sim", "rev-1")],
+    );
+    expect(paired).toHaveLength(2);
+    expect(paired[0].params).toEqual({ REPO: "alpha" });
+    expect(paired[1].params).toEqual({ REPO: "beta" });
+  });
+
+  it("preserves submission order when the resolver reorders", () => {
+    const paired = pairBindingsWithConfigs(
+      [
+        { ref: "db@r1", revisionId: "rev-db" },
+        { ref: "sim@r1", revisionId: "rev-sim" },
+      ],
+      [config("sim", "rev-sim"), config("db", "rev-db")],
+    );
+    expect(paired.map((c) => c.slug)).toEqual(["db", "sim"]);
+  });
+
+  it("leaves params unset when a binding has none", () => {
+    const paired = pairBindingsWithConfigs(
+      [{ ref: "sim@r1", revisionId: "rev-1", params: {} }],
+      [config("sim", "rev-1")],
+    );
+    expect(paired[0].params).toBeUndefined();
+  });
+
+  it("throws when the resolver omits a binding's revision", () => {
+    expect(() =>
+      pairBindingsWithConfigs([{ ref: "sim@r1", revisionId: "rev-missing" }], []),
+    ).toThrow(/rev-missing/);
+  });
+});
+
+// ─── Lifecycle teardown boundary ─────────────────────────────────────────────
+describe("CodingAgentQueueProcessor lifecycle teardown boundary", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // Regression: resource provisioning happens inside setup(), but setup used to
+  // sit outside the try/finally that calls teardown(). Any failure between setup
+  // and the agent loop — MCP registration, codebase seeding, skill extraction,
+  // gate-prompt resolution — left provisioned resources running.
+  it("tears down when initialization fails after setup succeeds", async () => {
+    const teardown = vi.fn().mockResolvedValue(undefined);
+    const setup = vi.fn().mockResolvedValue(undefined);
+    const processor: WorkerProcessor = {
+      workerName: "test-worker",
+      async processMessage(): Promise<WorkerResult> {
+        return { response: "ok" };
+      },
+      getAgentVersion: () => "test-1.0.0",
+      setup,
+      teardown,
+      getRunObservations: () => ({ resources: [], mcpRegistered: false }),
+    };
+
+    const qp = new CodingAgentQueueProcessor(
+      {
+        ...testConfig,
+        // BlobStorage is constructed before setup runs, so it needs a parseable
+        // endpoint for the test to reach the code path under test.
+        storageConnectionString:
+          "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=a2V5;BlobEndpoint=http://localhost:10000/devstoreaccount1;QueueEndpoint=http://localhost:10001/devstoreaccount1;",
+      },
+      processor,
+    );
+    (qp as any).collection = { updateOne: vi.fn().mockResolvedValue({}) };
+    (qp as any).logPublisher = { publish: vi.fn().mockResolvedValue(undefined), evictRun: vi.fn() };
+    (qp as any).heartbeatStore = new InMemoryHeartbeatStore();
+
+    // Seeding runs straight after setup and throws without this variable, which
+    // makes it a faithful stand-in for any post-setup initialization failure.
+    vi.stubEnv("SCOPE_MT_API_URL", "");
+
+    const requestDoc = {
+      _id: "req-teardown",
+      projectId: "p1",
+      workerType: "test-worker",
+      scenario: { task: "t", criteria: [] },
+      maxIterations: 1,
+      codebaseRevisionId: "codebase@r1",
+      run: { _id: "run-teardown", status: "processing" },
+    } as any;
+
+    await expect(
+      (qp as any).processMultiTurn(
+        requestDoc,
+        { messageId: "m1", popReceipt: "r1" },
+        { stop: vi.fn() },
+        vi.fn().mockResolvedValue(undefined),
+        new Date(),
+      ),
+    ).rejects.toThrow(/SCOPE_MT_API_URL/);
+
+    expect(setup).toHaveBeenCalled();
+    expect(teardown).toHaveBeenCalled();
   });
 });

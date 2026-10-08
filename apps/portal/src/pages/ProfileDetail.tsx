@@ -23,14 +23,16 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { parseSkillSpec } from "@/components/SkillPicker";
 import { KbdBadge } from "@/components/KbdBadge";
+import { AgentBadge, agentDisplayName, useAgentCatalog } from "@/components/AgentBadge";
+import { SkillRevisionLinks } from "@/components/SkillRevisionLinks";
 import { toast } from "sonner";
 
 export function ProfileDetail() {
   const { profileId, version: versionParam } = useParams<{ profileId: string; version?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { agentById } = useAgentCatalog();
 
   const isSpecificVersion = !!versionParam;
   const versionNumber = versionParam ? parseInt(versionParam, 10) : undefined;
@@ -142,9 +144,12 @@ export function ProfileDetail() {
                   onClick={() => {
                     const parts: string[] = [];
                     const descParts: string[] = [];
-                    const w = displayVersion.workerType;
-                    if (w) {
-                      const label = displayVersion.agentVersion ? `${w}@${displayVersion.agentVersion}` : w;
+                    const workerId = displayVersion.workerType;
+                    if (workerId) {
+                      const workerName = agentDisplayName(workerId, agentById);
+                      const label = displayVersion.agentVersion
+                        ? `${workerName}@${displayVersion.agentVersion}`
+                        : workerName;
                       parts.push(label);
                       descParts.push(label);
                     }
@@ -160,6 +165,10 @@ export function ProfileDetail() {
                       const short = displayVersion.skillRevisions.map((s) => s.split("/").pop() ?? s);
                       parts.push(short.join(", "));
                       descParts.push(`Skills: ${displayVersion.skillRevisions.join(", ")}`);
+                    }
+                    if (displayVersion.resources?.length) {
+                      parts.push(displayVersion.resources.map((resource) => resource.ref).join(", "));
+                      descParts.push(`Resources: ${displayVersion.resources.map((resource) => resource.ref).join(", ")}`);
                     }
                     if (displayVersion.extensions?.length) {
                       const short = displayVersion.extensions.map((e) => e.split("/").pop() ?? e);
@@ -294,7 +303,12 @@ export function ProfileDetail() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <FieldLabel>Worker</FieldLabel>
-                    <p className="font-mono text-sm">{displayVersion.workerType}</p>
+                    <p className="text-sm">
+                      <AgentBadge
+                        agentId={displayVersion.workerType}
+                        version={displayVersion.agentVersion}
+                      />
+                    </p>
                   </div>
                   <div>
                     <FieldLabel>Model</FieldLabel>
@@ -333,18 +347,8 @@ export function ProfileDetail() {
                     <Separator />
                     <div>
                       <FieldLabel>Skills</FieldLabel>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {displayVersion.skillRevisions.map((s) => {
-                          const { slug, commitHash } = parseSkillSpec(s);
-                          return (
-                            <Badge key={s} variant="outline" className="font-mono text-xs gap-1">
-                              {slug}
-                              {commitHash && (
-                                <span className="text-muted-foreground">@{commitHash.substring(0, 7)}</span>
-                              )}
-                            </Badge>
-                          );
-                        })}
+                      <div className="mt-1">
+                        <SkillRevisionLinks references={displayVersion.skillRevisions} />
                       </div>
                     </div>
                   </>
@@ -367,6 +371,33 @@ export function ProfileDetail() {
                             </Badge>
                           );
                         })}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {displayVersion.resources && displayVersion.resources.length > 0 && (
+                  <>
+                    <Separator />
+                    <div>
+                      <FieldLabel>Resources</FieldLabel>
+                      <div className="mt-1 space-y-2">
+                        {displayVersion.resources.map((resource) => (
+                          <div key={resource.ref} className="rounded-md border p-2">
+                            <div className="font-mono text-xs">{resource.ref}</div>
+                            {resource.params && Object.keys(resource.params).length > 0 ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {Object.entries(resource.params).map(([name, value]) => (
+                                  <Badge key={name} variant="outline" className="font-mono text-xs">
+                                    {name}={value}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-1 text-xs text-muted-foreground">No parameter presets.</p>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </>

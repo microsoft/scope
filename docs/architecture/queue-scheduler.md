@@ -22,8 +22,13 @@ The scheduling system decouples request ordering from message delivery. MongoDB 
                │     (apps/scheduler/)          │
                │     1 replica, polls every 2s  │
                │                                │
+               │  Refresh agent registry        │
+               │  Group active targets by       │
+               │    advertised queueName        │
+               │                                │
                │  findOneAndUpdate              │
                │    filter: status=pending      │
+               │            exact worker+ver    │
                │    sort: priority DESC,        │
                │          createdAt ASC         │
                │    set: status → queued        │
@@ -35,9 +40,8 @@ The scheduling system decouples request ordering from message delivery. MongoDB 
                ┌───────────────▼───────────────┐
                │   Azure Storage Queues         │
                │   (shallow buffer, ≤5 msgs)    │
-               │   queue-coder-acp-copilot      │
-               │   queue-coder-acp-claude-code  │
-               │   queue-coder-vscode-electron… │
+               │   names advertised by active   │
+               │   AgentVersion records         │
                └───────────────┬───────────────┘
                                │
                ┌───────────────▼───────────────┐
@@ -72,6 +76,7 @@ stateDiagram-v2
     [*] --> pending
     pending --> paused : pause()
     pending --> queued : scheduler dispatch
+    queued --> pending : registry target recovery
     queued --> paused : pause()
     queued --> processing : worker pickup
     paused --> pending : resume()
@@ -82,7 +87,7 @@ stateDiagram-v2
 | Status | Meaning |
 |--------|---------|
 | `pending` | Awaiting scheduler dispatch. Can be paused. |
-| `queued` | Dispatched to Azure queue, awaiting worker pickup. Can be paused. |
+| `queued` | Dispatched to the Azure queue recorded in `run.queuedQueueName`, awaiting worker pickup. Can be paused. |
 | `processing` | Worker actively running. Cannot be paused. |
 | `paused` | Held — scheduler skips. Resume returns to `pending`. |
 | `done` | Terminal (outcome: succeeded / failed / finished). |
@@ -97,13 +102,43 @@ stateDiagram-v2
 
 Every 2 seconds (configurable via `SCHEDULER_POLL_INTERVAL_MS`):
 
-1. For each worker type, read Azure queue depth via `getProperties().approximateMessagesCount`
-2. Compute available slots: `targetQueueDepth − currentDepth`
-3. For each slot, `findOneAndUpdate` the highest-priority pending request:
-   - Filter: `run.status: "pending"`, matching `workerType`, no `deletedAt`
-   - Sort: `priority: -1, createdAt: 1`
-   - Update: set `run.status: "queued"`
-4. Send `{ requestId, runId }` message to Azure Storage Queue (base64-encoded JSON)
+1. Read the agent registry and keep only non-deleted agents with `available: true` and active versions whose `queueName` is non-empty.
+2. Build one exact worker/version target per advertised queue. If legacy or racing
+   registry writes assign a queue to multiple targets, fail that queue closed and emit
+   `scheduler.registry_queue_conflict`.
+3. Every 30 seconds (configurable via
+   `SCHEDULER_QUEUE_RECONCILIATION_INTERVAL_MS`), reconcile queued requests
+   against the refreshed registry. Requests whose target disappeared, whose
+   queue changed, or whose legacy record lacks `run.queuedQueueName` return
+   atomically to `pending`; workers discard messages from the superseded
+   dispatch. Between reconciliations, reuse the cached queued-request counts and
+   increment them for successful dispatches.
+4. Count queued requests per exact worker/version target from MongoDB and read the physical
+   Azure queue depth. Compute available slots from the greater count so stale queue messages
+   or an eventually consistent queue-depth read cannot overfill the queue.
+5. `findOneAndUpdate` the highest-priority pending request within that target:
+   - Filter: `run.status: "pending"`, exact `workerType` + `agentVersion`, no `deletedAt`
+   - Sort within the target: `priority: -1, createdAt: 1`
+   - Update: set `run.status: "queued"` and `run.queuedQueueName` to the advertised queue
+6. Send `{ requestId, runId, workerType, agentVersion }` to that advertised Azure Storage Queue. If the send fails, retry the idempotent queued-to-pending rollback. Exhausted rollback failures emit `scheduler.claim_rollback_failed`.
+
+Each exact target owns a dedicated physical queue and therefore has an independent
+shallow-buffer budget. Registering a new version of the same agent on its existing
+queue atomically retires the previous owner, so the last successful registration
+wins. The registry API rejects reuse by a different agent; the scheduler independently
+detects legacy or racing conflicts and dispatches nothing to the conflicted queue.
+
+The registry is refreshed on every cycle, so registrations, retirements,
+availability changes, and queue changes take effect without restarting the
+scheduler. Already-queued requests are recovered to pending before dispatch when
+their exact target is no longer routable or advertises a different queue.
+Pending requests whose target is missing, deleted, unavailable,
+inactive, versionless, or missing a queue are not claimed. The scheduler emits
+`scheduler.invalid_pending_target` and `scheduler.invalid_pending_requests`
+telemetry with an actionable reason whenever that invalid-target set changes.
+The diagnostic scan is rate-limited and isolated from dispatch; a failed
+inspection emits `scheduler.invalid_target_inspection_failed` but does not stop
+valid queues from being filled.
 
 ### Configuration
 
@@ -111,14 +146,17 @@ Scheduler environment variables (set on the scheduler Deployment):
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `SCHEDULER_QUEUE_DEPTH_<TYPE>` | 3–5 | Target queue depth per worker type |
+| `SCHEDULER_TARGET_QUEUE_DEPTH` | 5 | Target queued-request depth for each exact worker/version |
 | `SCHEDULER_POLL_INTERVAL_MS` | 2000 | Polling interval in ms |
+| `SCHEDULER_QUEUE_RECONCILIATION_INTERVAL_MS` | 30000 | MongoDB queued-request reconciliation interval in ms |
 
-Queue names follow the convention `queue-<workerType>` (e.g. `queue-coder-acp-copilot`).
+There is no scheduler worker inventory and no queue naming convention.
+`AgentVersion.queueName` is authoritative. In particular,
+`SCHEDULER_WORKER_TYPES` and per-worker queue-depth variables are not supported.
 
 ### Why Keep the Queue Shallow?
 
-Once a message is in Azure Storage Queue, it cannot be reordered or removed. By capping queue depth at 3–5 messages per worker type:
+Once a message is in Azure Storage Queue, it cannot be reordered or removed. By capping each discovered queue at a shallow target depth:
 
 - **Priority takes effect immediately**: high-priority requests get dispatched on the next tick
 - **Pause takes effect immediately**: paused requests are never dispatched
@@ -126,11 +164,12 @@ Once a message is in Azure Storage Queue, it cannot be reordered or removed. By 
 
 ### Back Pressure
 
-The scheduler provides natural back pressure. When workers are busy, messages sit in the queue and `approximateMessagesCount` stays at or above `targetQueueDepth`. The scheduler sees zero available slots and stops dispatching — pending requests accumulate in MongoDB where they remain re-prioritizable and pausable.
+The scheduler provides natural back pressure. When workers are busy, messages sit in the queue and the greater of `approximateMessagesCount` and the MongoDB queued-request count stays at or above `targetQueueDepth`. The scheduler sees zero available slots and stops dispatching — pending requests accumulate in MongoDB where they remain re-prioritizable and pausable.
 
 When workers finish and drain messages, slots open up and the scheduler fills them on the next tick (≤2s). This creates a pull-based flow: workers pull work at their own pace, and the scheduler never overwhelms them regardless of how many requests are pending in MongoDB.
 
-If worker replicas scale up, increase `SCHEDULER_QUEUE_DEPTH_<TYPE>` to match. The target depth should roughly equal the number of worker replicas so each has a message ready when it finishes its current job.
+If worker replicas scale up, increase `SCHEDULER_TARGET_QUEUE_DEPTH`. The same target depth is applied independently to every discovered queue and should
+be high enough to keep the largest worker pool supplied.
 
 ## Worker Behavior
 
@@ -246,10 +285,13 @@ Each row in the runs table has inline icon buttons for Pause (pending/queued), R
 
 ### Queue Inventory
 
-| Queue | Worker Type |
-|-------|-------------|
-| `queue-coder-acp-copilot` | GitHub Copilot CLI |
-| `queue-coder-acp-claude-code` | Claude Code |
+The scheduler has no static queue inventory. Inspect active
+`AgentVersion.queueName` values in the agent registry to see the current queues.
+Each non-deleted active agent version must own a distinct queue. Workers still
+compare the request's exact worker/version and recorded `run.queuedQueueName`
+with their runtime identity as defense in depth against stale or legacy messages.
+The atomic `queued → processing` claim also requires the worker's current queue
+name, closing the race where a run is reassigned after the worker's initial read.
 
 ## Key Files
 

@@ -5,7 +5,14 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { CodingAgent, McpServerDocument } from "@/types";
+import { AgentBadge } from "@/components/AgentBadge";
+import { useStrictAgentCapabilities } from "@/hooks/useStrictAgentCapabilities";
+import {
+  getActiveAgentVersions,
+  isAgentAvailable,
+  type CodingAgent,
+  type McpServerDocument,
+} from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -13,14 +20,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { SkillPicker } from "@/components/SkillPicker";
 import { ExtensionPicker } from "@/components/ExtensionPicker";
+import { ResourcePicker } from "@/components/ResourcePicker";
 import { useModelCapabilities, useReasoningEffort, ReasoningEffortSelect, ModelSelectItems } from "@/components/ReasoningEffortSelect";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
+import type { ResourceBindingSpec } from "@/types";
 
 export function NewProfileVersion() {
   const { profileId } = useParams<{ profileId: string }>();
   const navigate = useNavigate();
+  const strictAgentCapabilities = useStrictAgentCapabilities();
 
   // Configuration fields
   const [worker, setWorker] = useState("");
@@ -29,6 +39,7 @@ export function NewProfileVersion() {
   const [selectedAgentVersion, setSelectedAgentVersion] = useState("");
   const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [selectedResources, setSelectedResources] = useState<ResourceBindingSpec[]>([]);
   const [selectedExtensions, setSelectedExtensions] = useState<string[]>([]);
 
   // Fetch profile to pre-fill from latest version
@@ -39,9 +50,9 @@ export function NewProfileVersion() {
   });
 
   // Fetch agents (workers)
-  const { data: agents = [] } = useQuery({
+  const { data: agents = [], isSuccess: agentsLoaded } = useQuery({
     queryKey: ["agents"],
-    queryFn: api.listAgents,
+    queryFn: () => api.listAgents({ includeDeleted: true }),
   });
 
   // Fetch MCP servers
@@ -59,16 +70,21 @@ export function NewProfileVersion() {
       setSelectedAgentVersion(profile.version.agentVersion ?? "");
       setSelectedMcpServers(profile.version.mcpServers ?? []);
       setSelectedSkills(profile.version.skillRevisions ?? []);
+      setSelectedResources(profile.version.resources ?? []);
       setSelectedExtensions(profile.version.extensions ?? []);
     }
   }, [profile]);
 
   // Find selected agent for model/version lists
   const selectedAgent = agents.find((a: CodingAgent) => a._id === worker);
-  const isVscodeWorker = worker.includes("vscode");
+  const eligibleAgents = agents.filter(isAgentAvailable);
+  const selectedAgentIsEligible = !!selectedAgent && isAgentAvailable(selectedAgent);
+  const supportsMcpServers = !strictAgentCapabilities || selectedAgent?.capabilities?.supportsMcpServers === true;
+  const supportsSkills = !strictAgentCapabilities || selectedAgent?.capabilities?.supportsSkills === true;
+  const supportsExtensions = !strictAgentCapabilities || selectedAgent?.capabilities?.supportsExtensions === true;
 
   // Model capabilities and effort management
-  const { capabilitiesMap, activeModelIds } = useModelCapabilities(worker || undefined);
+  const { capabilitiesMap, activeModelIds, capabilitiesLoaded } = useModelCapabilities(worker || undefined);
   const supportedModels = activeModelIds.length > 0
     ? activeModelIds
     : (selectedAgent?.supportedModels ?? []);
@@ -78,26 +94,42 @@ export function NewProfileVersion() {
     capabilitiesMap,
     value: reasoningEffort,
     onChange: onEffortChange,
-    agentSupportsEffort: selectedAgent?.capabilities?.supportsReasoningEffort,
+    agentSupportsEffort: strictAgentCapabilities
+      ? selectedAgent?.capabilities?.supportsReasoningEffort
+      : true,
+    capabilitiesLoaded,
   });
 
-  // Clear extensions when the user switches to a non-vscode worker.
+  // Clear selections that the newly selected worker cannot consume.
   useEffect(() => {
-    if (worker && !isVscodeWorker) {
+    if (!worker || !agentsLoaded) return;
+    if (strictAgentCapabilities && selectedAgent?.capabilities?.supportsReasoningEffort !== true) {
+      setReasoningEffort("");
+    }
+    if (!supportsMcpServers) {
+      setSelectedMcpServers([]);
+    }
+    if (!supportsSkills) {
+      setSelectedSkills([]);
+    }
+    if (!supportsExtensions) {
       setSelectedExtensions([]);
     }
-  }, [worker, isVscodeWorker]);
+  }, [
+    worker,
+    agentsLoaded,
+    strictAgentCapabilities,
+    selectedAgent?.capabilities?.supportsReasoningEffort,
+    supportsMcpServers,
+    supportsSkills,
+    supportsExtensions,
+  ]);
 
-  // Fetch agent versions
-  const { data: agentVersions = [] } = useQuery({
-    queryKey: ["agent-versions", worker],
-    queryFn: () => api.listAgentVersions(worker),
-    enabled: !!worker,
-  });
-
-  const sortedVersions = [...agentVersions].sort(
+  const sortedVersions = selectedAgent ? getActiveAgentVersions(selectedAgent).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  ) : [];
+  const selectedVersionIsHistorical = !!selectedAgentVersion
+    && !sortedVersions.some((version) => version.agentVersion === selectedAgentVersion);
 
   const createVersionMutation = useMutation({
     mutationFn: () => api.createProfileVersion(profileId!, {
@@ -107,6 +139,7 @@ export function NewProfileVersion() {
       ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}),
       ...(selectedMcpServers.length > 0 ? { mcpServers: selectedMcpServers } : {}),
       ...(selectedSkills.length > 0 ? { skillRevisions: selectedSkills } : {}),
+      ...(selectedResources.length > 0 ? { resources: selectedResources } : {}),
       ...(selectedExtensions.length > 0 ? { extensions: selectedExtensions } : {}),
     }),
     onSuccess: (data) => {
@@ -146,10 +179,11 @@ export function NewProfileVersion() {
     (selectedAgentVersion || "") !== (ev.agentVersion || "") ||
     JSON.stringify([...selectedMcpServers].sort()) !== JSON.stringify([...(ev.mcpServers ?? [])].sort()) ||
     JSON.stringify([...selectedSkills].sort()) !== JSON.stringify([...(ev.skillRevisions ?? [])].sort()) ||
+    JSON.stringify(sortResourceBindings(selectedResources)) !== JSON.stringify(sortResourceBindings(ev.resources ?? [])) ||
     JSON.stringify([...selectedExtensions].sort()) !== JSON.stringify([...(ev.extensions ?? [])].sort())
   );
 
-  const canSubmit = worker && model && hasChanges;
+  const canSubmit = worker && model && selectedAgentIsEligible && !selectedVersionIsHistorical && hasChanges;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -175,13 +209,32 @@ export function NewProfileVersion() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="worker">Worker *</Label>
-            <Select value={worker} onValueChange={(v) => { setWorker(v); setModel(""); setSelectedAgentVersion(""); }}>
+            <Select value={worker} onValueChange={(v) => {
+              setWorker(v);
+              setModel("");
+              setReasoningEffort("");
+              setSelectedAgentVersion("");
+            }}>
               <SelectTrigger id="worker">
                 <SelectValue placeholder="Select a worker" />
               </SelectTrigger>
               <SelectContent>
-                {agents.map((a: CodingAgent) => (
-                  <SelectItem key={a._id} value={a._id}>{a.name}</SelectItem>
+                {worker && !selectedAgentIsEligible && (
+                  <SelectItem value={worker} disabled>
+                    <span className="flex items-center gap-1">
+                      <AgentBadge
+                        agentId={worker}
+                        agent={selectedAgent}
+                        triggerLink={false}
+                      />
+                      <span>(unavailable)</span>
+                    </span>
+                  </SelectItem>
+                )}
+                {eligibleAgents.map((a: CodingAgent) => (
+                  <SelectItem key={a._id} value={a._id}>
+                    <AgentBadge agentId={a._id} agent={a} triggerLink={false} />
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -211,7 +264,7 @@ export function NewProfileVersion() {
             workerEffortWarning={workerEffortWarning}
           />
 
-          {sortedVersions.length > 0 && (
+          {(sortedVersions.length > 0 || selectedVersionIsHistorical) && (
             <div className="space-y-2">
               <Label htmlFor="agentVersion">Agent Version</Label>
               <Select value={selectedAgentVersion} onValueChange={setSelectedAgentVersion}>
@@ -219,6 +272,11 @@ export function NewProfileVersion() {
                   <SelectValue placeholder="Select version" />
                 </SelectTrigger>
                 <SelectContent>
+                  {selectedVersionIsHistorical && (
+                    <SelectItem value={selectedAgentVersion} disabled>
+                      {selectedAgentVersion} (unavailable)
+                    </SelectItem>
+                  )}
                   {sortedVersions.map((v, i) => (
                     <SelectItem key={v.agentVersion} value={v.agentVersion}>
                       {v.agentVersion}{i === 0 ? " (latest)" : ""}
@@ -232,7 +290,7 @@ export function NewProfileVersion() {
       </Card>
 
       {/* MCP Servers */}
-      {mcpServers.length > 0 && (
+      {supportsMcpServers && mcpServers.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>MCP Servers</CardTitle>
@@ -261,18 +319,30 @@ export function NewProfileVersion() {
       )}
 
       {/* Skills */}
+      {supportsSkills && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Skills</CardTitle>
+            <CardDescription>Select skills to include — pinned to their current revision</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SkillPicker selected={selectedSkills} onChange={setSelectedSkills} />
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
-          <CardTitle>Skills</CardTitle>
-          <CardDescription>Select skills to include — pinned to their current revision</CardDescription>
+          <CardTitle>Resources</CardTitle>
+          <CardDescription>Select lifecycle resources and preset any parameter values this version should control</CardDescription>
         </CardHeader>
         <CardContent>
-          <SkillPicker selected={selectedSkills} onChange={setSelectedSkills} />
+          <ResourcePicker selected={selectedResources} onChange={setSelectedResources} />
         </CardContent>
       </Card>
 
-      {/* Extensions (VS Code workers only) */}
-      {isVscodeWorker && (
+      {/* Extensions */}
+      {supportsExtensions && (
         <Card>
           <CardHeader>
             <CardTitle>Extensions</CardTitle>
@@ -302,4 +372,13 @@ export function NewProfileVersion() {
       </div>
     </div>
   );
+}
+
+function sortResourceBindings(bindings: ResourceBindingSpec[]): ResourceBindingSpec[] {
+  return [...bindings]
+    .map((binding) => ({
+      ref: binding.ref,
+      ...(binding.params ? { params: Object.fromEntries(Object.entries(binding.params).sort(([a], [b]) => a.localeCompare(b))) } : {}),
+    }))
+    .sort((a, b) => a.ref.localeCompare(b.ref));
 }

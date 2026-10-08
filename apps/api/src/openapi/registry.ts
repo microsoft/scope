@@ -8,6 +8,13 @@ import {
 
 export const registry = new OpenAPIRegistry();
 
+registry.registerComponent("securitySchemes", "bearerAuth", {
+  type: "http",
+  scheme: "bearer",
+  bearerFormat: "JWT",
+  description: "Use the unchanged IdP access token, without the Bearer prefix.",
+});
+
 export function generateOpenAPIDocument() {
   const generator = new OpenApiGeneratorV31(registry.definitions);
   return generator.generateDocument({

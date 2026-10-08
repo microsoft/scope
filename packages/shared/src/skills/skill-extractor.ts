@@ -16,9 +16,9 @@
  * the agent will naturally discover them at startup.
  */
 
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
+import { extract as tarExtract } from 'tar';
 import { SkillClient } from './skill-client.js';
 import type { SkillConfig } from '../types/skill.js';
 
@@ -94,17 +94,17 @@ export async function extractSkillsToWorkspace(options: ExtractSkillsOptions): P
 
         // Write tar.gz to a temp file in the skill directory, extract, then clean up.
         // The archive structure is `<skillName>/...`, so we strip the first component.
+        // Extraction runs in-process via node-tar (no `tar`/`rm` subprocess spawn),
+        // which keeps it fast and deterministic even under heavy parallel load.
         const tmpArchive = join(skillDir, '.tmp-archive.tar.gz');
         writeFileSync(tmpArchive, archiveBuffer);
 
         try {
-          execSync(`tar xzf "${tmpArchive}" --strip-components=1 -C "${skillDir}"`, {
-            stdio: 'pipe',
-          });
+          tarExtract({ file: tmpArchive, cwd: skillDir, strip: 1, sync: true });
         } finally {
           // Clean up temp archive
           try {
-            execSync(`rm -f "${tmpArchive}"`, { stdio: 'pipe' });
+            rmSync(tmpArchive, { force: true });
           } catch {
             // ignore cleanup failures
           }

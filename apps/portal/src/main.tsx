@@ -13,6 +13,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProjectProvider } from "@/contexts/ProjectContext";
 import { Toaster } from "@/components/ui/sonner";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import { msalInstance, initializeAuth } from "@/lib/auth/msalInstance";
 import { wireApiAuth } from "@/lib/auth/wireApiAuth";
 import "./index.css";
@@ -36,14 +37,17 @@ initializeAuth().finally(() => {
       <MsalProvider instance={msalInstance}>
         <AuthProvider>
           <ThemeProvider>
-            <FeatureFlagProvider>
-              <ProjectProvider>
-                <BrowserRouter>
-                  <App />
-                  <Toaster />
-                </BrowserRouter>
-              </ProjectProvider>
-            </FeatureFlagProvider>
+            {/* Gate App's favicon effect and eager providers, not just routes. */}
+            <RequireAuth>
+              <FeatureFlagProvider>
+                <ProjectProvider>
+                  <BrowserRouter>
+                    <App />
+                    <Toaster />
+                  </BrowserRouter>
+                </ProjectProvider>
+              </FeatureFlagProvider>
+            </RequireAuth>
           </ThemeProvider>
         </AuthProvider>
       </MsalProvider>

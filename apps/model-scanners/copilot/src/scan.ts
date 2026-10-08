@@ -3,6 +3,8 @@
 
 import type { ScannedModel, ScanResult, ModelCapabilities } from "model-scanning";
 
+export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
+
 const COPILOT_MODELS_URL = "https://api.githubcopilot.com/models";
 
 /**
@@ -48,13 +50,21 @@ function extractCopilotCapabilities(
  *
  * @see https://aider.chat/docs/llms/github.html
  */
-export async function scanCopilotModels(token: string): Promise<ScanResult> {
-  const response = await fetch(COPILOT_MODELS_URL, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "Copilot-Integration-Id": "vscode-chat",
-    },
+export async function scanCopilotModels(
+  token: string | null,
+  fetchFn: FetchFn = (input, init) => fetch(input, init),
+): Promise<ScanResult> {
+  // With CAPI HMAC the gateway strips Authorization and sets the integration
+  // ID, so `token` is null and these headers are only the token-based defaults.
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Copilot-Integration-Id": "vscode-chat",
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const response = await fetchFn(COPILOT_MODELS_URL, {
+    headers,
     signal: AbortSignal.timeout(30_000),
   });
 

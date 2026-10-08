@@ -17,7 +17,19 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       },
       "AgentCapabilities": {
         "properties": {
+          "supportsExtensions": {
+            "type": "boolean",
+          },
+          "supportsMcpServers": {
+            "type": "boolean",
+          },
           "supportsReasoningEffort": {
+            "type": "boolean",
+          },
+          "supportsResources": {
+            "type": "boolean",
+          },
+          "supportsSkills": {
             "type": "boolean",
           },
         },
@@ -91,9 +103,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       "AgentVersion": {
         "properties": {
           "agentVersion": {
+            "minLength": 1,
             "type": "string",
           },
           "buildTime": {
+            "minLength": 1,
             "type": "string",
           },
           "components": {
@@ -110,9 +124,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             ],
           },
           "gitCommit": {
+            "minLength": 1,
             "type": "string",
           },
           "imageTag": {
+            "minLength": 1,
             "type": "string",
           },
           "queueName": {
@@ -126,6 +142,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
           "workerVersion": {
+            "minLength": 1,
             "type": "string",
           },
         },
@@ -136,7 +153,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "gitCommit",
           "buildTime",
           "imageTag",
-          "queueName",
           "status",
           "createdAt",
         ],
@@ -236,6 +252,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "overrides": {
             "properties": {
+              "agentVersion": {
+                "type": "string",
+              },
               "extensions": {
                 "items": {
                   "type": "string",
@@ -603,6 +622,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       "CreateAgentInput": {
         "properties": {
           "_id": {
+            "minLength": 1,
             "type": "string",
           },
           "available": {
@@ -621,6 +641,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
           "name": {
+            "minLength": 1,
             "type": "string",
           },
           "supportedModels": {
@@ -767,6 +788,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "reasoningEffort": {
             "type": "string",
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceBindingSpec",
+            },
+            "type": "array",
           },
           "skillRevisions": {
             "items": {
@@ -932,6 +959,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "reasoningEffort": {
             "type": "string",
           },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceBindingSpec",
+            },
+            "type": "array",
+          },
           "scenario": {
             "$ref": "#/components/schemas/Scenario",
           },
@@ -944,6 +977,78 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         },
         "required": [
           "scenario",
+        ],
+        "type": "object",
+      },
+      "CreateResourceInput": {
+        "properties": {
+          "creator": {
+            "type": "string",
+          },
+          "description": {
+            "type": "string",
+          },
+          "exports": {
+            "items": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string",
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceParameter",
+            },
+            "type": "array",
+          },
+          "setup": {
+            "$ref": "#/components/schemas/ResourceScript",
+          },
+          "slug": {
+            "minLength": 1,
+            "type": "string",
+          },
+          "teardown": {
+            "$ref": "#/components/schemas/ResourceScript",
+          },
+        },
+        "required": [
+          "name",
+          "setup",
+        ],
+        "type": "object",
+      },
+      "CreateResourceRevisionInput": {
+        "properties": {
+          "creator": {
+            "type": "string",
+          },
+          "exports": {
+            "items": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceParameter",
+            },
+            "type": "array",
+          },
+          "setup": {
+            "$ref": "#/components/schemas/ResourceScript",
+          },
+          "teardown": {
+            "$ref": "#/components/schemas/ResourceScript",
+          },
+        },
+        "required": [
+          "setup",
         ],
         "type": "object",
       },
@@ -1981,6 +2086,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "reasoningEffort": {
             "type": "string",
           },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceBindingSpec",
+            },
+            "type": "array",
+          },
           "skillRevisions": {
             "items": {
               "type": "string",
@@ -2177,9 +2288,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       "RegisterAgentVersionInput": {
         "properties": {
           "agentVersion": {
+            "minLength": 1,
             "type": "string",
           },
           "buildTime": {
+            "minLength": 1,
             "type": "string",
           },
           "components": {
@@ -2189,15 +2302,19 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "object",
           },
           "gitCommit": {
+            "minLength": 1,
             "type": "string",
           },
           "imageTag": {
+            "minLength": 1,
             "type": "string",
           },
           "queueName": {
+            "minLength": 1,
             "type": "string",
           },
           "workerVersion": {
+            "minLength": 1,
             "type": "string",
           },
         },
@@ -2597,6 +2714,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "reasoningEffort": {
             "type": "string",
           },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceBinding",
+            },
+            "type": "array",
+          },
           "run": {
             "$ref": "#/components/schemas/RunState",
           },
@@ -2641,6 +2764,261 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
           "requestedRef": {
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "ResourceBinding": {
+        "properties": {
+          "params": {
+            "additionalProperties": {
+              "type": "string",
+            },
+            "type": "object",
+          },
+          "ref": {
+            "type": "string",
+          },
+          "revisionId": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "ref",
+          "revisionId",
+          "params",
+        ],
+        "type": "object",
+      },
+      "ResourceBindingSpec": {
+        "anyOf": [
+          {
+            "type": "string",
+          },
+          {
+            "properties": {
+              "params": {
+                "additionalProperties": {
+                  "type": "string",
+                },
+                "type": "object",
+              },
+              "ref": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "ref",
+            ],
+            "type": "object",
+          },
+        ],
+      },
+      "ResourceParameter": {
+        "properties": {
+          "default": {
+            "type": "string",
+          },
+          "description": {
+            "type": "string",
+          },
+          "example": {
+            "type": "string",
+          },
+          "name": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string",
+          },
+          "required": {
+            "default": false,
+            "type": "boolean",
+          },
+        },
+        "required": [
+          "name",
+        ],
+        "type": "object",
+      },
+      "ResourceResponse": {
+        "properties": {
+          "_id": {
+            "type": "string",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "creator": {
+            "type": "string",
+          },
+          "deletedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "description": {
+            "type": "string",
+          },
+          "latestRevisionId": {
+            "type": "string",
+          },
+          "latestRevisionNumber": {
+            "type": "number",
+          },
+          "name": {
+            "type": "string",
+          },
+          "projectId": {
+            "type": "string",
+          },
+          "revisionCounter": {
+            "type": "number",
+          },
+          "slug": {
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+        },
+        "required": [
+          "_id",
+          "slug",
+          "name",
+          "revisionCounter",
+          "createdAt",
+          "projectId",
+        ],
+        "type": "object",
+      },
+      "ResourceRevisionResponse": {
+        "properties": {
+          "_id": {
+            "type": "string",
+          },
+          "contentSha256": {
+            "type": "string",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "creator": {
+            "type": "string",
+          },
+          "deduplicated": {
+            "type": "boolean",
+          },
+          "exports": {
+            "items": {
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceParameter",
+            },
+            "type": "array",
+          },
+          "projectId": {
+            "type": "string",
+          },
+          "ref": {
+            "type": "string",
+          },
+          "resourceId": {
+            "type": "string",
+          },
+          "revisionNumber": {
+            "type": "number",
+          },
+          "setup": {
+            "$ref": "#/components/schemas/ResourceScript",
+          },
+          "slug": {
+            "type": "string",
+          },
+          "teardown": {
+            "$ref": "#/components/schemas/ResourceScript",
+          },
+        },
+        "required": [
+          "_id",
+          "resourceId",
+          "slug",
+          "revisionNumber",
+          "ref",
+          "setup",
+          "exports",
+          "contentSha256",
+          "createdAt",
+          "projectId",
+        ],
+        "type": "object",
+      },
+      "ResourceRunOutcome": {
+        "properties": {
+          "error": {
+            "type": "string",
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string",
+            },
+            "type": "object",
+          },
+          "published": {
+            "items": {
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "ref": {
+            "type": "string",
+          },
+          "revisionId": {
+            "type": "string",
+          },
+          "setupDurationMs": {
+            "type": "number",
+          },
+          "setupSucceeded": {
+            "type": "boolean",
+          },
+          "slug": {
+            "type": "string",
+          },
+          "teardownRan": {
+            "type": "boolean",
+          },
+        },
+        "required": [
+          "ref",
+          "slug",
+          "revisionId",
+          "setupSucceeded",
+          "published",
+        ],
+        "type": "object",
+      },
+      "ResourceScript": {
+        "properties": {
+          "sh": {
+            "minLength": 1,
             "type": "string",
           },
         },
@@ -2804,6 +3182,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "logsUrl": {
             "type": "string",
           },
+          "mcpRegistered": {
+            "type": "boolean",
+          },
           "os": {
             "properties": {
               "arch": {
@@ -2838,11 +3219,20 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "null",
             ],
           },
+          "queuedQueueName": {
+            "type": "string",
+          },
           "rawChatFormat": {
             "type": "string",
           },
           "rawChatUrl": {
             "type": "string",
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceRunOutcome",
+            },
+            "type": "array",
           },
           "result": {
             "type": "string",
@@ -3522,6 +3912,44 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         },
         "type": "object",
       },
+      "UpdateResourceInput": {
+        "properties": {
+          "description": {
+            "type": "string",
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "UserMeResponse": {
+        "properties": {
+          "displayName": {
+            "type": "string",
+          },
+          "email": {
+            "type": "string",
+          },
+          "id": {
+            "type": "string",
+          },
+          "idp": {
+            "type": "string",
+          },
+          "idpTenant": {
+            "type": "string",
+          },
+          "role": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+        ],
+        "type": "object",
+      },
       "ValidateKeyInput": {
         "properties": {
           "token": {
@@ -3532,6 +3960,14 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "token",
         ],
         "type": "object",
+      },
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "bearerFormat": "JWT",
+        "description": "Use the unchanged IdP access token, without the Bearer prefix.",
+        "scheme": "bearer",
+        "type": "http",
       },
     },
   },
@@ -3757,6 +4193,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "type": "string",
             },
           },
+          {
+            "in": "query",
+            "name": "includeDeleted",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
         ],
         "responses": {
           "200": {
@@ -3801,6 +4249,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "400": {
             "description": "Validation error",
+          },
+          "409": {
+            "description": "Restored agent versions conflict with an active queue owner",
           },
         },
         "summary": "Create or update agent (upsert)",
@@ -3856,6 +4307,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "name": "id",
             "required": true,
             "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "includeDeleted",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
               "type": "string",
             },
           },
@@ -4004,6 +4467,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "404": {
             "description": "Agent not found",
           },
+          "409": {
+            "description": "Queue is assigned to another agent",
+          },
+          "503": {
+            "description": "Concurrent registration did not stabilize",
+          },
         },
         "summary": "Register agent version (upsert)",
         "tags": [
@@ -4056,6 +4525,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "404": {
             "description": "Agent or version not found",
+          },
+          "409": {
+            "description": "Queue is assigned to another agent",
+          },
+          "503": {
+            "description": "Concurrent activation did not stabilize",
           },
         },
         "summary": "Patch agent version",
@@ -6640,6 +7115,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                   },
                   "reasoningEffort": {
                     "type": "string",
+                  },
+                  "resources": {
+                    "items": {
+                      "$ref": "#/components/schemas/ResourceBindingSpec",
+                    },
+                    "type": "array",
                   },
                   "skillRevisions": {
                     "items": {
@@ -9982,6 +10463,463 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
       },
     },
+    "/api/v1/resources": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResourceResponse",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "List all resources",
+        "tags": [
+          "Resources",
+        ],
+      },
+      "post": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateResourceInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+          },
+          "400": {
+            "description": "Invalid input",
+          },
+          "409": {
+            "description": "Resource slug or revision ref already exists in this project",
+          },
+        },
+        "summary": "Create a resource and its first revision",
+        "tags": [
+          "Resources",
+        ],
+      },
+    },
+    "/api/v1/resources/revisions/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceRevisionResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Revision not found",
+          },
+        },
+        "summary": "Get resource revision by id",
+        "tags": [
+          "Resource Revisions",
+        ],
+      },
+    },
+    "/api/v1/resources/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "204": {
+            "description": "Success",
+          },
+          "404": {
+            "description": "Resource not found",
+          },
+        },
+        "summary": "Delete a resource",
+        "tags": [
+          "Resources",
+        ],
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Resource not found",
+          },
+        },
+        "summary": "Get a resource",
+        "tags": [
+          "Resources",
+        ],
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateResourceInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Resource not found",
+          },
+        },
+        "summary": "Update a resource",
+        "tags": [
+          "Resources",
+        ],
+      },
+    },
+    "/api/v1/resources/{id}/revisions": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResourceRevisionResponse",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Resource not found",
+          },
+        },
+        "summary": "List resource revisions",
+        "tags": [
+          "Resource Revisions",
+        ],
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateResourceRevisionInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+          },
+          "404": {
+            "description": "Resource not found",
+          },
+          "409": {
+            "description": "Resource revision ref already exists in this project",
+          },
+        },
+        "summary": "Create a resource revision",
+        "tags": [
+          "Resource Revisions",
+        ],
+      },
+    },
+    "/api/v1/resources/{id}/revisions/latest": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceRevisionResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Revision not found",
+          },
+        },
+        "summary": "Get the latest resource revision",
+        "tags": [
+          "Resource Revisions",
+        ],
+      },
+    },
+    "/api/v1/resources/{id}/revisions/{revisionNumber}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "revisionNumber",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceRevisionResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Revision not found",
+          },
+        },
+        "summary": "Get a resource revision by resource and revision number",
+        "tags": [
+          "Resource Revisions",
+        ],
+      },
+    },
     "/api/v1/runs/upload": {
       "post": {
         "parameters": [
@@ -11190,6 +12128,74 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
       },
     },
+    "/api/v1/users/me": {
+      "get": {
+        "description": "Read the existing authenticated Scope identity without enrollment or profile writes. Responses must not be HTTP-cached.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserMeResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "401": {
+            "description": "Not authenticated",
+          },
+          "403": {
+            "description": "User is not enrolled or is disabled",
+          },
+          "503": {
+            "description": "Authentication service unavailable",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Get the authenticated user's identity",
+        "tags": [
+          "Users",
+        ],
+      },
+      "post": {
+        "description": "JIT-enroll the authenticated user, refresh their profile and lastLoginAt, apply bootstrap-admin rules, and warm the access cache. Use this only after an explicit IdP login; do not prefetch, poll, or automatically retry transient failures.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserMeResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "401": {
+            "description": "Not authenticated",
+          },
+          "403": {
+            "description": "User is disabled",
+          },
+          "503": {
+            "description": "Authentication service unavailable",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Enroll the authenticated user",
+        "tags": [
+          "Users",
+        ],
+      },
+    },
     "/api/v1/version": {
       "get": {
         "responses": {
@@ -11207,11 +12213,15 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                     "environment": {
                       "type": "string",
                     },
+                    "strictAgentCapabilities": {
+                      "type": "boolean",
+                    },
                   },
                   "required": [
                     "commit",
                     "buildTime",
                     "environment",
+                    "strictAgentCapabilities",
                   ],
                   "type": "object",
                 },

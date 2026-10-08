@@ -19,6 +19,7 @@ import { HostWorkers } from "./host.js";
 import {
   backendServices,
   buildEnvironment,
+  dockerAgentVersion,
   dockerWorker,
   modelScanner,
   providerEnv,
@@ -638,13 +639,7 @@ async function startLauncher(launch: LaunchPaths, cliOptions: ServerCliOptions):
         await setAgentAvailable(status.apiUrl, id, true);
         return { executable: detected.executable, version: detected.version };
       }
-      let version: string;
-      if (id === "coder-acp-copilot") {
-        version = `copilot-${manifest.versions.COPILOT_CLI_VERSION}`;
-      } else {
-        version = `claude-agent-acp-${manifest.versions.CLAUDE_CODE_ACP_VERSION}` +
-          `-sdk-${manifest.versions.CLAUDE_AGENT_SDK_VERSION}`;
-      }
+      const version = dockerAgentVersion(id, manifest);
       await registerAgent(status.apiUrl, assets, id, manifest, version, manifest.versions);
       const scanner = modelScanner(id, requireStackOptions(stackOptions));
       await runtime.startService(scanner);

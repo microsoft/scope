@@ -77,6 +77,6 @@ profiles, and more — all from the terminal. See
 
 ## Where's the API reference?
 
-The auto-generated [REST API reference](/reference/api/operations/) is
+The auto-generated [REST API reference](/reference/api/) is
 built from the committed OpenAPI snapshot. A narrative overview of the
 resource groups is at the [REST API overview](/reference/rest-api/).

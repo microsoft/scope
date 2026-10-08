@@ -75,9 +75,6 @@ await build({
   banner: { js: banner },
   define: {
     "process.env.SCOPE_CLI_VERSION": JSON.stringify(pkg.version),
-    "process.env.SCOPE_DEFAULT_API_URL": JSON.stringify(
-      process.env.SCOPE_DEFAULT_API_URL || "https://msscope.azurewebsites.net"
-    ),
   },
   external: [],
   logLevel: "warning",

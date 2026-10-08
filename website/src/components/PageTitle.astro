@@ -1,0 +1,7 @@
+---
+import DefaultPageTitle from '@astrojs/starlight/components/PageTitle.astro';
+---
+
+{Astro.locals.starlightRoute.entry.id === ''
+	? <span data-home-title-placeholder hidden></span>
+	: <DefaultPageTitle />}

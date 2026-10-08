@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { CriteriaFilterBar } from "@/components/CriteriaFilterBar";
 import { TaskPromptBadge } from "@/components/TaskPromptBadge";
+import { AgentBadge } from "@/components/AgentBadge";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { formatDuration, cn } from "@/lib/utils";
 import { useFeatureFlags } from "@/contexts/FeatureFlagContext";
@@ -353,9 +354,11 @@ function InsightsRow({ insights }: { insights: DerivedInsights }) {
               </p>
             </TaskPromptBadge>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline" className="font-mono text-[10px]">
-                {topPerformer.workerType}
-              </Badge>
+              <AgentBadge
+                agentId={topPerformer.workerType}
+                variant="badge"
+                className="text-[10px]"
+              />
               <span>
                 {topPerformer.passed}/{topPerformer.completed} passed
               </span>
@@ -400,9 +403,11 @@ function InsightsRow({ insights }: { insights: DerivedInsights }) {
               </p>
             </TaskPromptBadge>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline" className="font-mono text-[10px]">
-                {needsAttention.workerType}
-              </Badge>
+              <AgentBadge
+                agentId={needsAttention.workerType}
+                variant="badge"
+                className="text-[10px]"
+              />
               <span>
                 {needsAttention.completed - needsAttention.passed}/
                 {needsAttention.completed} failed
@@ -500,9 +505,7 @@ function PerformanceTable({ data }: { data: AnalysisResponse }) {
                     </TaskPromptBadge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="font-mono text-xs">
-                      {group.workerType}
-                    </Badge>
+                    <AgentBadge agentId={group.workerType} variant="badge" />
                   </TableCell>
                   <TableCell className="text-center tabular-nums">
                     {group.completed}
@@ -630,9 +633,7 @@ function PassAtKTable({ data }: { data: AnalysisResponse }) {
                   </TaskPromptBadge>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className="font-mono text-xs">
-                    {group.workerType}
-                  </Badge>
+                  <AgentBadge agentId={group.workerType} variant="badge" />
                 </TableCell>
                 <TableCell className="text-center">{group.completed}</TableCell>
                 <TableCell className="text-center">
@@ -677,7 +678,13 @@ function PassAtKTable({ data }: { data: AnalysisResponse }) {
 
 // ─── Success@≤T CDF chart (only when there is data) ────────────────────────
 
-function SuccessAtTChart({ data }: { data: AnalysisResponse }) {
+function SuccessAtTChart({
+  data,
+  agentNameById,
+}: {
+  data: AnalysisResponse;
+  agentNameById: ReadonlyMap<string, string>;
+}) {
   const { groups, maxT } = data;
   const groupsWithData = groups.filter((g) => g.passed > 0);
   if (groupsWithData.length === 0) return null;
@@ -731,20 +738,13 @@ function SuccessAtTChart({ data }: { data: AnalysisResponse }) {
                   `≤${label} iterations`
                 }
               />
-              <Legend
-                wrapperStyle={{ fontSize: 11 }}
-                formatter={(value: string) => {
-                  const group = groupsWithData.find(
-                    (g) => getGroupKey(g) === value,
-                  );
-                  return group ? `${value} (n=${group.passed})` : value;
-                }}
-              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
               {groupsWithData.map((group, idx) => (
                 <Line
                   key={getGroupKey(group)}
                   type="monotone"
                   dataKey={getGroupKey(group)}
+                  name={`${group.task} (${agentNameById.get(group.workerType) ?? "Unknown agent"}) (n=${group.passed})`}
                   stroke={COLORS[idx % COLORS.length]}
                   strokeWidth={2}
                   dot={{ r: 3 }}
@@ -880,6 +880,15 @@ export function Statistics() {
       ),
     refetchInterval: 30_000,
   });
+  const { data: agents = [] } = useQuery({
+    queryKey: ["agents", "include-deleted"],
+    queryFn: () => api.listAgents({ includeDeleted: true }),
+    staleTime: 60_000,
+  });
+  const agentNameById = useMemo(
+    () => new Map(agents.map((agent) => [agent._id, agent.name])),
+    [agents],
+  );
 
   const insights = useMemo(() => (data ? deriveInsights(data) : null), [data]);
 
@@ -1159,7 +1168,7 @@ export function Statistics() {
 
           <PerformanceTable data={data} />
           {isFeatureEnabled("statistics-graph") && (
-            <SuccessAtTChart data={data} />
+            <SuccessAtTChart data={data} agentNameById={agentNameById} />
           )}
           {showPassAtK && <PassAtKTable data={data} />}
         </>

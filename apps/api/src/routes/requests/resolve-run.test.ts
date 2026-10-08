@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import supertest from "supertest";
 import { app, _injectTestDependencies } from "../../index.js";
+import { useTestServer } from "../../test-server.js";
 import { createAllMockDependencies } from "../../test-helpers.js";
 import { readableFrom, blobUrl, rewireBlobMocks } from "./test-blob-helpers.js";
 
@@ -40,6 +41,7 @@ vi.mock("@azure/storage-blob", async (importOriginal) => {
 });
 
 describe("resolveRunForRequest (via per-run endpoints)", () => {
+  const testServer = useTestServer(app);
   let mocks: ReturnType<typeof createAllMockDependencies>;
 
   beforeAll(() => {
@@ -58,7 +60,7 @@ describe("resolveRunForRequest (via per-run endpoints)", () => {
 
   it("returns 404 when request not found", async () => {
     (mocks.collection.findOne as any).mockResolvedValue(null);
-    const res = await supertest(app).get("/api/v1/requests/missing/runs/some-run/har");
+    const res = await supertest(testServer()).get("/api/v1/requests/missing/runs/some-run/har");
     expect(res.status).toBe(404);
     expect(res.body).toMatchObject({ error: "Request not found" });
   });
@@ -70,7 +72,7 @@ describe("resolveRunForRequest (via per-run endpoints)", () => {
     });
     (mocks.runsCollection.findOne as any).mockResolvedValue(null);
 
-    const res = await supertest(app).get("/api/v1/requests/req-1/runs/nonexistent/har");
+    const res = await supertest(testServer()).get("/api/v1/requests/req-1/runs/nonexistent/har");
     expect(res.status).toBe(404);
     expect(res.body).toMatchObject({ error: "Run not found for this request" });
   });
@@ -88,7 +90,7 @@ describe("resolveRunForRequest (via per-run endpoints)", () => {
     });
     mockDownload.mockResolvedValue({ readableStreamBody: readableFrom('{"log":{}}'), contentLength: 10 });
 
-    const res = await supertest(app).get("/api/v1/requests/req-1/runs/historical-run/har");
+    const res = await supertest(testServer()).get("/api/v1/requests/req-1/runs/historical-run/har");
     expect(res.status).toBe(200);
     expect(mockGetBlockBlobClient).toHaveBeenCalledWith("req-1/historical.har");
   });
@@ -104,7 +106,7 @@ describe("resolveRunForRequest (via per-run endpoints)", () => {
       status: "done",
     });
 
-    const res = await supertest(app).get("/api/v1/requests/req-1/runs/historical-run/har");
+    const res = await supertest(testServer()).get("/api/v1/requests/req-1/runs/historical-run/har");
     expect(res.status).toBe(404);
     expect(res.body).toMatchObject({ error: "Run not found for this request" });
   });

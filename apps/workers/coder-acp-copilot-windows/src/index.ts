@@ -92,11 +92,14 @@ export function buildSubprocessEnv(
 
 const WORKER_NAME = process.env.WORKER_NAME || "coder-acp-copilot-windows";
 const tokenClient = new TokenManagerClient();
-const AGENT_VERSION = `copilot-${process.env.COPILOT_CLI_VERSION || "unknown"}`;
+const AGENT_VERSION =
+  process.env.SCOPE_AGENT_VERSION ||
+  `copilot-${process.env.COPILOT_CLI_VERSION || "unknown"}`;
 
 class CopilotWindowsProcessor implements WorkerProcessor {
   static coldStartTracked = false;
   readonly workerName = WORKER_NAME;
+  readonly skillAgentType = "copilot" as const;
   workspacePath: string | undefined = undefined;
 
   getAgentVersion(): string {

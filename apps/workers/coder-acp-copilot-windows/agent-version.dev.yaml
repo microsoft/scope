@@ -1,0 +1,8 @@
+agentVersion: copilot-windows-dev
+workerVersion: copilot-windows-dev-local-dev
+components:
+  COPILOT_CLI_VERSION: dev
+gitCommit: local
+buildTime: local
+imageTag: dev
+queueName: queue-coder-acp-copilot-windows

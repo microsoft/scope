@@ -4,7 +4,6 @@
 import { z } from "zod";
 import { checkMigrations } from "db-migrations/check-migrations";
 import { apiRoute } from "../openapi/api-route.js";
-import { VALID_WORKERS } from "../route-context.js";
 import type { RouteContext } from "../route-context.js";
 
 export function registerSystemRoutes(ctx: RouteContext): void {
@@ -64,13 +63,27 @@ apiRoute(ctx.app, ctx.registry, {
     workers: z.array(z.string()),
   }),
   handler: async (_req, res) => {
+    const agents = await ctx.agentCollection
+      .find({
+        deletedAt: { $exists: false },
+        available: true,
+        versions: {
+          $elemMatch: {
+            status: "active",
+            queueName: { $type: "string", $ne: "" },
+          },
+        },
+      })
+      .project({ _id: 1 })
+      .sort({ _id: 1 })
+      .toArray();
     res.json({
       name: "Multi-Worker API (MongoDB)",
       version: (process.env.GIT_COMMIT || "development"),
       buildTime: (process.env.BUILD_TIME || new Date().toISOString()),
       environment: (process.env.SCOPE_ENVIRONMENT || "production"),
       description: "API that routes requests to multiple workers via separate queues",
-      workers: VALID_WORKERS,
+      workers: agents.map((agent) => agent._id),
     });
   },
 });
@@ -85,12 +98,14 @@ apiRoute(ctx.app, ctx.registry, {
     commit: z.string(),
     buildTime: z.string(),
     environment: z.string(),
+    strictAgentCapabilities: z.boolean(),
   }),
   handler: async (_req, res) => {
     res.json({
       commit: (process.env.GIT_COMMIT || "development"),
       buildTime: (process.env.BUILD_TIME || new Date().toISOString()),
       environment: (process.env.SCOPE_ENVIRONMENT || "production"),
+      strictAgentCapabilities: ctx.strictAgentCapabilities,
     });
   },
 });

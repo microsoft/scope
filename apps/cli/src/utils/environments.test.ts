@@ -16,7 +16,7 @@ import { ScopeCommand, currentEnvironment } from "./connection.js";
 import { EnvironmentStore, environmentConfigDir } from "./environments.js";
 import { apiFetch, apiEventSource, resetApiClient, setReauthHandler, setTokenProvider } from "./api-client.js";
 import { resolveProjectId, setSelectedProjectId } from "./config.js";
-import { getDefaultApiUrl, applyApiPortFallback } from "./shared.js";
+import { getDefaultApiUrl } from "./shared.js";
 
 const isolated = vi.hoisted(() => ({
   home: `${process.cwd()}/apps/cli/.test-environments-${process.pid}`,
@@ -182,7 +182,7 @@ describe("integrated environment resolution and precedence", () => {
 
   it.each(["--url", "-u"])("explicit caller API %s restores legacy auth/project even when equal to the default", async (flag) => {
     store.use("local");
-    await run("--env", "missing", "run", "list", flag, getDefaultApiUrl(), "-o", "json");
+    await run("--env", "missing", "run", "list", flag, getDefaultApiUrl()!, "-o", "json");
     expect(requests[0]).toMatchObject({ token: "Bearer ambient-token" });
     expect(new URL(requests[0].url).origin).toBe("https://legacy.example");
     expect(new URL(requests[0].url).searchParams.get("projectId")).toBe("ambient-project");
@@ -191,21 +191,13 @@ describe("integrated environment resolution and precedence", () => {
     expect(new URL(requests[1].url).searchParams.get("projectId")).toBe("legacy-project");
   });
 
-  it("uses legacy environment/port/build defaults only when neither named selector exists", async () => {
+  it("uses legacy SCOPE_API_URL only when neither named selector exists, with no fallback default", async () => {
     await run("project", "list", "-o", "json");
     expect(requests[0].url).toBe("https://legacy.example/api/v1/projects");
     vi.stubEnv("SCOPE_API_URL", "");
     vi.stubEnv("SCOPE_API_PORT", "3999");
-    applyApiPortFallback();
-    await run("project", "list", "-o", "json");
-    expect(requests[1].url).toBe("http://localhost:3999/api/v1/projects");
-    vi.stubEnv("SCOPE_API_URL", "");
     vi.stubEnv("SCOPE_DEFAULT_API_URL", "https://bundled.example");
-    await run("project", "list", "-o", "json");
-    expect(requests[2].url).toBe("https://bundled.example/api/v1/projects");
-    vi.stubEnv("SCOPE_DEFAULT_API_URL", "");
-    await run("project", "list", "-o", "json");
-    expect(requests[3].url).toBe("http://localhost:3100/api/v1/projects");
+    expect(getDefaultApiUrl()).toBeUndefined();
   });
 
   it("never borrows absent named credentials or project, including from custom auth", async () => {
@@ -264,7 +256,7 @@ describe("integrated environment resolution and precedence", () => {
     expect(body.url).toBe("https://mcp.example");
     if (action === "update") expect(body.env).toEqual({ FOO: "bar" });
     for (const apiFlag of ["--api-url", "-u"]) {
-      await run("--env", "missing", "mcp", "server", action, ...args, "--url", "https://mcp.example", apiFlag, getDefaultApiUrl());
+      await run("--env", "missing", "mcp", "server", action, ...args, "--url", "https://mcp.example", apiFlag, getDefaultApiUrl()!);
       expect(requests.at(-1)?.token).toBe("Bearer ambient-token");
       expect(requests.at(-1)?.url).toContain("https://legacy.example/api/v1/mcp/servers");
     }
@@ -450,7 +442,7 @@ describe("operation pinning across streams, downloads, polling and retry", () =>
         expect(requests).toHaveLength(1);
       });
     });
-  it("pins real run/report SSE URLs and headers while preserving explicit-URL legacy SSE", async () => {
+  it("pins real run/report SSE URLs and headers while authenticating explicit-URL legacy SSE", async () => {
     store.use("local");
     await run("run", "logs", "-i", "request", "--from-start");
     reply = () => json({ id: "report" });
@@ -459,7 +451,7 @@ describe("operation pinning across streams, downloads, polling and retry", () =>
     expect(isolated.streams).toEqual([
       { url: "http://127.0.0.1:43127/api/v1/requests/request/logs?fromStart=true", options: { headers: { Authorization: "Bearer local-token" } } },
       { url: "http://127.0.0.1:43127/api/v1/reports/report/logs", options: { headers: { Authorization: "Bearer local-token" } } },
-      { url: "https://explicit.example/api/v1/requests/request/logs", options: undefined },
+      { url: "https://explicit.example/api/v1/requests/request/logs", options: { headers: { Authorization: expect.stringMatching(/^Bearer /) } } },
     ]);
   });
 

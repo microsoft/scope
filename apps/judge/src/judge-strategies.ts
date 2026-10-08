@@ -44,6 +44,12 @@ export interface JudgeStrategyContext {
   currentAgentResponse?: string;
 }
 
+export function createJudgeCriteriaGraph(
+  criteria: CriteriaConfig[],
+): DependencyGraph<CriteriaConfig> {
+  return new DependencyGraph(criteria);
+}
+
 /**
  * Base class for judge evaluation strategies
  */
@@ -996,23 +1002,39 @@ IMPORTANT: Return ONLY the JSON, no additional text before or after.`;
 ${criteriaList}${historySection}`;
   }
 
+  /** Extract the first complete JSON object, respecting strings and escapes. */
+  private extractJsonObject(response: string): string | undefined {
+    const start = response.indexOf("{");
+    if (start < 0) return undefined;
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < response.length; i++) {
+      const ch = response[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === "\\") escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      else if (ch === "{") depth++;
+      else if (ch === "}" && --depth === 0) return response.slice(start, i + 1);
+    }
+    return undefined;
+  }
+
   private parseJsonResponse(
     response: string,
     criteria: CriteriaConfig[],
     onProgress?: (result: CriterionResult) => void,
   ): DetailedEvaluationResult {
-    // Try to extract JSON from markdown code blocks
-    let jsonStr = response.trim();
-    const jsonMatch = jsonStr.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[1];
-    } else {
-      // Try to find raw JSON
-      const rawJsonMatch = jsonStr.match(/(\{[\s\S]*\})/);
-      if (rawJsonMatch) {
-        jsonStr = rawJsonMatch[1];
-      }
-    }
+    // Extract a complete JSON object without relying on markdown fences. A
+    // brace-balanced scan handles nested objects and braces inside feedback strings,
+    // while an incomplete/truncated response deliberately falls through to the
+    // existing parse-error path.
+    const jsonStr = this.extractJsonObject(response) ?? response.trim();
 
     try {
       const data = JSON.parse(jsonStr);

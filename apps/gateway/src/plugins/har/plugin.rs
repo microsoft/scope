@@ -27,6 +27,10 @@ use super::storage::{BlobWriter, HarWriter, LocalWriter};
 use super::writer;
 
 /// Per-session metadata kept in the plugin (writer holds all data).
+///
+/// Only recording sessions have an entry. A session that opted out with
+/// `{"har": {"enabled": false}}` is never tracked, so every hook skips it and
+/// `GET .../har` returns 404.
 struct HarSession {
     redact: bool,
     finalized: bool,
@@ -96,6 +100,17 @@ impl ProxyPlugin for HarPlugin {
     }
 
     async fn on_session_start(&self, session_id: &SessionId, settings: &serde_json::Value) {
+        let recording = settings
+            .get("enabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        if !recording {
+            // Drop any entry left by an earlier start with the same id.
+            self.inner.sessions.write().remove(session_id);
+            debug!("HAR plugin: recording disabled for session {}", session_id);
+            return;
+        }
+
         let redact = settings
             .get("redactCredentials")
             .and_then(|v| v.as_bool())
@@ -120,6 +135,11 @@ impl ProxyPlugin for HarPlugin {
         session_id: &SessionId,
         next_iteration: u32,
     ) -> anyhow::Result<()> {
+        // Sessions that opted out of recording have no entry.
+        if !self.inner.sessions.read().contains_key(session_id) {
+            return Ok(());
+        }
+
         self.inner
             .writer
             .init_iteration(session_id, next_iteration)
@@ -435,5 +455,43 @@ mod tests {
         // iter-1 still has 1.
         let har1_after = plugin.inner.build_har_for_session(&sid, 1).await.unwrap();
         assert_eq!(har1_after.log.entries.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn disabled_session_records_nothing() {
+        let tmp = TempDir::new().unwrap();
+        let plugin = HarPlugin::new(tmp.path().to_path_buf());
+        let sid = "scanner-session".to_string();
+
+        plugin
+            .on_session_start(&sid, &serde_json::json!({ "enabled": false }))
+            .await;
+        let mut headers = HeaderMap::new();
+        let uri = Uri::from_static("https://api.githubcopilot.com/models");
+        assert!(plugin.on_request(&sid, &uri, &mut headers).await.is_ok());
+        plugin.on_exchange(&sid, &make_exchange(), 1).await;
+        assert!(plugin.on_iteration_rotate(&sid, 2).await.is_ok());
+        plugin.on_session_stop(&sid).await;
+
+        assert!(plugin.inner.build_har_for_session(&sid, 1).await.is_none());
+        assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 0);
+
+        plugin.on_session_clear(&sid).await;
+        assert!(plugin.inner.sessions.read().get(&sid).is_none());
+    }
+
+    #[tokio::test]
+    async fn explicit_enabled_true_records() {
+        let tmp = TempDir::new().unwrap();
+        let plugin = HarPlugin::new(tmp.path().to_path_buf());
+        let sid = "10.0.0.1".to_string();
+
+        plugin
+            .on_session_start(&sid, &serde_json::json!({ "enabled": true }))
+            .await;
+        plugin.on_exchange(&sid, &make_exchange(), 1).await;
+
+        let har = plugin.inner.build_har_for_session(&sid, 1).await.unwrap();
+        assert_eq!(har.log.entries.len(), 1);
     }
 }

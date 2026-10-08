@@ -20,7 +20,10 @@
  */
 import ModelClient, { type ModelClient as ModelClientType } from "@azure-rest/ai-inference";
 import { AzureKeyCredential } from "@azure/core-auth";
-import { TokenManagerClient, parseAzureAiFoundrySecret } from "shared";
+import {
+  TokenManagerClient,
+  parseAzureAiFoundrySecret,
+} from "shared";
 
 const GITHUB_MODELS_ENDPOINT = "https://models.inference.ai.azure.com";
 
@@ -65,34 +68,6 @@ function normalizeFoundryEndpoint(raw: string): string {
     // Let the SDK surface the malformed-URL error downstream.
   }
   return trimmed;
-}
-
-
-export interface OpenAiChatBody {
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
-  model: string;
-  temperature?: number;
-  max_tokens?: number;
-  max_completion_tokens?: number;
-  [key: string]: unknown;
-}
-
-export function normalizeOpenAiChatBody(body: OpenAiChatBody): OpenAiChatBody {
-  if (!/^(gpt-5|o[134])(?:[.-]|$)/.test(body.model)) return body;
-
-  // origin/main sent temperature: 0.3 and max_tokens: 512 unconditionally from
-  // the Portal authoring helpers. Azure Foundry gpt-5.x/o1/o3/o4 deployments
-  // reject max_tokens and require max_completion_tokens instead; a live
-  // Foundry run against gpt-5.4-mini reproduced that Azure error and returned
-  // HTTP 200 after this translation. The temperature removal is kept with the
-  // same reasoning-model guard, but was inferred from a separate Anthropic case
-  // rather than independently reproduced on Foundry.
-  const normalized: Record<string, unknown> = { ...body };
-  const maxTokens = normalized.max_tokens;
-  delete normalized.max_tokens;
-  delete normalized.temperature;
-  if (typeof maxTokens === "number") normalized.max_completion_tokens = maxTokens;
-  return normalized as OpenAiChatBody;
 }
 
 /**
@@ -202,33 +177,6 @@ export interface InferenceClientHandle {
   model?: string;
 }
 
-
-function azureClient(endpoint: string, apiKey: string, source: InferenceSource): ModelClientType {
-  const sdk = ModelClient(endpoint, new AzureKeyCredential(apiKey));
-  if (source !== "azure-ai-foundry") return sdk;
-
-  return new Proxy(sdk, {
-    get(target, prop, receiver) {
-      if (prop !== "path") return Reflect.get(target, prop, receiver);
-      const path: ModelClientType["path"] = ((...args: unknown[]) => {
-        const pathClient = (target.path as (...pathArgs: unknown[]) => unknown)(...args);
-        if (args[0] !== "/chat/completions" || !pathClient || typeof pathClient !== "object" || !("post" in pathClient)) {
-          return pathClient;
-        }
-        const typedPathClient = pathClient as { post: (request: { body: OpenAiChatBody }) => Promise<unknown> };
-        return {
-          ...pathClient,
-          post: (request: { body: OpenAiChatBody }) => typedPathClient.post({
-            ...request,
-            body: normalizeOpenAiChatBody(request.body),
-          }),
-        };
-      }) as ModelClientType["path"];
-      return path;
-    },
-  }) as ModelClientType;
-}
-
 function logInferenceAcquired(handle: InferenceClientHandle): void {
   const model = handle.model || process.env.LLM_MODEL || "gpt-4.1";
   console.log(
@@ -278,11 +226,13 @@ export async function acquireInferenceClient(): Promise<InferenceClientHandle> {
   if (isFoundryConfigured()) {
     const endpoint = normalizeFoundryEndpoint(process.env.AZURE_AI_INFERENCE_ENDPOINT!);
     const apiKey = process.env.AZURE_AI_INFERENCE_API_KEY!;
+    const model = process.env.LLM_MODEL || "gpt-4.1";
     const handle: InferenceClientHandle = {
-      client: azureClient(endpoint, apiKey, "azure-ai-foundry"),
+      client: ModelClient(endpoint, new AzureKeyCredential(apiKey)),
       endpoint,
       source: "azure-ai-foundry",
       via: "azure-ai-foundry-env",
+      model,
     };
     logInferenceAcquired(handle);
     return handle;
@@ -291,12 +241,13 @@ export async function acquireInferenceClient(): Promise<InferenceClientHandle> {
   // 2. Azure AI Foundry via the Token Manager — preferred in production.
   const tmFoundry = await tryAcquireFoundryFromTokenManager();
   if (tmFoundry) {
+    const model = tmFoundry.model || process.env.LLM_MODEL || "gpt-4.1";
     const handle: InferenceClientHandle = {
-      client: azureClient(tmFoundry.endpoint, tmFoundry.apiKey, "azure-ai-foundry"),
+      client: ModelClient(tmFoundry.endpoint, new AzureKeyCredential(tmFoundry.apiKey)),
       endpoint: tmFoundry.endpoint,
       source: "azure-ai-foundry",
       via: "azure-ai-foundry-token-manager",
-      model: tmFoundry.model,
+      model,
     };
     logInferenceAcquired(handle);
     return handle;

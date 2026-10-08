@@ -8,4 +8,4 @@ SHELL ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Comma
 
 # Install GitHub Copilot CLI globally to C:\tools so it lands on PATH
 ARG COPILOT_CLI_VERSION
-RUN npm install -g --prefix C:\tools "@github/copilot@${env:COPILOT_CLI_VERSION}"
+RUN npm install -g --prefix C:\tools "@github/copilot@${env:COPILOT_CLI_VERSION}"; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

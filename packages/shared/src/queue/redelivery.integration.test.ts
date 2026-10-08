@@ -49,6 +49,7 @@ if (!dockerAvailable && process.env.CI) {
 
 const stubProcessor: WorkerProcessor = {
   workerName: "itest-worker",
+  getAgentVersion: () => "itest-v1",
   async processMessage(): Promise<WorkerResult> {
     // The duplicate-redelivery path returns BEFORE ever invoking the agent.
     // If this is reached, the fresh-heartbeat branch fell through — a bug.
@@ -160,7 +161,8 @@ describe("queue-processor redelivery (A1) — fresh heartbeat re-defers, does no
 
       const requestDoc = {
         _id: requestId,
-        workerType: "coder-acp-copilot",
+        workerType: "itest-worker",
+        agentVersion: "itest-v1",
         scenario: { criteria: [], task: "x" },
         run: {
           _id: runId,

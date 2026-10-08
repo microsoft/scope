@@ -77,4 +77,16 @@ describe("parseAzureAiFoundrySecret", () => {
     });
     expect(parseAzureAiFoundrySecret(raw)?.model).toBeUndefined();
   });
+
+  it("ignores request profiles from credentials created by older versions", () => {
+    const raw = JSON.stringify({
+      endpoint: "https://x",
+      apiKey: "k",
+      requestProfile: "future",
+    });
+    expect(parseAzureAiFoundrySecret(raw)).toEqual({
+      endpoint: "https://x",
+      apiKey: "k",
+    });
+  });
 });

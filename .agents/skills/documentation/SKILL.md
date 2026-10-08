@@ -1,3 +1,13 @@
+---
+name: documentation
+description: >
+  Best practices for writing and maintaining documentation in this repository.
+  Use this skill when writing or updating files in docs/, adding Mermaid
+  diagrams, or creating README and onboarding documentation.
+metadata:
+  version: "1.0.0"
+---
+
 # Documentation Skill
 
 Best practices for writing and maintaining documentation in this repository.

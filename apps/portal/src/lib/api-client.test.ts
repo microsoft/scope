@@ -7,6 +7,7 @@ import {
   resetApiClient,
   setApiTokenProvider,
   setReauthHandler,
+  setApiSessionSignal,
 } from "./api-client";
 
 /** Read the Authorization header off whatever ky passed to `fetch`. */
@@ -96,5 +97,48 @@ describe("portal api-client", () => {
     // Initial attempt + a single auth-scoped retry.
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(reauth).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([403, 503])("does not retry or redirect on %s", async (status) => {
+    const provider = vi.fn(() => "idp-token");
+    const reauth = vi.fn();
+    setApiTokenProvider(provider);
+    setReauthHandler(reauth);
+    fetchMock.mockResolvedValue(new Response("{}", { status }));
+    expect((await apiClient("https://scope.test/api/v1/users/me")).status).toBe(status);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(reauth).not.toHaveBeenCalled();
+  });
+
+  it("does not send an old account's request if it is cancelled during token acquisition", async () => {
+    const controller = new AbortController();
+    let resolve!: (token: string) => void;
+    const token = new Promise<string>((done) => { resolve = done; });
+    const provider = vi.fn(() => token);
+    setApiTokenProvider(provider);
+    setApiSessionSignal(controller.signal);
+    const result = apiClient("https://scope.test/api/v1/users/me");
+    const rejection = expect(result).rejects.toMatchObject({ name: "AbortError" });
+    await vi.waitFor(() => expect(provider).toHaveBeenCalledTimes(1));
+    controller.abort();
+    resolve("old-account-token");
+    await rejection;
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves POST bodies through the session signal and the existing 401 retry", async () => {
+    setApiSessionSignal(new AbortController().signal);
+    setApiTokenProvider(() => "idp-token");
+    const bodies: string[] = [];
+    fetchMock.mockImplementation(async (request: Request) => {
+      bodies.push(await request.clone().text());
+      return new Response("{}", { status: bodies.length === 1 ? 401 : 200 });
+    });
+    const result = await apiClient.post("https://scope.test/api/v1/projects", {
+      json: { name: "My project" },
+    });
+    expect(result.status).toBe(200);
+    expect(bodies).toEqual(['{"name":"My project"}', '{"name":"My project"}']);
   });
 });

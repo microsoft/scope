@@ -18,7 +18,7 @@ import type { ModelCapabilities } from "@/types";
 // --- Hook: useModelCapabilities ---
 
 export function useModelCapabilities(agentId: string | undefined) {
-  const { data: agentModels = [] } = useQuery({
+  const { data: agentModels = [], isSuccess } = useQuery({
     queryKey: ["models", agentId, "active"],
     queryFn: () => api.listModels({ agentId: agentId!, status: "active" }),
     enabled: !!agentId,
@@ -33,7 +33,12 @@ export function useModelCapabilities(agentId: string | undefined) {
   // Sorted list of active model IDs derived from the models collection (source of truth)
   const activeModelIds = agentModels.map((m) => m.modelId).sort();
 
-  return { agentModels, capabilitiesMap, activeModelIds };
+  return {
+    agentModels,
+    capabilitiesMap,
+    activeModelIds,
+    capabilitiesLoaded: !agentId || isSuccess,
+  };
 }
 
 // --- Hook: useReasoningEffort ---
@@ -43,8 +48,10 @@ export interface UseReasoningEffortOptions {
   capabilitiesMap: Map<string, ModelCapabilities>;
   value: string;
   onChange: (value: string) => void;
-  /** Whether the selected worker supports reasoning effort (undefined = unknown/not checked) */
+  /** Whether the selected worker supports reasoning effort (omitted = unsupported) */
   agentSupportsEffort?: boolean;
+  /** False while the model registry result is still unknown. */
+  capabilitiesLoaded?: boolean;
 }
 
 /**
@@ -57,21 +64,23 @@ export function useReasoningEffort({
   value,
   onChange,
   agentSupportsEffort,
+  capabilitiesLoaded = true,
 }: UseReasoningEffortOptions) {
   const capabilities = model ? capabilitiesMap.get(model) : undefined;
-  const supportedEfforts = capabilities?.reasoningEffort ?? [];
+  const modelEfforts = capabilities?.reasoningEffort ?? [];
+  const supportedEfforts = agentSupportsEffort === true ? modelEfforts : [];
 
   useEffect(() => {
+    if (!capabilitiesLoaded) return;
     if (supportedEfforts.length === 1 && value !== supportedEfforts[0]) {
       // Auto-select the only supported effort
       onChange(supportedEfforts[0]);
     } else if (value && !supportedEfforts.includes(value)) {
       onChange("");
     }
-  }, [model, supportedEfforts, value, onChange]);
+  }, [capabilitiesLoaded, model, supportedEfforts, value, onChange]);
 
-  // Worker doesn't support effort but model does
-  const workerEffortWarning = supportedEfforts.length > 0 && agentSupportsEffort === false;
+  const workerEffortWarning = modelEfforts.length > 0 && agentSupportsEffort === false;
 
   return { supportedEfforts, capabilities, workerEffortWarning };
 }

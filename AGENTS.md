@@ -29,6 +29,7 @@ packages/
   model-scanning/               # Shared model scanning logic
   version-checking/             # Version comparison utilities
   llm-eval/                     # LLM-graded eval harness (grader, sampling, rate-limit retry)
+  test-utils/                   # ACP worker integration test helpers (Docker runner, in-container harness)
 config/                         # Benchmark definitions (YAML)
 ```
 
@@ -49,6 +50,15 @@ Express.js REST server. Orchestrates runs, streams logs via SSE, manages criteri
 - Data models and API design: [docs/architecture/app-design.md](docs/architecture/app-design.md)
 - SSE + Change Streams pattern: [docs/research/realtime-data-flow.md](docs/research/realtime-data-flow.md)
 - Environment variables: [ENV_VARIABLES.md](ENV_VARIABLES.md)
+
+> **Authentication invariant:** verify the unchanged IdP bearer before any user-access
+> cache lookup. Only `POST /api/v1/users/me` calls
+> `UserAccessResolver.enrollOnLogin()` for JIT/profile/lastLogin/bootstrap writes.
+> Every `GET /users/me` and other routes use `resolveExisting()` (Redis hit: no Mongo;
+> miss/outage: exact identity read, never upsert). Missing/disabled identities deny
+> access, never become anonymous. Preserve existing no-token/public rollout; full
+> RBAC and Scope internal tokens remain deferred. See
+> [auth-rbac.md](docs/architecture/auth-rbac.md) before changing this boundary.
 
 ### Workers (`apps/workers/`)
 
@@ -75,6 +85,12 @@ Evaluation engine that scores agent output against a criteria DAG (directed acyc
 ### Portal (`apps/portal/`)
 
 React 19 web UI with Vite, Tailwind CSS, Radix UI (shadcn/ui), TanStack Query, and XYFlow for criteria DAG visualization. Communicates with the API via REST and SSE.
+
+`AuthProvider` owns the Scope-user handshake: callback → `POST /users/me`;
+cached-account reload → plain `/users/me`. Gate all eager queries (including
+providers outside `RequireAuth`) until ready; do not treat MSAL account claims as
+the Scope UUID/role. Deduplicate account/login work and cancel it on account change
+or logout. The enrollment POST is no-store and must never be prefetched/polled.
 
 - Real-time data flow: [docs/research/realtime-data-flow.md](docs/research/realtime-data-flow.md)
 
@@ -179,6 +195,52 @@ pnpm test:integration             # Integration tests (requires .env + Docker)
 
 > **Portal Storybook stories run under Vitest**: `apps/portal/src/components/ui/stories.play.test.tsx` composes the `ui/*` stories and executes their `play` (interaction) functions inside the regular Vitest suite (no `@storybook/addon-vitest` required). It binds a Testing Library `canvas` to the rendered container, so story `play` functions must keep depending only on `canvas` plus values imported directly from `storybook/test` (`userEvent`, `screen`, `expect`). When you add a new `ui/*` story with a `play` function, register its module in that harness so it's covered.
 
+### Static prompt evaluations
+
+Read [docs/architecture/prompt-evaluations.md](docs/architecture/prompt-evaluations.md)
+before changing any AI-facing instruction surface.
+
+- Whenever hardcoded system/user prompt text, prompt-building logic, output
+  instructions, or AI-facing tool descriptions are added or modified, update
+  the corresponding production target adapter, curated cases, deterministic
+  checks, composition contract, and/or rubric.
+- Register every new runtime static prompt family in the documented inventory,
+  committed evaluation manifest, and JSONL adapter registry.
+- Run the smallest relevant explicit prompt-evaluation command before treating
+  a prompt change as complete. These suites are developer-invoked and are not
+  part of normal `pnpm test` or CI.
+- A change to user-authored/configurable prompt content does not by itself
+  create a static prompt family.
+- Whenever a user-controlled text field that reaches an AI is added or its
+  insertion point, trusted wrapper, role, tools, or security boundary changes,
+  preserve its benign composition contract. Cloud red-team profiles and
+  execution are maintained in a separate follow-up contribution.
+
+## Contributing (Pull Requests)
+
+This repository is commonly worked on from a **fork**. When opening a pull
+request, **always target the upstream repository when one is available** — do
+not open the PR against the fork unless the user explicitly asks you to.
+
+- Detect the upstream: check `git remote -v`. If an `upstream` remote exists
+  (e.g. `microsoft/scope`), that is the PR base. The `origin` remote is
+  typically your personal fork (e.g. `cedricvidal/scope`).
+- Push the branch to your fork (`origin`), then open the PR **across forks**
+  with the upstream as the base:
+  ```bash
+  gh pr create \
+    --repo <upstream-owner>/<repo> \
+    --base main \
+    --head <fork-owner>:<branch> \
+    --title "..." --body-file <path>
+  ```
+- Only fall back to opening the PR against the fork (`origin`) when there is no
+  `upstream` remote, or when the user explicitly requests it.
+- If the upstream org enforces **SAML SSO** and the PR call fails with a `403`
+  ("Resource protected by organization SAML enforcement"), stop and ask the
+  user to authorize their token for that org via the SSO link, then retry —
+  do not silently downgrade to a fork PR.
+
 ## Documentation Workflow
 
 **Before starting any task**, read the docs relevant to the components you will be working on (see the table below). Understanding the existing design, data models, and patterns prevents regressions and duplicated work.
@@ -191,7 +253,9 @@ pnpm test:integration             # Integration tests (requires .env + Docker)
 |----------|-------------|
 | [docs/architecture/overview.md](docs/architecture/overview.md) | System architecture, component interactions, data flow |
 | [docs/architecture/app-design.md](docs/architecture/app-design.md) | Data models, API design, package dependency graph |
+| [docs/architecture/prompt-evaluations.md](docs/architecture/prompt-evaluations.md) | Static prompt quality, datasets, commands, and maintenance rules |
 | [docs/architecture/data-organization-projects.md](docs/architecture/data-organization-projects.md) | Projects (a single container) to isolate/group data within a cluster; composes with data-tags and auth-rbac |
+| [docs/architecture/auth-rbac.md](docs/architecture/auth-rbac.md) | Explicit-login IdP auth, Redis user-access cache, Portal handshake; deferred RBAC/internal-token roadmap |
 | [docs/architecture/vscode-web-worker.md](docs/architecture/vscode-web-worker.md) | XState chat machine, GitHub auth flow, ARIA snapshots |
 | [docs/architecture/token-manager.md](docs/architecture/token-manager.md) | Token storage, validation, round-robin distribution |
 | [docs/architecture/criteria-provider.md](docs/architecture/criteria-provider.md) | CriteriaProvider abstraction, filesystem vs REST backends |

@@ -13,6 +13,168 @@ import {
 import { apiRoute } from "../openapi/api-route.js";
 import type { AgentVersion, CodingAgentDocument, RouteContext } from "../route-context.js";
 
+interface QueueOwner {
+  agentId: string;
+  agentVersion: string;
+}
+
+async function findActiveQueueOwner(
+  agentCollection: RouteContext["agentCollection"],
+  queueName: string,
+  requestedTarget: QueueOwner,
+  allowSameAgentTakeover = false,
+): Promise<QueueOwner | undefined> {
+  const agents = await agentCollection
+    .find({ deletedAt: { $exists: false } })
+    .toArray();
+
+  for (const agent of agents) {
+    for (const version of agent.versions ?? []) {
+      if (
+        version.status === "active" &&
+        version.queueName?.trim() === queueName &&
+        (agent._id !== requestedTarget.agentId ||
+          version.agentVersion !== requestedTarget.agentVersion) &&
+        (!allowSameAgentTakeover || agent._id !== requestedTarget.agentId)
+      ) {
+        return {
+          agentId: agent._id,
+          agentVersion: version.agentVersion,
+        };
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function takeOverQueue(
+  versions: AgentVersion[],
+  registeredVersion: AgentVersion,
+): AgentVersion[] {
+  let replaced = false;
+  const updatedVersions = versions.map((version) => {
+    if (version.agentVersion === registeredVersion.agentVersion) {
+      replaced = true;
+      return {
+        ...registeredVersion,
+        createdAt: version.createdAt,
+      };
+    }
+
+    if (
+      version.status === "active" &&
+      version.queueName?.trim() === registeredVersion.queueName
+    ) {
+      return {
+        ...version,
+        status: "retired" as const,
+      };
+    }
+
+    return version;
+  });
+
+  if (!replaced) {
+    updatedVersions.push(registeredVersion);
+  }
+
+  return updatedVersions;
+}
+
+type QueueTakeoverOutcome =
+  | { kind: "success"; version: AgentVersion; existed: boolean }
+  | { kind: "conflict"; owner: QueueOwner; queueName: string }
+  | { kind: "agent_not_found" }
+  | { kind: "version_not_found" }
+  | { kind: "queue_missing" }
+  | { kind: "unstable" };
+
+async function activateVersionWithQueueTakeover(
+  agentCollection: RouteContext["agentCollection"],
+  initialAgent: CodingAgentDocument,
+  selectVersion: (agent: CodingAgentDocument) => AgentVersion | undefined,
+  updatedAt?: Date,
+): Promise<QueueTakeoverOutcome> {
+  let currentAgent = initialAgent;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    const requestedVersion = selectVersion(currentAgent);
+    if (!requestedVersion) {
+      return { kind: "version_not_found" };
+    }
+
+    const queueName = requestedVersion.queueName?.trim();
+    if (!queueName) {
+      return { kind: "queue_missing" };
+    }
+
+    const owner = await findActiveQueueOwner(
+      agentCollection,
+      queueName,
+      {
+        agentId: currentAgent._id,
+        agentVersion: requestedVersion.agentVersion,
+      },
+      true,
+    );
+    if (owner) {
+      return { kind: "conflict", owner, queueName };
+    }
+
+    const currentVersions = currentAgent.versions ?? [];
+    const existingVersion = currentVersions.find(
+      (version) => version.agentVersion === requestedVersion.agentVersion,
+    );
+    const activatedVersion: AgentVersion = {
+      ...requestedVersion,
+      status: "active",
+      createdAt: existingVersion?.createdAt ?? requestedVersion.createdAt,
+    };
+    const nextVersions = takeOverQueue(currentVersions, activatedVersion);
+    // Compare the embedded array snapshot so same-agent claims serialize
+    // without requiring a multi-document transaction.
+    const versionSnapshotFilter =
+      currentAgent.versions === undefined
+        ? { versions: { $exists: false } }
+        : { versions: currentAgent.versions };
+    const takeover = await agentCollection.updateOne(
+      {
+        _id: currentAgent._id,
+        deletedAt: { $exists: false },
+        ...versionSnapshotFilter,
+      },
+      {
+        $set: {
+          versions: nextVersions,
+          updatedAt: updatedAt ?? new Date(),
+        },
+      },
+    );
+    if (takeover.matchedCount === 1) {
+      return {
+        kind: "success",
+        version: activatedVersion,
+        existed: existingVersion !== undefined,
+      };
+    }
+
+    const refreshedAgent = await agentCollection.findOne({
+      _id: currentAgent._id,
+      deletedAt: { $exists: false },
+    });
+    if (!refreshedAgent) {
+      return { kind: "agent_not_found" };
+    }
+    currentAgent = refreshedAgent;
+  }
+
+  return { kind: "unstable" };
+}
+
+function queueConflictError(queueName: string, owner: QueueOwner): string {
+  return `Queue "${queueName}" is already assigned to ${owner.agentId}@${owner.agentVersion}`;
+}
+
 export function registerAgentsRoutes(ctx: RouteContext): void {
 
 // List all agents
@@ -21,12 +183,18 @@ apiRoute(ctx.app, ctx.registry, {
   path: "/api/v1/agents",
   tags: ["Agents"],
   summary: "List agents",
-  query: z.object({ modelProvider: z.string().optional() }),
+  query: z.object({
+    modelProvider: z.string().optional(),
+    includeDeleted: z.enum(["true", "false"]).optional(),
+  }),
   response: z.array(AgentResponseSchema),
   handler: async (req, res, next) => {
     try {
       const modelProvider = req.query?.modelProvider as string | undefined;
-      const filter: Record<string, unknown> = { deletedAt: { $exists: false } };
+      const includeDeleted = req.query?.includeDeleted === "true";
+      const filter: Record<string, unknown> = includeDeleted
+        ? {}
+        : { deletedAt: { $exists: false } };
       if (modelProvider) {
         filter.modelProvider = modelProvider;
       }
@@ -49,6 +217,7 @@ apiRoute(ctx.app, ctx.registry, {
   tags: ["Agents"],
   summary: "Get agent",
   params: z.object({ id: z.string() }),
+  query: z.object({ includeDeleted: z.enum(["true", "false"]).optional() }),
   response: AgentResponseSchema,
   errorResponses: {
     404: { description: "Agent not found" },
@@ -56,7 +225,11 @@ apiRoute(ctx.app, ctx.registry, {
   handler: async (req, res, next) => {
     try {
       const { id } = req.params;
-      const agent = await ctx.agentCollection.findOne({ _id: id, deletedAt: { $exists: false } });
+      const includeDeleted = req.query?.includeDeleted === "true";
+      const agent = await ctx.agentCollection.findOne({
+        _id: id,
+        ...(includeDeleted ? {} : { deletedAt: { $exists: false } }),
+      });
       if (!agent) {
         res.status(404).json({ error: "Agent not found" });
         return;
@@ -78,6 +251,7 @@ apiRoute(ctx.app, ctx.registry, {
   response: AgentResponseSchema,
   errorResponses: {
     400: { description: "Validation error" },
+    409: { description: "Restored agent versions conflict with an active queue owner" },
   },
   handler: async (req, res, next) => {
     try {
@@ -109,6 +283,37 @@ apiRoute(ctx.app, ctx.registry, {
       const existing = await ctx.agentCollection.findOne({ _id });
 
       if (existing) {
+        if (existing.deletedAt) {
+          const restoredTargetByQueue = new Map<string, string>();
+          const restoredQueueByTarget = new Map<string, string>();
+          for (const version of existing.versions ?? []) {
+            const queueName = version.queueName?.trim();
+            if (version.status !== "active" || !queueName) continue;
+            const existingVersion = restoredTargetByQueue.get(queueName);
+            const existingQueue = restoredQueueByTarget.get(version.agentVersion);
+            if (
+              (existingVersion && existingVersion !== version.agentVersion) ||
+              (existingQueue && existingQueue !== queueName)
+            ) {
+              res.status(409).json({
+                error: `Restored agent has conflicting active queue assignments involving "${queueName}"`,
+              });
+              return;
+            }
+            restoredTargetByQueue.set(queueName, version.agentVersion);
+            restoredQueueByTarget.set(version.agentVersion, queueName);
+            const owner = await findActiveQueueOwner(
+              ctx.agentCollection,
+              queueName,
+              { agentId: _id, agentVersion: version.agentVersion },
+            );
+            if (owner) {
+              res.status(409).json({ error: queueConflictError(queueName, owner) });
+              return;
+            }
+          }
+        }
+
         // Upsert: update existing (un-delete if soft-deleted)
         // Only update supportedModels if explicitly provided — prevents registration
         // jobs from wiping models set by the scanner
@@ -292,7 +497,9 @@ apiRoute(ctx.app, ctx.registry, {
   response: AgentVersionSchema,
   errorResponses: {
     400: { description: "Validation error" },
+    409: { description: "Queue is assigned to another agent" },
     404: { description: "Agent not found" },
+    503: { description: "Concurrent registration did not stabilize" },
   },
   handler: async (req, res, next) => {
     try {
@@ -324,10 +531,11 @@ apiRoute(ctx.app, ctx.registry, {
         res.status(400).json({ error: "imageTag is required and must be a string" });
         return;
       }
-      if (!queueName || typeof queueName !== "string") {
+      if (!queueName || typeof queueName !== "string" || !queueName.trim()) {
         res.status(400).json({ error: "queueName is required and must be a string" });
         return;
       }
+      const normalizedQueueName = queueName.trim();
 
       const agent = await ctx.agentCollection.findOne({ _id: id, deletedAt: { $exists: false } });
       if (!agent) {
@@ -336,47 +544,48 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       const now = new Date();
-      const versionEntry: AgentVersion = {
-        agentVersion,
-        workerVersion,
-        components,
-        gitCommit,
-        buildTime,
-        imageTag,
-        queueName,
-        status: "active",
-        createdAt: now,
-      };
-
-      // Upsert: update existing entry with same agentVersion or push new
-      const existing = (agent.versions ?? []).find((v: AgentVersion) => v.agentVersion === agentVersion);
-      if (existing) {
-        await ctx.agentCollection.updateOne(
-          { _id: id, "versions.agentVersion": agentVersion },
-          {
-            $set: {
-              "versions.$.workerVersion": workerVersion,
-              "versions.$.components": components,
-              "versions.$.gitCommit": gitCommit,
-              "versions.$.buildTime": buildTime,
-              "versions.$.imageTag": imageTag,
-              "versions.$.queueName": queueName,
-              "versions.$.status": "active",
-              updatedAt: now,
-            },
-          }
-        );
-      } else {
-        await ctx.agentCollection.updateOne(
-          { _id: id },
-          {
-            $push: { versions: versionEntry },
-            $set: { updatedAt: now },
-          }
-        );
+      const outcome = await activateVersionWithQueueTakeover(
+        ctx.agentCollection,
+        agent,
+        () => ({
+          agentVersion,
+          workerVersion,
+          components,
+          gitCommit,
+          buildTime,
+          imageTag,
+          queueName: normalizedQueueName,
+          status: "active",
+          createdAt: now,
+        }),
+        now,
+      );
+      if (outcome.kind === "success") {
+        res.status(outcome.existed ? 200 : 201).json(outcome.version);
+        return;
+      }
+      if (outcome.kind === "conflict") {
+        res
+          .status(409)
+          .json({ error: queueConflictError(outcome.queueName, outcome.owner) });
+        return;
+      }
+      if (outcome.kind === "agent_not_found") {
+        res.status(404).json({ error: "Agent not found" });
+        return;
+      }
+      if (outcome.kind === "queue_missing") {
+        res.status(400).json({ error: "Active version must have a queueName" });
+        return;
+      }
+      if (outcome.kind === "version_not_found") {
+        res.status(404).json({ error: "Version not found" });
+        return;
       }
 
-      res.status(existing ? 200 : 201).json(versionEntry);
+      res.status(503).json({
+        error: "Agent versions changed concurrently; retry registration",
+      });
     } catch (error) {
       next(error);
     }
@@ -394,7 +603,9 @@ apiRoute(ctx.app, ctx.registry, {
   response: AgentVersionSchema,
   errorResponses: {
     400: { description: "Invalid status value" },
+    409: { description: "Queue is assigned to another agent" },
     404: { description: "Agent or version not found" },
+    503: { description: "Concurrent activation did not stabilize" },
   },
   handler: async (req, res, next) => {
     try {
@@ -415,6 +626,49 @@ apiRoute(ctx.app, ctx.registry, {
       const version = (agent.versions ?? []).find((v: AgentVersion) => v.agentVersion === agentVersion);
       if (!version) {
         res.status(404).json({ error: "Version not found" });
+        return;
+      }
+
+      if (status === "active") {
+        const outcome = await activateVersionWithQueueTakeover(
+          ctx.agentCollection,
+          agent,
+          (currentAgent) =>
+            (currentAgent.versions ?? []).find(
+              (candidate: AgentVersion) =>
+                candidate.agentVersion === agentVersion,
+            ),
+        );
+        if (outcome.kind === "success") {
+          res.json(outcome.version);
+          return;
+        }
+        if (
+          outcome.kind === "agent_not_found" ||
+          outcome.kind === "version_not_found"
+        ) {
+          res.status(404).json({
+            error:
+              outcome.kind === "agent_not_found"
+                ? "Agent not found"
+                : "Version not found",
+          });
+          return;
+        }
+        if (outcome.kind === "queue_missing") {
+          res.status(400).json({ error: "Active version must have a queueName" });
+          return;
+        }
+        if (outcome.kind === "conflict") {
+          res.status(409).json({
+            error: queueConflictError(outcome.queueName, outcome.owner),
+          });
+          return;
+        }
+
+        res.status(503).json({
+          error: "Agent versions changed concurrently; retry activation",
+        });
         return;
       }
 

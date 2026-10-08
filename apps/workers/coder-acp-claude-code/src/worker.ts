@@ -45,6 +45,7 @@ export interface ClaudeCodeWorkerRuntime {
 
 const WORKER_NAME = process.env.WORKER_NAME || "coder-acp-claude-code";
 const AGENT_VERSION =
+  process.env.SCOPE_AGENT_VERSION ||
   `claude-agent-acp-${process.env.CLAUDE_CODE_ACP_VERSION || "unknown"}` +
   `-sdk-${process.env.CLAUDE_AGENT_SDK_VERSION || "unknown"}`;
 
@@ -77,6 +78,7 @@ function isFirstAiCallSignal(msg: string): boolean {
 /** Queue processor that runs one Claude Code ACP benchmark attempt per message. */
 export class ClaudeCodeProcessor implements WorkerProcessor {
   readonly workerName: string;
+  readonly skillAgentType = "claude-code" as const;
   workspacePath: string | undefined = undefined;
   private gateway: McpGatewayClient | null = null;
   private mcpConfigs: McpServerConfig[] = [];

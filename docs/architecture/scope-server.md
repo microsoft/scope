@@ -46,9 +46,9 @@ It never checks out Scope or pulls prebuilt Scope images from a registry.
 Published npm dependencies (including the Claude ACP adapter) and public base
 images can download. Node and Docker are not bundled.
 
-The package builds `.scope` copies of the existing Dockerfiles, leaving the
-Compose/Kubernetes recipes unchanged. These copies install the same pinned pnpm
-version through npm, supporting registry proxies that lack Corepack's
+The package builds images from the existing Dockerfiles unchanged. Those
+Dockerfiles accept `NPM_CONFIG_REGISTRY` and fall back from Corepack to a pinned
+global pnpm install, supporting registry proxies that lack Corepack's
 version-specific metadata route. Builds honor the configured npm registry and
 HTTP(S) proxy. Packaged metadata keeps the npm version separate from a UTC
 ISO-8601 build timestamp; that timestamp and a metadata-derived local commit

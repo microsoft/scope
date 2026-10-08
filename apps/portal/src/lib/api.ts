@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Run, RunState, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir } from "@/types";
+import type { Run, RunState, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ResourceDocument, ResourceRevisionDocument, ResourceBindingSpec, CreateResourceBody, CreateResourceRevisionBody, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir } from "@/types";
 
 import type { Project, CreateProjectRequest, UpdateProjectRequest } from "@/types";
 import { qs } from "./url";
@@ -11,6 +11,38 @@ import { getSelectedProjectId, ProjectRequiredError } from "./project-scope";
 import { MAX_ARCHIVE_UPLOAD_LABEL } from "./codebaseUpload";
 
 const BASE = "/api/v1";
+
+/** Browser-safe response from the Scope identity endpoint (not IdP claims). */
+export interface CurrentUserResponse {
+  id: string;
+  role?: string;
+  email?: string;
+  displayName?: string;
+  idp?: string;
+  idpTenant?: string;
+}
+
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number, public readonly code?: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+function validateCurrentUser(value: unknown): CurrentUserResponse {
+  if (
+    !value || typeof value !== "object" ||
+    !("id" in value) || typeof value.id !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.id) ||
+    value.id === "00000000-0000-0000-0000-000000000000" ||
+    ["role", "email", "displayName", "idp", "idpTenant"].some(
+      (key) => key in value && typeof (value as Record<string, unknown>)[key] !== "string",
+    )
+  ) {
+    throw new Error("Invalid user response from Scope");
+  }
+  return value as CurrentUserResponse;
+}
 
 /**
  * Append `projectId=<id>` to an already-built request path, choosing `?` vs `&`
@@ -102,19 +134,37 @@ async function request<T>(path: string, init?: RequestInit, opts?: RequestOpts):
   // relative-time displays survive a misconfigured local clock.
   recordServerDate(res.headers.get("Date"));
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; details?: Array<{ path: string; message: string }> };
+    const body = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; code?: string; details?: Array<{ path: string; message: string }> };
     const message = body.error || `HTTP ${res.status}`;
     const details = body.details;
     if (details?.length) {
-      throw new Error(`${message}: ${details.map((d) => `${d.path || "body"}: ${d.message}`).join(", ")}`);
+      throw new ApiError(`${message}: ${details.map((d) => `${d.path || "body"}: ${d.message}`).join(", ")}`, res.status, body.code);
     }
-    throw new Error(message);
+    throw new ApiError(message, res.status, body.code);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
 }
 
+async function requestCurrentUser(
+  method: "GET" | "POST",
+  opts: { signal?: AbortSignal } = {},
+): Promise<CurrentUserResponse> {
+  const user = await request<unknown>("/users/me", {
+    method,
+    cache: "no-store",
+    signal: opts.signal,
+  });
+  return validateCurrentUser(user);
+}
+
 export const api = {
+  /** Only AuthProvider calls these; enrollment must never be prefetched. */
+  getCurrentUser: (opts: { signal?: AbortSignal } = {}): Promise<CurrentUserResponse> =>
+    requestCurrentUser("GET", opts),
+  enrollCurrentUser: (opts: { signal?: AbortSignal } = {}): Promise<CurrentUserResponse> =>
+    requestCurrentUser("POST", opts),
+
   /** List runs with cursor-based pagination, server-side filtering and sorting */
   listRuns: (opts?: RunFilterParams & { sortBy?: RunSortField; sortDir?: RunSortDir; limit?: number; after?: string; before?: string; last?: boolean }): Promise<CursorPaginatedResponse<Run>> => {
     return request(`/requests${qs({
@@ -171,6 +221,7 @@ export const api = {
     mcpServers?: string[];
     skills?: string[];
     extensions?: string[];
+    resources?: ResourceBindingSpec[];
     agentVersion?: string;
     profileId?: string;
     profileVariations?: string[];
@@ -555,14 +606,18 @@ export const api = {
 
   // ─── Agents ─────────────────────────────────────────────────────────────────
 
-  /** List all coding agents */
-  listAgents: (): Promise<CodingAgent[]> => {
-    return request("/agents");
+  /** List coding agents, optionally including soft-deleted historical records. */
+  listAgents: (options?: { includeDeleted?: boolean }): Promise<CodingAgent[]> => {
+    const params = new URLSearchParams();
+    if (options?.includeDeleted) params.set("includeDeleted", "true");
+    const query = params.size > 0 ? `?${params.toString()}` : "";
+    return request(`/agents${query}`);
   },
 
-  /** Get a single coding agent by ID */
-  getAgent: (id: string): Promise<CodingAgent> => {
-    return request(`/agents/${encodeURIComponent(id)}`);
+  /** Get a single coding agent by ID, optionally including a soft-deleted record. */
+  getAgent: (id: string, options?: { includeDeleted?: boolean }): Promise<CodingAgent> => {
+    const query = options?.includeDeleted ? "?includeDeleted=true" : "";
+    return request(`/agents/${encodeURIComponent(id)}${query}`);
   },
 
   /** Update a coding agent */
@@ -794,7 +849,12 @@ export const api = {
   // ─── Version ───────────────────────────────────────────────────────────────
 
   /** Get API version information (commit hash and build time) */
-  getVersion: (): Promise<{ commit: string; buildTime: string; environment?: string }> => {
+  getVersion: (): Promise<{
+    commit: string;
+    buildTime: string;
+    environment?: string;
+    strictAgentCapabilities?: boolean;
+  }> => {
     return request("/version");
   },
 
@@ -1169,6 +1229,60 @@ export const api = {
     return request(`/codebase-revisions/${id}`);
   },
 
+  // ─── Resources ───────────────────────────────────────────────────────────
+
+  /** List all resources */
+  listResources: (): Promise<ResourceDocument[]> => {
+    return request("/resources", undefined, { scoped: true });
+  },
+
+  /** Get a single resource by id or project-scoped slug */
+  getResource: (idOrSlug: string): Promise<ResourceDocument> => {
+    return request(`/resources/${idOrSlug}`, undefined, { scoped: true });
+  },
+
+  /** Create a resource together with its first immutable revision */
+  createResource: (body: CreateResourceBody): Promise<ResourceDocument & { firstRevision?: ResourceRevisionDocument }> => {
+    return request("/resources", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }, { scoped: true });
+  },
+
+  /** Update a resource's mutable metadata */
+  updateResource: (
+    idOrSlug: string,
+    body: Partial<Pick<ResourceDocument, "name" | "description">>,
+  ): Promise<ResourceDocument> => {
+    return request(`/resources/${idOrSlug}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }, { scoped: true });
+  },
+
+  /** Soft-delete a resource */
+  deleteResource: (idOrSlug: string): Promise<void> => {
+    return request(`/resources/${idOrSlug}`, { method: "DELETE" }, { scoped: true });
+  },
+
+  /** List revisions for a resource */
+  listResourceRevisions: (idOrSlug: string, limit?: number): Promise<ResourceRevisionDocument[]> => {
+    return request(`/resources/${idOrSlug}/revisions${limit ? `?limit=${limit}` : ""}`, undefined, { scoped: true });
+  },
+
+  /** Get a single resource revision by id */
+  getResourceRevision: (id: string): Promise<ResourceRevisionDocument> => {
+    return request(`/resources/revisions/${id}`, undefined, { scoped: true });
+  },
+
+  /** Create a new immutable lifecycle revision */
+  createResourceRevision: (idOrSlug: string, body: CreateResourceRevisionBody): Promise<ResourceRevisionDocument> => {
+    return request(`/resources/${idOrSlug}/revisions`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }, { scoped: true });
+  },
+
   // ─── Extensions ──────────────────────────────────────────────────────────
 
   /** List all imported extensions */
@@ -1238,9 +1352,11 @@ export const api = {
     description?: string;
     workerType: string;
     model: string;
+    reasoningEffort?: string;
     agentVersion?: string;
     mcpServers?: string[];
     skillRevisions?: string[];
+    resources?: ResourceBindingSpec[];
     extensions?: string[];
   }): Promise<ProfileWithVersion> => {
     return request("/profiles", {
@@ -1253,9 +1369,11 @@ export const api = {
   createProfileVersion: (profileId: string, body: {
     workerType: string;
     model: string;
+    reasoningEffort?: string;
     agentVersion?: string;
     mcpServers?: string[];
     skillRevisions?: string[];
+    resources?: ResourceBindingSpec[];
     extensions?: string[];
   }): Promise<ProfileVersionDocument> => {
     return request(`/profiles/${profileId}`, {

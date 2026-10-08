@@ -9,18 +9,22 @@ extendZodWithOpenApi(z);
 export const AgentCapabilitiesSchema = z
   .object({
     supportsReasoningEffort: z.boolean().optional(),
+    supportsMcpServers: z.boolean().optional(),
+    supportsSkills: z.boolean().optional(),
+    supportsExtensions: z.boolean().optional(),
+    supportsResources: z.boolean().optional(),
   })
   .openapi("AgentCapabilities");
 
 export const AgentVersionSchema = z
   .object({
-    agentVersion: z.string(),
-    workerVersion: z.string(),
+    agentVersion: z.string().trim().min(1),
+    workerVersion: z.string().trim().min(1),
     components: z.record(z.string(), z.string()),
-    gitCommit: z.string(),
-    buildTime: z.string(),
-    imageTag: z.string(),
-    queueName: z.string(),
+    gitCommit: z.string().trim().min(1),
+    buildTime: z.string().trim().min(1),
+    imageTag: z.string().trim().min(1),
+    queueName: z.string().optional(),
     status: z.enum(["active", "retired"]),
     createdAt: z.coerce.date(),
   })
@@ -28,8 +32,8 @@ export const AgentVersionSchema = z
 
 export const CreateAgentInputSchema = z
   .object({
-    _id: z.string(),
-    name: z.string(),
+    _id: z.string().trim().min(1),
+    name: z.string().trim().min(1),
     description: z.string().optional(),
     modelProvider: z.string().optional(),
     supportedModels: z.array(z.string()).optional(),
@@ -70,13 +74,13 @@ export const AgentResponseSchema = z
 
 export const RegisterAgentVersionInputSchema = z
   .object({
-    agentVersion: z.string(),
-    workerVersion: z.string(),
+    agentVersion: z.string().trim().min(1),
+    workerVersion: z.string().trim().min(1),
     components: z.record(z.string(), z.string()),
-    gitCommit: z.string(),
-    buildTime: z.string(),
-    imageTag: z.string(),
-    queueName: z.string(),
+    gitCommit: z.string().trim().min(1),
+    buildTime: z.string().trim().min(1),
+    imageTag: z.string().trim().min(1),
+    queueName: z.string().trim().min(1),
   })
   .openapi("RegisterAgentVersionInput");
 

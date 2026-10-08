@@ -11,12 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge, OutcomeBadge } from "@/components/StatusBadge";
 import { TaskPromptBadge } from "@/components/TaskPromptBadge";
+import { AgentBadge, agentDisplayName, useAgentCatalog } from "@/components/AgentBadge";
 import { GATE_METADATA } from "@/lib/gates";
 import { formatDate, formatId, formatDuration, truncate } from "@/lib/utils";
 
 export function RunPreviewPanel() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { agentById } = useAgentCatalog();
 
   const { data: run, isLoading, error } = useQuery({
     queryKey: ["run", id],
@@ -27,6 +29,12 @@ export function RunPreviewPanel() {
       if (status === "done") return false;
       return 5_000;
     },
+  });
+
+  const { data: profile } = useQuery({
+    queryKey: ["profile", run?.profileId],
+    queryFn: () => api.getProfile(run!.profileId!),
+    enabled: !!run?.profileId,
   });
 
   const closePanel = () => navigate({ pathname: "/runs", search: window.location.search });
@@ -63,7 +71,11 @@ export function RunPreviewPanel() {
   return (
     <DetailPanel
       title={<span className="truncate font-mono text-sm">{formatId(run._id)}</span>}
-      subtitle={run.scenario?.task ? truncate(run.scenario.task, 80) : run.workerType}
+      subtitle={
+        run.scenario?.task
+          ? truncate(run.scenario.task, 80)
+          : agentDisplayName(run.workerType, agentById)
+      }
       onClose={closePanel}
       headerActions={
         <div className="flex justify-end gap-2">
@@ -168,9 +180,24 @@ export function RunPreviewPanel() {
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-2 gap-3 text-sm">
+              {run.profileId && (
+                <div>
+                  <dt className="text-xs text-muted-foreground">Profile</dt>
+                  <dd className="mt-0.5 text-xs">
+                    <Link to={`/profiles/${run.profileId}`} className="text-primary hover:underline">
+                      {profile?.name ?? formatId(run.profileId)}
+                      {run.profileVersionId?.split("@")[1] && (
+                        <span className="ml-1 font-mono text-muted-foreground">v{run.profileVersionId.split("@")[1]}</span>
+                      )}
+                    </Link>
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-xs text-muted-foreground">Worker</dt>
-                <dd className="mt-0.5 font-mono text-xs">{run.workerType}</dd>
+                <dd className="mt-0.5 text-xs">
+                  <AgentBadge agentId={run.workerType} version={run.agentVersion} />
+                </dd>
               </div>
               {run.model && (
                 <div>

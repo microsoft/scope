@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Cpu } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { DetailPanel } from "@/components/list-layout";
+import { AgentBadge } from "@/components/AgentBadge";
 
 export function ModelDetail() {
   const { id } = useParams<{ id: string }>();
@@ -67,9 +68,7 @@ export function ModelDetail() {
               <div>
                 <dt className="text-xs text-muted-foreground">Agent</dt>
                 <dd className="mt-0.5">
-                  <Link to={`/agents/${model.agentId}`} className="font-mono text-xs hover:underline">
-                    {model.agentId}
-                  </Link>
+                  <AgentBadge agentId={model.agentId} />
                 </dd>
               </div>
               <div>

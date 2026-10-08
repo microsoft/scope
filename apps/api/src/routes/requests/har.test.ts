@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import supertest from "supertest";
 import { app, _injectTestDependencies } from "../../index.js";
+import { useTestServer } from "../../test-server.js";
 import { createAllMockDependencies } from "../../test-helpers.js";
 import { readableFrom, rawParser, blobUrl, VARIANTS, rewireBlobMocks } from "./test-blob-helpers.js";
 
@@ -42,6 +43,7 @@ vi.mock("@azure/storage-blob", async (importOriginal) => {
 });
 
 describe("HAR endpoints", () => {
+  const testServer = useTestServer(app);
   let mocks: ReturnType<typeof createAllMockDependencies>;
 
   beforeAll(() => {
@@ -63,14 +65,14 @@ describe("HAR endpoints", () => {
 
     it("returns 404 when request not found", async () => {
       (mocks.collection.findOne as any).mockResolvedValue(null);
-      const res = await supertest(app).get(harUrl("missing"));
+      const res = await supertest(testServer()).get(harUrl("missing"));
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ error: "Request not found" });
     });
 
     it("returns 404 when no HAR capture available", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
-      const res = await supertest(app).get(harUrl("req-1"));
+      const res = await supertest(testServer()).get(harUrl("req-1"));
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ error: "No HAR capture available" });
     });
@@ -79,7 +81,7 @@ describe("HAR endpoints", () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", harUrl: blobUrl("req-1/run.har") });
       mockDownload.mockResolvedValue({ readableStreamBody: readableFrom('{"log":{}}'), contentLength: 10 });
 
-      const res = await supertest(app).get(harUrl("req-1")).buffer(true).parse(rawParser);
+      const res = await supertest(testServer()).get(harUrl("req-1")).buffer(true).parse(rawParser);
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch("application/json");
       expect(res.headers["content-disposition"]).toContain("req-1.har");
@@ -96,7 +98,7 @@ describe("HAR endpoints", () => {
       });
       mockDownload.mockResolvedValue({ readableStreamBody: readableFrom('{"log":{}}'), contentLength: 10 });
 
-      const res = await supertest(app).get(harUrl("req-1", "?iteration=2")).buffer(true).parse(rawParser);
+      const res = await supertest(testServer()).get(harUrl("req-1", "?iteration=2")).buffer(true).parse(rawParser);
       expect(res.status).toBe(200);
       expect(res.headers["content-disposition"]).toContain("req-1-iteration-2.har");
       expect(mockGetBlockBlobClient).toHaveBeenCalledWith("req-1/iter-2.har");
@@ -104,7 +106,7 @@ describe("HAR endpoints", () => {
 
     it("returns 400 for invalid iteration number", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
-      const res = await supertest(app).get(harUrl("req-1", "?iteration=abc"));
+      const res = await supertest(testServer()).get(harUrl("req-1", "?iteration=abc"));
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ error: "Invalid iteration number" });
     });
@@ -119,7 +121,7 @@ describe("HAR endpoints", () => {
       });
       mockDownload.mockResolvedValue({ readableStreamBody: readableFrom('{"log":{}}'), contentLength: 10 });
 
-      const res = await supertest(app).get(harUrl("req-1")).buffer(true).parse(rawParser);
+      const res = await supertest(testServer()).get(harUrl("req-1")).buffer(true).parse(rawParser);
       expect(res.status).toBe(200);
       expect(mockGetBlockBlobClient).toHaveBeenCalledWith("req-1/iter-2.har");
     });

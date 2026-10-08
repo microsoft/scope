@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import supertest from "supertest";
 import { app, _injectTestDependencies } from "../../index.js";
+import { useTestServer } from "../../test-server.js";
 import { createAllMockDependencies } from "../../test-helpers.js";
 import { readableFrom, rawParser, blobUrl, VARIANTS, rewireBlobMocks } from "./test-blob-helpers.js";
 
@@ -42,6 +43,7 @@ vi.mock("@azure/storage-blob", async (importOriginal) => {
 });
 
 describe("Video endpoints", () => {
+  const testServer = useTestServer(app);
   let mocks: ReturnType<typeof createAllMockDependencies>;
 
   beforeAll(() => {
@@ -63,14 +65,14 @@ describe("Video endpoints", () => {
 
     it("returns 404 when request not found", async () => {
       (mocks.collection.findOne as any).mockResolvedValue(null);
-      const res = await supertest(app).get(vidUrl("missing"));
+      const res = await supertest(testServer()).get(vidUrl("missing"));
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ error: "Request not found" });
     });
 
     it("returns 404 when no video recordings available", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
-      const res = await supertest(app).get(vidUrl("req-1"));
+      const res = await supertest(testServer()).get(vidUrl("req-1"));
       expect(res.status).toBe(404);
       expect(res.body).toMatchObject({ error: "No video recordings available" });
     });
@@ -78,7 +80,7 @@ describe("Video endpoints", () => {
     it("proxies video download from run-level videoUrls", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", videoUrls: [blobUrl("req-1/video-0.webm")] });
 
-      const res = await supertest(app).get(vidUrl("req-1"));
+      const res = await supertest(testServer()).get(vidUrl("req-1"));
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toMatch("video/webm");
       expect(res.headers["accept-ranges"]).toBe("bytes");
@@ -91,7 +93,7 @@ describe("Video endpoints", () => {
         turns: [{ iteration: 1, videoUrls: [blobUrl("req-1/iter-1-video-0.webm")] }],
       });
 
-      const res = await supertest(app).get(vidUrl("req-1", "?iteration=1"));
+      const res = await supertest(testServer()).get(vidUrl("req-1", "?iteration=1"));
       expect(res.status).toBe(200);
       expect(mockGetBlockBlobClient).toHaveBeenCalledWith("req-1/iter-1-video-0.webm");
     });
@@ -99,7 +101,7 @@ describe("Video endpoints", () => {
     it("proxies setup video", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", setupVideoUrls: [blobUrl("req-1/setup-video-0.webm")] });
 
-      const res = await supertest(app).get(vidUrl("req-1", "?phase=setup"));
+      const res = await supertest(testServer()).get(vidUrl("req-1", "?phase=setup"));
       expect(res.status).toBe(200);
       expect(mockGetBlockBlobClient).toHaveBeenCalledWith("req-1/setup-video-0.webm");
     });
@@ -107,14 +109,14 @@ describe("Video endpoints", () => {
     it("returns 404 when video index is out of range", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", videoUrls: [blobUrl("req-1/video-0.webm")] });
 
-      const res = await supertest(app).get(vidUrl("req-1", "?index=5"));
+      const res = await supertest(testServer()).get(vidUrl("req-1", "?index=5"));
       expect(res.status).toBe(404);
       expect(res.body.error).toContain("Video index 5 not found");
     });
 
     it("returns 400 for invalid video index", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
-      const res = await supertest(app).get(vidUrl("req-1", "?index=-1"));
+      const res = await supertest(testServer()).get(vidUrl("req-1", "?index=-1"));
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ error: "Invalid video index" });
     });
@@ -126,7 +128,7 @@ describe("Video endpoints", () => {
       const partialBody = "a]".repeat(250); // 500 bytes
       mockDownload.mockResolvedValue({ readableStreamBody: readableFrom(partialBody), contentLength: 500 });
 
-      const res = await supertest(app)
+      const res = await supertest(testServer())
         .get(vidUrl("req-1"))
         .set("Range", "bytes=0-499")
         .buffer(true)
@@ -140,7 +142,7 @@ describe("Video endpoints", () => {
 
     it("returns 400 for invalid iteration number", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
-      const res = await supertest(app).get(vidUrl("req-1", "?iteration=abc"));
+      const res = await supertest(testServer()).get(vidUrl("req-1", "?iteration=abc"));
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ error: "Invalid iteration number" });
     });

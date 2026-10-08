@@ -26,16 +26,6 @@ async function copy(path) {
   await mkdir(dirname(to), { recursive: true });
   await copyFile(from, to);
   hash.update(path).update(await readFile(to));
-  if (path.endsWith("/Dockerfile")) {
-    // npm's package metadata endpoint also works with registries that do not
-    // implement Corepack's version-specific metadata requests.
-    const text = await readFile(from, "utf8");
-    const local = text
-      .replace(/^(FROM .+)$/gm, "$1\nARG NPM_CONFIG_REGISTRY")
-      .replace(/corepack enable && corepack prepare (pnpm@[\w.+-]+) --activate/g, "npm install --global $1");
-    await writeFile(`${to}.scope`, local);
-    hash.update(`${path}.scope`).update(local);
-  }
 }
 async function walk(directory) {
   for (const entry of (await readdir(join(root, directory), { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {

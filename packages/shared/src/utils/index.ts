@@ -3,3 +3,4 @@
 
 export * from "./retry.js";
 export * from "./workspace.js";
+export * from "./chat-completions.js";

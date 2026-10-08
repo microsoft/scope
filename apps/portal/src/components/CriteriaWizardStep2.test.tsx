@@ -37,11 +37,13 @@ function Harness({
   initialChildren = [],
   parentCandidates = true,
   childCandidates = true,
+  generationError,
 }: {
   initialParents?: string[];
   initialChildren?: string[];
   parentCandidates?: boolean;
   childCandidates?: boolean;
+  generationError?: Error;
 }) {
   const [dependsOn, setDependsOn] = useState<string[]>(initialParents);
   const [acceptedChildren, setAcceptedChildren] = useState<string[]>(initialChildren);
@@ -65,7 +67,9 @@ function Harness({
     hasCompatibleParentCandidates: parentCandidates,
     hasCompatibleChildCandidates: childCandidates,
     handleRegenerate: () => {},
-    generateMutation: noopMutation,
+    generateMutation: generationError
+      ? { isPending: false, isError: true, error: generationError }
+      : noopMutation,
     createMutation: noopMutation,
   } as unknown as CriteriaWizardState;
 
@@ -153,5 +157,21 @@ describe("CriteriaWizardStep2 — honest empty-pool notes", () => {
     expect(
       screen.queryByText(/no gate-compatible criteria available as children/i),
     ).toBeNull();
+  });
+});
+
+describe("CriteriaWizardStep2 — generation errors", () => {
+  it("shows the inference error returned by the API", async () => {
+    renderStep2({
+      generationError: new Error(
+        "LLM request failed: Unsupported parameter: 'max_tokens'",
+      ),
+    });
+
+    expect(
+      await screen.findByText(
+        /AI generation failed — LLM request failed: Unsupported parameter: 'max_tokens'/,
+      ),
+    ).toBeTruthy();
   });
 });

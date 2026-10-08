@@ -3,7 +3,6 @@
 
 export {
   LEVEL_COLORS,
-  WORKER_COLORS,
   banner,
   colorLevel,
   criterionIcon,

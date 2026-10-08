@@ -107,5 +107,18 @@ describe("resolveAgentVersion", () => {
         queueName: "queue-copilot-0.0.414",
       });
     });
+
+    it("skips a newer active version that has no routable queue", () => {
+      const unroutable = makeVersion({
+        agentVersion: "copilot-0.0.416",
+        queueName: undefined,
+        createdAt: new Date("2026-03-19T16:00:00Z"),
+      });
+
+      expect(resolveAgentVersion([v1, v2, unroutable], undefined)).toEqual({
+        agentVersion: "copilot-0.0.415",
+        queueName: "queue-copilot-0.0.415",
+      });
+    });
   });
 });

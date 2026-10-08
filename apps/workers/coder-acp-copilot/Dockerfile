@@ -3,8 +3,13 @@ ARG COPILOT_CLI_VERSION
 # --- Base stage: runtime tools shared by dev and production ---
 FROM node:24-slim AS base
 
-RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
-
+ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
+ENV npm_config_registry=${NPM_CONFIG_REGISTRY} \
+    COREPACK_NPM_REGISTRY=${NPM_CONFIG_REGISTRY}
+# corepack bootstraps pnpm from the registry's per-version metadata endpoint,
+# which some private registry proxies don't serve; fall back to a pinned global
+# install (honors npm_config_registry) so restricted networks can still build.
+RUN corepack enable && (corepack prepare pnpm@10.29.1 --activate || npm install -g pnpm@10.29.1 --force)
 # Install system tools for coding agents: Python, uv, git, PowerShell, Go, .NET, Rust, Java, Maven, Gradle
 RUN apt-get update && apt-get install -y \
     python3 \
@@ -76,6 +81,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/telemetry/package.json ./packages/telemetry/
+COPY packages/test-utils/package.json ./packages/test-utils/
 COPY apps/workers/coder-acp-copilot/package.json ./apps/workers/coder-acp-copilot/
 
 RUN pnpm install --frozen-lockfile
@@ -84,10 +90,12 @@ COPY packages/shared/tsconfig.json ./packages/shared/
 COPY packages/shared/src ./packages/shared/src/
 COPY packages/telemetry/tsconfig.json ./packages/telemetry/
 COPY packages/telemetry/src ./packages/telemetry/src/
+COPY packages/test-utils/tsconfig.json ./packages/test-utils/
+COPY packages/test-utils/src ./packages/test-utils/src/
 COPY apps/workers/coder-acp-copilot/tsconfig.json ./apps/workers/coder-acp-copilot/
 COPY apps/workers/coder-acp-copilot/src ./apps/workers/coder-acp-copilot/src/
 
-RUN pnpm --filter shared build && pnpm --filter telemetry build && pnpm --filter coder-acp-copilot build
+RUN pnpm --filter shared build && pnpm --filter telemetry build && pnpm --filter test-utils build && pnpm --filter coder-acp-copilot build
 
 # Pre-convert agent.yaml to JSON so the registration job doesn't need the yaml package at runtime
 COPY apps/workers/coder-acp-copilot/agent.yaml ./apps/workers/coder-acp-copilot/agent.yaml
@@ -108,7 +116,7 @@ ENV SERVICE_DIR=workers/coder-acp-copilot
 ENV WORKER_NAME=coder-acp-copilot
 COPY scripts/dev-entrypoint.sh /app/scripts/dev-entrypoint.sh
 COPY config /app/config/
-RUN chown -R node:node /app/packages/shared/dist /app/packages/telemetry/dist /app/apps/workers/coder-acp-copilot/dist
+RUN chown -R node:node /app/packages/shared/dist /app/packages/telemetry/dist /app/packages/test-utils/dist /app/apps/workers/coder-acp-copilot/dist
 USER node
 CMD ["/app/scripts/dev-entrypoint.sh"]
 

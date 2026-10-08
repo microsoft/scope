@@ -70,6 +70,7 @@ function makeStubAgent(): { processor: WorkerProcessor; called: () => boolean } 
   return {
     processor: {
       workerName: "itest-worker",
+      getAgentVersion: () => "itest-v1",
       async processMessage(): Promise<WorkerResult> {
         invoked = true;
         throw new Error("agent must NOT run for a reaped run");
@@ -118,7 +119,8 @@ async function insertRun(
 ): Promise<void> {
   await collection.insertOne({
     _id: id,
-    workerType: "coder-acp-copilot",
+    workerType: "itest-worker",
+    agentVersion: "itest-v1",
     scenario: { criteria: [], task: "x" },
     run: {
       _id: runId,

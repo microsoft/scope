@@ -88,17 +88,19 @@ export class ExtensionClient {
    * Resolve an array of extension specs ("id" or "id@version") to their configurations.
    * Validates each extension exists via the API, then overlays the version from the spec.
    *
+   * @param projectId - Project scope of the run whose extensions are resolved
    * @param specs - Extension specs (e.g. "ms-python.python" or "ms-python.python@2024.22.1")
    * @throws Error if any extension cannot be resolved (404 or HTTP error)
    */
-  async resolveExtensions(specs: string[]): Promise<ExtensionConfig[]> {
+  async resolveExtensions(projectId: string, specs: string[]): Promise<ExtensionConfig[]> {
     if (specs.length === 0) return [];
 
     const configs: ExtensionConfig[] = [];
+    const projectQuery = `?projectId=${encodeURIComponent(projectId)}`;
 
     for (const spec of specs) {
       const { id, version } = parseExtensionSpec(spec);
-      const url = `${this.apiUrl}/api/v1/extensions/${encodeURIComponent(id)}`;
+      const url = `${this.apiUrl}/api/v1/extensions/${encodeURIComponent(id)}${projectQuery}`;
       const res = await fetch(url);
 
       if (res.status === 404) {

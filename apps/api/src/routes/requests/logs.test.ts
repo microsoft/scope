@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import request from "supertest";
 import { app, _injectTestDependencies } from "../../index.js";
+import { useTestServer } from "../../test-server.js";
 import { createAllMockDependencies } from "../../test-helpers.js";
 import type { LogEvent } from "shared";
 
@@ -48,6 +49,7 @@ function makeLogEvent(msg: string): LogEvent {
 // ─── Tests ─────────────────────────────────────────────────────────────────
 
 describe("SSE log endpoints — blob replay", () => {
+  const testServer = useTestServer(app);
   let mocks: ReturnType<typeof createAllMockDependencies>;
 
   beforeAll(() => {
@@ -69,7 +71,7 @@ describe("SSE log endpoints — blob replay", () => {
     it("returns 404 when request not found", async () => {
       (mocks.collection.findOne as any).mockResolvedValue(null);
 
-      const res = await request(app).get("/api/v1/requests/missing/logs");
+      const res = await request(testServer()).get("/api/v1/requests/missing/logs");
       expect(res.status).toBe(404);
     });
 
@@ -81,7 +83,7 @@ describe("SSE log endpoints — blob replay", () => {
       });
       (mocks.blobStorage.getLogEvents as any).mockResolvedValue(logs);
 
-      const res = await request(app)
+      const res = await request(testServer())
         .get("/api/v1/requests/run-done/logs?fromStart=true")
         .buffer(true)
         .parse((res, cb) => {
@@ -111,7 +113,7 @@ describe("SSE log endpoints — blob replay", () => {
         run: { _id: "attempt-1", attemptNumber: 1, status: "done", outcome: "succeeded" },
       });
 
-      await request(app)
+      await request(testServer())
         .get("/api/v1/requests/run-done/logs")
         .buffer(true)
         .parse((res, cb) => {
@@ -132,7 +134,7 @@ describe("SSE log endpoints — blob replay", () => {
         Object.assign(new Error("BlobServiceError"), { statusCode: 503 }),
       );
 
-      const res = await request(app)
+      const res = await request(testServer())
         .get("/api/v1/requests/run-done/logs?fromStart=true")
         .buffer(true)
         .parse((res, cb) => {
@@ -155,7 +157,7 @@ describe("SSE log endpoints — blob replay", () => {
       });
       (mocks.blobStorage.getLogEvents as any).mockResolvedValue([]);
 
-      const res = await request(app)
+      const res = await request(testServer())
         .get("/api/v1/requests/run-empty/logs?fromStart=true")
         .buffer(true)
         .parse((res, cb) => {
@@ -177,7 +179,7 @@ describe("SSE log endpoints — blob replay", () => {
       });
       (mocks.blobStorage.getLogEvents as any).mockResolvedValue([]);
 
-      const res = await request(app)
+      const res = await request(testServer())
         .get("/api/v1/requests/run-mt/logs?fromStart=true")
         .buffer(true)
         .parse((res, cb) => {
@@ -203,7 +205,7 @@ describe("SSE log endpoints — blob replay", () => {
     it("returns 404 when report not found", async () => {
       (mocks.reportCollection.findOne as any).mockResolvedValue(null);
 
-      const res = await request(app).get("/api/v1/reports/missing/logs");
+      const res = await request(testServer()).get("/api/v1/reports/missing/logs");
       expect(res.status).toBe(404);
     });
 
@@ -215,7 +217,7 @@ describe("SSE log endpoints — blob replay", () => {
       });
       (mocks.blobStorage.getLogEvents as any).mockResolvedValue(logs);
 
-      const res = await request(app)
+      const res = await request(testServer())
         .get("/api/v1/reports/report-done/logs?fromStart=true")
         .buffer(true)
         .parse((res, cb) => {
@@ -243,7 +245,7 @@ describe("SSE log endpoints — blob replay", () => {
       });
       (mocks.blobStorage.getLogEvents as any).mockResolvedValue([makeLogEvent("error")]);
 
-      const res = await request(app)
+      const res = await request(testServer())
         .get("/api/v1/reports/report-failed/logs?fromStart=true")
         .buffer(true)
         .parse((res, cb) => {
@@ -264,7 +266,7 @@ describe("SSE log endpoints — blob replay", () => {
         status: "completed",
       });
 
-      await request(app)
+      await request(testServer())
         .get("/api/v1/reports/report-done/logs")
         .buffer(true)
         .parse((res, cb) => {
@@ -285,7 +287,7 @@ describe("SSE log endpoints — blob replay", () => {
         Object.assign(new Error("BlobServiceError"), { statusCode: 503 }),
       );
 
-      const res = await request(app)
+      const res = await request(testServer())
         .get("/api/v1/reports/report-done/logs?fromStart=true")
         .buffer(true)
         .parse((res, cb) => {

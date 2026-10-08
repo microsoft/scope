@@ -6,7 +6,7 @@ description: Overview of the Scope REST API and pointer to the auto-generated en
 The Scope REST API mirrors what you can do in the Portal and the
 `scope` CLI. The full per-endpoint reference is **auto-generated from
 the committed OpenAPI snapshot** and lives under
-[REST API reference](/reference/api/operations/).
+[REST API reference](/reference/api/).
 
 For interactive exploration, your deployment may provide Swagger UI and
 a raw OpenAPI document:
@@ -75,7 +75,7 @@ Generate and fetch per-request evaluation reports.
 
 The API also exposes `agents`, `models`, `mcp-servers`, `skills`,
 `extensions`, `insights`, and `report-templates`. See the generated
-[REST API reference](/reference/api/operations/) for endpoint-level
+[REST API reference](/reference/api/) for endpoint-level
 details.
 
 ## Request status & outcome
@@ -118,5 +118,5 @@ published reference.
 
 ## See also
 
-- [REST API reference (auto-generated)](/reference/api/operations/)
+- [REST API reference (auto-generated)](/reference/api/)
 - [Submitting requests (REST API)](/guides/submitting-requests-api/)

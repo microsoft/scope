@@ -81,11 +81,9 @@ function buildCtx(overrides: {
     taskPromptStore: {} as any,
     skillRevisionStore: {} as any,
     skillResolver: {} as any,
-    queueClients: new Map() as any,
     reportQueueClient: {} as any,
-    getOrCreateQueueClient: vi.fn() as any,
     blobStorage: {} as any,
-    validWorkers: [],
+    strictAgentCapabilities: false,
     storageConnectionString: "",
     storageAccountName: "",
   } as unknown as RouteContext;

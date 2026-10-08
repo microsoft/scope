@@ -6,7 +6,7 @@ description: Definitions of the core Scope concepts.
 ## Request
 
 What you submit to Scope. A request bundles a task prompt, a
-criteria set, and a profile (or inline runtime configuration). MS
+criteria graph, and a profile (or inline runtime configuration).
 Scope creates one or more runs per request. See
 [Submitting requests (Portal)](/guides/submitting-requests-portal/).
 
@@ -19,17 +19,18 @@ new run on the same request. Logs and reports are produced per run.
 ## Task prompt
 
 The text instructions sent to the agent. Stored in a shared catalog,
-de-duplicated by text: when you submit a request with task text MS
+de-duplicated by text: when you submit a request with task text
 Scope has seen before, the request links to the existing record
-rather than creating a duplicate. The entity prompt-feature detection
-runs against. See [Managing task prompts](/guides/managing-task-prompts/).
+rather than creating a duplicate. Prompt-feature detection runs
+against this text. See [Managing task prompts](/guides/managing-task-prompts/).
 
 ## Criteria / Criterion
 
 A criterion is a single, observable statement the judge evaluates the
-run's output against. A **criteria set** is a named, reusable
-collection of criteria, optionally arranged as a DAG. Referenced from
-a request by ID. See [Defining evaluation criteria](/guides/defining-criteria/).
+run's output against. Criteria form a **directed acyclic graph (DAG)**.
+Each criterion can depend on other criteria; a criterion without
+dependencies is a root of the graph. See
+[Defining evaluation criteria](/guides/defining-criteria/).
 
 ## Judge
 
@@ -56,8 +57,7 @@ code, skill commits, and extension versions.
 
 ## Worker
 
-The runtime that drives an AI coding agent during a run. Scope
-ships three workers — see
+The runtime that drives an AI coding agent during a run. See
 [Coding agents & capabilities](/reference/workers/).
 
 ## ACP (Agent Client Protocol)
@@ -79,8 +79,8 @@ commit hash so re-runs are reproducible.
 
 ## Extension
 
-A VS Code extension installed for the duration of a run. Only the VS
-VS Code Copilot coding agent supports extensions.
+A VS Code extension installed for the duration of a run. See
+[Coding agents & capabilities](/reference/workers/) for compatibility.
 
 ## Prompt feature
 

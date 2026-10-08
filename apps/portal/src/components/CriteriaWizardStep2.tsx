@@ -168,7 +168,9 @@ export function CriteriaWizardStep2({ wizard }: CriteriaWizardStep2Props) {
 
         {generateMutation.isError && (
           <p className="text-xs text-amber-600">
-            AI generation unavailable — register a GitHub Models token or write your prompt manually
+            AI generation failed — {generateMutation.error instanceof Error
+              ? generateMutation.error.message
+              : "register an Azure AI Foundry or GitHub Models key at /secrets/keys/new, or write your prompt manually"}
           </p>
         )}
 

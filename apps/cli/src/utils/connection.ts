@@ -13,7 +13,7 @@ export function currentEnvironment(): Readonly<ScopeEnvironment> | undefined {
 }
 
 /** Prefer the action-scoped named URL over the legacy URL passed by older commands. */
-export function resolveApiUrl(legacyUrl: string): string {
+export function resolveApiUrl(legacyUrl: string | undefined): string | undefined {
   return currentEnvironment()?.url ?? legacyUrl;
 }
 

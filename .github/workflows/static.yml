@@ -45,24 +45,37 @@ jobs:
       - name: Restore Astro build cache
         uses: actions/cache@v4
         with:
+          # Only the persistent data store is cached. `website/.astro` holds
+          # generated content-collection modules that import source files by
+          # name, so restoring it through the loose restore-keys below — which
+          # match a different source tree by design — resurrects imports for
+          # files that have since been renamed or deleted, and the build fails
+          # resolving them.
           path: |
             website/node_modules/.astro
-            website/.astro
           key: astro-${{ runner.os }}-${{ hashFiles('website/pnpm-lock.yaml') }}-${{ hashFiles('website/src/**') }}
           restore-keys: |
             astro-${{ runner.os }}-${{ hashFiles('website/pnpm-lock.yaml') }}-
             astro-${{ runner.os }}-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Test site plugins
+        run: pnpm test
       - name: Setup Pages
         id: pages
         if: github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
       - name: Build site
         env:
-          SITE: ${{ steps.pages.outputs.origin }}
-          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          # The Pages API can report an isolated hostname instead of the public URL.
+          # Use the public project URL for both pull-request and production builds.
+          SITE: https://microsoft.github.io
+          BASE_PATH: /scope
         run: pnpm run build
+      - name: Install accessibility test browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test website accessibility and privacy links
+        run: pnpm exec playwright test
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3

@@ -13,6 +13,7 @@ import {
   fetchAgentsByProvider,
 } from "model-scanning";
 import { scanCopilotModels } from "./scan.js";
+import { isCapiHmacEnabled, withCapiGatewayFetch } from "./capi-gateway.js";
 
 const PROVIDER = "github-copilot";
 
@@ -20,21 +21,27 @@ async function main(): Promise<void> {
   initTelemetry("scope-model-scanner-copilot");
   const scanStart = Date.now();
   const { dryRun, apiUrl } = parseScannerArgs();
-  const tokenClient = new TokenManagerClient();
 
   console.log(`Model scanner: copilot (provider: ${PROVIDER})`);
   console.log(`Mode: ${dryRun ? "dry-run" : "live"}`);
 
-  // Acquire token — must be an OAuth token, not a PAT (Copilot API rejects PATs)
-  console.log("Acquiring token for copilot-models capability...");
-  const tokenStart = Date.now();
-  const token = await tokenClient.acquireToken("copilot-models");
-  trackMetric({ name: "model_scanner.token_acquisition_ms", value: Date.now() - tokenStart, properties: { service: "model-scanner-copilot", provider: PROVIDER } });
-  console.log("Token acquired.");
+  let scanResult;
+  if (isCapiHmacEnabled()) {
+    // CAPI HMAC (integration) auth: the gateway signs the request, so the
+    // catalog is the integration's rather than a user token's.
+    console.log("Scanning GitHub Copilot models via gateway with CAPI HMAC auth...");
+    scanResult = await withCapiGatewayFetch((fetchFn) => scanCopilotModels(null, fetchFn));
+  } else {
+    // Acquire token — must be an OAuth token, not a PAT (Copilot API rejects PATs)
+    console.log("Acquiring token for copilot-models capability...");
+    const tokenStart = Date.now();
+    const token = await new TokenManagerClient().acquireToken("copilot-models");
+    trackMetric({ name: "model_scanner.token_acquisition_ms", value: Date.now() - tokenStart, properties: { service: "model-scanner-copilot", provider: PROVIDER } });
+    console.log("Token acquired.");
 
-  // Scan models
-  console.log("Scanning GitHub Copilot models...");
-  const scanResult = await scanCopilotModels(token);
+    console.log("Scanning GitHub Copilot models...");
+    scanResult = await scanCopilotModels(token);
+  }
   console.log(`Found ${scanResult.models.length} models:`);
   for (const model of scanResult.models) {
     console.log(`  - ${model.id}`);

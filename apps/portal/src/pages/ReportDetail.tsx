@@ -16,6 +16,7 @@ import { ArrowLeft, Copy, Check, ExternalLink, ClipboardCopy, Lightbulb } from "
 import { formatDate } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+import { AgentBadge } from "@/components/AgentBadge";
 
 export function ReportDetail() {
   const { id } = useParams<{ id: string }>();
@@ -303,7 +304,10 @@ export function ReportDetail() {
                     </div>
                     <div>
                       <span className="text-muted-foreground">Agent:</span>{" "}
-                      <span className="font-mono">{report.reporter.agentId}@{report.reporter.agentVersion}</span>
+                      <AgentBadge
+                        agentId={report.reporter.agentId}
+                        version={report.reporter.agentVersion}
+                      />
                     </div>
                     <div>
                       <span className="text-muted-foreground">Git Hash:</span>{" "}

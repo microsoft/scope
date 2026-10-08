@@ -22,6 +22,9 @@ const config: StorybookConfig = {
       __GIT_COMMIT__: JSON.stringify("storybook"),
       __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
       __GIT_BRANCH__: JSON.stringify("storybook"),
+      // Auth stories use context fixtures, never a live IdP, including in builds.
+      "import.meta.env.VITE_AUTH_CLIENT_ID": JSON.stringify("storybook-client-id"),
+      "import.meta.env.VITE_AUTH_AUTHORITY": JSON.stringify("https://login.example.test/tenant"),
     };
     return config;
   },

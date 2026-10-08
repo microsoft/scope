@@ -89,7 +89,7 @@ describe("packaged backend", () => {
     expect(services.some(item => targetIds.includes(item.name as typeof targetIds[number]))).toBe(false);
     const migration = services.find(item => item.name === "db-migrate")!;
     expect(migration.kind).toBe("job");
-    expect(migration.image.build?.dockerfile).toBe("packages/db-migrations/Dockerfile.scope");
+    expect(migration.image.build?.dockerfile).toBe("packages/db-migrations/Dockerfile");
     expect(services.find(item => item.name === "api")?.dependsOn).toContain("db-migrate");
   });
 
@@ -99,7 +99,7 @@ describe("packaged backend", () => {
     expect(gateway?.image.name).toBe(`scope-local/gateway:${imageTag(options.manifest)}`);
     expect(gateway?.image.build).toMatchObject({
       context: "/package/assets/source/apps/gateway",
-      dockerfile: "Dockerfile.scope",
+      dockerfile: "Dockerfile",
     });
     expect(gateway?.memoryMb).toBe(512);
     expect(gateway?.ports).toEqual([{ container: 18000 }]);
@@ -132,7 +132,7 @@ describe("packaged backend", () => {
 
   it("prepares only the requested Docker worker using the pinned real component versions", () => {
     const worker = dockerWorker("coder-acp-copilot", options);
-    expect(worker.image.build?.dockerfile).toBe("apps/workers/coder-acp-copilot/Dockerfile.scope");
+    expect(worker.image.build?.dockerfile).toBe("apps/workers/coder-acp-copilot/Dockerfile");
     expect(worker.image.build?.args?.COPILOT_CLI_VERSION).toBe("1.0.65");
     expect(worker.image.build?.args?.NPM_CONFIG_REGISTRY).toBe(options.registry);
     expect(worker.env).toMatchObject({
@@ -171,7 +171,7 @@ describe("packaged backend", () => {
 
   it("runs the selected Docker provider's existing scanner without its cross-agent writes", () => {
     const scanner = modelScanner("coder-acp-copilot", options);
-    expect(scanner.image.build?.dockerfile).toBe("apps/model-scanners/copilot/Dockerfile.scope");
+    expect(scanner.image.build?.dockerfile).toBe("apps/model-scanners/copilot/Dockerfile");
     expect(scanner.kind).toBe("job");
     expect(scanner.command).toContain("--dry-run");
     expect(scanner.env?.TOKEN_MANAGER_URL).toBe("http://token-manager:80");

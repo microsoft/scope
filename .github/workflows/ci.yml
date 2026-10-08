@@ -15,6 +15,10 @@ on:
       - "vitest.config.ts"
       - "vitest.integration.config.ts"
       - ".github/workflows/ci.yml"
+      - ".github/workflows/publish-cli.yml"
+      - ".dockerignore"
+      - "install-cli.sh"
+      - "website/install-cli.sh"
   pull_request:
     branches: [main]
     paths:
@@ -29,15 +33,13 @@ on:
       - "vitest.config.ts"
       - "vitest.integration.config.ts"
       - ".github/workflows/ci.yml"
+      - ".github/workflows/publish-cli.yml"
+      - ".dockerignore"
+      - "install-cli.sh"
+      - "website/install-cli.sh"
   workflow_dispatch:
-    inputs:
-      images:
-        description: 'Comma-separated list of images to build (or "all"). Leave empty to run CI only.'
-        required: false
-        default: ""
 
 permissions:
-  id-token: write
   contents: read
   pull-requests: write
   issues: write
@@ -45,8 +47,6 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-env:
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -156,8 +156,8 @@ jobs:
     name: LLM Evals
     needs: [detect-changes]
     if: >
-      github.event_name == 'workflow_dispatch' ||
-      needs.detect-changes.outputs.evals == 'true'
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.evals == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -216,36 +216,25 @@ jobs:
     name: Integration Tests (${{ matrix.worker.name }})
     needs: [detect-changes]
     if: >-
-      github.repository == 'growth-ecosystems/scope-core' &&
+      github.repository == 'microsoft/scope' &&
       (
         github.event_name == 'workflow_dispatch' ||
+        needs.detect-changes.outputs.ci == 'true' ||
         needs.detect-changes.outputs.coder-acp-copilot == 'true' ||
         needs.detect-changes.outputs.coder-acp-claude-code == 'true' ||
         needs.detect-changes.outputs.shared == 'true'
       )
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TRUSTED_CODE: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+      DOCKERHUB_LOGIN_ENABLED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
 
     strategy:
       fail-fast: false
       matrix:
         worker:
-          - name: vscode-web
-            images: |
-              docker buildx build \
-                --build-arg VSCODE_VERSION=$VSCODE_VERSION \
-                --build-arg COPILOT_CHAT_VERSION=$COPILOT_CHAT_VERSION \
-                --cache-from type=local,src=/tmp/.buildx-cache \
-                --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=min \
-                --load \
-                .
-              docker buildx build \
-                --target dev \
-                --build-arg VSCODE_VERSION=$VSCODE_VERSION \
-                --build-arg COPILOT_CHAT_VERSION=$COPILOT_CHAT_VERSION \
-                --cache-from type=local,src=/tmp/.buildx-cache \
-                --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=min \
-                --load \
-                .
           - name: copilot-acp
             dockerfile: apps/workers/coder-acp-copilot/Dockerfile
             versions_env: apps/workers/coder-acp-copilot/versions.env
@@ -257,16 +246,6 @@ jobs:
                 -f apps/workers/coder-acp-copilot/Dockerfile \
                 --target dev \
                 --build-arg COPILOT_CLI_VERSION=$COPILOT_CLI_VERSION \
-                --cache-from type=local,src=/tmp/.buildx-cache \
-                --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=min \
-                --load \
-                .
-          - name: vscode-electron
-            images: |
-              docker buildx build \
-                --target dev \
-                --build-arg VSCODE_VERSION=$VSCODE_VERSION \
-                --build-arg COPILOT_CHAT_VERSION=$COPILOT_CHAT_VERSION \
                 --cache-from type=local,src=/tmp/.buildx-cache \
                 --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=min \
                 --load \
@@ -333,6 +312,7 @@ jobs:
           restore-keys: docker-${{ matrix.worker.name }}-
 
       - name: Log in to Docker Hub
+        if: env.TRUSTED_CODE == 'true' && env.DOCKERHUB_LOGIN_ENABLED == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -350,10 +330,10 @@ jobs:
       - name: Run integration tests
         run: npx vitest run --config vitest.integration.config.ts --silent=false ${{ matrix.worker.test_pattern }}
         env:
-          GH_AUTH_USERNAME: ${{ secrets.GH_AUTH_USERNAME }}
-          GH_AUTH_PASSWORD: ${{ secrets.GH_AUTH_PASSWORD }}
-          GH_AUTH_TOTP_SECRET: ${{ secrets.GH_AUTH_TOTP_SECRET }}
-          GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_AUTH_USERNAME: ${{ env.TRUSTED_CODE == 'true' && secrets.GH_AUTH_USERNAME || '' }}
+          GH_AUTH_PASSWORD: ${{ env.TRUSTED_CODE == 'true' && secrets.GH_AUTH_PASSWORD || '' }}
+          GH_AUTH_TOTP_SECRET: ${{ env.TRUSTED_CODE == 'true' && secrets.GH_AUTH_TOTP_SECRET || '' }}
+          GITHUB_TOKEN: ${{ env.TRUSTED_CODE == 'true' && secrets.COPILOT_GITHUB_TOKEN || '' }}
           # NOTE: Claude Code credentials disabled — out of budget.
           # The expensive "completes coding prompts" test auto-skips when
           # these are absent; tool-check tests still run.
@@ -385,7 +365,7 @@ jobs:
         if: always()
         run: |
           mkdir -p test-videos
-          i=0; find apps/workers/*/test-output -name "*.webm" | sort | while read f; do
+          i=0; find apps/workers -type f -path "*/test-output/*" -name "*.webm" | sort | while IFS= read -r f; do
             cp "$f" "test-videos/recording-$i.webm"
             i=$((i+1))
           done
@@ -406,13 +386,18 @@ jobs:
     name: Integration Tests (queue recovery)
     needs: [detect-changes]
     if: >-
-      github.repository == 'growth-ecosystems/scope-core' &&
+      github.repository == 'microsoft/scope' &&
       (
         github.event_name == 'workflow_dispatch' ||
+        needs.detect-changes.outputs.ci == 'true' ||
         needs.detect-changes.outputs.shared == 'true' ||
         needs.detect-changes.outputs.scheduler == 'true'
       )
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DOCKERHUB_LOGIN_ENABLED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
 
     steps:
       - name: Checkout repository
@@ -441,9 +426,12 @@ jobs:
       - name: Build shared packages
         run: pnpm --filter shared build
 
-      # mongo:7.0 and redis are pulled from Docker Hub; authenticate to avoid
-      # anonymous pull-rate limits. (Azurite comes from mcr.microsoft.com.)
+      # Authenticate when available on trusted code; fork PRs use public images
+      # anonymously so missing secrets do not prevent these local-service tests.
       - name: Log in to Docker Hub
+        if: >-
+          env.DOCKERHUB_LOGIN_ENABLED == 'true' &&
+          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -751,12 +739,35 @@ jobs:
       - name: Verify NOTICE is up to date
         run: pnpm notice:check
 
+  windows-build:
+    name: Windows Worker Build
+    needs: [detect-changes]
+    if: >
+      github.repository == 'microsoft/scope' &&
+      (github.event_name == 'workflow_dispatch' ||
+      needs.detect-changes.outputs.ci == 'true' ||
+      needs.detect-changes.outputs.coder-acp-copilot-windows == 'true' ||
+      needs.detect-changes.outputs.coder-acp-copilot == 'true' ||
+      needs.detect-changes.outputs.shared == 'true')
+    runs-on: windows-2022
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and smoke-test local Windows images
+        shell: pwsh
+        run: ./scripts/build-windows-worker.ps1
+
   # ---------------------------------------------------------------------------
-  # Detect which images changed (runs in parallel with CI jobs)
+  # Detect changed components (runs in parallel with CI jobs)
   # ---------------------------------------------------------------------------
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
+      ci: ${{ steps.changes.outputs.ci }}
       api: ${{ steps.changes.outputs.api }}
       judge: ${{ steps.changes.outputs.judge }}
       portal: ${{ steps.changes.outputs.portal }}
@@ -784,6 +795,9 @@ jobs:
         with:
           base: ${{ github.event.before }}
           filters: |
+            ci:
+              - '.github/workflows/ci.yml'
+              - 'scripts/ci-workflow.test.ts'
             shared:
               - 'packages/shared/**'
               - 'package.json'
@@ -799,9 +813,11 @@ jobs:
               - 'apps/portal/**'
             coder-acp-copilot:
               - 'apps/workers/coder-acp-copilot/**'
+              - 'packages/test-utils/**'
             coder-acp-claude-code:
               - 'apps/workers/coder-acp-claude-code/**'
               - 'packages/copilot-driver-ext/**'
+              - 'packages/test-utils/**'
             token-manager:
               - 'apps/token-manager/**'
             model-scanner-copilot:
@@ -821,7 +837,22 @@ jobs:
             coder-acp-copilot-windows:
               - 'apps/workers/coder-acp-copilot-windows/**'
               - 'apps/workers/coder-acp-copilot/versions.env'
+              - 'packages/telemetry/**'
+              - 'scripts/build-windows-worker.ps1'
+              - 'pnpm-workspace.yaml'
+              - '.dockerignore'
+              - 'packages/test-utils/**'
             typescript:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/publish-cli.yml'
+              - 'scripts/ci-workflow.test.ts'
+              - 'scripts/install-cli.test.ts'
+              - 'scripts/build-windows-worker.test.ts'
+              - 'scripts/build-windows-worker.ps1'
+              - 'install-cli.sh'
+              - 'website/install-cli.sh'
+              - '.dockerignore'
+              - 'pnpm-workspace.yaml'
               - 'apps/**'
               - '!apps/gateway/**'
               - 'packages/**'
@@ -838,360 +869,12 @@ jobs:
               - 'packages/llm-eval/**'
 
   # ---------------------------------------------------------------------------
-  # Build container images — gated on CI passing
-  # ---------------------------------------------------------------------------
-  build-images:
-    name: "Build image: ${{ matrix.image.name }}"
-    if: >-
-      always() &&
-      !cancelled() &&
-      github.repository == 'growth-ecosystems/scope-core' &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
-      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
-      (needs.gateway.result == 'success' || needs.gateway.result == 'skipped') &&
-      (needs.integration-test.result == 'success' || needs.integration-test.result == 'skipped') &&
-      (needs.integration-test-queue.result == 'success' || needs.integration-test-queue.result == 'skipped') &&
-      (
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.images != '') ||
-        ((github.event_name == 'push' || github.event_name == 'pull_request') && (
-          needs.detect-changes.outputs.api == 'true' ||
-          needs.detect-changes.outputs.judge == 'true' ||
-          needs.detect-changes.outputs.portal == 'true' ||
-          needs.detect-changes.outputs.coder-acp-copilot == 'true' ||
-          needs.detect-changes.outputs.coder-acp-claude-code == 'true' ||
-          needs.detect-changes.outputs.token-manager == 'true' ||
-          needs.detect-changes.outputs.model-scanner-copilot == 'true' ||
-          needs.detect-changes.outputs.model-scanner-anthropic == 'true' ||
-          needs.detect-changes.outputs.report-generator == 'true' ||
-          needs.detect-changes.outputs.post-processor == 'true' ||
-          needs.detect-changes.outputs.scheduler == 'true' ||
-          needs.detect-changes.outputs.db-migrations == 'true' ||
-          needs.detect-changes.outputs.gateway == 'true' ||
-          needs.detect-changes.outputs.shared == 'true' ||
-          needs.detect-changes.outputs.model-scanning == 'true'
-        ))
-      )
-    needs: [test, integration-test, integration-test-queue, build, gateway, detect-changes]
-    runs-on: ubuntu-latest
-    environment: integration
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - name: api
-            dockerfile: apps/api/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.shared == 'true') && 'true' || 'false' }}
-          - name: judge
-            dockerfile: apps/judge/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.judge == 'true' || needs.detect-changes.outputs.shared == 'true') && 'true' || 'false' }}
-          - name: portal
-            dockerfile: apps/portal/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.portal == 'true' || needs.detect-changes.outputs.shared == 'true') && 'true' || 'false' }}
-          - name: coder-acp-copilot
-            dockerfile: apps/workers/coder-acp-copilot/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.coder-acp-copilot == 'true' || needs.detect-changes.outputs.shared == 'true') && 'true' || 'false' }}
-          - name: coder-acp-claude-code
-            dockerfile: apps/workers/coder-acp-claude-code/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.coder-acp-claude-code == 'true' || needs.detect-changes.outputs.shared == 'true') && 'true' || 'false' }}
-          - name: token-manager
-            dockerfile: apps/token-manager/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.token-manager == 'true' || needs.detect-changes.outputs.shared == 'true') && 'true' || 'false' }}
-          - name: model-scanner-copilot
-            dockerfile: apps/model-scanners/copilot/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.model-scanner-copilot == 'true' || needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.model-scanning == 'true') && 'true' || 'false' }}
-          - name: model-scanner-anthropic
-            dockerfile: apps/model-scanners/anthropic/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.model-scanner-anthropic == 'true' || needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.model-scanning == 'true') && 'true' || 'false' }}
-          - name: report-generator
-            dockerfile: apps/workers/report-generator/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.report-generator == 'true' || needs.detect-changes.outputs.shared == 'true') && 'true' || 'false' }}
-          - name: post-processor
-            dockerfile: apps/workers/post-processor/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.post-processor == 'true' || needs.detect-changes.outputs.shared == 'true') && 'true' || 'false' }}
-          - name: scheduler
-            dockerfile: apps/scheduler/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.scheduler == 'true' || needs.detect-changes.outputs.shared == 'true') && 'true' || 'false' }}
-          - name: db-migrations
-            dockerfile: packages/db-migrations/Dockerfile
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.db-migrations == 'true') && 'true' || 'false' }}
-          - name: gateway
-            dockerfile: apps/gateway/Dockerfile
-            context: apps/gateway
-            target: runtime
-            changed: ${{ (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.gateway == 'true') && 'true' || 'false' }}
-        exclude:
-          - image:
-              changed: "false"
-    steps:
-      - name: Check if image should be built (manual trigger)
-        id: check
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          IMAGES="${{ github.event.inputs.images }}"
-          if [[ "$IMAGES" == "all" ]] || echo "$IMAGES" | grep -qw "${{ matrix.image.name }}"; then
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - uses: actions/checkout@v4
-        if: steps.check.outputs.skip != 'true'
-
-      - name: Log in to Azure
-        if: steps.check.outputs.skip != 'true'
-        uses: azure/login@v2
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Log in to ACR
-        if: steps.check.outputs.skip != 'true'
-        run: az acr login --name "${{ vars.ACR_NAME }}"
-
-      - name: Set up Docker Buildx
-        if: steps.check.outputs.skip != 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Compute image tags
-        id: tags
-        if: steps.check.outputs.skip != 'true'
-        run: |
-          ACR_LOGIN_SERVER=$(az acr show --name "${{ vars.ACR_NAME }}" --resource-group "${{ vars.ACR_RESOURCE_GROUP }}" --query loginServer -o tsv)
-          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          echo "build_time=${BUILD_TIME}" >> "$GITHUB_OUTPUT"
-
-          # Load versions.env if present (needed for version-prefixed tags)
-          VERSION_PREFIX=""
-          for f in apps/workers/${{ matrix.image.name }}/versions.env apps/${{ matrix.image.name }}/versions.env; do
-            if [ -f "$f" ]; then
-              while IFS='=' read -r key value; do
-                [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
-                export "$key=$value"
-              done < "$f"
-              break
-            fi
-          done
-
-          # Build version prefix from component versions
-          case "${{ matrix.image.name }}" in
-            coder-acp-copilot)
-              VERSION_PREFIX="copilot-${COPILOT_CLI_VERSION}" ;;
-            coder-acp-claude-code)
-              VERSION_PREFIX="claude-agent-acp-${CLAUDE_CODE_ACP_VERSION}-sdk-${CLAUDE_AGENT_SDK_VERSION}" ;;
-              VERSION_PREFIX="vscode-${VSCODE_VERSION}-copilot-${COPILOT_CHAT_VERSION}" ;;
-              VERSION_PREFIX="vscode-electron-${VSCODE_VERSION}-copilot-${COPILOT_CHAT_VERSION}" ;;
-          esac
-
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            GIT_SHA="${{ github.event.pull_request.head.sha }}"
-            TAGS="${ACR_LOGIN_SERVER}/scoped/${{ matrix.image.name }}:${GIT_SHA}"
-            TAGS="${TAGS},${ACR_LOGIN_SERVER}/scoped/${{ matrix.image.name }}:pr-${{ github.event.pull_request.number }}-latest"
-          else
-            GIT_SHA="${{ github.sha }}"
-            SHORT_SHA="${GIT_SHA:0:7}"
-            TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-            TAGS="${ACR_LOGIN_SERVER}/scoped/${{ matrix.image.name }}:${GIT_SHA}"
-            TAGS="${TAGS},${ACR_LOGIN_SERVER}/scoped/${{ matrix.image.name }}:${TIMESTAMP}-${SHORT_SHA}"
-            if [ -n "$VERSION_PREFIX" ]; then
-              TAGS="${TAGS},${ACR_LOGIN_SERVER}/scoped/${{ matrix.image.name }}:${VERSION_PREFIX}-${TIMESTAMP}-${SHORT_SHA}"
-            fi
-          fi
-
-          echo "git_sha=${GIT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
-
-      - name: Load pinned versions
-        id: versions
-        if: steps.check.outputs.skip != 'true'
-        run: |
-          BUILD_ARGS="GIT_COMMIT=${{ steps.tags.outputs.git_sha }}"
-          BUILD_ARGS="${BUILD_ARGS}"$'\n'"BUILD_TIME=${{ steps.tags.outputs.build_time }}"
-          for f in apps/workers/${{ matrix.image.name }}/versions.env apps/${{ matrix.image.name }}/versions.env; do
-            if [ -f "$f" ]; then
-              while IFS='=' read -r key value; do
-                [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
-                BUILD_ARGS="${BUILD_ARGS}"$'\n'"${key}=${value}"
-              done < "$f"
-              break
-            fi
-          done
-          # Use EOF delimiter for multiline output
-          {
-            echo "build_args<<EOF"
-            echo "$BUILD_ARGS"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Build and push image
-        if: steps.check.outputs.skip != 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.image.context || '.' }}
-          file: ${{ matrix.image.dockerfile }}
-          target: ${{ matrix.image.target || '' }}
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          build-args: ${{ steps.versions.outputs.build_args }}
-          cache-from: type=gha,scope=${{ matrix.image.name }},ignore-error=true
-          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
-
-  # ---------------------------------------------------------------------------
-  # Build Windows image — uses az acr build --platform windows/amd64
-  # ---------------------------------------------------------------------------
-  build-windows-image:
-    name: "Build image: coder-acp-copilot-windows"
-    if: >-
-      always() &&
-      !cancelled() &&
-      github.repository == 'growth-ecosystems/scope-core' &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
-      (
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.images == 'all' || contains(github.event.inputs.images, 'coder-acp-copilot-windows'))) ||
-        ((github.event_name == 'push' || github.event_name == 'pull_request') && (needs.detect-changes.outputs.coder-acp-copilot-windows == 'true' || needs.detect-changes.outputs.shared == 'true'))
-      )
-    needs: [test, detect-changes]
-    runs-on: ubuntu-latest
-    environment: integration
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Load pinned versions
-        id: versions
-        run: |
-          EXTRA_ARGS=""
-          VERSION_FILE="apps/workers/coder-acp-copilot/versions.env"
-          if [ -f "$VERSION_FILE" ]; then
-            while IFS='=' read -r key value; do
-              [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
-              export "$key=$value"
-              EXTRA_ARGS="${EXTRA_ARGS} --build-arg ${key}=${value}"
-            done < "$VERSION_FILE"
-          fi
-          echo "extra_args=${EXTRA_ARGS}" >> "$GITHUB_OUTPUT"
-          echo "copilot_version=${COPILOT_CLI_VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve base image tag
-        id: base
-        run: |
-          WORKER_DIR="apps/workers/coder-acp-copilot-windows"
-          ACR_LOGIN_SERVER=$(az acr show --name "${{ vars.ACR_NAME }}" --resource-group "${{ vars.ACR_RESOURCE_GROUP }}" --query loginServer -o tsv)
-          echo "acr_login_server=${ACR_LOGIN_SERVER}" >> "$GITHUB_OUTPUT"
-
-          BASE_HASH=$(sha256sum ${WORKER_DIR}/Dockerfile.base | cut -c1-12)
-          BASE_TAG="base-${BASE_HASH}"
-
-          if az acr repository show-tags --name "${{ vars.ACR_NAME }}" --repository scoped/coder-windows-base --query "[?@=='${BASE_TAG}']" -o tsv | grep -q .; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          echo "base_tag=${BASE_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Build base image (if not in ACR)
-        if: steps.base.outputs.exists == 'false'
-        run: |
-          WORKER_DIR="apps/workers/coder-acp-copilot-windows"
-
-          az acr build \
-            --registry "${{ vars.ACR_NAME }}" \
-            --resource-group "${{ vars.ACR_RESOURCE_GROUP }}" \
-            --platform windows/amd64 \
-            --image "scoped/coder-windows-base:${{ steps.base.outputs.base_tag }}" \
-            --image "scoped/coder-windows-base:latest" \
-            --file "${WORKER_DIR}/Dockerfile.base" \
-            .
-
-      - name: Resolve deps image tag
-        id: deps
-        run: |
-          WORKER_DIR="apps/workers/coder-acp-copilot-windows"
-          ACR_LOGIN_SERVER="${{ steps.base.outputs.acr_login_server }}"
-
-          DEPS_HASH=$(cat ${WORKER_DIR}/Dockerfile.deps ${WORKER_DIR}/versions.env ${WORKER_DIR}/Dockerfile.base | sha256sum | cut -c1-12)
-          DEPS_TAG="deps-${DEPS_HASH}"
-          DEPS_IMAGE="${ACR_LOGIN_SERVER}/scoped/coder-acp-copilot-windows-deps:${DEPS_TAG}"
-
-          if az acr repository show-tags --name "${{ vars.ACR_NAME }}" --repository scoped/coder-acp-copilot-windows-deps --query "[?@=='${DEPS_TAG}']" -o tsv | grep -q .; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          echo "deps_tag=${DEPS_TAG}" >> "$GITHUB_OUTPUT"
-          echo "image=${DEPS_IMAGE}" >> "$GITHUB_OUTPUT"
-
-      - name: Build deps image (if not in ACR)
-        if: steps.deps.outputs.exists == 'false'
-        run: |
-          WORKER_DIR="apps/workers/coder-acp-copilot-windows"
-          ACR_LOGIN_SERVER="${{ steps.base.outputs.acr_login_server }}"
-          BASE_IMAGE="${ACR_LOGIN_SERVER}/scoped/coder-windows-base:${{ steps.base.outputs.base_tag }}"
-
-          az acr build \
-            --registry "${{ vars.ACR_NAME }}" \
-            --resource-group "${{ vars.ACR_RESOURCE_GROUP }}" \
-            --platform windows/amd64 \
-            --image "scoped/coder-acp-copilot-windows-deps:${{ steps.deps.outputs.deps_tag }}" \
-            --image "scoped/coder-acp-copilot-windows-deps:latest" \
-            --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
-            --build-arg "COPILOT_CLI_VERSION=${{ steps.versions.outputs.copilot_version }}" \
-            --file "${WORKER_DIR}/Dockerfile.deps" \
-            .
-
-      - name: Compute image tags
-        id: tags
-        run: |
-          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          echo "build_time=${BUILD_TIME}" >> "$GITHUB_OUTPUT"
-
-          VERSION_PREFIX="copilot-${{ steps.versions.outputs.copilot_version }}"
-
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            GIT_SHA="${{ github.event.pull_request.head.sha }}"
-            IMAGE_ARGS="--image scoped/coder-acp-copilot-windows:${GIT_SHA}"
-            IMAGE_ARGS="${IMAGE_ARGS} --image scoped/coder-acp-copilot-windows:pr-${{ github.event.pull_request.number }}-latest"
-          else
-            GIT_SHA="${{ github.sha }}"
-            SHORT_SHA="${GIT_SHA:0:7}"
-            TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-            IMAGE_ARGS="--image scoped/coder-acp-copilot-windows:${GIT_SHA}"
-            IMAGE_ARGS="${IMAGE_ARGS} --image scoped/coder-acp-copilot-windows:${TIMESTAMP}-${SHORT_SHA}"
-            IMAGE_ARGS="${IMAGE_ARGS} --image scoped/coder-acp-copilot-windows:${VERSION_PREFIX}-${TIMESTAMP}-${SHORT_SHA}"
-          fi
-
-          echo "git_sha=${GIT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "image_args=${IMAGE_ARGS}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push to ACR (Windows)
-        run: |
-          az acr build \
-            --registry "${{ vars.ACR_NAME }}" \
-            --resource-group "${{ vars.ACR_RESOURCE_GROUP }}" \
-            --platform windows/amd64 \
-            ${{ steps.tags.outputs.image_args }} \
-            --build-arg DEPS_IMAGE=${{ steps.deps.outputs.image }} \
-            --build-arg GIT_COMMIT=${{ steps.tags.outputs.git_sha }} \
-            --build-arg BUILD_TIME=${{ steps.tags.outputs.build_time }} \
-            ${{ steps.versions.outputs.extra_args }} \
-            --file apps/workers/coder-acp-copilot-windows/Dockerfile.windows \
-            .
-
-  # ---------------------------------------------------------------------------
   # Summary
   # ---------------------------------------------------------------------------
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [test, integration-test, integration-test-queue, lint, build, cli-bundle-test, gateway, llm-evals, notice-check, license-headers]
+    needs: [test, integration-test, integration-test-queue, windows-build, lint, build, cli-bundle-test, gateway, llm-evals, notice-check, license-headers]
     if: always()
 
     steps:
@@ -1200,6 +883,7 @@ jobs:
           if [ "${{ needs.test.result }}" = "success" ] && \
              [ "${{ needs.integration-test.result }}" = "success" -o "${{ needs.integration-test.result }}" = "skipped" ] && \
              [ "${{ needs.integration-test-queue.result }}" = "success" -o "${{ needs.integration-test-queue.result }}" = "skipped" ] && \
+             [ "${{ needs.windows-build.result }}" = "success" -o "${{ needs.windows-build.result }}" = "skipped" ] && \
              [ "${{ needs.lint.result }}" = "success" ] && \
              [ "${{ needs.build.result }}" = "success" ] && \
              [ "${{ needs.cli-bundle-test.result }}" = "success" -o "${{ needs.cli-bundle-test.result }}" = "skipped" ] && \
@@ -1214,6 +898,7 @@ jobs:
             echo "  Unit Tests: ${{ needs.test.result }}"
             echo "  Integration Tests: ${{ needs.integration-test.result }}"
             echo "  Integration Tests (queue recovery): ${{ needs.integration-test-queue.result }}"
+            echo "  Windows Worker Build: ${{ needs.windows-build.result }}"
             echo "  Lint: ${{ needs.lint.result }}"
             echo "  Build: ${{ needs.build.result }}"
             echo "  CLI Bundle Tests: ${{ needs.cli-bundle-test.result }}"

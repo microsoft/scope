@@ -80,8 +80,12 @@ function harness(
   const requestCollection = createMockCollection<RequestDocument>(docs);
   const runsCollection = createMockCollection<RunHistoryDocument>();
   const agentCollection = createMockCollection<CodingAgentDocument>();
+  // Docker targets are registered and available unless a test overrides them.
+  const registered = agents.some((agent) => agent._id === DOCKER) ? agents : [...agents, makeAgent(DOCKER, true)];
   vi.mocked(agentCollection.findOne).mockImplementation(async (filter) =>
-    agents.find((agent) => agent._id === filter._id && !agent.deletedAt) ?? null,
+    registered.find((agent) =>
+      agent._id === filter._id && (!("deletedAt" in filter) || !agent.deletedAt),
+    ) ?? null,
   );
   const profileCollection = createMockCollection<ProfileDocument>();
   vi.mocked(profileCollection.findOne).mockImplementation(async (filter) => {
@@ -142,9 +146,15 @@ describe.each(HOSTS)("host admission for %s", (host) => {
       const res = await request(ctx.app).post("/api/v1/requests/bulk-resubmit")
         .send({ ids: ["docker", "original"], count: 2 });
 
-      expect(res.status).toBe(400);
-      expect(res.body).toEqual({ error: `Worker "${host}" is not available for new submissions` });
-      expect(ctx.agentCollection.findOne).toHaveBeenCalledWith({ _id: host, deletedAt: { $exists: false } });
+      const errorCode = {
+        missing: "agent_not_found",
+        deleted: "agent_deleted",
+        disabled: "agent_unavailable",
+        unspecified: "agent_unavailable",
+      }[availability];
+      expect(res.status).toBe(errorCode === "agent_unavailable" ? 400 : 404);
+      expect(res.body).toMatchObject({ errorCode });
+      expect(ctx.agentCollection.findOne).toHaveBeenCalledWith({ _id: host });
       expectNoWorkWrites(ctx);
     },
   );
@@ -154,7 +164,10 @@ describe.each(HOSTS)("host admission for %s", (host) => {
     const res = await request(ctx.app).post(`/api/v1/requests?projectId=${PROJECT_ID}`)
       .send({ ...SUBMIT, profileId: "host-profile" });
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ error: `Worker "${host}" is not available for new submissions` });
+    expect(res.body).toMatchObject({
+      error: `Agent "${host}" is not available for new submissions`,
+      errorCode: "agent_unavailable",
+    });
     expectNoWorkWrites(ctx);
   });
 
@@ -163,7 +176,10 @@ describe.each(HOSTS)("host admission for %s", (host) => {
     const res = await request(ctx.app).post("/api/v1/requests/bulk-resubmit")
       .send({ ids: ["original"], overrides: { profileId: "host-profile" } });
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ error: `Worker "${host}" is not available for new submissions` });
+    expect(res.body).toMatchObject({
+      error: `Agent "${host}" is not available for new submissions`,
+      errorCode: "agent_unavailable",
+    });
     expectNoWorkWrites(ctx);
   });
 
@@ -197,8 +213,9 @@ describe.each(HOSTS)("host admission for %s", (host) => {
       profileVariations: [position === "base" ? "docker" : "host@1"],
     });
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({
-      error: `Worker "${host}" is not available for new submissions`,
+    expect(res.body).toMatchObject({
+      error: `Agent "${host}" is not available for new submissions`,
+      errorCode: "agent_unavailable",
       variationProfileId: "host",
     });
     expectNoWorkWrites(ctx);
@@ -211,7 +228,12 @@ describe.each(HOSTS)("host admission for %s", (host) => {
     const ctx = harness([original], [makeAgent(host, false)]);
     const res = await request(ctx.app).post(`/api/v1/requests/original/${action}`).send({ force: true });
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ error: `Worker "${host}" is not available for new submissions` });
+    // Retry uses the registry target check; resume keeps the host-only admission check.
+    expect(res.body.error).toBe(
+      action === "retry"
+        ? `Agent "${host}" is not available for new submissions`
+        : `Worker "${host}" is not available for new submissions`,
+    );
     expectNoWorkWrites(ctx);
   });
 
@@ -224,7 +246,7 @@ describe.each(HOSTS)("host admission for %s", (host) => {
       retried: 1,
       skipped: 2,
       results: [
-        { requestId: "original", error: `Worker "${host}" is not available for new submissions` },
+        { requestId: "original", error: `Agent "${host}" is not available for new submissions (agent_unavailable)` },
         { requestId: "docker", attemptNumber: 2 },
         { requestId: "missing", error: "Not found" },
       ],
@@ -341,10 +363,11 @@ it.each(["retry", "resume", "bulk-retry", "bulk-resume", "bulk-resubmit"] as con
   async (action) => {
     const ctx = harness([makeRequest(DOCKER, {
       run: { _id: "attempt-1", attemptNumber: 1, status: action.includes("resume") ? "paused" : "done" },
-    })], [makeAgent(DOCKER, false)]);
+    })], [makeAgent(DOCKER, true)]);
     const path = action.startsWith("bulk-") ? action : `original/${action}`;
     const res = await request(ctx.app).post(`/api/v1/requests/${path}`).send({ ids: ["original"] });
     expect(res.status).toBe(action.includes("resume") ? 200 : 201);
-    if (action !== "bulk-resubmit") expect(ctx.agentCollection.findOne).not.toHaveBeenCalled();
+    // Resume has no registry target check, and host admission never reads Docker agents.
+    if (action.includes("resume")) expect(ctx.agentCollection.findOne).not.toHaveBeenCalled();
   },
 );

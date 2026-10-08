@@ -32,15 +32,22 @@ import {
   runDurationMs,
   parseExtensionSpec,
   parseProfileSpec,
-  resolveAgentVersion,
+  resolveResourceParams,
   validateGateConfigs,
   isCriterionCompatibleWithGate,
   orderGates,
   computeTaskPromptId,
 } from "shared";
-import type { ProfileDocument, ProfileVersionDocument, GateConfig, GateId } from "shared";
+import type {
+  ProfileDocument,
+  ProfileVersionDocument,
+  GateConfig,
+  GateId,
+  ResourceBinding,
+  ResourceBindingSpec,
+  ResourceRevisionDocument,
+} from "shared";
 import { apiRoute } from "../../openapi/api-route.js";
-import { VALID_WORKERS } from "../../route-context.js";
 import type {
   ExtensionDocument,
   McpServerDocument,
@@ -72,6 +79,10 @@ import {
 import { insertHistoricalRun, listHistoricalRuns, getHistoricalRun } from "../../runs-repo.js";
 import { ProjectIdQuerySchema, getQueryProjectId } from "../../utils/project-scope.js";
 import type { RunState } from "shared";
+import {
+  requestedAgentCapabilities,
+  validateAgentTarget,
+} from "../../utils/agent-helpers.js";
 
 type RequestCollection = RouteContext["requestCollection"];
 type RunFacetsResponse = z.infer<typeof RunFacetsResponseSchema>;
@@ -169,9 +180,58 @@ export function _resetRunFacetsCacheForTests(): void {
   runFacetsCache.clear();
 }
 
+/**
+ * Decide where a resubmit's resources come from.
+ *
+ * A resubmit must reproduce the original environment, so pinned bindings are
+ * preserved by default — re-resolving would let a run pinned to `simulator@r1`
+ * with `REPO=run/repo` come back as `simulator@r2` with the revision's default,
+ * fail 422 if that parameter is required, or lose its resources entirely if the
+ * profile declares none.
+ *
+ * Only an explicitly supplied replacement profile re-resolves. This is keyed off
+ * `overrideProfileId` rather than off the resolved profile version, because the
+ * latter is also populated when the caller simply keeps the original profile.
+ *
+ * @param overrideProfileId - `undefined` keeps the original profile, `null`
+ *   detaches it, and a string selects a replacement.
+ */
+export function planResubmitResources(
+  overrideProfileId: string | null | undefined,
+  originalResources: ResourceBinding[] | undefined,
+  profileResourceSpecs: ResourceBindingSpec[] | undefined,
+):
+  | { kind: "preserve"; bindings: ResourceBinding[] | null }
+  | { kind: "resolve"; specs: ResourceBindingSpec[] } {
+  if (typeof overrideProfileId === "string") {
+    return profileResourceSpecs && profileResourceSpecs.length > 0
+      ? { kind: "resolve", specs: profileResourceSpecs }
+      : { kind: "preserve", bindings: null };
+  }
+  return {
+    kind: "preserve",
+    bindings: originalResources && originalResources.length > 0 ? originalResources : null,
+  };
+}
+
 export function registerRequestsRoutes(ctx: RouteContext): void {
 
 const upload = multer({ dest: tmpdir() });
+
+const validatePersistedRequestTarget = (request: RequestDocument) =>
+  validateAgentTarget(ctx.agentCollection, {
+    workerType: request.workerType,
+    requestedVersion: request.agentVersion,
+    model: request.model,
+    requirements: requestedAgentCapabilities({
+      reasoningEffort: request.reasoningEffort,
+      mcpServers: request.mcpServers,
+      skillRevisions: request.skillRevisions,
+      extensions: request.extensions,
+      resources: request.resources,
+    }),
+    strictCapabilities: ctx.strictAgentCapabilities,
+  });
 
 /** Maximum number of profile variations (including the base profile) allowed in one submit. */
 const MAX_PROFILE_VARIATIONS = 25;
@@ -280,6 +340,120 @@ async function resolveGatePromptText(
   );
 }
 
+type ResourceBindingSpecInput = string | ResourceBindingSpec;
+
+function normalizeResourceBindingSpec(input: ResourceBindingSpecInput): ResourceBindingSpec {
+  return typeof input === "string" ? { ref: input } : input;
+}
+
+function normalizeResourceBindingSpecs(input: unknown): ResourceBindingSpec[] | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const specs = input
+    .map((item) => {
+      if (typeof item === "string") {
+        const ref = item.trim();
+        return ref ? { ref } : undefined;
+      }
+      if (item && typeof item === "object" && typeof (item as { ref?: unknown }).ref === "string") {
+        const ref = (item as { ref: string }).ref.trim();
+        if (!ref) return undefined;
+        const params = (item as { params?: unknown }).params;
+        return {
+          ref,
+          ...(params && typeof params === "object" ? { params: params as Record<string, string> } : {}),
+        };
+      }
+      return undefined;
+    })
+    .filter((spec): spec is ResourceBindingSpec => spec !== undefined);
+  return specs.length > 0 ? specs : undefined;
+}
+
+async function resolveResourceRevision(
+  ctx: RouteContext,
+  projectId: string,
+  spec: string,
+): Promise<ResourceRevisionDocument | null> {
+  const at = spec.lastIndexOf("@r");
+  const slug = at > 0 ? spec.slice(0, at) : spec;
+  const revisionNumber = at > 0 ? Number(spec.slice(at + 2)) : undefined;
+
+  let revision: ResourceRevisionDocument | null = null;
+  if (revisionNumber !== undefined && Number.isInteger(revisionNumber) && revisionNumber > 0) {
+    const resource = await ctx.resourceStore.getBySlug(projectId, slug);
+    revision = resource
+      ? await ctx.resourceRevisionStore.getByNumber(resource._id, revisionNumber)
+      : null;
+  } else {
+    // A bare spec is a slug or a revision id; try both before failing.
+    const resource = await ctx.resourceStore.getBySlug(projectId, spec);
+    revision = resource
+      ? await ctx.resourceRevisionStore.getLatest(resource._id)
+      : await ctx.resourceRevisionStore.get(spec);
+  }
+
+  if (revision && revision.projectId !== projectId) return null;
+  return revision;
+}
+
+async function resolveResourceBindings(
+  ctx: RouteContext,
+  projectId: string,
+  requestedSpecs: ResourceBindingSpec[] | undefined,
+  profileSpecs: ResourceBindingSpec[] | undefined,
+): Promise<{ bindings?: ResourceBinding[]; conflicts: string[]; errors: string[] }> {
+  const conflicts: string[] = [];
+  const errors: string[] = [];
+  const effectiveSpecs = profileSpecs ?? requestedSpecs;
+  if (!effectiveSpecs || effectiveSpecs.length === 0) return { conflicts, errors };
+
+  if (profileSpecs && requestedSpecs && requestedSpecs.length > profileSpecs.length) {
+    conflicts.push(`resources: sent ${requestedSpecs.length} binding(s), profile requires ${profileSpecs.length}`);
+  }
+
+  const bindings: ResourceBinding[] = [];
+  for (let index = 0; index < effectiveSpecs.length; index += 1) {
+    const profileSpec = profileSpecs?.[index];
+    const runSpec = requestedSpecs?.[index];
+    const effectiveSpec = normalizeResourceBindingSpec(profileSpec ?? runSpec!);
+
+    const revision = await resolveResourceRevision(ctx, projectId, effectiveSpec.ref);
+    if (!revision) {
+      errors.push(`Resource '${effectiveSpec.ref}' not found in this project`);
+      continue;
+    }
+
+    let runParams = runSpec?.params;
+    if (profileSpec && runSpec) {
+      const normalizedRunSpec = normalizeResourceBindingSpec(runSpec);
+      const runRevision = await resolveResourceRevision(ctx, projectId, normalizedRunSpec.ref);
+      if (!runRevision) {
+        errors.push(`Resource '${normalizedRunSpec.ref}' not found in this project`);
+        runParams = undefined;
+      } else if (runRevision._id !== revision._id) {
+        conflicts.push(`resources[${index}].ref: sent "${normalizedRunSpec.ref}", profile requires "${effectiveSpec.ref}"`);
+        runParams = undefined;
+      }
+    }
+
+    const result = resolveResourceParams({
+      parameters: revision.parameters,
+      profileParams: profileSpec?.params,
+      runParams,
+      ref: revision.ref,
+    });
+    conflicts.push(...result.conflicts);
+    errors.push(...result.errors);
+    bindings.push({
+      ref: revision.ref,
+      revisionId: revision._id,
+      params: result.params,
+    });
+  }
+
+  return { bindings, conflicts, errors };
+}
+
 // Submit a request
 apiRoute(ctx.app, ctx.registry, {
   method: "post",
@@ -297,7 +471,7 @@ apiRoute(ctx.app, ctx.registry, {
   successStatus: 201,
   handler: async (req, res) => {
     const projectId = getQueryProjectId(req);
-    const { scenario: scenarioObj, persona: personaObj, maxIterations, personaInstructions, count = 1, model: requestedModel, reasoningEffort: requestedReasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, extensions: extensionIds, agentVersion: requestedAgentVersion, profileId: requestedProfileSpec, profileVariations, priority: requestedPriority, agentsMd: requestedAgentsMd, agentsMdParentIds: requestedAgentsMdParentIds, gates: requestedGates, codebase: codebaseSpec, codebaseRevisionId: requestedCodebaseRevisionId } = req.body;
+    const { scenario: scenarioObj, persona: personaObj, maxIterations, personaInstructions, count = 1, model: requestedModel, reasoningEffort: requestedReasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, extensions: extensionIds, agentVersion: requestedAgentVersion, profileId: requestedProfileSpec, profileVariations, priority: requestedPriority, agentsMd: requestedAgentsMd, agentsMdParentIds: requestedAgentsMdParentIds, gates: requestedGates, codebase: codebaseSpec, codebaseRevisionId: requestedCodebaseRevisionId, resources: resourceSpecs } = req.body;
     let worker = req.query.worker as string | undefined;
 
     // AGENTS.md body + lineage (for any caller that wants to attach an
@@ -349,6 +523,8 @@ apiRoute(ctx.app, ctx.registry, {
         resolvedCodebaseRevisionId = result.revisionId;
       }
     }
+
+    const requestedResourceSpecs = normalizeResourceBindingSpecs(resourceSpecs);
 
     type VariationInput = {
       profileId: string;
@@ -474,9 +650,10 @@ apiRoute(ctx.app, ctx.registry, {
         profileVersion: ProfileVersionDocument;
         workerType: WorkerType;
         model?: string;
-        agentVersion?: string;
+        agentVersion: string;
         mcpServers?: string[];
         skillRevisions?: string[];
+        resources?: ResourceBinding[];
         extensions?: string[];
       };
 
@@ -505,59 +682,38 @@ apiRoute(ctx.app, ctx.registry, {
         }
 
         const variationWorkerType = variationProfileVersion.workerType as WorkerType;
-        if (!VALID_WORKERS.includes(variationWorkerType)) {
-          res.status(400).json({ error: `Invalid worker in variation profile: ${variationWorkerType}` });
-          return;
-        }
-
-        let model = variationProfileVersion.model;
         const effectiveMcpServers = variationProfileVersion.mcpServers ?? undefined;
         const effectiveSkills = variationProfileVersion.skillRevisions ?? undefined;
         const effectiveExtensions = variationProfileVersion.extensions ?? undefined;
         const requestedVariationAgentVersion = variationProfileVersion.agentVersion ?? requestedAgentVersion;
-
-        const agentDoc = await ctx.agentCollection.findOne({ _id: variationWorkerType, deletedAt: { $exists: false } });
-        const availabilityError = variationWorkerType.endsWith("-host")
-          ? workerAvailabilityError(variationWorkerType, agentDoc?.available)
-          : undefined;
-        if (availabilityError) {
-          res.status(400).json({ error: availabilityError, variationProfileId: variationEntry.profileId });
+        const targetCheck = await validateAgentTarget(ctx.agentCollection, {
+          workerType: variationWorkerType,
+          requestedVersion: requestedVariationAgentVersion,
+          model: variationProfileVersion.model,
+          requireModel: true,
+          requirements: requestedAgentCapabilities({
+            reasoningEffort:
+              variationProfileVersion.reasoningEffort ?? requestedReasoningEffort,
+            mcpServers: effectiveMcpServers,
+            skillRevisions: effectiveSkills,
+            extensions: effectiveExtensions,
+            // Mirrors resolveResourceBindings' precedence (profile wins). Uses the
+            // specs rather than resolved bindings because the capability check only
+            // needs to know whether any resource was requested, and resolution
+            // happens after this point.
+            resources:
+              normalizeResourceBindingSpecs(variationProfileVersion.resources)
+              ?? requestedResourceSpecs,
+          }),
+          strictCapabilities: ctx.strictAgentCapabilities,
+        });
+        if (!targetCheck.ok) {
+          const { ok: _ok, status, ...payload } = targetCheck;
+          res.status(status).json({
+            ...payload,
+            variationProfileId: variationEntry.profileId,
+          });
           return;
-        }
-        if (agentDoc && agentDoc.supportedModels.length > 0) {
-          if (model && !agentDoc.supportedModels.includes(model)) {
-            res.status(400).json({
-              error: `Invalid model "${model}" for agent "${variationWorkerType}"`,
-              supportedModels: agentDoc.supportedModels,
-              variationProfileId: variationEntry.profileId,
-            });
-            return;
-          }
-          if (!model && agentDoc.defaultModel) {
-            model = agentDoc.defaultModel;
-          }
-          if (!model) {
-            res.status(400).json({
-              error: `model is required for agent "${variationWorkerType}". Select one of supportedModels or set a defaultModel on the agent.`,
-              supportedModels: agentDoc.supportedModels,
-              variationProfileId: variationEntry.profileId,
-            });
-            return;
-          }
-        }
-
-        let resolvedAgentVersion: string | undefined;
-        if (agentDoc) {
-          const versionResult = resolveAgentVersion(agentDoc.versions, requestedVariationAgentVersion);
-          if ("error" in versionResult) {
-            res.status(400).json({
-              error: `${versionResult.error} for agent "${variationWorkerType}"`,
-              activeVersions: versionResult.activeVersions,
-              variationProfileId: variationEntry.profileId,
-            });
-            return;
-          }
-          resolvedAgentVersion = versionResult.agentVersion;
         }
 
         let validatedMcpServers: string[] | undefined;
@@ -625,15 +781,39 @@ apiRoute(ctx.app, ctx.registry, {
           validatedExtensions = resolvedSpecs;
         }
 
+        const resourceResult = await resolveResourceBindings(
+          ctx,
+          projectId,
+          requestedResourceSpecs,
+          normalizeResourceBindingSpecs(variationProfileVersion.resources),
+        );
+        if (resourceResult.errors.length > 0) {
+          res.status(400).json({
+            error: resourceResult.errors.join("; "),
+            errors: resourceResult.errors,
+            variationProfileId: variationEntry.profileId,
+          });
+          return;
+        }
+        if (resourceResult.conflicts.length > 0) {
+          res.status(400).json({
+            error: `Profile "${variationEntry.profileId}" controls these fields. Either omit them or match the profile values.`,
+            conflicts: resourceResult.conflicts,
+            variationProfileId: variationEntry.profileId,
+          });
+          return;
+        }
+
         resolved.push({
           entry: variationEntry,
           profile: variationProfile,
           profileVersion: variationProfileVersion,
           workerType: variationWorkerType,
-          model,
-          agentVersion: resolvedAgentVersion,
+          model: targetCheck.model,
+          agentVersion: targetCheck.agentVersion,
           mcpServers: validatedMcpServers,
           skillRevisions: resolvedSkillRevisions,
+          resources: resourceResult.bindings,
           extensions: validatedExtensions,
         });
       }
@@ -674,8 +854,9 @@ apiRoute(ctx.app, ctx.registry, {
             ...(r.mcpServers ? { mcpServers: r.mcpServers } : {}),
             ...(r.skillRevisions ? { skillRevisions: r.skillRevisions } : {}),
             ...(resolvedCodebaseRevisionId ? { codebaseRevisionId: resolvedCodebaseRevisionId } : {}),
+            ...(r.resources ? { resources: r.resources } : {}),
             ...(r.extensions ? { extensions: r.extensions } : {}),
-            ...(r.agentVersion ? { agentVersion: r.agentVersion } : {}),
+            agentVersion: r.agentVersion,
             profileId: r.profile._id,
             profileVersionId: r.profileVersion.ref ?? r.profileVersion._id,
             ...(persistedVariationGates ? { gates: persistedVariationGates } : {}),
@@ -714,6 +895,7 @@ apiRoute(ctx.app, ctx.registry, {
     let profileId: string | undefined;
     let profileVersionId: string | undefined;
     let profileVersion: ProfileVersionDocument | null = null;
+    let resolvedResources: ResourceBinding[] | undefined;
     if (requestedProfileSpec) {
       let requestedProfileId: string;
       let requestedProfileVersion: number | undefined;
@@ -774,6 +956,18 @@ apiRoute(ctx.app, ctx.registry, {
           conflicts.push(`extensions: sent ${JSON.stringify(extensionIds)}, profile requires ${JSON.stringify(profileExts)}`);
         }
       }
+      const resourceResult = await resolveResourceBindings(
+        ctx,
+        projectId,
+        requestedResourceSpecs,
+        normalizeResourceBindingSpecs(profileVersion.resources),
+      );
+      if (resourceResult.errors.length > 0) {
+        res.status(400).json({ error: resourceResult.errors.join("; "), errors: resourceResult.errors });
+        return;
+      }
+      conflicts.push(...resourceResult.conflicts);
+      resolvedResources = resourceResult.bindings;
       if (conflicts.length > 0) {
         res.status(400).json({
           error: `Profile "${profileId}" controls these fields. Either omit them or match the profile values.`,
@@ -784,6 +978,13 @@ apiRoute(ctx.app, ctx.registry, {
 
       // Profile fields take precedence
       worker = profileVersion.workerType;
+    } else {
+      const resourceResult = await resolveResourceBindings(ctx, projectId, requestedResourceSpecs, undefined);
+      if (resourceResult.errors.length > 0) {
+        res.status(400).json({ error: resourceResult.errors.join("; "), errors: resourceResult.errors });
+        return;
+      }
+      resolvedResources = resourceResult.bindings;
     }
 
     // Effective values: profile overrides client inputs for controlled fields
@@ -801,25 +1002,8 @@ apiRoute(ctx.app, ctx.registry, {
     if (!worker) {
       res.status(400).json({ 
         error: "Worker query parameter is required",
-        validWorkers: VALID_WORKERS,
         example: "/api/v1/requests?worker=worker-1"
       });
-      return;
-    }
-
-    if (!VALID_WORKERS.includes(worker as WorkerType)) {
-      res.status(400).json({ 
-        error: `Invalid worker: ${worker}`,
-        validWorkers: VALID_WORKERS
-      });
-      return;
-    }
-
-    // Check if the worker (agent) is available for new submissions
-    const workerAgent = await ctx.agentCollection.findOne({ _id: worker, deletedAt: { $exists: false } });
-    const availabilityError = workerAvailabilityError(worker, workerAgent?.available);
-    if (availabilityError) {
-      res.status(400).json({ error: availabilityError });
       return;
     }
 
@@ -870,43 +1054,27 @@ apiRoute(ctx.app, ctx.registry, {
     }
 
     const workerType = worker as WorkerType;
-
-    // Resolve model: validate against agent's supportedModels if available
-    let model: string | undefined = effectiveModel;
-    const agentDoc = await ctx.agentCollection.findOne({ _id: workerType, deletedAt: { $exists: false } });
-    if (agentDoc && agentDoc.supportedModels.length > 0) {
-      if (model && !agentDoc.supportedModels.includes(model)) {
-        res.status(400).json({
-          error: `Invalid model "${model}" for agent "${workerType}"`,
-          supportedModels: agentDoc.supportedModels,
-        });
-        return;
-      }
-      if (!model && agentDoc.defaultModel) {
-        model = agentDoc.defaultModel;
-      }
-      if (!model) {
-        res.status(400).json({
-          error: `model is required for agent "${workerType}". Select one of supportedModels or set a defaultModel on the agent.`,
-          supportedModels: agentDoc.supportedModels,
-        });
-        return;
-      }
+    const targetCheck = await validateAgentTarget(ctx.agentCollection, {
+      workerType,
+      requestedVersion: profileVersion?.agentVersion ?? requestedAgentVersion,
+      model: effectiveModel,
+      requirements: requestedAgentCapabilities({
+        reasoningEffort: effectiveReasoningEffort,
+        mcpServers: effectiveMcpServers,
+        skillRevisions: effectiveSkills,
+        extensions: effectiveExtensions,
+        resources: resolvedResources,
+      }),
+      strictCapabilities: ctx.strictAgentCapabilities,
+    });
+    if (!targetCheck.ok) {
+      const { ok: _ok, status, ...payload } = targetCheck;
+      res.status(status).json(payload);
+      return;
     }
-
-    // Resolve agent version: explicit selection or latest active
-    let resolvedAgentVersion: string | undefined;
-    if (agentDoc) {
-      const versionResult = resolveAgentVersion(agentDoc.versions, requestedAgentVersion);
-      if ("error" in versionResult) {
-        res.status(400).json({
-          error: `${versionResult.error} for agent "${workerType}"`,
-          activeVersions: versionResult.activeVersions,
-        });
-        return;
-      }
-      resolvedAgentVersion = versionResult.agentVersion;
-    }
+    const agentDoc = targetCheck.agent;
+    const model = targetCheck.model;
+    const resolvedAgentVersion = targetCheck.agentVersion;
 
     // Validate reasoning effort against model capabilities
     const warnings: string[] = [];
@@ -1106,8 +1274,9 @@ apiRoute(ctx.app, ctx.registry, {
           ...(validatedMcpServers ? { mcpServers: validatedMcpServers } : {}),
           ...(resolvedSkillRevisions ? { skillRevisions: resolvedSkillRevisions } : {}),
           ...(resolvedCodebaseRevisionId ? { codebaseRevisionId: resolvedCodebaseRevisionId } : {}),
+          ...(resolvedResources ? { resources: resolvedResources } : {}),
           ...(validatedExtensions ? { extensions: validatedExtensions } : {}),
-          ...(resolvedAgentVersion ? { agentVersion: resolvedAgentVersion } : {}),
+          agentVersion: resolvedAgentVersion,
           ...(profileId ? { profileId } : {}),
           ...(profileVersionId ? { profileVersionId } : {}),
           ...(persistedGates ? { gates: persistedGates } : {}),
@@ -1134,7 +1303,7 @@ apiRoute(ctx.app, ctx.registry, {
         taskPromptId,
         ...(model ? { model } : {}),
         ...(effectiveReasoningEffort ? { reasoningEffort: effectiveReasoningEffort } : {}),
-        ...(resolvedAgentVersion ? { agentVersion: resolvedAgentVersion } : {}),
+        agentVersion: resolvedAgentVersion,
         status: "pending",
         mode,
         message: `${count} requests submitted successfully`,
@@ -1167,6 +1336,7 @@ apiRoute(ctx.app, ctx.registry, {
       ...(validatedMcpServers ? { mcpServers: validatedMcpServers } : {}),
       ...(resolvedSkillRevisions ? { skillRevisions: resolvedSkillRevisions } : {}),
       ...(resolvedCodebaseRevisionId ? { codebaseRevisionId: resolvedCodebaseRevisionId } : {}),
+      ...(resolvedResources ? { resources: resolvedResources } : {}),
       ...(validatedExtensions ? { extensions: validatedExtensions } : {}),
       ...(resolvedAgentVersion ? { agentVersion: resolvedAgentVersion } : {}),
       ...(profileId ? { profileId } : {}),
@@ -1285,9 +1455,7 @@ apiRoute(ctx.app, ctx.registry, {
 
     // Multi-value categorical filters: accept a single value, a repeated param,
     // or a comma list, plus the `__empty__` "(Unknown)" sentinel (issue #1138).
-    const workerValues = parseMulti(req.query.worker).filter(
-      (w) => w === EMPTY_FILTER_VALUE || VALID_WORKERS.includes(w as WorkerType),
-    );
+    const workerValues = parseMulti(req.query.worker);
     const statusValues = parseMulti(req.query.status);
     const outcomeValues = parseMulti(req.query.outcome);
     const profileIdValues = parseMulti(req.query.profileId);
@@ -1793,22 +1961,6 @@ apiRoute(ctx.app, ctx.registry, {
   handler: async (req, res) => {
     const { ids, count, overrides } = req.body;
 
-    // Validate workerType override against known workers
-    if (overrides?.workerType && !VALID_WORKERS.includes(overrides.workerType as WorkerType)) {
-      res.status(400).json({ error: `Invalid workerType override: ${overrides.workerType}` });
-      return;
-    }
-
-    // Check if the overridden worker is available for new submissions
-    if (overrides?.workerType) {
-      const overrideAgent = await ctx.agentCollection.findOne({ _id: overrides.workerType, deletedAt: { $exists: false } });
-      const availabilityError = workerAvailabilityError(overrides.workerType, overrideAgent?.available);
-      if (availabilityError) {
-        res.status(400).json({ error: availabilityError });
-        return;
-      }
-    }
-
     // Resolve profile override (once for the entire batch)
     let overrideProfileId: string | null | undefined = overrides?.profileId;
     let overrideProfileVersionId: string | undefined;
@@ -1917,15 +2069,7 @@ apiRoute(ctx.app, ctx.registry, {
         const effectiveWorkerType = (activeProfileVersion
           ? activeProfileVersion.workerType
           : (overrides?.workerType ?? original.workerType)) as WorkerType;
-        const agentDoc = await ctx.agentCollection.findOne({ _id: effectiveWorkerType, deletedAt: { $exists: false } });
-        const availabilityError = effectiveWorkerType.endsWith("-host")
-          ? workerAvailabilityError(effectiveWorkerType, agentDoc?.available)
-          : undefined;
-        if (availabilityError) {
-          res.status(400).json({ error: availabilityError });
-          return;
-        }
-        const effectiveModel = activeProfileVersion
+        let effectiveModel = activeProfileVersion
           ? activeProfileVersion.model
           : (overrides?.model !== undefined ? overrides.model : original.model);
         const effectiveReasoningEffort = activeProfileVersion?.reasoningEffort
@@ -1951,17 +2095,56 @@ apiRoute(ctx.app, ctx.registry, {
         const effectiveExtensions = activeProfileVersion
           ? (activeProfileVersion.extensions ?? null)
           : (overrides?.extensions !== undefined ? overrides.extensions : original.extensions);
-        // Strip extensions for non-vscode workers (they don't support VS Code extensions)
-        const isVscodeWorker = effectiveWorkerType.includes("vscode");
 
-        // Resolve agent version for re-submitted run (latest active for the effective worker)
-        let resolvedAgentVersion: string | undefined;
-        if (agentDoc) {
-          const versionResult = resolveAgentVersion(agentDoc.versions, undefined);
-          if (!("error" in versionResult)) {
-            resolvedAgentVersion = versionResult.agentVersion;
+        const resubmitPlan = planResubmitResources(
+          overrideProfileId,
+          original.resources,
+          normalizeResourceBindingSpecs(activeProfileVersion?.resources),
+        );
+        let effectiveResources: ResourceBinding[] | null = null;
+        if (resubmitPlan.kind === "resolve") {
+          const resolvedResources = await resolveResourceBindings(
+            ctx,
+            original.projectId,
+            undefined,
+            resubmitPlan.specs,
+          );
+          if (resolvedResources.errors.length > 0) {
+            res.status(422).json({
+              error: `Resource resolution failed during resubmit: ${resolvedResources.errors.join("; ")}`,
+            });
+            return;
           }
+          effectiveResources = resolvedResources.bindings ?? null;
+        } else {
+          effectiveResources = resubmitPlan.bindings;
         }
+
+        const targetCheck = await validateAgentTarget(ctx.agentCollection, {
+          workerType: effectiveWorkerType,
+          requestedVersion:
+            activeProfileVersion?.agentVersion ??
+            overrides?.agentVersion,
+          model: effectiveModel ?? undefined,
+          requirements: requestedAgentCapabilities({
+            reasoningEffort: effectiveReasoningEffort,
+            mcpServers: effectiveMcpServers,
+            skillRevisions: effectiveSkillRevisions,
+            extensions: effectiveExtensions,
+            resources: effectiveResources,
+          }),
+          strictCapabilities: ctx.strictAgentCapabilities,
+        });
+        if (!targetCheck.ok) {
+          const { ok: _ok, status, ...payload } = targetCheck;
+          res.status(status).json({
+            ...payload,
+            originalRequestId: original._id,
+          });
+          return;
+        }
+        effectiveModel = targetCheck.model;
+        const resolvedAgentVersion = targetCheck.agentVersion;
 
         const newDoc: RequestDocument = {
           _id: requestId,
@@ -1977,8 +2160,9 @@ apiRoute(ctx.app, ctx.registry, {
           ...(effectiveReasoningEffort ? { reasoningEffort: effectiveReasoningEffort } : {}),
           ...(effectiveMcpServers && effectiveMcpServers.length > 0 ? { mcpServers: effectiveMcpServers } : {}),
           ...(resolvedSkillRevisions && resolvedSkillRevisions.length > 0 ? { skillRevisions: resolvedSkillRevisions } : {}),
-          ...(isVscodeWorker && effectiveExtensions && effectiveExtensions.length > 0 ? { extensions: effectiveExtensions } : {}),
-          ...(resolvedAgentVersion ? { agentVersion: resolvedAgentVersion } : {}),
+          ...(effectiveExtensions && effectiveExtensions.length > 0 ? { extensions: effectiveExtensions } : {}),
+          ...(effectiveResources && effectiveResources.length > 0 ? { resources: effectiveResources } : {}),
+          agentVersion: resolvedAgentVersion,
           ...(original.taskPromptId ? { taskPromptId: original.taskPromptId } : {}),
           ...(effectiveProfileId ? { profileId: effectiveProfileId } : {}),
           ...(effectiveProfileVersionId ? { profileVersionId: effectiveProfileVersionId } : {}),
@@ -2935,9 +3119,12 @@ apiRoute(ctx.app, ctx.registry, {
         continue;
       }
 
-      const availabilityError = await hostWorkerAvailabilityError(request.workerType);
-      if (availabilityError) {
-        results.push({ requestId: id, error: availabilityError });
+      const targetCheck = await validatePersistedRequestTarget(request);
+      if (!targetCheck.ok) {
+        results.push({
+          requestId: id,
+          error: `${targetCheck.error} (${targetCheck.errorCode})`,
+        });
         skipped++;
         continue;
       }
@@ -2966,7 +3153,13 @@ apiRoute(ctx.app, ctx.registry, {
       // 2. Atomically swap
       const updateResult = await ctx.requestCollection.updateOne(
         { _id: id, "run._id": runToDemote._id },
-        { $set: { run: newRun, updatedAt: new Date() } },
+        {
+          $set: {
+            run: newRun,
+            agentVersion: targetCheck.agentVersion,
+            updatedAt: new Date(),
+          },
+        },
       );
       if (updateResult.matchedCount === 0) {
         results.push({ requestId: id, error: "Race condition — another retry started first" });
@@ -3034,9 +3227,10 @@ apiRoute(ctx.app, ctx.registry, {
       return;
     }
 
-    const availabilityError = await hostWorkerAvailabilityError(request.workerType);
-    if (availabilityError) {
-      res.status(400).json({ error: availabilityError });
+    const targetCheck = await validatePersistedRequestTarget(request);
+    if (!targetCheck.ok) {
+      const { ok: _ok, status, ...payload } = targetCheck;
+      res.status(status).json(payload);
       return;
     }
 
@@ -3068,6 +3262,7 @@ apiRoute(ctx.app, ctx.registry, {
       {
         $set: {
           run: newRun,
+          agentVersion: targetCheck.agentVersion,
           updatedAt: new Date(),
         },
       },

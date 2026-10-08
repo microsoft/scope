@@ -157,13 +157,116 @@ describe("validateToken", () => {
       const result = await validateToken("azure-ai-foundry", JSON.stringify({
         endpoint: "https://example.services.ai.azure.com/models",
         apiKey: "foundry-key",
-        model: "gpt-4.1",
+        model: "gpt-5.4-mini",
       }));
 
       expect(result.status).toBe("valid");
       expect(fetchSpy).toHaveBeenCalledWith(
         "https://example.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview",
         expect.anything()
+      );
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(JSON.parse(init.body as string)).toMatchObject({
+        model: "gpt-5.4-mini",
+        max_completion_tokens: 16,
+      });
+    });
+
+    it("negotiates a compatible request shape from structured errors", async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "unsupported_parameter",
+                param: "max_completion_tokens",
+              },
+            }),
+            { status: 400 },
+          ),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+      const result = await validateToken("azure-ai-foundry", JSON.stringify({
+        endpoint: "https://example.services.ai.azure.com/models",
+        apiKey: "foundry-key",
+        model: "custom-production-deployment",
+      }));
+
+      expect(result.status).toBe("valid");
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      const firstInit = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(JSON.parse(firstInit.body as string)).toEqual({
+        messages: [{ role: "user", content: "ping" }],
+        model: "custom-production-deployment",
+        max_completion_tokens: 16,
+        temperature: 0.3,
+      });
+
+      const secondInit = fetchSpy.mock.calls[1][1] as RequestInit;
+      expect(JSON.parse(secondInit.body as string)).toEqual({
+        messages: [{ role: "user", content: "ping" }],
+        model: "custom-production-deployment",
+        max_tokens: 16,
+        temperature: 0.3,
+      });
+    });
+
+    it("does not retry output-limit errors as compatibility failures", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              type: "invalid_request_error",
+              message:
+                "Could not finish the message because max_tokens or model output limit was reached.",
+            },
+          }),
+          { status: 400 },
+        ),
+      );
+
+      const result = await validateToken("azure-ai-foundry", JSON.stringify({
+        endpoint: "https://example.services.ai.azure.com/models",
+        apiKey: "foundry-key",
+        model: "gpt-5.4-mini",
+      }));
+
+      expect(result.status).toBe("invalid");
+      expect(result.error).toMatch(/model output limit was reached/);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(JSON.parse(init.body as string)).toMatchObject({
+        max_completion_tokens: 16,
+      });
+    });
+
+    it("negotiates from Model Inference 422 compatibility errors", async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              code: "parameter_not_supported",
+              detail: { loc: ["body", "temperature"] },
+            }),
+            { status: 422 },
+          ),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+      const result = await validateToken("azure-ai-foundry", JSON.stringify({
+        endpoint: "https://example.services.ai.azure.com/models",
+        apiKey: "foundry-key",
+        model: "custom-production-deployment",
+      }));
+
+      expect(result.status).toBe("valid");
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      const secondInit = fetchSpy.mock.calls[1][1] as RequestInit;
+      expect(JSON.parse(secondInit.body as string)).not.toHaveProperty(
+        "temperature",
       );
     });
 

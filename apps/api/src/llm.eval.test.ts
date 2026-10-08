@@ -39,7 +39,10 @@
  */
 import { describe, it, expect } from "vitest";
 import { isUnexpected } from "@azure-rest/ai-inference";
-import type { GateId } from "shared";
+import {
+  type GateId,
+} from "shared";
+import { postAdaptiveChatCompletion } from "./adaptive-chat-completions.js";
 import {
   collectSampledGrades,
   majority,
@@ -133,14 +136,19 @@ async function inferenceClient() {
  * `@azure-rest/ai-inference`, which the transport-agnostic package must not.
  */
 const complete: ChatComplete = async ({ messages, model, temperature, maxTokens }) => {
-  const { client, model: handleModel } = await inferenceClient();
-  const response = await client.path("/chat/completions").post({
-    body: {
-      messages,
-      model: model ?? handleModel ?? DEFAULT_MODEL,
-      temperature,
-      max_tokens: maxTokens,
-    },
+  const {
+    client,
+    endpoint,
+    model: handleModel,
+  } = await inferenceClient();
+  const modelName = model ?? handleModel ?? DEFAULT_MODEL;
+  const response = await postAdaptiveChatCompletion({
+    endpoint,
+    model: modelName,
+    messages,
+    temperature,
+    maxTokens,
+    send: (body) => client.path("/chat/completions").post({ body }),
   });
 
   if (isUnexpected(response)) {

@@ -39,7 +39,7 @@ describe('ExtensionClient', () => {
 
   describe('resolveExtensions', () => {
     it('returns empty array for no ids', async () => {
-      const result = await client.resolveExtensions([]);
+      const result = await client.resolveExtensions('project-1', []);
       expect(result).toEqual([]);
       expect(mockFetch).not.toHaveBeenCalled();
     });
@@ -57,7 +57,7 @@ describe('ExtensionClient', () => {
         }),
       });
 
-      const result = await client.resolveExtensions(['ms-python.python']);
+      const result = await client.resolveExtensions('project-1', ['ms-python.python']);
 
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
@@ -65,7 +65,7 @@ describe('ExtensionClient', () => {
         version: undefined,
       });
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:3100/api/v1/extensions/ms-python.python'
+        'http://localhost:3100/api/v1/extensions/ms-python.python?projectId=project-1'
       );
     });
 
@@ -82,7 +82,7 @@ describe('ExtensionClient', () => {
         }),
       });
 
-      const result = await client.resolveExtensions(['ms-python.python@2024.22.1']);
+      const result = await client.resolveExtensions('project with spaces', ['ms-python.python@2024.22.1']);
 
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
@@ -91,7 +91,7 @@ describe('ExtensionClient', () => {
       });
       // Should strip @version when calling the API
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:3100/api/v1/extensions/ms-python.python'
+        'http://localhost:3100/api/v1/extensions/ms-python.python?projectId=project%20with%20spaces'
       );
     });
 
@@ -110,7 +110,7 @@ describe('ExtensionClient', () => {
         });
       }
 
-      const result = await client.resolveExtensions(['ms-python.python@2024.22.1', 'GitHub.copilot']);
+      const result = await client.resolveExtensions('project-1', ['ms-python.python@2024.22.1', 'GitHub.copilot']);
 
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual({ id: 'ms-python.python', version: '2024.22.1' });
@@ -120,22 +120,22 @@ describe('ExtensionClient', () => {
     it('throws on 404', async () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
 
-      await expect(client.resolveExtensions(['non.existent']))
+      await expect(client.resolveExtensions('project-1', ['non.existent']))
         .rejects.toThrow("Extension 'non.existent' not found via API");
     });
 
     it('throws on 404 for spec with version', async () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
 
-      await expect(client.resolveExtensions(['non.existent@1.0.0']))
+      await expect(client.resolveExtensions('project-1', ['non.existent@1.0.0']))
         .rejects.toThrow("Extension 'non.existent' not found via API");
     });
 
     it('throws on HTTP error', async () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Internal Server Error' });
 
-      await expect(client.resolveExtensions(['some.ext']))
-        .rejects.toThrow('[ExtensionClient] GET http://localhost:3100/api/v1/extensions/some.ext failed: 500 Internal Server Error');
+      await expect(client.resolveExtensions('project-1', ['some.ext']))
+        .rejects.toThrow('[ExtensionClient] GET http://localhost:3100/api/v1/extensions/some.ext?projectId=project-1 failed: 500 Internal Server Error');
     });
   });
 

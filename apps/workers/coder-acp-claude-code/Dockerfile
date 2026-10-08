@@ -1,8 +1,13 @@
 # --- Base stage: runtime tools shared by dev and production ---
 FROM node:22.22.0-slim AS base
 
-RUN corepack enable && corepack prepare pnpm@10.29.1 --activate
-
+ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
+ENV npm_config_registry=${NPM_CONFIG_REGISTRY} \
+    COREPACK_NPM_REGISTRY=${NPM_CONFIG_REGISTRY}
+# corepack bootstraps pnpm from the registry's per-version metadata endpoint,
+# which some private registry proxies don't serve; fall back to a pinned global
+# install (honors npm_config_registry) so restricted networks can still build.
+RUN corepack enable && (corepack prepare pnpm@10.29.1 --activate || npm install -g pnpm@10.29.1 --force)
 # Install system tools for coding agents: Python, uv, git, PowerShell, Go, .NET, Rust, Java, Maven, Gradle
 RUN apt-get update && apt-get install -y \
     python3 \
@@ -81,6 +86,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/telemetry/package.json ./packages/telemetry/
+COPY packages/test-utils/package.json ./packages/test-utils/
 COPY apps/workers/coder-acp-claude-code/package.json ./apps/workers/coder-acp-claude-code/
 
 RUN pnpm install --frozen-lockfile
@@ -89,10 +95,12 @@ COPY packages/shared/tsconfig.json ./packages/shared/
 COPY packages/shared/src ./packages/shared/src/
 COPY packages/telemetry/tsconfig.json ./packages/telemetry/
 COPY packages/telemetry/src ./packages/telemetry/src/
+COPY packages/test-utils/tsconfig.json ./packages/test-utils/
+COPY packages/test-utils/src ./packages/test-utils/src/
 COPY apps/workers/coder-acp-claude-code/tsconfig.json ./apps/workers/coder-acp-claude-code/
 COPY apps/workers/coder-acp-claude-code/src ./apps/workers/coder-acp-claude-code/src/
 
-RUN pnpm --filter shared build && pnpm --filter telemetry build && pnpm --filter coder-acp-claude-code build
+RUN pnpm --filter shared build && pnpm --filter telemetry build && pnpm --filter test-utils build && pnpm --filter coder-acp-claude-code build
 
 # Pre-convert agent.yaml to JSON so the registration job doesn't need the yaml package at runtime
 COPY apps/workers/coder-acp-claude-code/agent.yaml ./apps/workers/coder-acp-claude-code/agent.yaml

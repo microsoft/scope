@@ -36,14 +36,16 @@ pnpm exec vitest run --config vitest.integration.config.ts \
 ### Existing release installer
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
+curl --fail --location https://raw.githubusercontent.com/microsoft/scope/main/install-cli.sh | bash
 ```
 
 **Prerequisites:**
 - Node.js >= 20
-- `gh` CLI installed and authenticated (`gh auth login`)
+- `curl` (no GitHub authentication required for installation)
 
-The installer downloads the latest release and places `scope` in `~/.local/bin/`. Add it to your PATH if needed:
+The installer downloads the latest published `cli/v*` release from `microsoft/scope`
+and places `scope` in `~/.local/bin/` (override with `SCOPE_INSTALL_DIR`). It fails
+clearly if no CLI release has been published yet. Add it to your PATH if needed:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -95,7 +97,7 @@ Connection precedence:
 
 1. An **explicit command-owned API URL** (`--url`/`-u`, or MCP
    create/update's `--api-url`/`-u`) uses legacy URL, token and project resolution,
-   even when a named environment is selected or the URL equals the default.
+   even when a named environment is selected or the URL equals `SCOPE_API_URL`.
 2. Root **`--env <name>`**, placed before the command.
 3. The saved selection from **`env use`**.
 4. Legacy configuration, if neither selector exists.
@@ -117,7 +119,8 @@ scope --env local mcp server create --id remote --name Remote --type http \
 
 ### Legacy configuration
 
-Set the API URL to your Scope instance:
+There is no default API URL in either the installed CLI or source-mode
+development. Set the URL of your Scope instance explicitly:
 
 ```bash
 export SCOPE_API_URL=https://your-scope-api.example.com
@@ -128,6 +131,39 @@ Or pass it per-command with `-u`:
 ```bash
 scope run list -u https://your-scope-api.example.com
 ```
+
+API operations fail with configuration guidance when no URL is supplied.
+`--help`, `--version`, and `scope update` do not need a Scope API URL.
+`SCOPE_DEFAULT_API_URL` and `SCOPE_API_PORT` no longer select an API destination.
+For local development, set `SCOPE_API_URL=http://localhost:<your-api-port>`
+explicitly (in your environment or `.env`).
+
+### Authentication
+
+Set `SCOPE_TOKEN` to an IdP access token obtained for your API's audience. The CLI
+sends that bearer unchanged; this release does not add interactive `scope auth`
+commands, a Scope JWT, or token exchange. Already-enrolled callers remain compatible.
+
+Before a **new identity** makes ordinary authenticated calls, explicitly enroll it:
+
+```bash
+curl --fail-with-body -sS \
+  -X POST \
+  -H "Authorization: Bearer $SCOPE_TOKEN" \
+  -H "Cache-Control: no-store" \
+  "${SCOPE_API_URL%/}/api/v1/users/me"
+```
+
+This POST has side effects (user/profile/`lastLoginAt`/eligible bootstrap updates):
+never prefetch or poll it. `GET /api/v1/users/me` is read-only and returns
+`403 user_not_enrolled` for missing enrollment or `403 user_disabled` for disabled
+access; do not auto-enroll/retry these as token-refresh errors.
+
+The API verifies every non-public bearer before active-user resolution. Redis hits
+avoid Mongo; misses/outages read the exact identity without creating users. Cache
+expiry is fixed/non-sliding (300 seconds by default), so database-only role/disable
+changes can remain stale until expiry. Existing public/anonymous rollout is unchanged.
+Never print or persist tokens in logs. See [the auth contract](../../docs/architecture/auth-rbac.md).
 
 ## Usage
 
@@ -247,10 +283,12 @@ Update to the latest version:
 scope update
 ```
 
-Or re-run the install script:
+This command requires `gh` installed and authenticated (`gh auth login`) and
+downloads from the same public `microsoft/scope` repository.
+Alternatively, re-run the install script without `gh`:
 
 ```bash
-gh api repos/growth-ecosystems/scope-doc/contents/install-cli.sh -H "Accept: application/vnd.github.raw" | bash
+curl --fail --location https://raw.githubusercontent.com/microsoft/scope/main/install-cli.sh | bash
 ```
 
 The CLI will also notify you when a newer version is available. Suppress this with:
@@ -263,7 +301,7 @@ export SCOPE_NO_UPDATE_CHECK=1
 
 | Variable | Description |
 |----------|-------------|
-| `SCOPE_API_URL` | Default API base URL |
-| `SCOPE_API_PORT` | Derive API URL as `http://localhost:$PORT` when `SCOPE_API_URL` is unset |
+| `SCOPE_API_URL` | API base URL; required for API operations unless `-u` is provided. No default |
+| `SCOPE_TOKEN` | Caller-provided IdP access token for authenticated API calls; new identities must explicitly enroll |
 | `SCOPE_NO_UPDATE_CHECK` | Set to `1` to suppress update notifications |
 | `GH_TOKEN` / `GITHUB_TOKEN` | GitHub token for authenticated API calls (update checks, install script) |

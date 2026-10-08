@@ -307,9 +307,9 @@ describe("BaseQueueProcessor.safeDeferMessage", () => {
 });
 
 /**
- * Part 1b — the error-path failure write is gated on run.status="processing"
- * (mirroring the success path) so a worker that throws after a wrongful reap or
- * a concurrent cancel/retry no-ops instead of clobbering the terminal state.
+ * Part 1b — the error-path failure write is gated on the exact processing run
+ * owned by this worker so a wrongful reap or concurrent cancel/retry cannot be
+ * clobbered.
  */
 describe("BaseQueueProcessor error-path failure write", () => {
   function setup(payloadObj: Record<string, unknown>, updateResult: any) {
@@ -349,7 +349,7 @@ describe("BaseQueueProcessor error-path failure write", () => {
     return { proc, updateOne, onRunTerminal, msg };
   }
 
-  it("gates the failure write on run.status=processing when runId is present", async () => {
+  it("gates the failure write on the exact owned processing run", async () => {
     const { proc, updateOne, onRunTerminal, msg } = setup(
       { requestId: "doc-1", runId: "run-1" },
       { matchedCount: 1 },
@@ -362,6 +362,7 @@ describe("BaseQueueProcessor error-path failure write", () => {
       _id: "doc-1",
       "run._id": "run-1",
       "run.status": "processing",
+      "run.worker.instanceId": (proc as any).instanceId,
     });
     expect(update.$set["run.status"]).toBe("done");
     expect(update.$set["run.outcome"]).toBe("failed");
@@ -378,7 +379,10 @@ describe("BaseQueueProcessor error-path failure write", () => {
     // Only the gated update is attempted — no second top-level {_id} write that
     // would overwrite a terminal state set by a cancel/retry/reaper.
     expect(updateOne).toHaveBeenCalledTimes(1);
-    expect(updateOne.mock.calls[0][0]).toHaveProperty("run.status", "processing");
+    expect(updateOne.mock.calls[0][0]).toMatchObject({
+      "run.status": "processing",
+      "run.worker.instanceId": (proc as any).instanceId,
+    });
     expect(onRunTerminal).not.toHaveBeenCalled();
   });
 

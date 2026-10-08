@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 import { isUnexpected } from "@azure-rest/ai-inference";
-import { PromptFeatureConfig, PromptFeatureResult, SuggestedPromptFeature } from "shared";
+import {
+  PromptFeatureConfig,
+  PromptFeatureResult,
+  SuggestedPromptFeature,
+} from "shared";
+import { postAdaptiveChatCompletion } from "./adaptive-chat-completions.js";
 import { acquireInferenceClient, isLlmAvailable as inferenceAvailable } from "./llm-token.js";
 
 // ---------------------------------------------------------------------------
@@ -46,6 +51,16 @@ export interface GeneratePromptFeatureResult {
   suggestedChildren: string[];
 }
 
+export interface PromptFeatureRequest {
+  messages: [
+    { role: "system"; content: string },
+    { role: "user"; content: string },
+  ];
+  model: string;
+  temperature: number;
+  max_tokens: number;
+}
+
 export function isLlmAvailable(): boolean {
   return inferenceAvailable();
 }
@@ -65,27 +80,113 @@ function buildGenerateUserMessage(behavior: string, existing: ExistingPromptFeat
   return parts.join("\n");
 }
 
+export function buildPromptFeatureAuthoringRequest(
+  behavior: string,
+  existingFeatures: ExistingPromptFeature[],
+  model: string,
+): PromptFeatureRequest {
+  return {
+    messages: [
+      { role: "system", content: GENERATE_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: buildGenerateUserMessage(behavior, existingFeatures),
+      },
+    ],
+    model,
+    temperature: 0.3,
+    max_tokens: 512,
+  };
+}
+
+export function parsePromptFeatureAuthoringResponse(
+  content: string,
+  existingFeatures: ExistingPromptFeature[],
+): GeneratePromptFeatureResult {
+  const cleaned = content.replace(/```json\s*|```\s*/g, "").trim();
+  try {
+    const parsed: unknown = JSON.parse(cleaned);
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("prompt" in parsed) ||
+      !("suggestedId" in parsed)
+    ) {
+      throw new Error("Missing required fields");
+    }
+    const value = parsed as {
+      prompt: unknown;
+      suggestedId: unknown;
+      suggestedParents?: unknown;
+      suggestedChildren?: unknown;
+    };
+    if (
+      typeof value.prompt !== "string" ||
+      !value.prompt ||
+      typeof value.suggestedId !== "string" ||
+      !value.suggestedId
+    ) {
+      throw new Error("Missing required fields");
+    }
+
+    const sanitizedId = value.suggestedId
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "_")
+      .replace(/^[^a-z]+/, "")
+      .replace(/_+/g, "_")
+      .replace(/_$/, "");
+
+    const existingIds = new Set(existingFeatures.map((feature) => feature.id));
+    const suggestedParents = Array.isArray(value.suggestedParents)
+      ? value.suggestedParents.filter(
+          (id): id is string =>
+            typeof id === "string" && existingIds.has(id),
+        )
+      : [];
+    const suggestedChildren = Array.isArray(value.suggestedChildren)
+      ? value.suggestedChildren.filter(
+          (id): id is string =>
+            typeof id === "string" && existingIds.has(id),
+        )
+      : [];
+
+    return {
+      prompt: value.prompt.trim(),
+      suggestedId: sanitizedId || "asks_for_something",
+      suggestedParents,
+      suggestedChildren,
+    };
+  } catch {
+    throw new Error(`Failed to parse LLM response as JSON: ${cleaned}`);
+  }
+}
+
 export async function generatePromptFeaturePrompt(
   behavior: string,
   existingFeatures: ExistingPromptFeature[] = [],
   model?: string,
 ): Promise<GeneratePromptFeatureResult> {
-  const { client: llm, model: foundryModel } = await acquireInferenceClient();
+  const {
+    client: llm,
+    endpoint,
+    model: foundryModel,
+  } = await acquireInferenceClient();
 
   // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
   const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
-  const userMessage = buildGenerateUserMessage(behavior, existingFeatures);
+  const request = buildPromptFeatureAuthoringRequest(
+    behavior,
+    existingFeatures,
+    modelName,
+  );
 
-  const response = await llm.path("/chat/completions").post({
-    body: {
-      messages: [
-        { role: "system", content: GENERATE_SYSTEM_PROMPT },
-        { role: "user", content: userMessage },
-      ],
-      model: modelName,
-      temperature: 0.3,
-      max_tokens: 512,
-    },
+  const response = await postAdaptiveChatCompletion({
+    endpoint,
+    model: request.model,
+    messages: request.messages,
+    temperature: request.temperature,
+    maxTokens: request.max_tokens,
+    send: (body) => llm.path("/chat/completions").post({ body }),
   });
 
   if (isUnexpected(response)) {
@@ -100,37 +201,7 @@ export async function generatePromptFeaturePrompt(
     throw new Error("LLM returned empty response");
   }
 
-  const cleaned = content.replace(/```json\s*|```\s*/g, "").trim();
-  try {
-    const parsed = JSON.parse(cleaned);
-    if (!parsed.prompt || !parsed.suggestedId) {
-      throw new Error("Missing required fields");
-    }
-
-    const sanitizedId = parsed.suggestedId
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, "_")
-      .replace(/^[^a-z]+/, "")
-      .replace(/_+/g, "_")
-      .replace(/_$/, "");
-
-    const existingIds = new Set(existingFeatures.map((f) => f.id));
-    const suggestedParents = Array.isArray(parsed.suggestedParents)
-      ? parsed.suggestedParents.filter((pid: string) => existingIds.has(pid))
-      : [];
-    const suggestedChildren = Array.isArray(parsed.suggestedChildren)
-      ? parsed.suggestedChildren.filter((cid: string) => existingIds.has(cid))
-      : [];
-
-    return {
-      prompt: parsed.prompt.trim(),
-      suggestedId: sanitizedId || "asks_for_something",
-      suggestedParents,
-      suggestedChildren,
-    };
-  } catch {
-    throw new Error(`Failed to parse LLM response as JSON: ${cleaned}`);
-  }
+  return parsePromptFeatureAuthoringResponse(content, existingFeatures);
 }
 
 // ---------------------------------------------------------------------------
@@ -175,27 +246,129 @@ export interface ExtractionResult {
   suggestedFeatures: SuggestedPromptFeature[];
 }
 
+export function buildPromptFeatureExtractionRequest(
+  taskText: string,
+  features: PromptFeatureConfig[],
+  model: string,
+): PromptFeatureRequest {
+  return {
+    messages: [
+      { role: "system", content: EXTRACT_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: buildExtractUserMessage(taskText, features),
+      },
+    ],
+    model,
+    temperature: 0.1,
+    max_tokens: 2048,
+  };
+}
+
+export function parsePromptFeatureExtractionResponse(
+  content: string,
+  features: PromptFeatureConfig[],
+): ExtractionResult {
+  const cleaned = content.replace(/```json\s*|```\s*/g, "").trim();
+  try {
+    const parsed: unknown = JSON.parse(cleaned);
+    const parsedObject =
+      parsed && typeof parsed === "object"
+        ? (parsed as {
+            results?: unknown;
+            suggestedFeatures?: unknown;
+          })
+        : {};
+
+    // Support both old format (plain array) and new format ({results, suggestedFeatures})
+    const rawResults: unknown[] = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsedObject.results)
+        ? parsedObject.results
+        : [];
+
+    // Build a map of LLM results
+    const llmResults = new Map<string, boolean>();
+    for (const item of rawResults) {
+      if (!item || typeof item !== "object") continue;
+      const value = item as { featureId?: unknown; detected?: unknown };
+      if (
+        typeof value.featureId === "string" &&
+        typeof value.detected === "boolean"
+      ) {
+        llmResults.set(value.featureId, value.detected);
+      }
+    }
+
+    // Build complete results for all features (mark as not evaluated if
+    // an ancestor was not detected — skip descendant evaluation)
+    const results: PromptFeatureResult[] = features.map((feature) => ({
+      featureId: feature.id,
+      detected: llmResults.get(feature.id) ?? false,
+      evaluated: llmResults.has(feature.id),
+    }));
+
+    // Parse suggested features (sanitize IDs)
+    const rawSuggestions: SuggestedPromptFeature[] = [];
+    if (
+      !Array.isArray(parsed) &&
+      Array.isArray(parsedObject.suggestedFeatures)
+    ) {
+      for (const suggestion of parsedObject.suggestedFeatures) {
+        if (!suggestion || typeof suggestion !== "object") continue;
+        const value = suggestion as {
+          suggestedId?: unknown;
+          behavior?: unknown;
+          prompt?: unknown;
+        };
+        if (value.suggestedId && value.behavior && value.prompt) {
+          const sanitizedId = String(value.suggestedId)
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, "_")
+            .replace(/^[^a-z]+/, "")
+            .replace(/_+/g, "_")
+            .replace(/_$/, "");
+          rawSuggestions.push({
+            suggestedId: sanitizedId || "asks_for_something",
+            behavior: String(value.behavior).trim(),
+            prompt: String(value.prompt).trim(),
+          });
+        }
+      }
+    }
+
+    return { results, suggestedFeatures: rawSuggestions };
+  } catch {
+    throw new Error(`Failed to parse LLM extraction response as JSON: ${cleaned}`);
+  }
+}
+
 export async function extractPromptFeatures(
   taskText: string,
   features: PromptFeatureConfig[],
   model?: string,
 ): Promise<ExtractionResult> {
-  const { client: llm, model: foundryModel } = await acquireInferenceClient();
+  const {
+    client: llm,
+    endpoint,
+    model: foundryModel,
+  } = await acquireInferenceClient();
 
   // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
   const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
-  const userMessage = buildExtractUserMessage(taskText, features);
+  const request = buildPromptFeatureExtractionRequest(
+    taskText,
+    features,
+    modelName,
+  );
 
-  const response = await llm.path("/chat/completions").post({
-    body: {
-      messages: [
-        { role: "system", content: EXTRACT_SYSTEM_PROMPT },
-        { role: "user", content: userMessage },
-      ],
-      model: modelName,
-      temperature: 0.1,  // Lower temperature for more deterministic detection
-      max_tokens: 2048,
-    },
+  const response = await postAdaptiveChatCompletion({
+    endpoint,
+    model: request.model,
+    messages: request.messages,
+    temperature: request.temperature,
+    maxTokens: request.max_tokens,
+    send: (body) => llm.path("/chat/completions").post({ body }),
   });
 
   if (isUnexpected(response)) {
@@ -210,55 +383,5 @@ export async function extractPromptFeatures(
     throw new Error("LLM returned empty response");
   }
 
-  const cleaned = content.replace(/```json\s*|```\s*/g, "").trim();
-  try {
-    const parsed = JSON.parse(cleaned);
-
-    // Support both old format (plain array) and new format ({results, suggestedFeatures})
-    const rawResults: Array<{ featureId: string; detected: boolean }> = Array.isArray(parsed)
-      ? parsed
-      : Array.isArray(parsed.results)
-        ? parsed.results
-        : [];
-
-    // Build a map of LLM results
-    const llmResults = new Map<string, boolean>();
-    for (const item of rawResults) {
-      if (item.featureId && typeof item.detected === "boolean") {
-        llmResults.set(item.featureId, item.detected);
-      }
-    }
-
-    // Build complete results for all features (mark as not evaluated if
-    // an ancestor was not detected — skip descendant evaluation)
-    const results: PromptFeatureResult[] = features.map(f => ({
-      featureId: f.id,
-      detected: llmResults.get(f.id) ?? false,
-      evaluated: llmResults.has(f.id),
-    }));
-
-    // Parse suggested features (sanitize IDs)
-    const rawSuggestions: SuggestedPromptFeature[] = [];
-    if (!Array.isArray(parsed) && Array.isArray(parsed.suggestedFeatures)) {
-      for (const s of parsed.suggestedFeatures) {
-        if (s.suggestedId && s.behavior && s.prompt) {
-          const sanitizedId = String(s.suggestedId)
-            .toLowerCase()
-            .replace(/[^a-z0-9_]/g, "_")
-            .replace(/^[^a-z]+/, "")
-            .replace(/_+/g, "_")
-            .replace(/_$/, "");
-          rawSuggestions.push({
-            suggestedId: sanitizedId || "asks_for_something",
-            behavior: String(s.behavior).trim(),
-            prompt: String(s.prompt).trim(),
-          });
-        }
-      }
-    }
-
-    return { results, suggestedFeatures: rawSuggestions };
-  } catch {
-    throw new Error(`Failed to parse LLM extraction response as JSON: ${cleaned}`);
-  }
+  return parsePromptFeatureExtractionResponse(content, features);
 }

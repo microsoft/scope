@@ -17,6 +17,8 @@ async function main(): Promise<void> {
   const runtime = claudeCodeRuntime(detected);
   // HAR capture must not replace the host login with Token Manager credentials.
   process.env.GATEWAY_TOKEN_PLUGIN_ENABLED = "false";
+  // The registry identity must match the version the launcher registered for this host CLI.
+  process.env.SCOPE_AGENT_VERSION = runtime.agentVersion;
   const { startClaudeCodeWorker } = await import("coder-acp-claude-code/worker");
   await startClaudeCodeWorker(runtime);
 }

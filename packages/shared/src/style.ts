@@ -13,12 +13,6 @@ export const LEVEL_COLORS: Record<string, Parameters<typeof styleText>[0]> = {
   debug: "gray",
 };
 
-/** Color mapping for worker types — matches the Ink components' WORKER_COLORS. */
-export const WORKER_COLORS: Record<string, Parameters<typeof styleText>[0]> = {
-  "coder-acp-claude-code": "cyan",
-  "coder-acp-copilot": "magenta",
-};
-
 /** Format a log level with its associated color. */
 export function colorLevel(level: string): string {
   const color = LEVEL_COLORS[level.toLowerCase()] ?? "white";

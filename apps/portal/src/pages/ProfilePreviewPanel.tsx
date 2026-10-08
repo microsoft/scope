@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/utils";
+import { AgentBadge } from "@/components/AgentBadge";
 
 export function ProfilePreviewPanel() {
   const { profileId } = useParams<{ profileId: string }>();
@@ -93,7 +94,9 @@ export function ProfilePreviewPanel() {
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <dt className="text-xs text-muted-foreground">Worker</dt>
-                <dd className="mt-0.5 font-mono text-xs">{v.workerType}</dd>
+                <dd className="mt-0.5 text-xs">
+                  <AgentBadge agentId={v.workerType} version={v.agentVersion} />
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Model</dt>

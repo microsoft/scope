@@ -4,6 +4,7 @@
 import type { McpServerConfig } from './mcp.js';
 import type { SkillConfig } from './skill.js';
 import type { ExtensionConfig } from './extension.js';
+import type { ResourceBinding, ResourceConfig, ResourceRunOutcome } from './resource.js';
 import type { ToolCall } from '../har/types.js';
 
 // Re-export ToolCall so consumers can import from types
@@ -218,7 +219,7 @@ export interface AgentVersion {
   gitCommit: string;                     // Short SHA of the build
   buildTime: string;                     // Build timestamp (e.g. "20260318T163740Z")
   imageTag: string;                      // Full image tag (same as workerVersion)
-  queueName: string;                     // Queue this version listens on
+  queueName?: string;                    // Queue this version listens on; legacy records may omit it
   status: "active" | "retired";
   createdAt: Date;
 }
@@ -226,6 +227,10 @@ export interface AgentVersion {
 // Capabilities declared by a coding agent (worker-level features)
 export interface AgentCapabilities {
   supportsReasoningEffort?: boolean;  // Whether the worker can pass reasoning effort to the underlying agent
+  supportsMcpServers?: boolean;       // Whether the worker can configure MCP servers
+  supportsSkills?: boolean;           // Whether the worker can consume installed agent skills
+  supportsExtensions?: boolean;       // Whether the worker can install VS Code extensions
+  supportsResources?: boolean;        // Whether the worker provisions resources (setup/teardown) before the agent runs
 }
 
 // Coding agent definition stored in MongoDB
@@ -236,7 +241,7 @@ export interface CodingAgentDocument {
   modelProvider?: string;     // Model provider (e.g. "github-copilot", "anthropic") — used by scanners to discover agents
   supportedModels: string[];  // Empty array = model selection disabled
   defaultModel?: string;
-  available?: boolean;        // Whether this agent is available for new submissions (default: true)
+  available?: boolean;        // Only explicit true makes this agent available for new submissions
   capabilities?: AgentCapabilities;  // Worker-level capabilities
   versions?: AgentVersion[];  // Registered agent versions (embedded array)
   createdAt: Date;
@@ -296,6 +301,24 @@ export interface RequestDocument {
   mcpServers?: string[];          // MCP server slugs selected for this run
   skillRevisions?: string[];      // Skill revision refs (e.g. "vercel-labs/agent-skills/my-skill@a1b2c3d")
   codebaseRevisionId?: string;    // FK → CodebaseRevisionDocument._id — seeds the workspace before the agent starts
+  /**
+   * Resolved resource bindings, in setup order.
+   *
+   * The revision is pinned at submit time so the run stays reproducible after the
+   * resource is edited, and `params` is stored **fully resolved** (defaults, then
+   * profile presets, then run-supplied values) rather than as a diff — a run must
+   * be explainable from its own document without re-reading a revision whose
+   * defaults may since have been superseded.
+   *
+   * Deliberately one grouped array rather than parallel `resourceRevisionIds` and
+   * `resourceParams` arrays: parallel lists would have to stay the same length and
+   * order forever, an invariant nothing enforces and any future writer can break.
+   *
+   * Shares its name with `RunState.resources`, which records the *outcome* of the
+   * same list keyed by the same `revisionId`. One is what was asked for, the other
+   * is what happened.
+   */
+  resources?: ResourceBinding[];
   extensions?: string[];           // VS Code extension IDs selected for this run (e.g. "ms-python.python")
   agentVersion?: string;          // Agent software version prefix (e.g. "copilot-0.0.415") — FK → AgentVersion.agentVersion
   profileId?: string;             // FK → ProfileDocument._id (the profile lineage)
@@ -368,6 +391,9 @@ export interface RunState {
   _id: string;                              // Unique per attempt
   attemptNumber: number;                    // 1, 2, 3…
   status: "pending" | "queued" | "processing" | "paused" | "done";
+  /** Physical queue used for the current dispatch claim. Cleared when the claim
+   * is rolled back or accepted for processing. */
+  queuedQueueName?: string;
   outcome?: "succeeded" | "failed" | "finished";
   result?: string;
   error?: string;
@@ -388,6 +414,18 @@ export interface RunState {
   /** When this run was last resumed from paused state */
   resumedAt?: Date;
   turns?: ConversationTurn[];
+  /** Outcome of each resource this run provisioned, in setup order.
+   *
+   *  Recorded so a run that ended up without the environment it asked for is
+   *  visibly different from one that had it. The dangerous failure mode this
+   *  guards against is a run that completes, looks valid, and silently had no
+   *  MCP tools — a comparison against such a run is meaningless, so it must be
+   *  distinguishable after the fact rather than only in the live log. */
+  resources?: ResourceRunOutcome[];
+  /** Whether MCP servers were actually registered with the gateway for this
+   *  run. `false` with a non-empty `mcpServers` on the request means the profile
+   *  ran without the tools it was configured with. */
+  mcpRegistered?: boolean;
   workerVersion?: string;
   os?: OsInfo;
   /** Wall-clock time of the last heartbeat written by the worker actively
@@ -467,6 +505,10 @@ export interface WorkerProcessorOptions {
    *  per-project skill revisions (by ref) hit the right project's copy. */
   projectId?: string;
   mcpServerConfigs?: McpServerConfig[];  // Resolved MCP server configurations
+  /** Resolved resources to provision before the agent starts and release after
+   *  it finishes. Their setup phases publish connection details that are
+   *  interpolated into MCP server config and merged into the agent's env. */
+  resourceConfigs?: ResourceConfig[];
   skillConfigs?: SkillConfig[];          // Resolved skill configurations for prompt injection
   extensionConfigs?: ExtensionConfig[];  // Resolved VS Code extension configurations for runtime installation
   /** Current iteration number (1-based) for multi-turn runs. Used by the
@@ -514,6 +556,9 @@ export interface SetupResult {
 // Worker processor interface - each worker implements this
 export interface WorkerProcessor {
   readonly workerName: string;
+  /** Optional explicit skill layout. Omit to install only to the universal
+   * `.agents/skills` location instead of inferring behavior from the worker ID. */
+  readonly skillAgentType?: "copilot" | "claude-code";
   /** The workspace directory used by this worker for the current run. When set,
    *  the queue processor uses this instead of the WORKSPACE_PATH env var. */
   readonly workspacePath?: string;
@@ -526,6 +571,10 @@ export interface WorkerProcessor {
   setup?(log: WorkerLogFn, options?: WorkerProcessorOptions): Promise<SetupResult | void>;
   /** Called once after the last processMessage in a run. Always called if setup() was called, even on error. */
   teardown?(log: WorkerLogFn): Promise<void>;
+  /** Lifecycle observations to persist on the run record. Read after teardown so
+   *  a run that ended up without the environment or tools it asked for is
+   *  distinguishable after the fact, not only in the live log. */
+  getRunObservations?(): { resources?: ResourceRunOutcome[]; mcpRegistered?: boolean };
 }
 
 // Base configuration for queue processors

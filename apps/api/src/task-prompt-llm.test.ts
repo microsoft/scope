@@ -33,10 +33,12 @@ vi.mock("./llm-token.js", () => ({
 }));
 
 import { generateTaskPrompt, isTaskPromptLlmAvailable } from "./task-prompt-llm.js";
+import { clearChatCompletionCompatibilityCache } from "./adaptive-chat-completions.js";
 
 describe("task-prompt-llm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearChatCompletionCompatibilityCache();
   });
 
   describe("isTaskPromptLlmAvailable", () => {

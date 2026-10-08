@@ -163,6 +163,21 @@ function StatusIcon({ status }: { status: string }) {
   }
 }
 
+export function buildFoundryCredentialValue(options: {
+  endpoint: string;
+  apiKey: string;
+  model: string;
+}): string {
+  const endpoint = options.endpoint.trim().replace(/\/+$/, "");
+  const apiKey = options.apiKey.trim();
+  const model = options.model.trim();
+  return JSON.stringify({
+    endpoint,
+    apiKey,
+    ...(model ? { model } : {}),
+  });
+}
+
 export function CreateToken() {
   const navigate = useNavigate();
 
@@ -186,12 +201,11 @@ export function CreateToken() {
    */
   const getSubmitValue = (): string => {
     if (type === "azure-ai-foundry") {
-      const endpoint = foundryEndpoint.trim().replace(/\/+$/, "");
-      const apiKey = foundryApiKey.trim();
-      const model = foundryModel.trim();
-      const payload: Record<string, string> = { endpoint, apiKey };
-      if (model) payload.model = model;
-      return JSON.stringify(payload);
+      return buildFoundryCredentialValue({
+        endpoint: foundryEndpoint,
+        apiKey: foundryApiKey,
+        model: foundryModel,
+      });
     }
     return value.trim();
   };

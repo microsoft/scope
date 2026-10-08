@@ -8,12 +8,14 @@ import starlightOpenAPI, { openAPISidebarGroups } from 'starlight-openapi';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
+import remarkGfm from 'remark-gfm';
+import remarkBasePath from './src/plugins/remark-base-path.mjs';
 import remarkHttpSnippets from './src/plugins/remark-http-snippets.mjs';
 
 // https://astro.build/config
 // `site` and `base` are driven by the GitHub Pages deployment URL in CI
-// (set via env vars from `actions/configure-pages` outputs), with safe
-// defaults for local development.
+// (set explicitly in the deployment workflow), with safe defaults
+// for local development.
 //
 // `DOC_PORT` is read from the `.env` file that `worktree-env` writes to
 // the git repo root (so each worktree binds to a unique dev/preview
@@ -47,13 +49,21 @@ function readDotEnv(name) {
 	return undefined;
 }
 const docPort = Number(readDotEnv('DOC_PORT')) || 4300;
+const base = process.env.BASE_PATH || '/';
 
 export default defineConfig({
 	site: process.env.SITE || `http://localhost:${docPort}`,
-	base: process.env.BASE_PATH || '/',
+	base,
+	output: 'static',
 	server: { port: docPort },
 	markdown: {
-		remarkPlugins: [remarkHttpSnippets],
+		// remarkGfm is listed explicitly because Astro applies its built-in GFM
+		// support to .md only. MDX inherits `remarkPlugins` but not that built-in,
+		// so without this every table in a .mdx page renders as literal pipe
+		// characters. Splitting content between the two extensions is not an
+		// option here: the HTTP snippet plugin below emits JSX, which only .mdx
+		// renders, and several guides need both tables and snippets.
+		remarkPlugins: [remarkGfm, [remarkBasePath, { base }], remarkHttpSnippets],
 	},
 	integrations: [
 		starlight({
@@ -66,7 +76,11 @@ export default defineConfig({
 			customCss: ['./src/styles/landing.css'],
 			components: {
 				SiteTitle: './src/components/SiteTitle.astro',
+				Header: './src/components/Header.astro',
+				PageTitle: './src/components/PageTitle.astro',
+				TwoColumnContent: './src/components/TwoColumnContent.astro',
 			},
+			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/microsoft/scope' }],
 			plugins: [
 				starlightOpenAPI([
 					{
@@ -85,9 +99,14 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Community',
+					items: [{ label: 'Articles & talks', slug: 'community/articles-and-talks' }],
+				},
+				{
 					label: 'Getting Started',
 					items: [
 						{ label: 'Access', slug: 'getting-started/access' },
+						{ label: 'Local development', slug: 'getting-started/local-development' },
 						{ label: 'Install the CLI', slug: 'getting-started/install-cli' },
 						{ label: 'Your first run', slug: 'getting-started/first-run' },
 					],
@@ -95,24 +114,43 @@ export default defineConfig({
 				{
 					label: 'Guides',
 					items: [
-						{ label: 'Submitting requests (Portal)', slug: 'guides/submitting-requests-portal' },
-						{ label: 'Submitting requests (REST API)', slug: 'guides/submitting-requests-api' },
-					{ label: 'Submitting requests (CLI)', slug: 'guides/submitting-requests-cli' },
-						{ label: 'Managing task prompts', slug: 'guides/managing-task-prompts' },
-						{ label: 'Defining evaluation criteria', slug: 'guides/defining-criteria' },
-						{ label: 'Defining profiles', slug: 'guides/defining-profiles' },
-						{ label: 'Working with prompt features', slug: 'guides/prompt-features' },
-						{ label: 'Choosing a coding agent', slug: 'guides/choosing-a-coding-agent' },
-					{ label: 'Choosing software stacks', slug: 'guides/software-stacks' },
-						{ label: 'Prioritizing & pausing requests', slug: 'guides/prioritizing-requests' },
-						{ label: 'Importing MCP servers', slug: 'guides/importing-mcp-servers' },
-						{ label: 'Importing skills', slug: 'guides/importing-skills' },
-						{ label: 'Importing VS Code extensions', slug: 'guides/importing-extensions' },
-						{ label: 'Using MCP servers, skills & extensions', slug: 'guides/mcp-skills-extensions' },
+						{
+							label: 'Run experiments',
+							items: [
+								{ label: 'Submit from the Portal', slug: 'guides/submitting-requests-portal' },
+								{ label: 'Submit from the CLI', slug: 'guides/submitting-requests-cli' },
+								{ label: 'Submit through the API', slug: 'guides/submitting-requests-api' },
+								{ label: 'Prioritize & pause', slug: 'guides/prioritizing-requests' },
+							],
+						},
+						{
+							label: 'Design your benchmark',
+							collapsed: true,
+							items: [
+								{ label: 'Task prompts', slug: 'guides/managing-task-prompts' },
+								{ label: 'Evaluation criteria', slug: 'guides/defining-criteria' },
+								{ label: 'Agent profiles', slug: 'guides/defining-profiles' },
+								{ label: 'Prompt features', slug: 'guides/prompt-features' },
+								{ label: 'Choose a coding agent', slug: 'guides/choosing-a-coding-agent' },
+								{ label: 'Software stacks', slug: 'guides/software-stacks' },
+							],
+						},
+						{
+							label: 'Connect tools & skills',
+							collapsed: true,
+							items: [
+								{ label: 'Import MCP servers', slug: 'guides/importing-mcp-servers' },
+								{ label: 'Provision resources', slug: 'guides/provisioning-resources' },
+								{ label: 'Import skills', slug: 'guides/importing-skills' },
+								{ label: 'Import VS Code extensions', slug: 'guides/importing-extensions' },
+								{ label: 'Use tools, skills & extensions', slug: 'guides/mcp-skills-extensions' },
+							],
+						},
 					],
 				},
 				{
 					label: 'Reference',
+					collapsed: true,
 					items: [
 						{ label: 'REST API overview', slug: 'reference/rest-api' },
 						{ label: 'Profile schema', slug: 'reference/profile-schema' },
@@ -123,9 +161,19 @@ export default defineConfig({
 				},
 				...openAPISidebarGroups,
 				{
-					label: 'Resources',
+					label: 'Contributing',
 					items: [
+						{ label: 'Contributor guide', slug: 'resources/contributing' },
+						{ label: 'Development guide', slug: 'resources/development' },
+					],
+				},
+				{
+					label: 'Resources',
+					collapsed: true,
+					items: [
+						{ label: 'Support and security', slug: 'resources/support' },
 						{ label: 'FAQ', slug: 'resources/faq' },
+						{ label: 'Data collection and privacy', slug: 'resources/data-collection' },
 						{ label: 'Troubleshooting', slug: 'resources/troubleshooting' },
 						{ label: 'Glossary', slug: 'resources/glossary' },
 					],

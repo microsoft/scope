@@ -7,7 +7,8 @@
  *
  * Kept separate from `api-client.ts` so that module stays free of MSAL (and thus
  * unit-testable without a browser). Call {@link wireApiAuth} once at bootstrap,
- * after {@link initializeAuth} has run.
+ * before initialization and the first render. Token acquisition itself waits
+ * for {@link initializeAuth}.
  */
 import { setApiTokenProvider, setReauthHandler } from "../api-client";
 import { acquireApiToken, acquireApiTokenRedirect, isAuthEnabled } from "./msalInstance";
@@ -23,7 +24,10 @@ let wired = false;
  *
  * No-op when the auth feature is disabled ({@link isAuthEnabled} is `false`) so
  * requests go out without an `Authorization` header and a `401` never triggers
- * an interactive redirect — matching an API that does not verify tokens yet.
+ * an interactive redirect — preserving anonymous rollout mode.
+ *
+ * The token provider must never await the Scope user handshake: that handshake
+ * uses this very transport. AuthProvider/RequireAuth gate application queries.
  *
  * Idempotent.
  */

@@ -272,13 +272,11 @@ function buildApp(
     skillRevisionStore: {} as any,
     skillResolver: {} as any,
     mcpSecretClient: null,
-    queueClients: new Map(),
     reportQueueClient: {} as any,
-    getOrCreateQueueClient: vi.fn(),
     blobStorage: {
       getLogsBlobUrl: (name: string) => blobUrl("logs", name),
     },
-    validWorkers: ["coder-acp-copilot"],
+    strictAgentCapabilities: false,
     storageConnectionString: "UseDevelopmentStorage=true",
     storageAccountName: "test",
   };
