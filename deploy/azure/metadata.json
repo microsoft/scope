@@ -1,0 +1,7 @@
+{
+  "itemDisplayName": "Scope — Deploy to Azure",
+  "description": "Deploys the Azure infrastructure for Scope: an AKS cluster (OIDC issuer, workload identity, native Key Vault Secrets Provider add-on), a VNet with private endpoints for Key Vault, Cosmos DB, Redis, and Storage, an Azure Container Registry, Cosmos DB (MongoDB API), Azure Cache for Redis, and a Storage account (blob + queue). This template provisions infrastructure only — it does not install the Scope application itself; see README.md for the Helm-based install that follows.",
+  "summary": "Provisions the Azure infrastructure needed to run Scope (AKS, Key Vault, Cosmos DB, Redis, Storage, ACR) behind private networking.",
+  "githubUsername": "microsoft",
+  "dateUpdated": "2025-10-08"
+}

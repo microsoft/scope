@@ -1,0 +1,65 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "scope"
+    },
+    "location": {
+      "value": "eastus2"
+    },
+    "tags": {
+      "value": {
+        "app": "scope"
+      }
+    },
+    "kubernetesVersion": {
+      "value": ""
+    },
+    "aksSystemNodeVmSize": {
+      "value": "Standard_D4s_v5"
+    },
+    "aksSystemNodeCount": {
+      "value": 3
+    },
+    "aksUserNodeVmSize": {
+      "value": "Standard_D4s_v5"
+    },
+    "aksUserNodeCount": {
+      "value": 2
+    },
+    "acrSkuName": {
+      "value": "Standard"
+    },
+    "cosmosDbConsistencyLevel": {
+      "value": "Session"
+    },
+    "redisSkuName": {
+      "value": "Standard"
+    },
+    "redisSkuFamily": {
+      "value": "C"
+    },
+    "redisSkuCapacity": {
+      "value": 1
+    },
+    "storageSkuName": {
+      "value": "Standard_LRS"
+    },
+    "vnetAddressPrefix": {
+      "value": "10.20.0.0/16"
+    },
+    "aksSubnetPrefix": {
+      "value": "10.20.0.0/20"
+    },
+    "privateEndpointSubnetPrefix": {
+      "value": "10.20.16.0/24"
+    },
+    "workloadIdentityServiceAccountNamespace": {
+      "value": "scope"
+    },
+    "workloadIdentityServiceAccountName": {
+      "value": "scope-workload-identity"
+    }
+  }
+}
