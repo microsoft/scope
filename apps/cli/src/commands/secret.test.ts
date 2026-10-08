@@ -97,6 +97,16 @@ describe("secret CLI", () => {
     expect(requests).toHaveLength(0);
   });
 
+  it("lists only user-facing key types in help and errors", async () => {
+    const program = new Command();
+    registerSecretCommands(program);
+    const create = program.commands.find((c) => c.name() === "secret")!.commands.find((c) => c.name() === "create")!;
+    const help = create.helpInformation();
+    expect(help).toContain("anthropic-api-key");
+    expect(help).not.toContain("github-oauth-cookie-state");
+    await expect(run("secret", "create", "--type", "unknown", "--value", "fixture")).rejects.toThrow(/^(?!.*cookie-state).*azure-ai-foundry/);
+  });
+
   it("preserves raw Anthropic registration format", async () => {
     await run("secret", "create", "--type", "anthropic-api-key", "--value", "anthropic-fixture", "-u", "https://explicit.example");
 
