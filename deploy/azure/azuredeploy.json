@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "12447810586945755700"
+      "templateHash": "10664202483431472314"
     }
   },
   "parameters": {
@@ -12864,7 +12864,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.48.1.52935",
-              "templateHash": "5716084092396418768"
+              "templateHash": "10391613202739940507"
             }
           },
           "parameters": {
@@ -12899,6 +12899,13 @@
               "type": "string",
               "metadata": {
                 "description": "Resource ID of the subnet to deploy the Cosmos DB private endpoint into."
+              }
+            },
+            "databaseName": {
+              "type": "string",
+              "defaultValue": "scope",
+              "metadata": {
+                "description": "Name of the default MongoDB database created on the account."
               }
             },
             "consistencyLevel": {
@@ -16001,7 +16008,11 @@
                     "value": "[parameters('consistencyLevel')]"
                   },
                   "mongodbDatabases": {
-                    "value": []
+                    "value": [
+                      {
+                        "name": "[parameters('databaseName')]"
+                      }
+                    ]
                   },
                   "networkRestrictions": {
                     "value": {

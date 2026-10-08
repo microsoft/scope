@@ -30,6 +30,9 @@ param vnetResourceId string
 @description('Resource ID of the subnet to deploy the Cosmos DB private endpoint into.')
 param privateEndpointSubnetResourceId string
 
+@description('Name of the default MongoDB database created on the account.')
+param databaseName string = 'scope'
+
 @description('Default consistency level for the account.')
 @allowed([
   'Eventual'
@@ -71,7 +74,17 @@ module cosmosDbAccount 'br/public:avm/res/document-db/database-account:0.10.0' =
       'EnableServerless'
     ]
     defaultConsistencyLevel: consistencyLevel
-    mongodbDatabases: []
+    // The AVM module derives the account's `kind` (GlobalDocumentDB vs
+    // MongoDB) from whether mongodbDatabases is non-empty — an empty array
+    // leaves the account at kind=GlobalDocumentDB (SQL API) even with
+    // EnableMongo in capabilitiesToAdd, which then rejects a MongoDB-groupId
+    // private endpoint ("GroupId MongoDB is not supported"). At least one
+    // database is required to get kind=MongoDB.
+    mongodbDatabases: [
+      {
+        name: databaseName
+      }
+    ]
     networkRestrictions: {
       ipRules: []
       virtualNetworkRules: []
