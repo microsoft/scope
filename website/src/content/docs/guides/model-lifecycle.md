@@ -1,5 +1,5 @@
 ---
-title: Model lifecycle and deprecation
+title: Model catalog and lifecycle
 description: How Scope discovers new coding-agent models, handles provider deprecations, and treats models that disappear.
 ---
 
@@ -17,17 +17,16 @@ the provider stops advertising it.
 A model normally moves through these states:
 
 1. **Discovered** — a scanner sees the model for the first time.
-2. **Active** — later scans continue to return it.
-3. **Planned for retirement** *(when the provider supplies a date)* — Scope
-   records the provider's end-of-life/deprecation date, but the model remains
-   active while the provider still advertises it.
-4. **Disappeared** — a scan no longer returns a model that Scope previously
-   saw.
-5. **Restored** — if the provider advertises a disappeared model again, Scope
+2. **Active** — later scans continue to return it. A planned retirement date,
+   when supplied, is metadata on an active model, not a separate status.
+3. **Disappeared** — a scan no longer returns a model that Scope previously saw.
+4. **Restored** — if the provider advertises a disappeared model again, Scope
    clears the disappearance marker and treats the model as active again.
 
-Scope keeps lifecycle history rather than deleting the model record. This lets
-older runs retain the model ID they actually used.
+Scope keeps the model record (marked as disappeared) rather than deleting it.
+The marker is cleared on restore, so earlier disappear/restore cycles are not
+preserved as a full lifecycle history. Older runs still retain the model ID
+they actually used.
 
 ## How new models are added
 
@@ -37,6 +36,10 @@ Each provider scanner returns a model ID and, when available, metadata such as:
 - the provider-reported end-of-life/deprecation date;
 - model capabilities such as supported reasoning-effort levels, tool calling,
   vision, streaming, or adaptive thinking.
+
+The Copilot and Anthropic scanners expose different metadata. Only Copilot
+reports `providerEndOfLife`; Anthropic reports `providerAvailableFrom` but
+not an end-of-life date.
 
 The scanner sends that inventory to Scope's model-sync API. A model Scope has
 never seen before is inserted with a `firstSeenAt` timestamp. Models already in
@@ -60,7 +63,9 @@ saw the model.
 
 A model appearing in the catalog therefore does **not** necessarily change the
 default immediately. The automatic default selection happens when a default is
-missing or has disappeared.
+missing or has disappeared. Restoring the previously selected model does not
+automatically restore it as the default; the replacement stays selected until
+the default is changed again.
 
 ## What happens when a model is deprecated
 
@@ -78,23 +83,24 @@ model stops working, or temporarily omit a model from discovery.
 
 ## Submission behavior after a model disappears
 
-Request submission first validates the selected model against the coding
-agent's current `supportedModels` list. Because reconciliation removes
-disappeared models from that list, a reconciled request can be rejected at this
-step with `agent_model_unsupported`.
+In the normal scanner reconciliation flow, the disappeared model is removed
+from the agent's `supportedModels` list at the same time that `disappearedAt`
+is set. New submissions targeting that model therefore fail **immediately**
+with `agent_model_unsupported`, rather than receiving a 24-hour grace period.
 
-If the model still passes that agent-target validation, the request route also
-checks the model catalog's `disappearedAt` timestamp:
+The request route only reaches the later `disappearedAt` check if agent-target
+validation still accepts the model. This can happen if an agent's
+`supportedModels` list has been explicitly supplied by an agent update or
+registration instead of reflecting the latest scanner reconciliation:
 
 - **Less than 24 hours since `disappearedAt`:** submission is allowed, but the
   request receives a warning that the model may not be available at runtime.
 - **24 hours or more since `disappearedAt`:** submission is rejected with
   `model_unavailable_for_worker`.
 
-The 24-hour check is therefore a secondary safety net, not a guarantee that
-every disappeared model remains submittable for 24 hours. In the common case
-where agent reconciliation has already removed the model from
-`supportedModels`, the earlier agent-target validation rejects it first.
+This 24-hour warning/rejection check is a **secondary safeguard**, not the
+normal submission behavior after a scan. It does not grant a grace period to
+models removed from the agent's `supportedModels` list.
 
 If the model reappears in a later provider scan, its `disappearedAt` marker is
 cleared and it returns to the active model catalog and agent reconciliation can
@@ -114,16 +120,22 @@ model, but a new request using it may be rejected by agent-target validation.
 Only models that pass that validation reach the later `disappearedAt`
 warning/rejection check described above.
 
+For inline requests that omit `model`, Scope resolves the agent's current
+`defaultModel` **at submission time**. If a scan rotates the default, later
+inline requests can silently use a different model. Specify an explicit
+`model`, or use a versioned profile, for reproducible benchmark comparisons.
+
 ### Profiles
 
-Profiles are versioned configuration records, so an older profile version can
-still name a model that has since disappeared. Keeping that historical value is
-important for reproducibility: Scope should not silently rewrite what an old
-benchmark was configured to use.
+Profile creation saves the **resolved model** in the profile version. If no
+model was explicitly provided, Scope saves the agent's current default at that
+time. Existing profile versions therefore **do not follow later default-model
+rotation**; they keep their original model for reproducibility.
 
-When you create new runs, prefer an active model. If a long-lived benchmark
-profile points at a retired model, create a new profile version with its
-replacement instead of changing the meaning of the historical version.
+If a saved profile version refers to a disappeared model, new runs and reruns
+using that version fail agent-target validation with
+`agent_model_unsupported`. You must create a **new profile version** with an
+active replacement model. The historical version is not silently rewritten.
 
 ### Existing runs and reports
 
@@ -138,8 +150,9 @@ removed from the database.
 When a provider introduces or retires a model:
 
 1. Run or wait for the relevant provider scanner.
-2. Verify the model catalog (`GET /api/v1/models`) shows the expected active or
-   disappeared state.
+2. Query `GET /api/v1/models?agentId=<agent-id>&status=disappeared` to
+   inspect disappeared models for that agent; use `status=active` for the
+   active catalog. The endpoint also accepts a `provider` filter.
 3. Check the affected coding agent's `supportedModels` and `defaultModel`.
 4. Review `providerEndOfLife` dates where the provider supplies them.
 5. Update benchmark profiles that should move to a replacement model by
