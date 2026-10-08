@@ -5,10 +5,12 @@ import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { NetworkError } from "ky";
 import {
-  parseAzureAiFoundrySecret, withRetry,
+  parseAzureAiFoundrySecret,
   type CreateKeyRequest, type KeyDocument, type KeyType, type KeyValidationResult,
   type UpdateKeyRequest,
-} from "shared";
+} from "shared/token-manager";
+// Subpath imports keep server-only code (Redis, Mongo, Azure SDKs) out of the CLI bundle.
+import { withRetry } from "shared/retry";
 import { ApiError, apiFetch, readApiError, type ApiFetchInit } from "../utils/api-client.js";
 import { formatData } from "../utils/formatters.js";
 import { configureHelp } from "../utils/helpFormatter.js";

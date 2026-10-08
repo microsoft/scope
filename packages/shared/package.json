@@ -20,6 +20,16 @@
       "types": "./dist/gates/index.d.ts",
       "import": "./dist/gates/index.js"
     },
+    "./token-manager": {
+      "source": "./src/token-manager/index.ts",
+      "types": "./dist/token-manager/index.d.ts",
+      "import": "./dist/token-manager/index.js"
+    },
+    "./retry": {
+      "source": "./src/utils/retry.ts",
+      "types": "./dist/utils/retry.d.ts",
+      "import": "./dist/utils/retry.js"
+    },
     "./criteria-store": {
       "source": "./src/criteria/criteria-store.ts",
       "types": "./dist/criteria/criteria-store.d.ts",
