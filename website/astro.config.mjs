@@ -149,6 +149,18 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Self-hosting',
+					collapsed: true,
+					items: [
+						{ label: 'Overview', slug: 'self-hosting/overview' },
+						{ label: 'Provision AKS', slug: 'self-hosting/provision-aks' },
+						{ label: 'Deploy with Helm', slug: 'self-hosting/deploy-helm' },
+						{ label: 'Deploy with Flux', slug: 'self-hosting/deploy-flux' },
+						{ label: 'Configuration', slug: 'self-hosting/configuration' },
+						{ label: 'Operations', slug: 'self-hosting/operations' },
+					],
+				},
+				{
 					label: 'Reference',
 					collapsed: true,
 					items: [
