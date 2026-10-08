@@ -2,14 +2,9 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect } from "vitest";
-import { INTERNAL_KEY_TYPES, isKeyType, KEY_TYPES, parseAzureAiFoundrySecret, USER_KEY_TYPES } from "./types.js";
+import { isKeyType, parseAzureAiFoundrySecret } from "./types.js";
 
-describe("key type lists", () => {
-  it("splits every key type into exactly one of user-facing or internal", () => {
-    expect([...USER_KEY_TYPES, ...INTERNAL_KEY_TYPES].sort()).toEqual([...KEY_TYPES].sort());
-    expect(USER_KEY_TYPES).not.toContain("github-oauth-cookie-state");
-  });
-
+describe("isKeyType", () => {
   it("recognises only known key types", () => {
     expect(isKeyType("anthropic-api-key")).toBe(true);
     expect(isKeyType("github-oauth-cookie-state")).toBe(true);

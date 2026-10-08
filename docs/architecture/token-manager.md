@@ -62,11 +62,8 @@ The Token Manager uses a **capability-based model** where tokens are associated 
 
 The list of types is defined once, as `KEY_TYPES` in
 `packages/shared/src/token-manager/types.ts`. The `KeyType` union, Token
-Manager validation and the CLI's `scope secret --type` all derive from it.
-`INTERNAL_KEY_TYPES` (currently `github-oauth-cookie-state`) marks types
-that support internal automation rather than provider access. The CLI still
-accepts them but leaves them out of help and error messages
-(`USER_KEY_TYPES`).
+Manager validation and the CLI's `scope secret --type` (validation, help
+and error messages) all derive from it.
 
 The `azure-ai-foundry` secret stores a JSON blob:
 

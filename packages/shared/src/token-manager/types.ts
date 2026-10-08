@@ -26,16 +26,6 @@ export const KEY_TYPES = [
  */
 export type KeyType = (typeof KEY_TYPES)[number];
 
-/**
- * Key types that back internal automation (e.g. VS Code Web sign-in state)
- * rather than provider access. They grant no capabilities and are not
- * advertised to users.
- */
-export const INTERNAL_KEY_TYPES: readonly KeyType[] = ["github-oauth-cookie-state"];
-
-/** Key types users manage directly, in display order. */
-export const USER_KEY_TYPES: readonly KeyType[] = KEY_TYPES.filter((type) => !INTERNAL_KEY_TYPES.includes(type));
-
 export function isKeyType(value: unknown): value is KeyType {
   return typeof value === "string" && (KEY_TYPES as readonly string[]).includes(value);
 }

@@ -6,6 +6,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { registerSecretCommands } from "./secret.js";
 import { Command } from "commander";
+import { KEY_TYPES } from "shared/token-manager";
 import { resetApiClient, setApiLogSink, type ApiLogEntry } from "../utils/api-client.js";
 import type { OutputFormat } from "../utils/types.js";
 
@@ -97,14 +98,14 @@ describe("secret CLI", () => {
     expect(requests).toHaveLength(0);
   });
 
-  it("lists only user-facing key types in help and errors", async () => {
+  it("lists every key type in help and errors", async () => {
     const program = new Command();
     registerSecretCommands(program);
     const create = program.commands.find((c) => c.name() === "secret")!.commands.find((c) => c.name() === "create")!;
     const help = create.helpInformation();
-    expect(help).toContain("anthropic-api-key");
-    expect(help).not.toContain("github-oauth-cookie-state");
-    await expect(run("secret", "create", "--type", "unknown", "--value", "fixture")).rejects.toThrow(/^(?!.*cookie-state).*azure-ai-foundry/);
+    for (const type of KEY_TYPES) expect(help).toContain(type);
+    const error = await run("secret", "create", "--type", "unknown", "--value", "fixture").catch((e: Error) => e);
+    for (const type of KEY_TYPES) expect(String(error)).toContain(type);
   });
 
   it("preserves raw Anthropic registration format", async () => {

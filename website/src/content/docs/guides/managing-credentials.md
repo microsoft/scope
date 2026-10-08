@@ -23,6 +23,7 @@ key by capability, not by type.
 | `github-pat-classic` | `github-public-api`; plus `copilot-sdk` and `copilot-cli` when the token has the `copilot` scope |
 | `github-pat-fine-grained` | `github-public-api`; plus `github-models` when the token can use GitHub Models |
 | `github-oauth` | `github-models`, `github-public-api`, `copilot-models`, `copilot-sdk`, `copilot-cli` |
+| `github-oauth-cookie-state` | None. Stores browser-extracted GitHub session cookies as JSON. |
 | `anthropic-api-key` | `claude-code-cli`, `anthropic-api` |
 | `anthropic-oauth` | `claude-code-cli` |
 | `azure-ai-foundry` | `azure-ai-inference` |

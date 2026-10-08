@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { NetworkError } from "ky";
 import {
-  isKeyType, parseAzureAiFoundrySecret, USER_KEY_TYPES,
+  isKeyType, KEY_TYPES, parseAzureAiFoundrySecret,
   type CreateKeyRequest, type KeyDocument, type KeyValidationResult,
   type UpdateKeyRequest,
 } from "shared/token-manager";
@@ -65,7 +65,7 @@ function readStdin(): string {
 }
 
 function credential(options: CredentialOptions): CreateKeyRequest {
-  if (!isKeyType(options.type)) throw new Error(`Invalid key type. Choose ${USER_KEY_TYPES.join(", ")}.`);
+  if (!isKeyType(options.type)) throw new Error(`Invalid key type. Choose ${KEY_TYPES.join(", ")}.`);
   const sources = [options.value !== undefined, options.valueStdin, options.apiKey !== undefined, options.apiKeyStdin].filter(Boolean);
   if (sources.length !== 1) throw new Error("Provide exactly one of --value, --value-stdin, --api-key, or --api-key-stdin.");
   if (options.value !== undefined) console.error("Warning: --value exposes secrets in shell history and process listings; prefer --value-stdin.");
@@ -97,7 +97,7 @@ function credential(options: CredentialOptions): CreateKeyRequest {
 
 function credentialOptions(command: Command): Command {
   return withOutputOption(command
-    .requiredOption("--type <type>", `Credential type: ${USER_KEY_TYPES.join(", ")}`)
+    .requiredOption("--type <type>", `Credential type: ${KEY_TYPES.join(", ")}`)
     .option("--value <value>", "Raw secret, or complete JSON for Azure AI Foundry credentials")
     .option("--value-stdin", "Read the raw secret or complete JSON from piped stdin")
     .option("--api-key <key>", "Provider API key (prefer --api-key-stdin to avoid shell history)")
