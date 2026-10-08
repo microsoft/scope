@@ -37,7 +37,9 @@ You don't need to install anything to use the Portal.
 
 Your deployment may require credentials to run coding agents or pull
 skills from GitHub repositories. Contact your deployment administrator
-for the required setup.
+for the required setup, or see
+[Manage provider credentials](/guides/managing-credentials/) to add
+provider keys yourself.
 
 ## CLI access
 
