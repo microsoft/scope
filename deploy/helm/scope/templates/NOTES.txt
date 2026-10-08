@@ -1,0 +1,21 @@
+Scope has been deployed as release "{{ .Release.Name }}" in namespace
+"{{ .Values.global.namespace }}".
+
+{{- if .Values.api.ingress.enabled }}
+API:    https://{{ .Values.api.ingress.host }}
+{{- else }}
+API:    kubectl -n {{ .Values.global.namespace }} port-forward svc/{{ include "scope.componentName" (dict "component" "api" "context" .) }} 3100:{{ .Values.api.port }}
+{{- end }}
+{{- if .Values.portal.ingress.enabled }}
+Portal: https://{{ .Values.portal.ingress.host }}
+{{- else }}
+Portal: kubectl -n {{ .Values.global.namespace }} port-forward svc/{{ include "scope.componentName" (dict "component" "portal" "context" .) }} 5100:{{ .Values.portal.port }}
+{{- end }}
+
+Before this chart can fully start:
+  1. Populate any bring-your-own secrets in Key Vault "{{ .Values.azure.keyVaultName }}"
+     (github-token, anthropic-api-key, etc. — see values.yaml secrets.keyVaultSecretNames).
+  2. Confirm azure.workloadIdentityClientId matches the user-assigned identity
+     federated by deploy/azure/ to system:serviceaccount:{{ .Values.global.namespace }}:{{ .Values.azure.serviceAccountName }}.
+
+See deploy/helm/scope/README.md for full install instructions.

@@ -1,0 +1,183 @@
+# -----------------------------------------------------------------------------
+# Default values for the Scope umbrella chart.
+#
+# This chart is designed to be deployed against the AKS cluster provisioned by
+# deploy/azure/ (the "Deploy to Azure" Bicep template). Values under `azure:`
+# correspond directly to that template's outputs:
+#
+#   az deployment group show -g <rg> -n <deployment> --query properties.outputs
+#
+#   azure.acrLoginServer            <- output acrLoginServer
+#   azure.keyVaultName              <- output keyVaultName
+#   azure.keyVaultUri               <- output keyVaultUri
+#   azure.workloadIdentityClientId  <- output workloadIdentityClientId
+#   azure.serviceAccountName        <- output workloadIdentityServiceAccountName
+#   azure.tenantId                  <- your Azure AD tenant ID
+#   azure.storageAccountName        <- output storageAccountName
+#
+# This repo ships ONE values.yaml with sane open-source defaults. There are no
+# per-environment overlay files in-repo — layer your own `-f my-values.yaml`
+# (or `--set`) on top for environment-specific overrides.
+# -----------------------------------------------------------------------------
+
+global:
+  # Namespace all resources are deployed into. Must match the namespace the
+  # Bicep template federated the workload identity to
+  # (output workloadIdentityServiceAccountNamespace, default "scope").
+  namespace: scope
+
+  # Container registry the service images are pulled from. Point this at the
+  # Bicep-provisioned ACR's login server (output acrLoginServer) in
+  # production. AKS node kubelet identity already has AcrPull on that
+  # registry, so no imagePullSecrets are required. Leave empty to use images
+  # exactly as named in each service's `image.repository` (e.g. for a local
+  # registry or GHCR during development).
+  imageRegistry: ""
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+
+  imageTag: "latest"
+
+# -----------------------------------------------------------------------------
+# Azure integration: Key Vault (via Secrets Store CSI driver) + workload
+# identity (direct SDK access for Blob/Queue storage and token-manager's
+# live Key Vault calls).
+# -----------------------------------------------------------------------------
+azure:
+  tenantId: ""
+  keyVaultName: ""
+  # Client ID of the user-assigned managed identity the Bicep template
+  # created and federated to the Kubernetes ServiceAccount below.
+  workloadIdentityClientId: ""
+  # Must exactly match the Bicep's federated subject
+  # (system:serviceaccount:<namespace>:<serviceAccountName>).
+  serviceAccountName: scope-workload-identity
+  storageAccountName: ""
+
+# Secret object names as they exist in Key Vault, synced into a single K8s
+# Secret (named by `secrets.k8sSecretName`) via the Secrets Store CSI
+# driver's secretObjects feature. `mongoConnectionString` and
+# `redisConnectionString` are pre-populated by the Bicep template; the rest
+# are bring-your-own (add them to the Key Vault before or after install).
+secrets:
+  k8sSecretName: scope-secrets
+  keyVaultSecretNames:
+    mongoConnectionString: cosmos-connection-string
+    redisConnectionString: redis-connection-string
+    githubToken: github-token
+    anthropicApiKey: anthropic-api-key
+
+# -----------------------------------------------------------------------------
+# Per-service configuration. Each service supports `enabled`, `image`,
+# `replicas`, and `resources`; resource defaults mirror the "mirrors prod
+# K8s" limits already documented in docker-compose.yml.
+# -----------------------------------------------------------------------------
+
+api:
+  enabled: true
+  image:
+    repository: scope-api
+    tag: ""
+  port: 80
+  replicas: 1
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: "500m", memory: 512Mi }
+  ingress:
+    enabled: false
+    className: ""
+    host: ""
+    tls: []
+
+portal:
+  enabled: true
+  image:
+    repository: scope-portal
+    tag: ""
+  port: 80
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+  ingress:
+    enabled: false
+    className: ""
+    host: ""
+    tls: []
+
+judge:
+  enabled: true
+  image:
+    repository: scope-judge
+    tag: ""
+  port: 80
+  replicas: 1
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  judgeModel: gpt-5.4-mini
+  feedbackModel: gpt-5.4-mini
+  judgeStrategy: bundled
+
+tokenManager:
+  enabled: true
+  image:
+    repository: scope-token-manager
+    tag: ""
+  port: 80
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+scheduler:
+  enabled: true
+  image:
+    repository: scope-scheduler
+    tag: ""
+  port: 8080
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+workers:
+  reportGenerator:
+    enabled: true
+    image:
+      repository: scope-report-generator
+      tag: ""
+    replicas: 1
+    resources:
+      requests: { cpu: 250m, memory: 256Mi }
+      limits: { cpu: "500m", memory: 512Mi }
+  coderAcpCopilot:
+    enabled: false
+    image:
+      repository: scope-coder-acp-copilot
+      tag: ""
+    replicas: 1
+    resources:
+      requests: { cpu: 500m, memory: 512Mi }
+      limits: { cpu: "1", memory: 1Gi }
+  coderAcpClaudeCode:
+    enabled: false
+    image:
+      repository: scope-coder-acp-claude-code
+      tag: ""
+    replicas: 1
+    resources:
+      requests: { cpu: 500m, memory: 512Mi }
+      limits: { cpu: "1", memory: 1Gi }
+
+jobs:
+  dbMigrate:
+    enabled: true
+    image:
+      repository: scope-api
+      tag: ""
+  registerAgents:
+    enabled: true
+    image:
+      repository: alpine
+      tag: "3.21"

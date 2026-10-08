@@ -1,0 +1,19 @@
+apiVersion: v2
+name: scope
+description: >-
+  Helm chart for deploying the Scope application (API, Portal, Judge, Token
+  Manager, Scheduler, and coding-agent workers) onto an AKS cluster — pairs
+  with the infrastructure provisioned by deploy/azure/.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://microsoft.github.io/scope/
+sources:
+  - https://github.com/microsoft/scope
+keywords:
+  - scope
+  - ai-benchmarking
+  - coding-agents
+maintainers:
+  - name: Scope maintainers
+    url: https://github.com/microsoft/scope
