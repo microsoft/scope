@@ -26,6 +26,8 @@ function record(value: unknown): Record<string, unknown> {
 function fakeResponse(row: QualityCaseRow, request: ComposedPromptRequest): string {
   const input = record(row.input);
   switch (row.family) {
+    case "external-contribution-triage":
+      return '{"body":"The evidence supports advisory triage; maintainers decide the next step.","labels":"[]"}';
     case "criteria-authoring":
       return '{"prompt":"Inspect the available evidence and decide whether the behavior is satisfied.","suggestedId":"generated_criterion"}';
     case "parent-dependency-suggestion":

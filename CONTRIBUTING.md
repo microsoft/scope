@@ -324,6 +324,16 @@ The PR owner applies `status: waiting` when requesting a contributor response an
 the contributor responds. State who owes the next action in a comment; the label alone must not
 trigger the closure policy, particularly when a PR is waiting on the team.
 
+### Automated triage assistance
+
+Scope includes a preview-first GitHub Agentic Workflow for external issues and
+non-draft PRs. After maintainer activation, it can provide an advisory comment
+and add allowlisted category/component labels; it cannot approve, merge, close,
+assign reviewers, run contributor code, or replace human classifications.
+Existing CLA checks and the review process above remain authoritative.
+See [contribution triage](./docs/architecture/contribution-triage.md) for preview
+commands, opt-in controls, cost limits, and disabling the automation.
+
 ## Repository labels
 
 Use the existing `category: value` labels for issue and PR triage. Check the
@@ -340,6 +350,7 @@ Automations depend on these exact names:
 | Dependabot | `type: dependencies`, plus `language: javascript` or `language: rust` |
 | Pull Request Labeler | Area, topic, language, and type labels from `.github/labeler.yml` |
 | Community Contribution Labeler | `community-contribution` |
+| External Contribution Triage | Allowlisted existing `type:` and `area:` classifications; existing human families take precedence |
 
 Use `area: reporting` for Scope's benchmark reporting component, not daily repository activity.
 Worker upgrade routing uses `type: worker-update`, not the broader `area: worker`.
