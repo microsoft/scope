@@ -38,7 +38,7 @@ param userNodeCount int = 2
 // (Key Vault, Storage, Cosmos DB, etc.) are placed behind private endpoints;
 // the AKS API server stays reachable over its public, AAD/kubeconfig-secured
 // endpoint. No authorizedIPRanges allowlist is configured for the same reason.
-module managedCluster 'br/public:avm/res/container-service/managed-cluster:0.9.0' = {
+module managedCluster 'br/public:avm/res/container-service/managed-cluster:0.14.0' = {
   name: 'aks-deployment'
   params: {
     name: aksName
@@ -53,14 +53,20 @@ module managedCluster 'br/public:avm/res/container-service/managed-cluster:0.9.0
     networkPolicy: 'cilium'
     networkDataplane: 'cilium'
     publicNetworkAccess: 'Enabled'
-    enablePrivateCluster: false
+    apiServerAccessProfile: {
+      enablePrivateCluster: false
+    }
     // Local accounts are kept enabled (the module default is to disable
     // them) because this template does not wire up Entra ID/AAD cluster
     // admin group integration, so `az aks get-credentials` relies on the
     // cluster's local admin credentials to produce a working kubeconfig.
     disableLocalAccounts: false
     enableOidcIssuerProfile: true
-    enableWorkloadIdentity: true
+    securityProfile: {
+      workloadIdentity: {
+        enabled: true
+      }
+    }
     // Native Key Vault Secrets Provider add-on replaces External Secrets
     // Operator for syncing Key Vault secrets into the cluster; do not add
     // ESO, Flux, or ASO alongside this.
