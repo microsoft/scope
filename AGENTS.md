@@ -263,6 +263,7 @@ not open the PR against the fork unless the user explicitly asks you to.
 | [docs/architecture/codebases.md](docs/architecture/codebases.md) | Codebase entity, immutable revisions, source types, worker seeding |
 | [docs/architecture/db-migrations.md](docs/architecture/db-migrations.md) | MongoDB migration framework |
 | [docs/architecture/cli-distribution.md](docs/architecture/cli-distribution.md) | CLI bundling, publishing, installation, update check |
+| [docs/architecture/release-strategy.md](docs/architecture/release-strategy.md) | Proposed coordinated releases, Changie metadata, versioning, artifact publishing, and recovery |
 | [docs/architecture/retry.md](docs/architecture/retry.md) | Retry utilities: `withRetry` function and `@Retry` decorator |
 | [docs/architecture/post-processing.md](docs/architecture/post-processing.md) | Post-processing pipeline, ATIF generation, handler extensibility |
 | [docs/architecture/observability.md](docs/architecture/observability.md) | Application telemetry, Azure Monitor OTel distro, custom worker metrics |
