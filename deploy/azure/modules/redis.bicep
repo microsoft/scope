@@ -1,12 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// This module deploys a classic Azure Cache for Redis instance (Microsoft.Cache/redis)
-// using the AVM module `avm/res/cache/redis:0.5.0`. It is the well-established, generally
-// available option for v1 of this template.
-//
-// NOTE: Azure Managed Redis (Microsoft.Cache/redisEnterprise, AVM `avm/res/cache/redis-enterprise`)
-// is a newer, more performant offering and could be a future upgrade path for this template.
+// This module deploys Azure Managed Redis (Microsoft.Cache/redisEnterprise, the "Balanced_*" SKU
+// family) using the AVM module `avm/res/cache/redis-enterprise:0.5.0`. Classic Azure Cache for
+// Redis (Microsoft.Cache/redis) is being retired for new deployments, so Azure Managed Redis - the
+// currently supported, generally available successor on the same redisEnterprise resource
+// provider - is used instead.
 
 @description('Azure region for all resources.')
 param location string
@@ -14,9 +13,9 @@ param location string
 @description('Tags to apply to all resources.')
 param tags object = {}
 
-@description('Name of the Azure Cache for Redis instance. Must be globally unique.')
+@description('Name of the Azure Managed Redis instance. Must be globally unique.')
 @minLength(1)
-@maxLength(63)
+@maxLength(60)
 param redisName string
 
 @description('Resource ID of the virtual network to link the private DNS zone to.')
@@ -25,27 +24,22 @@ param vnetResourceId string
 @description('Resource ID of the subnet to deploy the Redis private endpoint into.')
 param privateEndpointSubnetResourceId string
 
-@description('Redis SKU name.')
+@description('Azure Managed Redis SKU name (Balanced tier; see https://aka.ms/redis/overview for the full SKU catalog).')
 @allowed([
-  'Basic'
-  'Standard'
-  'Premium'
+  'Balanced_B0'
+  'Balanced_B1'
+  'Balanced_B3'
+  'Balanced_B5'
+  'Balanced_B10'
 ])
-param skuName string = 'Standard'
+param skuName string = 'Balanced_B1'
 
-@description('Redis SKU family (C for Basic/Standard, P for Premium). Informational only: the underlying AVM module derives the actual family from skuName automatically.')
-@allowed([
-  'C'
-  'P'
-])
-#disable-next-line no-unused-params // Part of the required parameter contract; the AVM module derives family from skuName automatically.
-param skuFamily string = 'C'
+@description('Principal (object) ID of the workload identity to grant Microsoft Entra ID (Azure AD) data-plane access to the default Redis database, via an access policy assignment. Leave empty to skip the assignment.')
+param workloadIdentityPrincipalId string = ''
 
-@description('Redis SKU capacity/size.')
-param skuCapacity int = 1
-
-// Private DNS zone name used for Azure Cache for Redis private endpoints.
-var privateDnsZoneName = 'privatelink.redis.cache.windows.net'
+// Private DNS zone name used for Azure Managed Redis (Redis Enterprise) private endpoints. This is
+// a different zone than classic Azure Cache for Redis (privatelink.redis.cache.windows.net).
+var privateDnsZoneName = 'privatelink.redisenterprise.cache.azure.net'
 
 module privateDnsZone 'br/public:avm/res/network/private-dns-zone:0.7.0' = {
   name: 'redis-private-dns-zone-${uniqueString(redisName)}'
@@ -61,66 +55,56 @@ module privateDnsZone 'br/public:avm/res/network/private-dns-zone:0.7.0' = {
   }
 }
 
-// Microsoft Entra ID (Azure AD) authentication is preferred over access keys. This is enabled via
-// the `aad-enabled` redisConfiguration entry, which allows clients to authenticate using Entra ID
-// tokens instead of (or alongside) the shared access keys. Assigning Redis data-plane access
-// policies to specific principals (e.g. via `az redis access-policy-assignment`) is outside the
-// scope of this module and should be performed separately after deployment.
-// The non-SSL port remains disabled, and the access key output is still populated via listKeys()
-// as a fallback/compatibility mechanism for clients that cannot yet use Entra ID auth.
-module redis 'br/public:avm/res/cache/redis:0.5.0' = {
+// Microsoft Entra ID (Azure AD) authentication is preferred over access keys, granted here via an
+// access policy assignment to the shared workload identity. Access-key authentication is left
+// enabled as a fallback/compatibility mechanism for clients that cannot yet use Entra ID auth; its
+// primary key is still surfaced as a secure output.
+module redis 'br/public:avm/res/cache/redis-enterprise:0.5.0' = {
   name: 'redis-${uniqueString(redisName)}'
   params: {
     name: redisName
     location: location
     tags: tags
     skuName: skuName
-    capacity: skuCapacity
-    enableNonSslPort: false
-    minimumTlsVersion: '1.2'
     publicNetworkAccess: 'Disabled'
-    redisConfiguration: {
-      'aad-enabled': 'true'
+    database: {
+      accessKeysAuthentication: 'Enabled'
+      accessPolicyAssignments: !empty(workloadIdentityPrincipalId)
+        ? [
+            {
+              userObjectId: workloadIdentityPrincipalId
+            }
+          ]
+        : []
     }
     privateEndpoints: [
       {
-        service: 'redisCache'
+        service: 'redisEnterprise'
         subnetResourceId: privateEndpointSubnetResourceId
-        privateDnsZoneResourceIds: [
-          privateDnsZone.outputs.resourceId
-        ]
+        privateDnsZoneGroup: {
+          privateDnsZoneGroupConfigs: [
+            {
+              privateDnsZoneResourceId: privateDnsZone.outputs.resourceId
+            }
+          ]
+        }
       }
     ]
   }
 }
 
-@description('The resource ID of the Azure Cache for Redis instance.')
+@description('The resource ID of the Azure Managed Redis instance.')
 output redisResourceId string = redis.outputs.resourceId
 
-@description('The name of the Azure Cache for Redis instance.')
+@description('The name of the Azure Managed Redis instance.')
 output redisName string = redis.outputs.name
 
-@description('The hostname of the Azure Cache for Redis instance.')
+@description('The hostname of the Azure Managed Redis instance.')
 output hostName string = redis.outputs.hostName
 
-// `listKeys()` requires a resource ID that is calculable at the start of the deployment, so it
-// cannot reference a module's runtime output (e.g. `redis.outputs.resourceId`) directly - Bicep
-// rejects that with BCP181. But building the ID purely from the compile-time-known `redisName`
-// parameter (as a previous version of this file did) loses the implicit `dependsOn` edge that
-// Bicep normally infers from symbolic-name references, since nothing here points at the `redis`
-// module symbol. That let ARM evaluate `listKeys()` concurrently with (or before) the long-running
-// cache finishing provisioning, intermittently failing.
-//
-// The fix: declare an `existing` resource for the cache (a compile-time-known ID, so valid as a
-// `listKeys()` target) with an explicit `dependsOn: [redis]` to force correct ordering without
-// needing a runtime output.
-resource existingRedisCache 'Microsoft.Cache/redis@2024-03-01' existing = {
-  name: redisName
-  dependsOn: [
-    redis
-  ]
-}
+@description('The TCP port of the default Redis database.')
+output port int = redis.outputs.port
 
-@description('The primary access key for the Azure Cache for Redis instance. Entra ID authentication is preferred; this key is provided as a fallback for compatibility.')
+@description('The primary access key for the default Redis database. Entra ID authentication is preferred; this key is provided as a fallback for compatibility.')
 @secure()
-output primaryKey string = existingRedisCache.listKeys().primaryKey
+output primaryKey string = redis.outputs.primaryAccessKey!

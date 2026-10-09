@@ -35,13 +35,7 @@
       "value": "Session"
     },
     "redisSkuName": {
-      "value": "Standard"
-    },
-    "redisSkuFamily": {
-      "value": "C"
-    },
-    "redisSkuCapacity": {
-      "value": 1
+      "value": "Balanced_B1"
     },
     "storageSkuName": {
       "value": "Standard_LRS"

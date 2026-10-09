@@ -27,7 +27,7 @@ below and is also usable standalone via the Azure CLI.
   granted `AcrPull` so nodes can pull the worker image (which cannot be hosted on
   GHCR for private use).
 - **Cosmos DB**: MongoDB API only, private endpoint only.
-- **Azure Cache for Redis**: private endpoint only, with Microsoft Entra ID
+- **Azure Managed Redis**: private endpoint only, with Microsoft Entra ID
   (Azure AD) authentication enabled; an access key is also provisioned as a
   compatibility fallback for clients that don't yet support Entra ID auth.
 - **Storage account**: blob and queue services only, private endpoints only, with the
@@ -91,7 +91,7 @@ deploy/azure/
     ├── aks.bicep               # AKS cluster
     ├── keyvault.bicep          # Key Vault + private endpoint
     ├── cosmosdb.bicep          # Cosmos DB (MongoDB API)
-    ├── redis.bicep             # Azure Cache for Redis
+    ├── redis.bicep             # Azure Managed Redis (Redis Enterprise, Balanced tier)
     ├── storage.bicep           # Storage account (blob + queue)
     └── acr.bicep               # Azure Container Registry
 ```
@@ -123,8 +123,12 @@ the build if `azuredeploy.json` doesn't match — commit the regenerated file if
 - AKS local accounts are left enabled (rather than requiring Entra ID cluster admin
   integration) so `az aks get-credentials` produces a working kubeconfig out of the
   box.
-- Redis is deployed as classic Azure Cache for Redis rather than Azure Managed Redis
-  (Redis Enterprise); the latter could be a future upgrade path.
+- Redis is deployed as Azure Managed Redis (`Microsoft.Cache/redisEnterprise`,
+  `Balanced_*` SKU tier) rather than classic Azure Cache for Redis — the classic
+  service is being retired for new deployments. The default SKU is `Balanced_B1`;
+  the workload identity is granted Entra ID data-plane access via an access policy
+  assignment on the default database, with access-key auth left enabled as a
+  compatibility fallback.
 - Cosmos DB uses serverless throughput by default to minimize idle cost for a
   quickstart deployment; switch to provisioned RU/s if you need guaranteed
   throughput.

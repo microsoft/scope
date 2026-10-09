@@ -8,7 +8,7 @@
 // infrastructure needed to run Scope: an AKS cluster (with the native Key
 // Vault Secrets Provider add-on, OIDC issuer, and workload identity enabled),
 // a VNet with private endpoints for Key Vault/Cosmos DB/Redis/Storage, an
-// Azure Container Registry, Cosmos DB (MongoDB API), Azure Cache for Redis,
+// Azure Container Registry, Cosmos DB (MongoDB API), Azure Managed Redis,
 // and a Storage account (blob + queue).
 //
 // This template does NOT install the Scope application itself (that's a Helm
@@ -65,23 +65,15 @@ param acrSkuName string = 'Standard'
 ])
 param cosmosDbConsistencyLevel string = 'Session'
 
-@description('SKU name for Azure Cache for Redis.')
+@description('SKU name for Azure Managed Redis (Balanced tier; see https://aka.ms/redis/overview for the full SKU catalog).')
 @allowed([
-  'Basic'
-  'Standard'
-  'Premium'
+  'Balanced_B0'
+  'Balanced_B1'
+  'Balanced_B3'
+  'Balanced_B5'
+  'Balanced_B10'
 ])
-param redisSkuName string = 'Standard'
-
-@description('SKU family for Azure Cache for Redis (C for Basic/Standard, P for Premium).')
-@allowed([
-  'C'
-  'P'
-])
-param redisSkuFamily string = 'C'
-
-@description('SKU capacity/size for Azure Cache for Redis.')
-param redisSkuCapacity int = 1
+param redisSkuName string = 'Balanced_B1'
 
 @description('SKU for the storage account.')
 param storageSkuName string = 'Standard_LRS'
@@ -110,7 +102,7 @@ var aksName = 'aks-${environmentName}-${resourceToken}'
 var keyVaultName = take('kv-${environmentName}-${resourceToken}', 24)
 var acrName = take(replace('acr${environmentName}${resourceToken}', '-', ''), 50)
 var cosmosAccountName = take('cosmos-${environmentName}-${resourceToken}', 44)
-var redisName = take('redis-${environmentName}-${resourceToken}', 63)
+var redisName = take('redis-${environmentName}-${resourceToken}', 60)
 var storageAccountName = take(replace('st${environmentName}${resourceToken}', '-', ''), 24)
 var workloadIdentityName = 'id-${environmentName}-${resourceToken}'
 
@@ -205,7 +197,7 @@ module cosmosDb 'modules/cosmosdb.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
-// Azure Cache for Redis, private endpoint, Entra ID auth preferred.
+// Azure Managed Redis, private endpoint, Entra ID auth preferred.
 // ---------------------------------------------------------------------------
 module redis 'modules/redis.bicep' = {
   name: 'redis'
@@ -216,8 +208,7 @@ module redis 'modules/redis.bicep' = {
     vnetResourceId: networking.outputs.vnetResourceId
     privateEndpointSubnetResourceId: networking.outputs.privateEndpointSubnetResourceId
     skuName: redisSkuName
-    skuFamily: redisSkuFamily
-    skuCapacity: redisSkuCapacity
+    workloadIdentityPrincipalId: workloadIdentity.outputs.principalId
   }
 }
 
@@ -341,8 +332,11 @@ output keyVaultUri string = keyVault.outputs.keyVaultUri
 @description('Document endpoint of the Cosmos DB account.')
 output cosmosDbAccountEndpoint string = cosmosDb.outputs.accountEndpoint
 
-@description('Hostname of the Azure Cache for Redis instance.')
+@description('Hostname of the Azure Managed Redis instance.')
 output redisHostName string = redis.outputs.hostName
+
+@description('TCP port of the Azure Managed Redis default database.')
+output redisPort int = redis.outputs.port
 
 @description('Name of the storage account.')
 output storageAccountName string = storage.outputs.storageAccountName

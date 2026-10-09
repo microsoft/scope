@@ -134,27 +134,18 @@
             "name": "redisSkuControl",
             "type": "Microsoft.Common.DropDown",
             "label": "Redis cache SKU",
-            "defaultValue": "Standard",
-            "toolTip": "SKU for Azure Cache for Redis.",
+            "defaultValue": "Balanced B1",
+            "toolTip": "SKU for Azure Managed Redis (Balanced tier). Capacity is encoded in the SKU name itself.",
             "constraints": {
               "allowedValues": [
-                { "label": "Basic", "value": "Basic" },
-                { "label": "Standard", "value": "Standard" },
-                { "label": "Premium", "value": "Premium" }
+                { "label": "Balanced B0", "value": "Balanced_B0" },
+                { "label": "Balanced B1", "value": "Balanced_B1" },
+                { "label": "Balanced B3", "value": "Balanced_B3" },
+                { "label": "Balanced B5", "value": "Balanced_B5" },
+                { "label": "Balanced B10", "value": "Balanced_B10" }
               ],
               "required": true
             }
-          },
-          {
-            "name": "redisCapacityControl",
-            "type": "Microsoft.Common.Slider",
-            "label": "Redis cache capacity",
-            "defaultValue": 1,
-            "min": 0,
-            "max": 6,
-            "step": 1,
-            "toolTip": "Capacity/size of the Redis cache (meaning depends on SKU family).",
-            "showStepMarkers": false
           },
           {
             "name": "storageSkuControl",
@@ -258,7 +249,6 @@
     "acrSkuName": "[steps('dataServices').acrSkuControl]",
     "cosmosDbConsistencyLevel": "[steps('dataServices').cosmosConsistencyControl]",
     "redisSkuName": "[steps('dataServices').redisSkuControl]",
-    "redisSkuCapacity": "[steps('dataServices').redisCapacityControl]",
     "storageSkuName": "[steps('dataServices').storageSkuControl]",
     "vnetAddressPrefix": "[steps('networking').vnetAddressPrefixControl]",
     "aksSubnetPrefix": "[steps('networking').aksSubnetPrefixControl]",
