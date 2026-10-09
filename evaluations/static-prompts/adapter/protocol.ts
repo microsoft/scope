@@ -12,6 +12,7 @@ export const QUALITY_FAMILIES = [
   "judge-instructions",
   "developer-feedback",
   "run-report",
+  "external-contribution-triage",
 ] as const;
 
 export type QualityFamily = (typeof QUALITY_FAMILIES)[number];
