@@ -661,7 +661,15 @@ Both follow the same rules:
 - **`TaskPromptBadge` is type-agnostic.** Gate prompts (`select`/`build`/`test`/`run`/`deploy`),
   `agents.md`, and legacy untyped prompts all render the same hover + the same
   `/task-prompts/:id` navigation; only the human label differs (via `promptTypeLabel`). It also
-  renders content plainly (no link/tooltip) when no `taskPromptId` is available.
+  renders content plainly when no `taskPromptId` is available, unless the caller
+  supplies `fallbackText`. The Runs list supplies the inline task for legacy runs:
+  a portaled Radix tooltip shows the full text on hover or keyboard focus, uses
+  the same 200 ms hover delay as existing metadata tooltips, wraps long values,
+  and scrolls if needed. This fallback has no detail link and never fetches
+  prompt metadata or content. Runs with a task-prompt reference keep their
+  existing linked preview, even when fallback text is supplied.
+  The Runs list's truncated numeric filter labels also use Radix tooltips
+  instead of native `title` attributes, inheriting the page's 200 ms hover delay.
 - **Detected-features list + explicit navigate button.** `TaskPromptBadge`'s preview lists only
   the prompt's **detected** features by id (it never shows undetected features or an `x/y` count)
   and ends with an obvious button-styled **Open details** `Link` (not plain text). Because the
