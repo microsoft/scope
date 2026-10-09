@@ -129,7 +129,15 @@ portal:
   # docs/architecture/auth-rbac.md §8); rebuild+republish your own portal
   # image if you need a different Entra app registration than this chart's
   # default GHCR image ships with.
-  authEnabled: true
+  #
+  # Defaults to false (unlike the portal image's own "secure by default"
+  # fallback): the publicly-published GHCR portal image has no Entra app
+  # registration baked in, so setting this true out of the box makes every
+  # fresh Helm install land on a dead-end "Authentication not configured"
+  # page (apps/portal/src/components/auth/RequireAuth.tsx) with no way to
+  # sign in. Set to true (and rebuild the portal image with your own
+  # VITE_AUTH_* values) once you've wired up a real IdP.
+  authEnabled: false
   docsBaseUrl: ""
   ingress:
     enabled: false
