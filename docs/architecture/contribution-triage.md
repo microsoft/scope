@@ -59,6 +59,17 @@ AW threat detection, then rechecks eligibility and content fingerprint.
 Changes during analysis invalidate the proposal. API failures and invalid
 output fail explicitly rather than silently completing triage.
 
+Automatic failure-issue and failed-job reporting are disabled with
+`safe-outputs.report-failure-as-issue: false` and `report-failed-jobs: false`.
+No-op and threat-detection issue reporting each set `report-as-issue: false`;
+threat detection itself remains enabled. Agent failures, missing-data or
+missing-tool diagnostics, and rejected threat detection remain in Actions
+logs, summaries, and artifacts, never public diagnostic issues. The controlled
+triage publisher is the only job with repository-write permission; conclusion
+processing cannot bypass preview or publication gates. Missing-evidence and
+incomplete-execution handlers explicitly set `create-issue: false` while
+retaining failure reporting.
+
 Only one proposal is accepted, with a 20-4000 character Markdown comment and a
 JSON-encoded array of up to five classification labels, at most one `type:`.
 Allowed labels are the existing `type: bug`, `type: enhancement`,

@@ -267,6 +267,43 @@ describe("compiled AW boundaries", () => {
     expect(compiled.jobs.publish_triage.if).toContain("needs.detection.result == 'success'");
     expect(compiled.jobs.publish_triage.if).toContain("needs.detection.outputs.detection_success == 'true'");
   });
+  it("keeps failure and missing-evidence diagnostics from bypassing the publisher", () => {
+    const source = readFileSync(".github/workflows/external-contribution-triage.md", "utf8");
+    expect(source).toContain("report-failure-as-issue: false");
+    expect(source).toContain("report-failed-jobs: false");
+    const writers = Object.entries(compiled.jobs).filter(([, job]) =>
+      Object.entries(job.permissions ?? compiled.permissions ?? {}).some(([permission, value]) =>
+        value === "write" && permission !== "copilot-requests",
+      ),
+    );
+    expect(writers.map(([name]) => name)).toEqual(["publish_triage"]);
+    const failure = compiled.jobs.conclusion.steps.find((step) =>
+      String(step.with?.script).includes("handle_agent_failure.cjs"),
+    );
+    expect(failure).toBeDefined();
+    expect(failure?.env?.GH_AW_FAILURE_REPORT_AS_ISSUE).toBe("false");
+    const noop = compiled.jobs.conclusion.steps.find((step) =>
+      String(step.with?.script).includes("handle_noop_message.cjs"),
+    );
+    expect(noop).toBeDefined();
+    expect(noop?.env?.GH_AW_NOOP_REPORT_AS_ISSUE).toBe("false");
+    for (const step of compiled.jobs.conclusion.steps) {
+      for (const [name, value] of Object.entries(step.env ?? {})) {
+        if (/^GH_AW_.*(?:CREATE_ISSUE|REPORT_AS_ISSUE)$/.test(name)) {
+          expect(value, name).toBe("false");
+        }
+      }
+    }
+    expect(failure?.env?.GH_AW_MISSING_TOOL_REPORT_AS_FAILURE).toBe("true");
+    expect(failure?.env?.GH_AW_MISSING_DATA_REPORT_AS_FAILURE).toBe("true");
+    expect(compiled.jobs.conclusion.steps.some((step) =>
+      String(step.with?.script).includes("handle_detection_runs.cjs"),
+    )).toBe(false);
+    expect(compiled.jobs.conclusion.steps.some((step) =>
+      String(step.with?.script).includes("report_failed_jobs.cjs"),
+    )).toBe(false);
+    expect(compiled.jobs.publish_triage.if).toContain("needs.detection.outputs.detection_success == 'true'");
+  });
   it("allows untrusted contribution reads only from Scope", () => {
     const source = readFileSync(".github/workflows/external-contribution-triage.md", "utf8");
     expect(source).toContain("min-integrity: none");

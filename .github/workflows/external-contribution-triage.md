@@ -86,6 +86,18 @@ tools:
     allowed: [get_file_contents, issue_read, pull_request_read, search_issues]
 safe-outputs:
   staged: true
+  report-failure-as-issue: false
+  report-failed-jobs: false
+  threat-detection:
+    report-as-issue: false
+  noop:
+    report-as-issue: false
+  missing-tool:
+    create-issue: false
+  missing-data:
+    create-issue: false
+  report-incomplete:
+    create-issue: false
   jobs:
     publish-triage:
       description: Publish one advisory comment and allowlisted labels to the trusted selected contribution.
