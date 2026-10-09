@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "8685616850244988124"
+      "templateHash": "10637998934738098090"
     }
   },
   "parameters": {
@@ -12864,7 +12864,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.48.1.52935",
-              "templateHash": "10391613202739940507"
+              "templateHash": "17869098716336833704"
             }
           },
           "parameters": {
@@ -12924,7 +12924,7 @@
             }
           },
           "variables": {
-            "mongoPrivateDnsZoneName": "privatelink.mongo.cosmos.azure.net"
+            "mongoPrivateDnsZoneName": "privatelink.mongo.cosmos.azure.com"
           },
           "resources": {
             "existingCosmosDbAccount": {

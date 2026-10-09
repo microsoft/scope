@@ -43,8 +43,10 @@ param databaseName string = 'scope'
 ])
 param consistencyLevel string = 'Session'
 
+// Canonical zone name per the public DNS CNAME chain (*.mongo.cosmos.azure.com ->
+// *.privatelink.mongo.cosmos.azure.com) is ".com", not ".net" (which is the Key Vault zone's TLD).
 @description('Private DNS zone name used for the Cosmos DB MongoDB API private endpoint.')
-var mongoPrivateDnsZoneName = 'privatelink.mongo.cosmos.azure.net'
+var mongoPrivateDnsZoneName = 'privatelink.mongo.cosmos.azure.com'
 
 module mongoPrivateDnsZone 'br/public:avm/res/network/private-dns-zone:0.7.0' = {
   name: '${deployment().name}-mongo-dns-zone'
