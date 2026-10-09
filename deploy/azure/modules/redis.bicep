@@ -69,9 +69,14 @@ module redis 'br/public:avm/res/cache/redis-enterprise:0.5.0' = {
     publicNetworkAccess: 'Disabled'
     database: {
       accessKeysAuthentication: 'Enabled'
+      // NOTE: `name` is documented as optional on this type, but the AVM module's nested access
+      // policy assignment deployment reads `.name` directly (not via `tryGet`), which throws
+      // InvalidTemplate ("property 'name' doesn't exist") if the property is omitted entirely.
+      // Always supply it explicitly to work around that.
       accessPolicyAssignments: !empty(workloadIdentityPrincipalId)
         ? [
             {
+              name: 'workload-identity-access'
               userObjectId: workloadIdentityPrincipalId
             }
           ]

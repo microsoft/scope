@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "2369282927455341120"
+      "templateHash": "8576521609879066734"
     }
   },
   "parameters": {
@@ -19837,7 +19837,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.48.1.52935",
-              "templateHash": "10991816613498976791"
+              "templateHash": "6067630453949842112"
             }
           },
           "parameters": {
@@ -22971,7 +22971,7 @@
                   "database": {
                     "value": {
                       "accessKeysAuthentication": "Enabled",
-                      "accessPolicyAssignments": "[if(not(empty(parameters('workloadIdentityPrincipalId'))), createArray(createObject('userObjectId', parameters('workloadIdentityPrincipalId'))), createArray())]"
+                      "accessPolicyAssignments": "[if(not(empty(parameters('workloadIdentityPrincipalId'))), createArray(createObject('name', 'workload-identity-access', 'userObjectId', parameters('workloadIdentityPrincipalId'))), createArray())]"
                     }
                   },
                   "privateEndpoints": {
