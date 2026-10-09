@@ -16,17 +16,16 @@ Deploying Scope end to end is three separate steps:
    [`.github/workflows/publish-images.yml`](../../../.github/workflows/publish-images.yml))
    by default, so no registry build step is required for this phase — AKS
    pulls these public images directly.
-3. **Build/push the ACP coding-agent workers separately** —
-   `coder-acp-copilot` and `coder-acp-claude-code` are *not* installed by
-   this chart (they need the Kubedock/MCP-gateway sidecar pattern described
-   in [`docs/architecture/kubedock.md`](../../docs/architecture/kubedock.md),
-   which isn't templated here yet). Build and push those two images to the
-   Bicep-provisioned **ACR** (`az acr build`), then register the
-   GitHub/Anthropic credentials they need — either directly in Key Vault or
-   via the running token-manager's admin API — and enable them with
-   `helm upgrade` once their manifests exist. See
-   ["Phase 3: ACP workers"](#phase-3-acp-coding-agent-workers-not-automated)
-   below.
+3. **Bring the ACP coding-agent workers online separately** —
+   `coder-acp-copilot` and `coder-acp-claude-code` are disabled by default
+   in this chart (no MCPJungle/AI Gateway/Kubedock sidecars are templated
+   yet — see [`docs/architecture/kubedock.md`](../../docs/architecture/kubedock.md)
+   for the intended production pattern). Run
+   `scripts/bootstrap-workers.sh --acr <acrName>` to build/push both worker
+   images, prompt for and register their GitHub/Anthropic credentials,
+   `helm upgrade` to enable the worker Deployments this chart already ships,
+   and register both agent types with the API — all in one command. See
+   ["Phase 3: ACP workers"](#phase-3-acp-coding-agent-workers) below.
 
 This chart only automates phase 2.
 
@@ -36,12 +35,11 @@ This chart only automates phase 2.
 - Populating bring-your-own secrets in Key Vault (GitHub token, Anthropic API
   key, etc.) — add those yourself before or after installing this chart (see
   [Secrets](#secrets) below).
-- Building/pushing the two ACP coding-agent worker images, or deploying them
-  — that's the separate "Phase 3" step above; this chart disables both by
-  default (`workers.coderAcpCopilot.enabled` / `workers.coderAcpClaudeCode.enabled`)
-  and ships no Deployment templates for them yet.
-- Registering agent types with the API (`scripts/register-agent.sh`) — a
-  manual Phase 3 step alongside enabling the workers.
+- Building/pushing the two ACP coding-agent worker images, enabling their
+  Deployments, or registering their agent types with the API — that's the
+  separate "Phase 3" step above, disabled by default
+  (`workers.coderAcpCopilot.enabled` / `workers.coderAcpClaudeCode.enabled`)
+  and automated end-to-end by `scripts/bootstrap-workers.sh`.
 - TLS/cert-manager or DNS — bring your own ingress controller and certificates.
 
 ## Prerequisites
@@ -166,36 +164,41 @@ All Azure-dependent Pods run under the shared ServiceAccount named by
 `azure.serviceAccountName`, which must match the Bicep template's federated
 subject.
 
-## Phase 3: ACP coding-agent workers (not automated)
+## Phase 3: ACP coding-agent workers
 
-Once the core app is up, bring the two ACP workers online separately:
+Once the core app is up, bring the two ACP workers online with one command:
 
 ```bash
-az acr build --registry <acrName> --image scope-coder-acp-copilot:latest \
-  -f apps/workers/coder-acp-copilot/Dockerfile \
-  --build-arg COPILOT_CLI_VERSION=$(grep COPILOT_CLI_VERSION apps/workers/coder-acp-copilot/versions.env | cut -d= -f2) .
-
-az acr build --registry <acrName> --image scope-coder-acp-claude-code:latest \
-  -f apps/workers/coder-acp-claude-code/Dockerfile \
-  --build-arg CLAUDE_CODE_ACP_VERSION=$(grep CLAUDE_CODE_ACP_VERSION apps/workers/coder-acp-claude-code/versions.env | cut -d= -f2) \
-  --build-arg CLAUDE_AGENT_SDK_VERSION=$(grep CLAUDE_AGENT_SDK_VERSION apps/workers/coder-acp-claude-code/versions.env | cut -d= -f2) .
+./scripts/bootstrap-workers.sh --acr <acrName>
 ```
 
-Then register the GitHub/Anthropic credentials the workers need. The
-recommended path is the Portal's **Create Token** page (or a direct
-`POST /api/v1/keys` call against the API) — this writes straight to Key
-Vault via the token-manager's workload identity and requires no chart
-changes. Populating `secrets.keyVaultSecretNames.githubToken`/
-`.anthropicApiKey` in Key Vault yourself works too, as a static fallback the
-worker falls back to only if Token Manager has no credential registered.
+This builds/pushes both worker images via `az acr build`, interactively
+prompts for (and registers via the Token Manager API) the GitHub PAT and
+Anthropic API key they need, runs `helm upgrade --reuse-values` to point
+each worker's `values.yaml` image fields at the image it just built and
+flip `workers.<name>.enabled: true`, waits for both Deployments to roll
+out, and registers both agent types with the API
+(`scripts/register-agent.sh`). Run `./scripts/bootstrap-workers.sh --help`
+for all flags (`--skip-build`, `--skip-secrets`, `--skip-copilot`,
+`--skip-claude-code`, `--skip-agent-registration`, `-y`/`--yes` for
+non-interactive use, custom `--namespace`/`--release`/`--chart`/`--image-tag`).
 
-Point each worker's `values.yaml` entry at the image you just built
-(`workers.coderAcpCopilot.image.registry`/`workers.coderAcpClaudeCode.image.registry`
-= your ACR login server, `.tag` = the tag you pushed), set `.enabled: true`,
-and `helm upgrade` — this chart does template a Deployment for each worker
+Credentials can also be registered manually instead of through the script's
+prompts: the Portal's **Create Token** page (or a direct `POST /api/v1/keys`
+call against the API) writes straight to Key Vault via the token-manager's
+workload identity and requires no chart changes. Populating
+`secrets.keyVaultSecretNames.githubToken`/`.anthropicApiKey` in Key Vault
+yourself works too, as a static fallback the worker falls back to only if
+Token Manager has no credential registered.
+
+### What the script does under the hood
+
+Each worker's Deployment is templated by this chart
 (`templates/workers/coder-acp-copilot/`,
 `templates/workers/coder-acp-claude-code/`), reusing the common env
-ConfigMap/Secret and Key Vault CSI mount the rest of the app uses. These are
+ConfigMap/Secret and Key Vault CSI mount the rest of the app uses — the
+script just flips `workers.<name>.enabled: true` and sets
+`workers.<name>.image.registry`/`.tag` via `helm upgrade --set`. These are
 minimal background Storage Queue consumers only: no MCPJungle MCP-gateway
 sidecar (MCP server support), no AI Gateway/DevProxy sidecar (HAR capture),
 and no Kubedock (in-task `docker build`/`docker run` support) — see
@@ -203,12 +206,13 @@ and no Kubedock (in-task `docker build`/`docker run` support) — see
 that last one. Scenarios needing those features aren't supported by this
 chart yet.
 
-Finally, register each agent type with the API
-(`scripts/register-agent.sh <API_URL> <agent.yaml> <agent-version.yaml>`).
 `workers.coderAcpCopilot.agentVersion`/`.coderAcpClaudeCode.agentVersion`
-must match the `agentVersion` in whatever version manifest you register —
-the defaults point at the `-dev` manifests under each worker's directory,
-intended for chart smoke-testing only; use a real version manifest (and
-matching `imageTag`/`queueName`/`gitCommit`/`buildTime`) for anything else.
-This registration step is not run automatically by `helm install`/`upgrade`
-— rerun it manually whenever you roll a new worker image or version.
+must match the `agentVersion` in whatever version manifest gets registered
+— the script's defaults point at the `-dev` manifests under each worker's
+directory, intended for chart smoke-testing only; pass a real version
+manifest (and matching `imageTag`/`queueName`/`gitCommit`/`buildTime`) for
+anything beyond that, and keep `values.yaml`'s `agentVersion` fields in
+sync. Agent registration is not run automatically by `helm install`/
+`upgrade` on its own — rerun `scripts/bootstrap-workers.sh` (or
+`scripts/register-agent.sh` directly) whenever you roll a new worker image
+or version.
