@@ -200,4 +200,70 @@ describe("TokenManagerClient", () => {
       );
     });
   });
+
+  describe("acquireEndpoint", () => {
+    it("returns a typed endpoint from the Token Manager", async () => {
+      const result = {
+        endpoint: "https://foundry.example.com/models",
+        apiKey: "foundry-key",
+        deployment: "gpt-4.1-mini",
+      };
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+        ok: true,
+        json: async () => result,
+      } as Response);
+
+      const client = new TokenManagerClient("http://token-manager:80");
+
+      await expect(client.acquireEndpoint("azure-ai-inference")).resolves.toEqual(result);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "http://token-manager:80/api/v1/endpoints/acquire",
+        expect.objectContaining({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ capability: "azure-ai-inference" }),
+        })
+      );
+    });
+
+    it("throws when no Token Manager URL is configured", async () => {
+      delete process.env.TOKEN_MANAGER_URL;
+      const client = new TokenManagerClient();
+
+      await expect(client.acquireEndpoint("azure-ai-inference")).rejects.toThrow(
+        /No endpoint available.*TOKEN_MANAGER_URL/
+      );
+    });
+
+    it("includes the server response when acquisition fails", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: async () => "No valid endpoints available",
+      } as Response);
+      const client = new TokenManagerClient("http://token-manager:80");
+
+      await expect(client.acquireEndpoint("azure-ai-inference")).rejects.toThrow(
+        /Endpoint acquisition failed.*azure-ai-inference.*404.*No valid endpoints/
+      );
+    });
+
+    it.each([
+      null,
+      {},
+      { endpoint: "", apiKey: "key" },
+      { endpoint: "https://foundry.example.com/models", apiKey: "" },
+      { endpoint: "https://foundry.example.com/models", apiKey: "key", deployment: 42 },
+    ])("rejects a malformed endpoint response %#", async (result) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue({
+        ok: true,
+        json: async () => result,
+      } as Response);
+      const client = new TokenManagerClient("http://token-manager:80");
+
+      await expect(client.acquireEndpoint("azure-ai-inference")).rejects.toThrow(
+        /Invalid endpoint response.*azure-ai-inference/
+      );
+    });
+  });
 });

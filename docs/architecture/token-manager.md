@@ -98,10 +98,17 @@ may contain a `requestProfile` field; the parser accepts and ignores it.
 
 ### Acquisition Fallback Chain
 
-`TokenManagerClient.acquireToken(capability)` resolves a token in three tiers, returning the first one that succeeds:
+`TokenManagerClient.acquireToken(capability)` resolves a token in two tiers, returning the first one that succeeds:
 
 1. **Capability-specific env var** — e.g. `GITHUB_MODELS_TOKEN` for `github-models`, `ANTHROPIC_API_KEY` for `claude-code-cli`. Mapping lives in `KEY_CAPABILITY_ENV_VARS`.
-3. **Token Manager HTTP service** — `GET /tokens/acquire?capability=...` against `TOKEN_MANAGER_URL`. This is the only tier used in production K8s deployments, where no static token env vars are mounted.
+2. **Token Manager HTTP service** — `POST /api/v1/keys/acquire` against `TOKEN_MANAGER_URL`. This is the only tier used in production K8s deployments, where no static token env vars are mounted.
+
+Structured credentials use `TokenManagerClient.acquireEndpoint(capability)`.
+It calls `POST /api/v1/endpoints/acquire` and returns an object containing
+`endpoint`, `apiKey`, and an optional `deployment`. Initially this is a typed
+projection over existing valid `azure-ai-foundry` keys, so registrations and
+legacy `acquireToken()` callers remain compatible while consumers no longer
+parse Key Vault JSON themselves.
 
 The API's discovery endpoint uses this chain via the `github-api-token` helper to acquire a `github-public-api` token per call, so each request can be served by a different token in round-robin.
 
@@ -161,7 +168,17 @@ stateDiagram-v2
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/v1/keys/acquire?capability=X` | Acquire a key for given capability |
+| `POST` | `/api/v1/keys/acquire` | Acquire a key for the capability in the request body |
+
+### Endpoint Acquisition
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/endpoints/acquire` | Acquire a structured endpoint for a supported capability |
+
+The endpoint response contains `{ endpoint, apiKey, deployment? }`. The
+service performs the stored JSON validation and returns HTTP 422 for malformed
+endpoint credentials rather than requiring each consumer to parse the secret.
 
 The acquire endpoint uses round-robin selection among valid, enabled keys that provide the requested capability.
 
@@ -255,10 +272,10 @@ first source that succeeds:
    `AZURE_AI_INFERENCE_ENDPOINT` + `AZURE_AI_INFERENCE_API_KEY`.
    Endpoint URLs missing the `/models` suffix are auto-corrected with a
    warning.
-2. **Azure AI Foundry via the Token Manager** — fetched directly via
-   `POST {TOKEN_MANAGER_URL}/api/v1/keys/acquire {capability:
-   "azure-ai-inference"}` so the helper receives the full JSON blob
-   (endpoint + key + model), not just the API key. The capability
+2. **Azure AI Foundry via the Token Manager** — fetched via
+   `TokenManagerClient.acquireEndpoint("azure-ai-inference")`, which calls
+   `POST {TOKEN_MANAGER_URL}/api/v1/endpoints/acquire` and returns a typed
+   endpoint + key + deployment response. The capability
    `azure-ai-inference` is derived from any registered `azure-ai-foundry`
    key.
 3. **GitHub Models** — `GITHUB_MODELS_API_KEY` env var, then

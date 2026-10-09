@@ -21,6 +21,16 @@ export type KeyCapability =
   "github-models" | "github-public-api" | "copilot-models" | "copilot-sdk" | "copilot-cli" | "claude-code-cli" | "anthropic-api" | "azure-ai-inference";
 
 /**
+ * A structured endpoint provider stored by the Token Manager.
+ */
+export type EndpointType = "azure-ai-foundry";
+
+/**
+ * A capability that can be acquired as a structured endpoint.
+ */
+export type EndpointCapability = "azure-ai-inference";
+
+/**
  * Validation status of a key.
  */
 export type KeyValidationStatus =
@@ -67,6 +77,22 @@ export interface AcquireKeyResponse {
   keyType: KeyType;
   capability: KeyCapability;
   expiresAt?: Date;
+}
+
+/**
+ * Request body for POST /api/v1/endpoints/acquire.
+ */
+export interface AcquireEndpointRequest {
+  capability: EndpointCapability;
+}
+
+/**
+ * Structured response from POST /api/v1/endpoints/acquire.
+ */
+export interface AcquireEndpointResponse {
+  endpoint: string;
+  apiKey: string;
+  deployment?: string;
 }
 
 /**

@@ -12,7 +12,12 @@ import {
   CreateKeyRequest,
   UpdateKeyRequest,
   AcquireKeyRequest,
+  AcquireEndpointRequest,
+  AcquireEndpointResponse,
+  EndpointCapability,
+  EndpointType,
   deriveSecretName,
+  parseAzureAiFoundrySecret,
 } from "shared";
 import { SecretStore } from "./keyvault-store.js";
 import { validateToken } from "./token-validators.js";
@@ -37,6 +42,8 @@ const VALID_CAPABILITIES: KeyCapability[] = [
   "anthropic-api",
   "azure-ai-inference",
 ];
+const VALID_ENDPOINT_CAPABILITIES: EndpointCapability[] = ["azure-ai-inference"];
+const VALID_ENDPOINT_TYPES: EndpointType[] = ["azure-ai-foundry"];
 
 export function createKeyRouter(
   collection: Collection<KeyDocument>,
@@ -354,6 +361,71 @@ export function createKeyRouter(
         expiresAt: selected.expiresAt,
       };
 
+      res.json(response);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ──────────────────────────────────────────────
+  // POST /api/v1/endpoints/acquire — Structured endpoint acquisition (internal)
+  // ──────────────────────────────────────────────
+  router.post("/api/v1/endpoints/acquire", async (req, res, next) => {
+    try {
+      const body = req.body as Partial<AcquireEndpointRequest> | null | undefined;
+
+      if (
+        !body?.capability ||
+        !VALID_ENDPOINT_CAPABILITIES.includes(body.capability)
+      ) {
+        res.status(400).json({
+          error: `Invalid endpoint capability. Must be one of: ${VALID_ENDPOINT_CAPABILITIES.join(", ")}`,
+        });
+        return;
+      }
+
+      const endpoints = await collection
+        .find({
+          capabilities: { $in: [body.capability] },
+          type: { $in: VALID_ENDPOINT_TYPES },
+          enabled: true,
+          lastValidationStatus: "valid",
+          deletedAt: { $exists: false },
+        })
+        .toArray();
+
+      if (endpoints.length === 0) {
+        res.status(404).json({
+          error: `No valid endpoints available for capability '${body.capability}'`,
+        });
+        return;
+      }
+
+      const selected = roundRobin.next(`endpoint:${body.capability}`, endpoints);
+      const value = await store.getSecret(selected.secretName);
+      const parsed = parseAzureAiFoundrySecret(value);
+
+      if (!parsed) {
+        res.status(422).json({
+          error: `Stored endpoint credential '${selected._id}' is malformed`,
+        });
+        return;
+      }
+
+      collection
+        .updateOne(
+          { _id: selected._id },
+          { $inc: { acquireCount: 1 }, $set: { lastAcquiredAt: new Date() } }
+        )
+        .catch((err) =>
+          console.error(`[routes] Failed to update acquireCount for ${selected._id}:`, err)
+        );
+
+      const response: AcquireEndpointResponse = {
+        endpoint: parsed.endpoint,
+        apiKey: parsed.apiKey,
+        ...(parsed.model ? { deployment: parsed.model } : {}),
+      };
       res.json(response);
     } catch (err) {
       next(err);
