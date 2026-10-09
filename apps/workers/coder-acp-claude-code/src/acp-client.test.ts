@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { ACPClientHandler, selectReasoningEffort, formatToolArgs, formatToolContent } from "./acp-client.js";
+import { ACPClientHandler, selectReasoningEffort, formatToolArgs, formatToolContent, buildClaudeCodeNewSessionRequest } from "./acp-client.js";
 
 describe("formatToolArgs", () => {
   it("returns an empty string for non-object input", () => {
@@ -225,6 +225,44 @@ describe("ACPClientHandler tool call logging", () => {
     } as never);
 
     expect(logs).toEqual(["Tool update: toolu_bdrk_789 - failed"]);
+  });
+});
+
+describe("buildClaudeCodeNewSessionRequest", () => {
+  it("adds Claude Code isolation metadata when host isolation is enabled", () => {
+    const request = buildClaudeCodeNewSessionRequest("/workspace", [], true);
+
+    expect(request).toEqual({
+      _meta: {
+        claudeCode: {
+          options: {
+            settingSources: [],
+            extraArgs: { "strict-mcp-config": null },
+          },
+        },
+      },
+      cwd: "/workspace",
+      mcpServers: [],
+    });
+
+    const meta = request._meta as {
+      claudeCode?: {
+        options?: {
+          extraArgs?: Record<string, string | null>;
+        };
+      };
+    } | null | undefined;
+    const extraArgs = meta?.claudeCode?.options?.extraArgs;
+    expect(extraArgs?.["strict-mcp-config"]).toBeNull();
+    expect(extraArgs).not.toHaveProperty("0");
+    expect(Array.isArray(extraArgs)).toBe(false);
+  });
+
+  it("omits Claude Code isolation metadata for Docker workers", () => {
+    expect(buildClaudeCodeNewSessionRequest("/workspace", [], false)).toEqual({
+      cwd: "/workspace",
+      mcpServers: [],
+    });
   });
 });
 

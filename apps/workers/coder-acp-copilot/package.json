@@ -5,7 +5,16 @@
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./acp-client": "./dist/acp-client.js"
+    "./acp-client": {
+      "source": "./src/acp-client.ts",
+      "types": "./dist/acp-client.d.ts",
+      "default": "./dist/acp-client.js"
+    },
+    "./worker": {
+      "source": "./src/worker.ts",
+      "types": "./dist/worker.d.ts",
+      "default": "./dist/worker.js"
+    }
   },
   "scripts": {
     "build": "tsc",

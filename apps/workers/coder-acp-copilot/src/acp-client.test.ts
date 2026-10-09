@@ -4,6 +4,8 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   runACPSession,
+  discoverACPModels,
+  extractModelDiscovery,
   selectModel,
   resolveRequestedModel,
   getCurrentModelId,
@@ -177,6 +179,107 @@ describe("runACPSession", () => {
         })
       ).rejects.toThrow(/ACP session timed out after 200ms/);
     });
+  });
+
+  it.each([
+    { authenticate: undefined, expected: "authenticated" },
+    { authenticate: false, expected: "host-login" },
+  ])("preserves the $expected authentication path over ACP", async ({ authenticate, expected }) => {
+    const fakeAgent = `
+      let authenticated = false;
+      const send = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
+      require("node:readline").createInterface({ input: process.stdin }).on("line", (line) => {
+        const request = JSON.parse(line);
+        let result = {};
+        if (request.method === "initialize") {
+          result = { protocolVersion: request.params.protocolVersion, agentCapabilities: {},
+            authMethods: [{ id: "login", name: "Existing login" }] };
+        } else if (request.method === "authenticate") {
+          authenticated = true;
+        } else if (request.method === "session/new") {
+          result = { sessionId: "test-session" };
+        } else if (request.method === "session/prompt") {
+          send({ jsonrpc: "2.0", method: "session/update", params: {
+            sessionId: "test-session", update: { sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: authenticated ? "authenticated" : "host-login" } }
+          } });
+          result = { stopReason: "end_turn" };
+        }
+        send({ jsonrpc: "2.0", id: request.id, result });
+      });
+    `;
+    const result = await runACPSession("test input", {
+      command: process.execPath,
+      args: ["-e", fakeAgent],
+      cwd,
+      onLog: noop,
+      authenticate,
+      sessionTimeoutMs: 5_000,
+    });
+    expect(result.response).toBe(expected);
+    expect(result.stopReason).toBe("end_turn");
+  });
+});
+
+describe("native ACP model discovery", () => {
+  it("reads advertised models without authentication, permission changes or a prompt", async () => {
+    const fakeAgent = `
+      const send = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
+      require("node:readline").createInterface({ input: process.stdin }).on("line", (line) => {
+        const request = JSON.parse(line);
+        let result;
+        if (request.method === "initialize") {
+          result = { protocolVersion: request.params.protocolVersion, agentCapabilities: {},
+            authMethods: [{ id: "login", name: "Existing login" }] };
+        } else if (request.method === "session/new") {
+          result = { sessionId: "discovery-session", models: {
+            currentModelId: "native-model", availableModels: [{ modelId: "native-model", name: "Native Model" }]
+          } };
+        } else {
+          send({ jsonrpc: "2.0", id: request.id, error: { code: -32601, message: "Discovery must not invoke " + request.method } });
+          return;
+        }
+        send({ jsonrpc: "2.0", id: request.id, result });
+      });
+    `;
+    expect(await discoverACPModels({
+      command: process.execPath,
+      args: ["-e", fakeAgent],
+      cwd: process.cwd(),
+      onLog: () => {},
+      sessionTimeoutMs: 5_000,
+    })).toEqual({
+      supportedModels: ["native-model"],
+      models: [{ id: "native-model", name: "Native Model" }],
+      defaultModel: "native-model",
+    });
+  });
+
+  it("reads native model config options, including grouped options", () => {
+    expect(extractModelDiscovery({
+      sessionId: "session",
+      models: { currentModelId: "unknown", availableModels: [] },
+      configOptions: [{
+        id: "model",
+        category: "model",
+        name: "Model",
+        type: "select",
+        currentValue: "advertised-model",
+        options: [{ group: "provider", name: "Provider", options: [{ value: "advertised-model", name: "Advertised model" }] }],
+      }],
+    })).toEqual({
+      supportedModels: ["advertised-model"],
+      models: [{ id: "advertised-model", name: "Advertised model" }],
+      defaultModel: "advertised-model",
+    });
+  });
+
+  it("does not invent models or a default when metadata is unavailable", () => {
+    expect(() => extractModelDiscovery({ sessionId: "session" })).toThrow("did not advertise any models");
+    expect(extractModelDiscovery({
+      sessionId: "session",
+      models: { currentModelId: "unknown", availableModels: [{ modelId: "actual", name: "Actual" }] },
+    })).not.toHaveProperty("defaultModel");
   });
 });
 

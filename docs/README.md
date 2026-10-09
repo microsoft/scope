@@ -18,6 +18,7 @@ Central documentation hub for the Scope platform — an AI coding agent benchmar
 | [Database Migrations](architecture/db-migrations.md) | Lightweight MongoDB migration framework, writing and running migrations |
 | [Database Collection Scaling](architecture/db-collection-scaling.md) | Per-collection autoscale throughput, ASO reconcile policy, operator runbook |
 | [GitOps & Deployment](architecture/gitops-deploy.md) | FluxCD design, kustomization phases, variable substitution |
+| [Scope Server](architecture/scope-server.md) | Local npx deployment (in development): launcher, host/Docker agent setup, worker identities |
 
 ## Infrastructure
 

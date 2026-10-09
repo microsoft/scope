@@ -46,6 +46,7 @@
     "remark-gfm": "^4.0.0",
     "remark-github-markdown-alerts": "^1.2.2",
     "sonner": "^1.7.0",
+    "shared": "workspace:*",
     "tailwind-merge": "^2.6.0",
     "yaml": "^2.8.3"
   },

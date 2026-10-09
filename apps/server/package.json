@@ -1,0 +1,58 @@
+{
+  "name": "@scope/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Run the Scope platform locally with Docker and installed coding agents",
+  "type": "module",
+  "bin": {
+    "scope-server": "dist/cli.js"
+  },
+  "files": ["dist", "assets", "package.json"],
+  "engines": { "node": ">=22.13.0" },
+  "scripts": {
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "lint": "tsc --noEmit",
+    "prepack": "pnpm build"
+  },
+  "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.52.0",
+    "@agentclientprotocol/sdk": "^0.14.1",
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
+    "@azure/identity": "^4.5.0",
+    "@azure/monitor-opentelemetry": "^1.7.0",
+    "@azure/storage-blob": "^12.26.0",
+    "@azure/storage-queue": "^12.24.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.78.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.220.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.220.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
+    "@opentelemetry/resources": "^2.9.0",
+    "@opentelemetry/sdk-logs": "^0.220.0",
+    "@opentelemetry/sdk-metrics": "^2.9.0",
+    "@opentelemetry/sdk-node": "^0.220.0",
+    "@opentelemetry/sdk-trace-base": "^2.9.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
+    "cockatiel": "^3.2.1",
+    "commander": "^14.0.0",
+    "dockerode": "^4.0.9",
+    "dotenv": "^16.4.5",
+    "gray-matter": "^4.0.3",
+    "ioredis": "^5.4.1",
+    "mongodb": "^6.12.0",
+    "tar": "^7.5.8",
+    "uuid": "^11.1.1",
+    "yaml": "^2.8.3",
+    "yauzl": "^3.4.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "coder-acp-claude-code-host": "workspace:*",
+    "coder-acp-copilot-host": "workspace:*",
+    "docker-orchestrator": "workspace:*",
+    "shared": "workspace:*",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.9.3"
+  }
+}

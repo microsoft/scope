@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect } from "vitest";
-import { buildSubprocessEnv, assertNoPublishChannelCollision } from "./index.js";
+import { buildSubprocessEnv, assertNoPublishChannelCollision } from "./worker.js";
 
 describe("assertNoPublishChannelCollision", () => {
   it("accepts keys published to exactly one channel", () => {

@@ -16,12 +16,15 @@ const CANCEL_SENTINEL = "/tmp/.scope-cancel-exit";
  * In dev mode, tsx watch is PID 1 and restarts the child on exit. Writing
  * a sentinel file tells the dev-entrypoint to kill tsx watch and exit,
  * bringing down the entire container.
+ * Host workers are supervised by Scope Server and do not use this sentinel.
  */
 export function cancelExit(): never {
-  try {
-    writeFileSync(CANCEL_SENTINEL, String(Date.now()));
-  } catch {
-    // Best-effort — prod containers may not have /tmp writable
+  if (!process.env.SCOPE_HOST_WORKSPACE_ROOT) {
+    try {
+      writeFileSync(CANCEL_SENTINEL, String(Date.now()));
+    } catch {
+      // Best-effort — prod containers may not have /tmp writable
+    }
   }
   process.exit(1);
 }

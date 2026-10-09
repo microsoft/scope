@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trash2, Bot } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
+import { ServerAgentSetup } from "@/components/ServerAgentSetup";
 import {
   ListLayout,
   FilterRail,
@@ -214,6 +215,7 @@ export function AgentList() {
     <ListLayout
       title="Agents"
       description="Coding agents and their supported models"
+      actions={<ServerAgentSetup />}
       railStorageKey="agents"
       filterRail={
         <FilterRail

@@ -10,6 +10,10 @@
  * falls back to a default, so the CLI must resolve a concrete project id before
  * issuing those requests.
  *
+ * Named actions instead use their pinned environment's SCOPE_PROJECT and
+ * persist changes to that environment's .env; they never read the legacy
+ * config or ambient SCOPE_PROJECT. Explicit --project overrides either mode.
+ *
  * Resolution precedence (highest first), see {@link resolveProjectId}:
  *  1. an explicit `--project <id>` flag,
  *  2. the `SCOPE_PROJECT` environment variable,
@@ -23,6 +27,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { getCliName } from "./shared.js";
+import { currentEnvironment } from "./connection.js";
+import { EnvironmentStore } from "./environments.js";
 
 /** Directory holding all CLI state (shared with the update checker). */
 const CONFIG_DIR = join(homedir(), ".config", "scope");
@@ -58,6 +64,8 @@ export function writeConfig(config: ScopeConfig): void {
 
 /** The persisted selected project id, or `undefined` if none has been chosen. */
 export function getSelectedProjectId(): string | undefined {
+  const environment = currentEnvironment();
+  if (environment) return environment.project;
   const id = readConfig().selectedProjectId;
   return typeof id === "string" && id.trim() ? id.trim() : undefined;
 }
@@ -67,6 +75,11 @@ export function getSelectedProjectId(): string | undefined {
  * the selection so the next resolution falls through to flag/env or `undefined`.
  */
 export function setSelectedProjectId(id: string | undefined): void {
+  const environment = currentEnvironment();
+  if (environment) {
+    new EnvironmentStore().set(environment.name, "SCOPE_PROJECT", id);
+    return;
+  }
   const config = readConfig();
   const trimmed = id?.trim();
   if (trimmed) config.selectedProjectId = trimmed;
@@ -82,6 +95,8 @@ export function setSelectedProjectId(id: string | undefined): void {
 export function resolveProjectId(flag?: string): string | undefined {
   const fromFlag = flag?.trim();
   if (fromFlag) return fromFlag;
+  const environment = currentEnvironment();
+  if (environment) return environment.project;
   const fromEnv = process.env.SCOPE_PROJECT?.trim();
   if (fromEnv) return fromEnv;
   return getSelectedProjectId();
@@ -95,6 +110,12 @@ export function requireProjectId(flag?: string): string {
   const id = resolveProjectId(flag);
   if (!id) {
     const cli = getCliName();
+    const environment = currentEnvironment();
+    if (environment) {
+      throw new Error(
+        `No project selected in environment "${environment.name}". Pass --project <id> or run \`${cli} --env ${environment.name} project use <id>\`.`,
+      );
+    }
     throw new Error(
       `No project selected. Pass --project <id>, set SCOPE_PROJECT, or run \`${cli} project use <id>\`.`,
     );

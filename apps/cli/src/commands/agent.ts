@@ -8,6 +8,7 @@ import { formatData, isMachineReadable } from "../utils/formatters.js";
 import type { OutputFormat, DisplayField } from "../utils/types.js";
 import { withOutputOption, getDefaultApiUrl } from "../utils/shared.js";
 import { apiFetch } from "../utils/api-client.js";
+import { registerAgentSetupCommands } from "./agent-setup.js";
 
 export function registerAgentCommands(program: Command): void {
 // ─── Agent management ────────────────────────────────────────────────────────
@@ -20,6 +21,7 @@ const agent = program
   });
 
 configureHelp(agent);
+registerAgentSetupCommands(agent);
 
 withOutputOption(
 agent

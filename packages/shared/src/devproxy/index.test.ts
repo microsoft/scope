@@ -9,7 +9,7 @@ describe("createProxyClient (devproxy backend)", () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    delete process.env.PROXY_BACKEND;
+    process.env.PROXY_BACKEND = "devproxy";
     delete process.env.DEV_PROXY_URL;
     delete process.env.DEV_PROXY_API_URL;
   });
@@ -25,6 +25,13 @@ describe("createProxyClient (devproxy backend)", () => {
     expect(client.backend).toBe("devproxy");
     expect(client.apiUrl).toBe("http://devproxy-claude-code:18897");
     expect(client.proxyUrl).toBe("http://devproxy-claude-code:18000");
+  });
+
+  it("preserves the explicit legacy backend for remaining DevProxy workers", () => {
+    process.env.DEV_PROXY_API_URL = "http://devproxy-claude-code:18897";
+    process.env.DEV_PROXY_URL = "http://devproxy-claude-code:18000";
+    const client = createProxyClient();
+    expect(client.backend).toBe("devproxy");
   });
 
   it("never returns the management API URL as the proxy URL", () => {
@@ -81,6 +88,12 @@ describe("createProxyClient (gateway backend)", () => {
 
   it("defaults the api URL to localhost:18000 when DEV_PROXY_API_URL is unset", () => {
     process.env.PROXY_BACKEND = "gateway";
+    const client = createProxyClient();
+    expect(client.backend).toBe("gateway");
+    expect(client.apiUrl).toBe("http://localhost:18000");
+  });
+
+  it("defaults to the gateway backend when PROXY_BACKEND is unset", () => {
     const client = createProxyClient();
     expect(client.backend).toBe("gateway");
     expect(client.apiUrl).toBe("http://localhost:18000");

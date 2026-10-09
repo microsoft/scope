@@ -8,11 +8,17 @@ The sophisticated criteria system can be configured via environment variables in
 **Default:** None
 **Type:** URL string
 
-Base URL of the Scope API used by CLI API operations. Set this explicitly or pass
-`-u/--url` to a command (`--api-url` for MCP server create/update). Both bundled
-and source-mode CLIs fail before making an API request when no URL is configured.
-Help, version, and CLI updates do not require a Scope API URL. The CLI no longer
-derives a localhost URL from `SCOPE_API_PORT` or uses `SCOPE_DEFAULT_API_URL`.
+Base URL of the Scope API used by CLI API operations in legacy connection mode.
+Set this explicitly or pass `-u/--url` to a command (`--api-url` for MCP server
+create/update). Both bundled and source-mode CLIs fail before making an API
+request when no URL is configured. Help, version, and CLI updates do not require
+a Scope API URL. The CLI no longer derives a localhost URL from `SCOPE_API_PORT`
+or uses `SCOPE_DEFAULT_API_URL`.
+
+A root `--env <name>` or saved active environment uses its own `SCOPE_API_URL`,
+token, and project instead. An explicitly supplied API URL option opts back into
+legacy resolution for that operation. See
+[named connections](docs/architecture/cli-distribution.md#named-connections).
 
 ## Docker Development
 

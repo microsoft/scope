@@ -55,6 +55,24 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           },
         },
       },
+      "setup": {
+        "options": [
+          "--consent",
+          "--disable",
+          "--enable",
+          "--executable",
+          "--output",
+          "--timeout",
+          "--url",
+          "--wait",
+        ],
+      },
+      "status": {
+        "options": [
+          "--output",
+          "--url",
+        ],
+      },
       "update": {
         "options": [
           "--description",
@@ -94,6 +112,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       },
       "delete": {
         "options": [
+          "--project",
           "--url",
         ],
       },
@@ -107,6 +126,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       "resolve": {
         "options": [
           "--output",
+          "--project",
           "--ref",
           "--url",
         ],
@@ -115,12 +135,14 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
         "options": [
           "--limit",
           "--output",
+          "--project",
           "--url",
         ],
       },
       "upload": {
         "options": [
           "--output",
+          "--project",
           "--url",
         ],
       },
@@ -190,6 +212,35 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--project",
           "--prompt",
           "--url",
+        ],
+      },
+    },
+  },
+  "env": {
+    "subcommands": {
+      "add": {
+        "options": [
+          "--force",
+          "--token",
+          "--url",
+        ],
+      },
+      "list": {
+        "options": [
+          "--output",
+        ],
+      },
+      "remove": {},
+      "set": {},
+      "show": {
+        "options": [
+          "--output",
+        ],
+      },
+      "unset": {},
+      "use": {
+        "options": [
+          "--clear",
         ],
       },
     },
@@ -860,6 +911,74 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
         "options": [
           "--dry-run",
           "--project",
+          "--url",
+        ],
+      },
+    },
+  },
+  "secret": {
+    "subcommands": {
+      "create": {
+        "options": [
+          "--api-key",
+          "--api-key-stdin",
+          "--comment",
+          "--endpoint",
+          "--expires-at",
+          "--model",
+          "--no-enabled",
+          "--output",
+          "--type",
+          "--url",
+          "--value",
+          "--value-stdin",
+        ],
+      },
+      "delete": {
+        "options": [
+          "--url",
+        ],
+      },
+      "get": {
+        "options": [
+          "--output",
+          "--url",
+        ],
+      },
+      "list": {
+        "options": [
+          "--capability",
+          "--output",
+          "--url",
+        ],
+      },
+      "preview": {
+        "options": [
+          "--api-key",
+          "--api-key-stdin",
+          "--endpoint",
+          "--model",
+          "--output",
+          "--type",
+          "--url",
+          "--value",
+          "--value-stdin",
+        ],
+      },
+      "update": {
+        "options": [
+          "--clear-expiry",
+          "--comment",
+          "--disable",
+          "--enable",
+          "--expires-at",
+          "--output",
+          "--url",
+        ],
+      },
+      "validate": {
+        "options": [
+          "--output",
           "--url",
         ],
       },

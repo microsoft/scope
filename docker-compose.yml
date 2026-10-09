@@ -677,6 +677,9 @@ services:
       QUEUE_NAME: queue-coder-acp-claude-code
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # DevProxy integration (enabled by default when using claude-code profile)
+      # Pin the legacy backend explicitly while ACP Claude Code still owns its
+      # DevProxy sidecar; the shared default is now gateway for new/local users.
+      PROXY_BACKEND: devproxy
       DEV_PROXY_ENABLED: "${DEV_PROXY_ENABLED:-true}"
       DEV_PROXY_API_URL: http://devproxy-claude-code:18897
       DEV_PROXY_URL: http://devproxy-claude-code:18000

@@ -25,7 +25,10 @@ const DEFAULT_API_URL = "http://localhost:18000";
  * Clients handle proxy lifecycle; the adapter composes HAR collection.
  */
 export function createProxyClient(): ProxyClient {
-  const backend = process.env.PROXY_BACKEND || "devproxy";
+  // Gateway is the current backend for new/local deployments. The remaining
+  // DevProxy users must pin PROXY_BACKEND=devproxy explicitly so forgetting the
+  // setting cannot silently opt a worker into the legacy sidecar.
+  const backend = process.env.PROXY_BACKEND || "gateway";
   const apiUrl = process.env.DEV_PROXY_API_URL || DEFAULT_API_URL;
 
   if (backend === "gateway") {

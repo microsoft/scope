@@ -10,11 +10,17 @@ RUN corepack enable && (corepack prepare pnpm@10.29.1 --activate || npm install 
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/portal/package.json apps/portal/
-RUN pnpm install --frozen-lockfile --filter portal --prod=false
+COPY packages/shared/package.json packages/shared/
+RUN pnpm install --frozen-lockfile --filter portal... --prod=false
+
+FROM deps AS shared
+COPY tsconfig.base.json ./
+COPY packages/shared/ packages/shared/
+RUN pnpm --filter shared build
 
 # --- Dev stage: Vite dev server with HMR ---
-# Built from `deps` (not `builder`) so the dev image skips the production build.
-FROM deps AS dev
+# Build the shared dependency but skip the Portal production build.
+FROM shared AS dev
 ENV NODE_ENV=development
 COPY apps/portal/ apps/portal/
 WORKDIR /app/apps/portal
@@ -22,7 +28,7 @@ EXPOSE 80
 CMD ["npx", "vite", "--host", "0.0.0.0", "--port", "80"]
 
 # Stage 1: Build
-FROM deps AS builder
+FROM shared AS builder
 # Version information (passed as build args, used by Vite at build time)
 ARG GIT_COMMIT=unknown
 ARG BUILD_TIME=unknown

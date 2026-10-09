@@ -9,8 +9,9 @@ import { configureHelp } from "../utils/helpFormatter.js";
 import { errorText, successText, label, value, warnBanner } from "../utils/style.js";
 import { formatData, isMachineReadable } from "../utils/formatters.js";
 import type { DisplayField, OutputFormat } from "../utils/types.js";
-import { getDefaultApiUrl, normalizeUrl, withOutputOption, withProjectOption } from "../utils/shared.js";
+import { getDefaultApiUrl, withOutputOption, withProjectOption } from "../utils/shared.js";
 import { requireProjectId } from "../utils/config.js";
+import { apiFetch, type ApiFetchInit } from "../utils/api-client.js";
 
 type JsonDate = string | Date;
 type CodebaseApiDocument = Omit<CodebaseDocument, "createdAt" | "updatedAt" | "deletedAt"> & {
@@ -56,16 +57,16 @@ async function readError(response: Response): Promise<string> {
   return error.error ?? JSON.stringify(error);
 }
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+async function fetchJson<T>(baseUrl: string, path: string, init?: ApiFetchInit): Promise<T> {
+  const response = await apiFetch(baseUrl, path, init);
   if (!response.ok) {
     throw new Error(await readError(response));
   }
   return await response.json() as T;
 }
 
-async function resolveCodebase(baseUrl: string, idOrSlug: string): Promise<CodebaseApiDocument> {
-  const directResponse = await fetch(`${baseUrl}/api/v1/codebases/${encodeURIComponent(idOrSlug)}`);
+async function resolveCodebase(baseUrl: string, idOrSlug: string, projectId: string): Promise<CodebaseApiDocument> {
+  const directResponse = await apiFetch(baseUrl, `/codebases/${encodeURIComponent(idOrSlug)}`, { projectId });
   if (directResponse.ok) {
     return await directResponse.json() as CodebaseApiDocument;
   }
@@ -73,7 +74,7 @@ async function resolveCodebase(baseUrl: string, idOrSlug: string): Promise<Codeb
     throw new Error(await readError(directResponse));
   }
 
-  const codebases = await fetchJson<CodebaseApiDocument[]>(`${baseUrl}/api/v1/codebases`);
+  const codebases = await fetchJson<CodebaseApiDocument[]>(baseUrl, "/codebases", { projectId });
   const found = codebases.find((codebase) => codebase.slug === idOrSlug || codebase._id === idOrSlug || codebase.id === idOrSlug);
   if (!found) {
     throw new Error(`Codebase not found: ${idOrSlug}`);
@@ -122,7 +123,7 @@ export function registerCodebaseCommands(program: Command): void {
     const format = (options.output ?? "table") as OutputFormat;
     const projectId = requireProjectId(options.project);
     try {
-      const codebases = await fetchJson<CodebaseApiDocument[]>(`${normalizeUrl(options.url)}/api/v1/codebases?projectId=${encodeURIComponent(projectId)}`);
+      const codebases = await fetchJson<CodebaseApiDocument[]>(options.url, "/codebases", { projectId });
       if (codebases.length === 0) {
         if (!isMachineReadable(format)) console.log(warnBanner("No codebases found."));
         return;
@@ -166,7 +167,7 @@ export function registerCodebaseCommands(program: Command): void {
         process.exit(1);
       }
 
-      const baseUrl = normalizeUrl(options.url);
+      const baseUrl = options.url;
       let created: CodebaseApiDocument;
 
       if (sourceType === "archive") {
@@ -182,7 +183,7 @@ export function registerCodebaseCommands(program: Command): void {
         if (options.description) formData.append("description", options.description);
         const blob = new Blob([archiveBuffer], { type: "application/octet-stream" });
         formData.append("archive", blob, basename(resolvedPath));
-        const response = await fetch(`${baseUrl}/api/v1/codebases?projectId=${encodeURIComponent(projectId)}`, { method: "POST", body: formData });
+        const response = await apiFetch(baseUrl, "/codebases", { method: "POST", body: formData, projectId });
         if (!response.ok) {
           throw new Error(await readError(response));
         }
@@ -195,10 +196,11 @@ export function registerCodebaseCommands(program: Command): void {
           ...(options.description ? { description: options.description } : {}),
           ...(options.defaultBranch ? { defaultBranch: options.defaultBranch } : {}),
         };
-        created = await fetchJson<CodebaseApiDocument>(`${baseUrl}/api/v1/codebases?projectId=${encodeURIComponent(projectId)}`, {
+        created = await fetchJson<CodebaseApiDocument>(baseUrl, "/codebases", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
+          projectId,
         });
       }
 
@@ -217,20 +219,21 @@ export function registerCodebaseCommands(program: Command): void {
     }
   });
 
-  withOutputOption(
+  withProjectOption(withOutputOption(
     codebase
       .command("revisions")
       .description("List revisions for a codebase")
       .argument("<codebaseIdOrSlug>", "Codebase ID or slug")
       .option("--limit <number>", "Maximum results", Number.parseInt)
       .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
-  ).action(async (codebaseIdOrSlug: string, options) => {
+  )).action(async (codebaseIdOrSlug: string, options) => {
     const format = (options.output ?? "table") as OutputFormat;
-    const baseUrl = normalizeUrl(options.url);
+    const baseUrl = options.url;
+    const projectId = requireProjectId(options.project);
     try {
-      const resolved = await resolveCodebase(baseUrl, codebaseIdOrSlug);
+      const resolved = await resolveCodebase(baseUrl, codebaseIdOrSlug, projectId);
       const params = options.limit ? `?limit=${encodeURIComponent(String(options.limit))}` : "";
-      const revisions = await fetchJson<CodebaseRevisionApiDocument[]>(`${baseUrl}/api/v1/codebases/${encodeURIComponent(codebaseId(resolved))}/revisions${params}`);
+      const revisions = await fetchJson<CodebaseRevisionApiDocument[]>(baseUrl, `/codebases/${encodeURIComponent(codebaseId(resolved))}/revisions${params}`, { projectId });
       if (revisions.length === 0) {
         if (!isMachineReadable(format)) console.log(warnBanner("No revisions found."));
         return;
@@ -245,23 +248,25 @@ export function registerCodebaseCommands(program: Command): void {
     }
   });
 
-  withOutputOption(
+  withProjectOption(withOutputOption(
     codebase
       .command("resolve")
       .description("Resolve a git codebase revision")
       .argument("<codebaseIdOrSlug>", "Codebase ID or slug")
       .option("--ref <branch|tag|sha|latest>", "Git ref to resolve")
       .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
-  ).action(async (codebaseIdOrSlug: string, options) => {
+  )).action(async (codebaseIdOrSlug: string, options) => {
     const format = (options.output ?? "table") as OutputFormat;
-    const baseUrl = normalizeUrl(options.url);
+    const baseUrl = options.url;
+    const projectId = requireProjectId(options.project);
     try {
-      const resolved = await resolveCodebase(baseUrl, codebaseIdOrSlug);
+      const resolved = await resolveCodebase(baseUrl, codebaseIdOrSlug, projectId);
       const body = options.ref ? { requestedRef: options.ref as string } : {};
-      const revision = await fetchJson<CodebaseRevisionApiDocument>(`${baseUrl}/api/v1/codebases/${encodeURIComponent(codebaseId(resolved))}/revisions`, {
+      const revision = await fetchJson<CodebaseRevisionApiDocument>(baseUrl, `/codebases/${encodeURIComponent(codebaseId(resolved))}/revisions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        projectId,
       });
 
       if (isMachineReadable(format)) {
@@ -282,31 +287,33 @@ export function registerCodebaseCommands(program: Command): void {
     }
   });
 
-  withOutputOption(
+  withProjectOption(withOutputOption(
     codebase
       .command("upload")
       .description("Upload an archive as a new codebase revision")
       .argument("<codebaseIdOrSlug>", "Codebase ID or slug")
       .argument("<archivePath>", "Path to archive file")
       .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
-  ).action(async (codebaseIdOrSlug: string, archivePath: string, options) => {
+  )).action(async (codebaseIdOrSlug: string, archivePath: string, options) => {
     const format = (options.output ?? "table") as OutputFormat;
-    const baseUrl = normalizeUrl(options.url);
+    const baseUrl = options.url;
+    const projectId = requireProjectId(options.project);
     try {
       const resolvedPath = resolve(archivePath);
       if (!existsSync(resolvedPath)) {
         console.error(errorText(`Path not found: ${resolvedPath}`));
         process.exit(1);
       }
-      const resolved = await resolveCodebase(baseUrl, codebaseIdOrSlug);
+      const resolved = await resolveCodebase(baseUrl, codebaseIdOrSlug, projectId);
       const archiveBuffer = readFileSync(resolvedPath);
       const formData = new FormData();
       const blob = new Blob([archiveBuffer], { type: "application/octet-stream" });
       formData.append("archive", blob, basename(resolvedPath));
 
-      const response = await fetch(`${baseUrl}/api/v1/codebases/${encodeURIComponent(codebaseId(resolved))}/upload`, {
+      const response = await apiFetch(baseUrl, `/codebases/${encodeURIComponent(codebaseId(resolved))}/upload`, {
         method: "POST",
         body: formData,
+        projectId,
       });
       if (!response.ok) {
         throw new Error(await readError(response));
@@ -331,17 +338,20 @@ export function registerCodebaseCommands(program: Command): void {
     }
   });
 
-  codebase
+  withProjectOption(codebase
     .command("delete")
     .description("Delete a codebase (soft-delete)")
     .argument("<codebaseIdOrSlug>", "Codebase ID or slug")
     .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
+  )
     .action(async (codebaseIdOrSlug: string, options) => {
-      const baseUrl = normalizeUrl(options.url);
+      const baseUrl = options.url;
+      const projectId = requireProjectId(options.project);
       try {
-        const resolved = await resolveCodebase(baseUrl, codebaseIdOrSlug);
-        const response = await fetch(`${baseUrl}/api/v1/codebases/${encodeURIComponent(codebaseId(resolved))}`, {
+        const resolved = await resolveCodebase(baseUrl, codebaseIdOrSlug, projectId);
+        const response = await apiFetch(baseUrl, `/codebases/${encodeURIComponent(codebaseId(resolved))}`, {
           method: "DELETE",
+          projectId,
         });
         if (!response.ok) {
           throw new Error(await readError(response));

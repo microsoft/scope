@@ -1,0 +1,6 @@
+dist/
+assets/source/
+assets/manifest.json
+assets/coder-acp-*.json
+.test-state/
+.artifacts/

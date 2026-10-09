@@ -136,6 +136,8 @@ export interface ACPClientOptions {
   reasoningEffort?: string;
   /** Use shell to spawn the process (required on Windows for .cmd shim resolution). */
   shell?: boolean;
+  /** Host workers keep the CLI's existing login instead of invoking an auth flow. */
+  authenticate?: boolean;
 }
 
 export interface ACPSessionResult {
@@ -145,6 +147,45 @@ export interface ACPSessionResult {
   initialModel?: string;
   /** Model successfully activated through ACP, or undefined if selection was not requested or did not succeed. */
   confirmedModel?: string;
+}
+
+export interface ACPModelDiscovery {
+  supportedModels: string[];
+  models: Array<{ id: string; name: string }>;
+  defaultModel?: string;
+}
+
+export function extractModelDiscovery(session: acp.NewSessionResponse): ACPModelDiscovery {
+  const modelConfig = session.configOptions?.find((option) => option.category === "model");
+  const hasSessionModels = Boolean(session.models?.availableModels.length);
+  const models = hasSessionModels
+    ? session.models!.availableModels.map((model) => ({ id: model.modelId, name: model.name }))
+    : modelConfig?.options.flatMap((option) =>
+      "group" in option
+        ? option.options.map((value) => ({ id: value.value, name: value.name }))
+        : [{ id: option.value, name: option.name }],
+    )
+    ?? [];
+  const supportedModels = [...new Set(models.map((model) => model.id))];
+  if (supportedModels.length === 0) {
+    throw new Error("The installed agent did not advertise any models through ACP. Check its login and compatibility; Scope will not invent a model catalog.");
+  }
+  const currentModel = hasSessionModels ? session.models?.currentModelId : modelConfig?.currentValue;
+  return {
+    supportedModels,
+    models,
+    ...(currentModel && supportedModels.includes(currentModel) ? { defaultModel: currentModel } : {}),
+  };
+}
+
+/** Initialize a native ACP session and read its model metadata without sending a prompt. */
+export async function discoverACPModels(options: ACPClientOptions): Promise<ACPModelDiscovery> {
+  const session = await runSession(undefined, {
+    ...options,
+    authenticate: false,
+    sessionTimeoutMs: options.sessionTimeoutMs ?? 30_000,
+  });
+  return extractModelDiscovery(session);
 }
 
 /**
@@ -531,6 +572,15 @@ export async function runACPSession(
   prompt: string,
   options: ACPClientOptions
 ): Promise<ACPSessionResult> {
+  return runSession(prompt, options);
+}
+
+function runSession(prompt: string, options: ACPClientOptions): Promise<ACPSessionResult>;
+function runSession(prompt: undefined, options: ACPClientOptions): Promise<acp.NewSessionResponse>;
+async function runSession(
+  prompt: string | undefined,
+  options: ACPClientOptions,
+): Promise<ACPSessionResult | acp.NewSessionResponse> {
   const { command, args = [], env = {}, cwd, onLog = console.log, mcpServers = [], model, reasoningEffort, shell = false } = options;
   const sessionTimeoutMs = options.sessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
 
@@ -599,9 +649,10 @@ export async function runACPSession(
     acpStream
   );
 
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     // Build the actual ACP session work as a promise
-    const sessionWork = async (): Promise<ACPSessionResult> => {
+    const sessionWork = async (): Promise<ACPSessionResult | acp.NewSessionResponse> => {
     // Initialize the connection
     const initResult = await connection.initialize({
       protocolVersion: acp.PROTOCOL_VERSION,
@@ -616,7 +667,7 @@ export async function runACPSession(
     onLog(`Connected to agent (protocol v${initResult.protocolVersion})`);
 
     // Authenticate if needed
-    if (initResult.authMethods && initResult.authMethods.length > 0) {
+    if (options.authenticate !== false && initResult.authMethods && initResult.authMethods.length > 0) {
       const authMethod = initResult.authMethods[0];
       onLog(`Authenticating with method: ${authMethod.name}`);
       await connection.authenticate({ methodId: authMethod.id });
@@ -636,6 +687,8 @@ export async function runACPSession(
         headers: s.headers?.map((h) => ({ name: h.name, value: h.value })) ?? [],
       })),
     });
+
+    if (prompt === undefined) return sessionResult;
 
     onLog(`Created session: ${sessionResult.sessionId}`);
     if (sessionResult._meta) {
@@ -710,9 +763,8 @@ export async function runACPSession(
     };
 
     // Race the session work against subprocess exit and optional timeout
-    const racers: Promise<ACPSessionResult>[] = [sessionWork(), exitPromise];
+    const racers: Array<Promise<ACPSessionResult | acp.NewSessionResponse>> = [sessionWork(), exitPromise];
 
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     if (sessionTimeoutMs > 0) {
       racers.push(new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
@@ -733,6 +785,7 @@ export async function runACPSession(
     throw new Error(JSON.stringify(error, null, 2));
   } finally {
     sessionCompleted = true;
+    if (timeoutId) clearTimeout(timeoutId);
     // Cleanup
     stdinStream.end();
     agentProcess.kill();

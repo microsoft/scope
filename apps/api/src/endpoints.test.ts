@@ -1576,6 +1576,66 @@ describe("API Endpoints", () => {
   // Submit with profile — server-side field resolution
   // ===================================================================
 
+  describe("host worker admission", () => {
+    it.each(["coder-acp-copilot-host", "coder-acp-claude-code-host"])(
+      "rejects %s until it is registered",
+      async worker => {
+        vi.mocked(mocks.agentCollection.findOne).mockResolvedValue(null);
+        const response = await request(app)
+          .post(`/api/v1/requests?worker=${worker}&projectId=${TEST_PROJECT_ID}`)
+          .send({ scenario: { task: "Write hello.js", criteria: [] }, maxIterations: 1 });
+        expect(response.status).toBe(404);
+        expect(response.body.errorCode).toBe("agent_not_found");
+        expect(mocks.collection.insertOne).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["coder-acp-copilot-host", "coder-acp-claude-code-host"])(
+      "rejects a registered %s until it is available",
+      async worker => {
+        vi.mocked(mocks.agentCollection.findOne).mockResolvedValue({
+          _id: worker,
+          name: worker,
+          supportedModels: ["host-model"],
+          defaultModel: "host-model",
+          versions: [{ agentVersion: "host-v1", status: "active", queueName: `queue-${worker}` }],
+        } as never);
+        const response = await request(app)
+          .post(`/api/v1/requests?worker=${worker}&projectId=${TEST_PROJECT_ID}`)
+          .send({ scenario: { task: "Write hello.js", criteria: [] }, maxIterations: 1 });
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain("not available");
+        expect(mocks.collection.insertOne).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["coder-acp-copilot-host", "coder-acp-claude-code-host"])(
+      "accepts a configured %s using the existing request flow",
+      async worker => {
+        vi.mocked(mocks.agentCollection.findOne).mockResolvedValue({
+          _id: worker,
+          name: worker,
+          available: true,
+          supportedModels: ["host-model"],
+          defaultModel: "host-model",
+          createdAt: new Date(),
+          versions: [{
+            agentVersion: "host-v1", workerVersion: "test", components: {},
+            gitCommit: "test", buildTime: "test", imageTag: "host",
+            queueName: `queue-${worker}`, status: "active", createdAt: new Date(),
+          }],
+        });
+        const response = await request(app)
+          .post(`/api/v1/requests?worker=${worker}&projectId=${TEST_PROJECT_ID}`)
+          .send({ scenario: { task: "Write hello.js", criteria: [] }, maxIterations: 1 });
+        expect(response.status).toBe(201);
+        expect(mocks.collection.insertOne).toHaveBeenCalledWith(
+          expect.objectContaining({ workerType: worker, model: "host-model", agentVersion: "host-v1" }),
+        );
+      },
+    );
+  });
+
   describe("POST /api/v1/requests?worker=... (profile)", () => {
     const resourceRevision = {
       _id: "rev-github-simulator-1",
@@ -2872,6 +2932,11 @@ describe("API Endpoints", () => {
 
   describe("POST /api/v1/requests/:id/resume", () => {
     it("resumes a paused request", async () => {
+      (mocks.collection.findOne as any).mockResolvedValue({
+        _id: "r1",
+        workerType: "coder-acp-copilot",
+        run: { _id: "run1", status: "paused" },
+      });
       (mocks.collection.updateOne as any).mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
 
       const res = await request(testServer()).post("/api/v1/requests/r1/resume");
@@ -2924,6 +2989,12 @@ describe("API Endpoints", () => {
 
   describe("POST /api/v1/requests/bulk-resume", () => {
     it("resumes multiple paused requests", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: async () => [
+          { _id: "r1", workerType: "coder-acp-copilot", run: { status: "paused" } },
+          { _id: "r2", workerType: "coder-acp-copilot", run: { status: "paused" } },
+        ],
+      });
       (mocks.collection.updateMany as any).mockResolvedValue({ matchedCount: 2, modifiedCount: 2 });
 
       const res = await request(testServer())

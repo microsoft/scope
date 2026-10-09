@@ -236,6 +236,18 @@ const validatePersistedRequestTarget = (request: RequestDocument) =>
 /** Maximum number of profile variations (including the base profile) allowed in one submit. */
 const MAX_PROFILE_VARIATIONS = 25;
 
+function workerAvailabilityError(worker: string, available: boolean | undefined): string | undefined {
+  if (available === false || (worker.endsWith("-host") && available !== true)) {
+    return `Worker "${worker}" is not available for new submissions`;
+  }
+}
+
+async function hostWorkerAvailabilityError(worker: string): Promise<string | undefined> {
+  if (!worker.endsWith("-host")) return;
+  const agent = await ctx.agentCollection.findOne({ _id: worker, deletedAt: { $exists: false } });
+  return workerAvailabilityError(worker, agent?.available);
+}
+
 /**
  * Server-side validation of a request's gate configuration (docs/design/gates.md
  * §4.3). Returns an error string when invalid, or null when valid.
@@ -3376,6 +3388,25 @@ apiRoute(ctx.app, ctx.registry, {
   response: z.object({ id: z.string(), status: z.string() }),
   handler: async (req, res) => {
     const { id } = req.params;
+    const request = await ctx.requestCollection.findOne({
+      _id: id,
+      deletedAt: { $exists: false },
+    });
+    if (!request) {
+      res.status(404).json({ error: `Request not found: ${id}` });
+      return;
+    }
+    if (request.run?.status !== "paused") {
+      res.status(409).json({
+        error: `Cannot resume request in status "${request.run?.status}". Only paused requests can be resumed.`,
+      });
+      return;
+    }
+    const availabilityError = await hostWorkerAvailabilityError(request.workerType);
+    if (availabilityError) {
+      res.status(400).json({ error: availabilityError });
+      return;
+    }
     const result = await ctx.requestCollection.updateOne(
       {
         _id: id,
@@ -3446,9 +3477,24 @@ apiRoute(ctx.app, ctx.registry, {
   response: z.object({ updated: z.number(), skipped: z.number() }),
   handler: async (req, res) => {
     const { ids } = req.body;
+    const requests = await ctx.requestCollection.find({
+      _id: { $in: ids },
+      "run.status": "paused",
+      deletedAt: { $exists: false },
+    }).toArray();
+    const admittedIds: string[] = [];
+    for (const request of requests) {
+      if (!await hostWorkerAvailabilityError(request.workerType)) {
+        admittedIds.push(request._id);
+      }
+    }
+    if (admittedIds.length === 0) {
+      res.json({ updated: 0, skipped: ids.length });
+      return;
+    }
     const result = await ctx.requestCollection.updateMany(
       {
-        _id: { $in: ids },
+        _id: { $in: admittedIds },
         "run.status": "paused",
         deletedAt: { $exists: false },
       },
