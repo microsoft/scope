@@ -20,7 +20,9 @@ below and is also usable standalone via the Azure CLI.
   and the native **Azure Key Vault Secrets Provider** add-on enabled (this is how
   secrets get into the cluster — via a Helm install, not GitOps/Flux).
 - **Key Vault**: RBAC-authorized, private endpoint only, with a generated workload
-  identity granted `Key Vault Secrets User` access.
+  identity granted `Key Vault Secrets Officer` access (read/write/delete on secrets,
+  not just read) — the app's Token Manager service writes BYO credentials into the
+  vault at runtime via this same identity, so read-only access isn't sufficient.
 - **Azure Container Registry**: admin user disabled; the AKS kubelet identity is
   granted `AcrPull` so nodes can pull the worker image (which cannot be hosted on
   GHCR for private use).

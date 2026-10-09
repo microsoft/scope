@@ -18,7 +18,7 @@ param vnetResourceId string
 @description('Resource ID of the subnet to deploy the Key Vault private endpoint into.')
 param privateEndpointSubnetResourceId string
 
-@description('Principal (object) ID of the workload identity to grant read access to secrets. Leave empty to skip the role assignment.')
+@description('Principal (object) ID of the workload identity to grant secrets read/write access to. Leave empty to skip the role assignment.')
 param workloadIdentityPrincipalId string = ''
 
 @description('Key Vault SKU name.')
@@ -31,9 +31,9 @@ param skuName string = 'standard'
 @description('Number of days to retain soft-deleted vaults/objects.')
 param softDeleteRetentionInDays int = 90
 
-var keyVaultSecretsUserRoleDefinitionId = subscriptionResourceId(
+var keyVaultSecretsOfficerRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
-  '4633458b-17de-408a-b874-0445c86b69e6'
+  'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
 )
 
 module privateDnsZone 'br/public:avm/res/network/private-dns-zone:0.7.0' = {
@@ -78,7 +78,11 @@ module keyVault 'br/public:avm/res/key-vault/vault:0.11.0' = {
       ? [
           {
             principalId: workloadIdentityPrincipalId
-            roleDefinitionIdOrName: keyVaultSecretsUserRoleDefinitionId
+            // Secrets Officer (not just Secrets User/read-only) is required because the Token
+            // Manager service (apps/token-manager) writes BYO credentials (e.g. GitHub/Anthropic
+            // API keys) into this vault at runtime via SecretClient.setSecret(), using this same
+            // shared workload identity - a read-only role 403s that write path.
+            roleDefinitionIdOrName: keyVaultSecretsOfficerRoleDefinitionId
             principalType: 'ServicePrincipal'
           }
         ]
