@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { SkillConfig, SkillRevisionDocument } from '../types/skill.js';
+import { stripTrailingSlashes } from '../utils/strings.js';
 
 /**
  * Client for resolving skill revision refs via the Scope REST API.
@@ -14,7 +15,7 @@ export class SkillClient {
   private readonly apiUrl: string;
 
   constructor(apiUrl: string) {
-    this.apiUrl = apiUrl.replace(/\/+$/, '');
+    this.apiUrl = stripTrailingSlashes(apiUrl);
   }
 
   /**

@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripTrailingSlashes } from "../../../packages/shared/src/utils/strings.js";
 
 export const DEFAULT_BASE_URL = "https://msscope-int.azurewebsites.net";
 export const DEFAULT_PROJECT_NAME = "Default Project";
@@ -1550,7 +1551,7 @@ async function writeDataset(
 async function run(options: HarvestOptions): Promise<void> {
   const token = options.tokenEnv ? process.env[options.tokenEnv] : undefined;
   if (options.tokenEnv && !token) throw new Error(`Environment variable ${options.tokenEnv} is not set`);
-  const client = new ScopeApiClient(options.baseUrl.replace(/\/+$/, ""), token);
+  const client = new ScopeApiClient(stripTrailingSlashes(options.baseUrl), token);
   const openApi = await client.initialize();
   const project = resolveProject(await client.projects(), options);
 

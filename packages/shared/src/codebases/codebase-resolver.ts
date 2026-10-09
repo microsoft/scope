@@ -22,6 +22,7 @@ import { randomUUID, createHash } from "crypto";
 import type { CodebaseDocument, CodebaseRevisionDocument } from "../types/codebase.js";
 import type { CodebaseRevisionStore } from "./codebase-revision-store.js";
 import { normalizeToRootTarGz } from "./codebase-archive.js";
+import { stripTrailingSlashes } from "../utils/strings.js";
 
 /** Function that uploads archive bytes to blob storage and returns its URL. */
 export type UploadArchiveFn = (blobName: string, data: Buffer) => Promise<string>;
@@ -59,7 +60,8 @@ export class CodebaseResolver {
   private readonly tokenProvider?: () => Promise<string | undefined>;
 
   constructor(options?: CodebaseResolverOptions) {
-    this.githubApiUrl = options?.githubApiUrl?.replace(/\/+$/, "") ?? "https://api.github.com";
+    const githubApiUrl = options?.githubApiUrl;
+    this.githubApiUrl = githubApiUrl != null ? stripTrailingSlashes(githubApiUrl) : "https://api.github.com";
     this.baseHeaders = {
       Accept: "application/vnd.github.v3+json",
       "User-Agent": "scope-mt-codebase-resolver",

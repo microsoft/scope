@@ -82,7 +82,8 @@ remain available without API configuration.
 - **ESM format** with a `createRequire` polyfill banner (CJS won't work due to Ink's top-level await)
 - **All dependencies bundled** — no `node_modules` needed at runtime
 - **Pure shared runtime imports** — CLI gate constants and helpers come from
-  `shared/types` and `shared/gates`, not the top-level `shared` barrel. The barrel
+  `shared/types`, `shared/gates`, and `shared/strings` (e.g. `stripTrailingSlashes`),
+  not the top-level `shared` barrel. The barrel
   also initializes server-side modules with dynamic Redis imports that esbuild
   cannot bundle. Type-only imports from `shared` are safe because they are erased.
 - **Node.js >= 20 required** at runtime

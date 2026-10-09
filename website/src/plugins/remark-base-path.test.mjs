@@ -102,12 +102,28 @@ test('preserves code examples, MDX expressions, spreads, and unrelated attribute
 });
 
 test('normalizes base paths and only prefixes URLs once', () => {
-	for (const base of ['/scope', '/scope/', 'scope', '/nested/scope/']) {
+	const cases = [
+		['/scope', '/scope'],
+		['/scope/', '/scope'],
+		['scope', '/scope'],
+		['///scope///', '/scope'],
+		['/nested/scope/', '/nested/scope'],
+		['nested//scope//', '/nested//scope'],
+	];
+	for (const [base, prefix] of cases) {
 		const tree = transform([{ type: 'link', url: '/reference/api/', children: [] }], base);
 		remarkBasePath({ base })(tree);
-		const prefix = base.includes('nested') ? '/nested/scope' : '/scope';
 		assert.equal(tree.children[0].url, `${prefix}/reference/api/`);
 	}
+});
+
+test('normalizes a pathological base path in linear time', () => {
+	const base = `a${'/'.repeat(100_000)}b`;
+	const start = performance.now();
+	const tree = transform([{ type: 'link', url: '/reference/', children: [] }], `/${base}/`);
+	// The backtracking regex takes seconds on this input; the scan takes ~1ms.
+	assert.ok(performance.now() - start < 500);
+	assert.equal(tree.children[0].url, `/${base}/reference/`);
 });
 
 test('leaves root deployments unchanged', () => {

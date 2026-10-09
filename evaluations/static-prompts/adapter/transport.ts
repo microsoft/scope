@@ -3,6 +3,7 @@
 
 import { acquireInferenceClient } from "../../../apps/api/src/llm-token.js";
 import { withRetry } from "../../../packages/shared/src/utils/retry.js";
+import { stripTrailingSlashes } from "../../../packages/shared/src/utils/strings.js";
 import type {
   AdapterContext,
   CompletionOptions,
@@ -193,7 +194,7 @@ function azureOpenAIConfiguration(
     process.env.AZURE_OPENAI_DEPLOYMENT;
   if (!endpoint || !apiKey || !deployment) return null;
   return {
-    endpoint: endpoint.replace(/\/+$/, ""),
+    endpoint: stripTrailingSlashes(endpoint),
     apiKey,
     deployment,
     apiVersion:

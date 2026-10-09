@@ -3,6 +3,7 @@
 
 import { ConversationTurn, CriterionResult, GateId } from "../types/types.js";
 import { withRetry } from "../utils/retry.js";
+import { stripTrailingSlashes } from "../utils/strings.js";
 
 /**
  * Request payload for the judge service's /api/v1/evaluate endpoint.
@@ -149,8 +150,7 @@ export class JudgeClient {
   private maxRetries: number;
 
   constructor(baseUrl: string, options?: JudgeClientOptions) {
-    // Strip trailing slash
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.baseUrl = stripTrailingSlashes(baseUrl);
     this.timeoutMs = options?.timeoutMs
       ?? parseInt(process.env.JUDGE_CLIENT_TIMEOUT || String(DEFAULT_JUDGE_CLIENT_TIMEOUT));
     this.maxRetries = options?.maxRetries

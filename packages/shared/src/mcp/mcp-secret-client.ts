@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { McpServerHeader } from '../types/mcp.js';
+import { stripTrailingSlashes } from '../utils/strings.js';
 
 /**
  * Thrown when the Token Manager is configured but unreachable (network failure).
@@ -49,7 +50,7 @@ export class McpSecretClient {
   private readonly tokenManagerUrl: string;
 
   constructor(tokenManagerUrl: string) {
-    this.tokenManagerUrl = tokenManagerUrl.replace(/\/+$/, '');
+    this.tokenManagerUrl = stripTrailingSlashes(tokenManagerUrl);
   }
 
   private async fetchOrThrow(url: string, init?: RequestInit): Promise<Response> {

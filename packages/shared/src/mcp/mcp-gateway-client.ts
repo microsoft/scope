@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { McpServerConfig } from '../types/mcp.js';
+import { stripTrailingSlashes } from '../utils/strings.js';
 
 /** Maps DB transport type to MCPJungle transport name */
 const TRANSPORT_MAP: Record<string, string> = {
@@ -24,7 +25,7 @@ export class McpGatewayClient {
   private readonly baseUrl: string;
 
   constructor(baseUrl?: string) {
-    this.baseUrl = (baseUrl ?? process.env.MCP_GATEWAY_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
+    this.baseUrl = stripTrailingSlashes(baseUrl ?? process.env.MCP_GATEWAY_URL ?? 'http://localhost:8080');
   }
 
   /** The streamable HTTP endpoint to pass to ACP sessions */

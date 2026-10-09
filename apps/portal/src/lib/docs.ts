@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { stripTrailingSlashes } from "./url";
+
 /**
  * Central helpers for linking from the portal into the public Scope docs site.
  *
@@ -27,7 +29,7 @@ export function getDocsBase(): string {
   const configured =
     typeof window !== "undefined" ? window.__SCOPE_CONFIG__?.docsBaseUrl : undefined;
   const base = configured && configured.trim() !== "" ? configured : DEFAULT_DOCS_BASE;
-  return base.replace(/\/+$/, "");
+  return stripTrailingSlashes(base);
 }
 
 /**

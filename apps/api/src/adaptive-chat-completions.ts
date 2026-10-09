@@ -8,6 +8,7 @@ import {
   type ChatCompletionCompatibility,
   type ChatCompletionMessage,
   type ChatCompletionRequestBody,
+  stripTrailingSlashes,
 } from "shared";
 
 const MAX_CACHE_ENTRIES = 100;
@@ -36,7 +37,7 @@ const negotiations = new Map<
 >();
 
 function cacheKey(endpoint: string, model: string): string {
-  const normalizedEndpoint = endpoint.trim().replace(/\/+$/, "");
+  const normalizedEndpoint = stripTrailingSlashes(endpoint.trim());
   return `${normalizedEndpoint}\n${model.trim()}`;
 }
 

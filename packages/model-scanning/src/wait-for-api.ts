@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { stripTrailingSlashes } from "shared/strings";
+
 /**
  * Wait for the API server to become healthy.
  *
@@ -13,7 +15,7 @@ export async function waitForApi(
 ): Promise<void> {
   const maxRetries = options?.maxRetries ?? 60;
   const intervalMs = options?.intervalMs ?? 5_000;
-  const healthUrl = `${apiUrl.replace(/\/+$/, "")}/health`;
+  const healthUrl = `${stripTrailingSlashes(apiUrl)}/health`;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {

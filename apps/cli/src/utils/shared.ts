@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { Command } from "commander";
+import { stripTrailingSlashes } from "shared/strings";
 import { dimTimestamp, label, value } from "./style.js";
 import { generateOutputFormatsHelp } from "./helpFormatter.js";
 
@@ -11,7 +12,7 @@ export function normalizeUrl(url: string | undefined): string {
   if (!configured) {
     throw new Error("No API URL configured. Set SCOPE_API_URL or pass -u/--url (MCP server create/update: --api-url).");
   }
-  return configured.replace(/\/+$/, "");
+  return stripTrailingSlashes(configured);
 }
 
 /**

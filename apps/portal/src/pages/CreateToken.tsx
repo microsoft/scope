@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { stripTrailingSlashes } from "@/lib/url";
 import type { KeyType, KeyValidationResult, CreateKeyRequest } from "@/types";
 import { KEY_TYPE_LABELS, KEY_CAPABILITY_LABELS, KEY_TYPE_EXPECTED_CAPABILITIES } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -168,7 +169,7 @@ export function buildFoundryCredentialValue(options: {
   apiKey: string;
   model: string;
 }): string {
-  const endpoint = options.endpoint.trim().replace(/\/+$/, "");
+  const endpoint = stripTrailingSlashes(options.endpoint.trim());
   const apiKey = options.apiKey.trim();
   const model = options.model.trim();
   return JSON.stringify({

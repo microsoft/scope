@@ -3,6 +3,7 @@
 
 import type { ExtensionConfig, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo } from '../types/extension.js';
 import { parseExtensionSpec } from '../types/extension.js';
+import { stripTrailingSlashes } from '../utils/strings.js';
 
 /** VS Code marketplace Gallery API response types (subset). */
 interface MarketplaceExtension {
@@ -29,7 +30,7 @@ export class ExtensionClient {
     "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery";
 
   constructor(apiUrl: string) {
-    this.apiUrl = apiUrl.replace(/\/+$/, '');
+    this.apiUrl = stripTrailingSlashes(apiUrl);
   }
 
   /**

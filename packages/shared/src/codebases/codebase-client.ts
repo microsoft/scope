@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { CodebaseConfig, CodebaseRevisionDocument } from "../types/codebase.js";
+import { stripTrailingSlashes } from "../utils/strings.js";
 
 /**
  * Client for resolving codebase revisions via the Scope REST API.
@@ -15,7 +16,7 @@ export class CodebaseClient {
   private readonly apiUrl: string;
 
   constructor(apiUrl: string) {
-    this.apiUrl = apiUrl.replace(/\/+$/, "");
+    this.apiUrl = stripTrailingSlashes(apiUrl);
   }
 
   /**
