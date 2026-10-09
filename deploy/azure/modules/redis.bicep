@@ -103,6 +103,24 @@ output redisName string = redis.outputs.name
 @description('The hostname of the Azure Cache for Redis instance.')
 output hostName string = redis.outputs.hostName
 
+// `listKeys()` requires a resource ID that is calculable at the start of the deployment, so it
+// cannot reference a module's runtime output (e.g. `redis.outputs.resourceId`) directly - Bicep
+// rejects that with BCP181. But building the ID purely from the compile-time-known `redisName`
+// parameter (as a previous version of this file did) loses the implicit `dependsOn` edge that
+// Bicep normally infers from symbolic-name references, since nothing here points at the `redis`
+// module symbol. That let ARM evaluate `listKeys()` concurrently with (or before) the long-running
+// cache finishing provisioning, intermittently failing.
+//
+// The fix: declare an `existing` resource for the cache (a compile-time-known ID, so valid as a
+// `listKeys()` target) with an explicit `dependsOn: [redis]` to force correct ordering without
+// needing a runtime output.
+resource existingRedisCache 'Microsoft.Cache/redis@2024-03-01' existing = {
+  name: redisName
+  dependsOn: [
+    redis
+  ]
+}
+
 @description('The primary access key for the Azure Cache for Redis instance. Entra ID authentication is preferred; this key is provided as a fallback for compatibility.')
 @secure()
-output primaryKey string = listKeys(resourceId('Microsoft.Cache/redis', redisName), '2024-03-01').primaryKey
+output primaryKey string = existingRedisCache.listKeys().primaryKey

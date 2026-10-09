@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "10664202483431472314"
+      "templateHash": "8685616850244988124"
     }
   },
   "parameters": {
@@ -19856,7 +19856,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.48.1.52935",
-              "templateHash": "163453956752287973"
+              "templateHash": "18437424227995853260"
             }
           },
           "parameters": {
@@ -19928,6 +19928,15 @@
             "privateDnsZoneName": "privatelink.redis.cache.windows.net"
           },
           "resources": {
+            "existingRedisCache": {
+              "existing": true,
+              "type": "Microsoft.Cache/redis",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('redisName')]",
+              "dependsOn": [
+                "redis"
+              ]
+            },
             "privateDnsZone": {
               "type": "Microsoft.Resources/deployments",
               "apiVersion": "2025-04-01",
@@ -24743,7 +24752,7 @@
               "metadata": {
                 "description": "The primary access key for the Azure Cache for Redis instance. Entra ID authentication is preferred; this key is provided as a fallback for compatibility."
               },
-              "value": "[listKeys(resourceId('Microsoft.Cache/redis', parameters('redisName')), '2024-03-01').primaryKey]"
+              "value": "[listKeys('existingRedisCache', '2024-03-01').primaryKey]"
             }
           }
         }
