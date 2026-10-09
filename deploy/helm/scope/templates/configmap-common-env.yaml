@@ -12,7 +12,17 @@ metadata:
     {{- include "scope.labels" . | nindent 4 }}
 data:
   AZURE_STORAGE_ACCOUNT_NAME: {{ .Values.azure.storageAccountName | quote }}
+  # Only token-manager calls the Key Vault SDK directly (DefaultAzureCredential
+  # via the workload-identity-injected AZURE_CLIENT_ID/AZURE_FEDERATED_TOKEN_FILE
+  # env vars); harmless no-op for the other services.
+  AZURE_KEYVAULT_URI: {{ required "azure.keyVaultUri is required (see deploy/azure output keyVaultUri)" .Values.azure.keyVaultUri | quote }}
   TOKEN_MANAGER_URL: "http://{{ include "scope.componentName" (dict "component" "token-manager" "context" .) }}:{{ .Values.tokenManager.port }}"
   JUDGE_SERVICE_URL: "http://{{ include "scope.componentName" (dict "component" "judge" "context" .) }}:{{ .Values.judge.port }}"
   SCOPE_MT_API_URL: "http://{{ include "scope.componentName" (dict "component" "api" "context" .) }}:{{ .Values.api.port }}"
   AZURE_STORAGE_QUEUE_REPORT: report-queue
+  # Discrete Redis connection settings (Azure Cache for Redis: TLS-only on
+  # 6380). REDIS_PASSWORD (the access key) comes from the KV-synced
+  # `scope-secrets` Secret, not this ConfigMap.
+  REDIS_HOST: {{ required "azure.redisHostName is required (see deploy/azure output redisHostName)" .Values.azure.redisHostName | quote }}
+  REDIS_PORT: {{ .Values.azure.redisPort | quote }}
+  REDIS_TLS: {{ .Values.azure.redisTls | quote }}

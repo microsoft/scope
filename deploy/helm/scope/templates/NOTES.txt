@@ -18,4 +18,8 @@ Before this chart can fully start:
   2. Confirm azure.workloadIdentityClientId matches the user-assigned identity
      federated by deploy/azure/ to system:serviceaccount:{{ .Values.global.namespace }}:{{ .Values.azure.serviceAccountName }}.
 
+NOTE: The ACP coding-agent workers (coder-acp-copilot, coder-acp-claude-code)
+are NOT deployed by this chart. Build/push their images to your ACR and
+bring them online as a separate step — see "Phase 3" in README.md.
+
 See deploy/helm/scope/README.md for full install instructions.

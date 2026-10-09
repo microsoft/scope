@@ -40,13 +40,19 @@ Resource name for a given service component, e.g. "scope-api".
 {{- end -}}
 
 {{/*
-Fully qualified image reference, combining global.imageRegistry with a
-service's image.repository/tag (falling back to global.imageTag).
+Fully qualified image reference, combining a registry with a service's
+image.repository/tag. Per-image `.image.registry` (used by the workers and
+the db-migrate job, which live on the Bicep-provisioned ACR rather than
+GHCR) wins; otherwise falls back to `global.imageRegistry` (the default
+distribution point for the core app services, conventionally
+ghcr.io/<owner>/scope). Falls back to `global.imageTag` when `.image.tag`
+is unset, and to a bare (unregistered) name when no registry applies at all.
 */}}
 {{- define "scope.image" -}}
 {{- $tag := .image.tag | default .context.Values.global.imageTag -}}
-{{- if .context.Values.global.imageRegistry -}}
-{{- printf "%s/%s:%s" .context.Values.global.imageRegistry .image.repository $tag -}}
+{{- $registry := .image.registry | default .context.Values.global.imageRegistry -}}
+{{- if $registry -}}
+{{- printf "%s/%s:%s" $registry .image.repository $tag -}}
 {{- else -}}
 {{- printf "%s:%s" .image.repository $tag -}}
 {{- end -}}

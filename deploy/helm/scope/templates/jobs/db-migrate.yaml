@@ -1,0 +1,45 @@
+{{- if .Values.jobs.dbMigrate.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "scope.componentName" (dict "component" "db-migrate" "context" .) }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "scope.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-migrate
+  annotations:
+    # Runs before api/judge/scheduler/token-manager come up, mirroring
+    # docker-compose's `depends_on: db-migrate: condition:
+    # service_completed_successfully`. Re-run on every `helm upgrade` too,
+    # since new migrations can ship with any release.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "scope.selectorLabels" (dict "component" "db-migrate" "context" .) | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        # packages/db-migrations' migrate:up script runs its .ts migrations
+        # directly via tsx, so this must use the Dockerfile's `builder`
+        # stage (full TS source + dev deps) rather than the slim production
+        # scope-api image, which only ships compiled dist/ (no src/, no
+        # tsx) — see jobs.dbMigrate.image.tag default ("builder") in
+        # values.yaml.
+        - name: db-migrate
+          image: {{ include "scope.image" (dict "image" .Values.jobs.dbMigrate.image "context" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          workingDir: /app
+          command: ["pnpm", "--filter", "db-migrations", "migrate:up"]
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.k8sSecretName }}
+{{- end -}}
