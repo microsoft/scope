@@ -1,0 +1,78 @@
+{{- if .Values.workers.coderAcpCopilot.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "scope.componentName" (dict "component" "coder-acp-copilot" "context" .) }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "scope.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coder-acp-copilot
+spec:
+  replicas: {{ .Values.workers.coderAcpCopilot.replicas }}
+  selector:
+    matchLabels:
+      {{- include "scope.selectorLabels" (dict "component" "coder-acp-copilot" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "scope.selectorLabels" (dict "component" "coder-acp-copilot" "context" .) | nindent 8 }}
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: {{ include "scope.serviceAccountName" . }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        # Pure background Storage Queue consumer — no HTTP server/port, so
+        # no Service or readiness/liveness HTTP probes (see
+        # apps/workers/coder-acp-copilot/src/index.ts).
+        #
+        # NOT templated here (see docs/architecture/worker-requirements.md
+        # and docs/architecture/kubedock.md): the MCPJungle MCP-gateway
+        # sidecar (MCP server support), the AI Gateway/DevProxy sidecar (HAR
+        # capture), and Kubedock (in-task `docker build`/`docker run`
+        # support). The worker runs without them — scenarios that need MCP
+        # servers or in-task Docker access are not yet supported by this
+        # chart. Follow up once those sidecars have a templated pattern.
+        - name: coder-acp-copilot
+          image: {{ include "scope.image" (dict "image" .Values.workers.coderAcpCopilot.image "context" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "scope.componentName" (dict "component" "common-env" "context" .) }}
+            - secretRef:
+                # Supplies MONGO_CONNECTION_STRING/REDIS_PASSWORD always, and
+                # GITHUB_TOKEN as a fallback only if secrets.keyVaultSecretNames.githubToken
+                # is populated. The worker prefers acquiring its GitHub
+                # credential dynamically from Token Manager at runtime (see
+                # "Read credentials via Token Manager" in
+                # docs/architecture/worker-requirements.md) — register one
+                # via the Portal's "Create Token" page or `POST
+                # /api/v1/keys` instead of populating this secret, unless
+                # you specifically want the static-env-var fallback.
+                name: {{ .Values.secrets.k8sSecretName }}
+          env:
+            - name: WORKER_NAME
+              value: coder-acp-copilot
+            # Must exactly match the agentVersion registered via
+            # scripts/register-agent.sh (see deploy/helm/scope/README.md
+            # "Phase 3") — the queue processor refuses to start otherwise.
+            - name: SCOPE_AGENT_VERSION
+              value: {{ .Values.workers.coderAcpCopilot.agentVersion | quote }}
+            - name: QUEUE_NAME
+              value: {{ .Values.workers.coderAcpCopilot.queueName | quote }}
+          volumeMounts:
+            - name: kv-secrets
+              mountPath: /mnt/secrets
+              readOnly: true
+          resources:
+            {{- toYaml .Values.workers.coderAcpCopilot.resources | nindent 12 }}
+      volumes:
+        - name: kv-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "scope.componentName" (dict "component" "azure-kv" "context" .) }}
+{{- end -}}

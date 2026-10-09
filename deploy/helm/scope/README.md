@@ -181,10 +181,34 @@ az acr build --registry <acrName> --image scope-coder-acp-claude-code:latest \
   --build-arg CLAUDE_AGENT_SDK_VERSION=$(grep CLAUDE_AGENT_SDK_VERSION apps/workers/coder-acp-claude-code/versions.env | cut -d= -f2) .
 ```
 
-Then register the GitHub/Anthropic credentials the workers need (see
-[Secrets](#secrets) above — either Key Vault directly or the token-manager
-API) and register each agent type with the API
-(`scripts/register-agent.sh`, pointed at `API_URL`/`TOKEN_MANAGER_URL`).
-Deploying the worker Pods themselves (with their Kubedock/MCP-gateway
-sidecars) is not yet templated in this chart — see
-`docs/architecture/kubedock.md` for the intended production pattern.
+Then register the GitHub/Anthropic credentials the workers need. The
+recommended path is the Portal's **Create Token** page (or a direct
+`POST /api/v1/keys` call against the API) — this writes straight to Key
+Vault via the token-manager's workload identity and requires no chart
+changes. Populating `secrets.keyVaultSecretNames.githubToken`/
+`.anthropicApiKey` in Key Vault yourself works too, as a static fallback the
+worker falls back to only if Token Manager has no credential registered.
+
+Point each worker's `values.yaml` entry at the image you just built
+(`workers.coderAcpCopilot.image.registry`/`workers.coderAcpClaudeCode.image.registry`
+= your ACR login server, `.tag` = the tag you pushed), set `.enabled: true`,
+and `helm upgrade` — this chart does template a Deployment for each worker
+(`templates/workers/coder-acp-copilot/`,
+`templates/workers/coder-acp-claude-code/`), reusing the common env
+ConfigMap/Secret and Key Vault CSI mount the rest of the app uses. These are
+minimal background Storage Queue consumers only: no MCPJungle MCP-gateway
+sidecar (MCP server support), no AI Gateway/DevProxy sidecar (HAR capture),
+and no Kubedock (in-task `docker build`/`docker run` support) — see
+`docs/architecture/kubedock.md` for the intended production pattern for
+that last one. Scenarios needing those features aren't supported by this
+chart yet.
+
+Finally, register each agent type with the API
+(`scripts/register-agent.sh <API_URL> <agent.yaml> <agent-version.yaml>`).
+`workers.coderAcpCopilot.agentVersion`/`.coderAcpClaudeCode.agentVersion`
+must match the `agentVersion` in whatever version manifest you register —
+the defaults point at the `-dev` manifests under each worker's directory,
+intended for chart smoke-testing only; use a real version manifest (and
+matching `imageTag`/`queueName`/`gitCommit`/`buildTime`) for anything else.
+This registration step is not run automatically by `helm install`/`upgrade`
+— rerun it manually whenever you roll a new worker image or version.

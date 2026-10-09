@@ -208,6 +208,14 @@ workers:
       registry: ""
       repository: scope-coder-acp-copilot
       tag: ""
+    queueName: queue-coder-acp-copilot
+    # Must match the `agentVersion` you register via
+    # scripts/register-agent.sh (see deploy/helm/scope/README.md "Phase 3").
+    # apps/workers/coder-acp-copilot/agent-version.dev.yaml's "copilot-dev"
+    # is a dev-only placeholder — set this to a real version string
+    # (and register a matching, non-dev agent-version manifest) for
+    # anything beyond chart smoke-testing.
+    agentVersion: copilot-dev
     replicas: 1
     resources:
       requests: { cpu: 500m, memory: 512Mi }
@@ -218,6 +226,10 @@ workers:
       registry: ""
       repository: scope-coder-acp-claude-code
       tag: ""
+    queueName: queue-coder-acp-claude-code
+    # See workers.coderAcpCopilot.agentVersion above for the registration
+    # contract this must satisfy.
+    agentVersion: claude-agent-acp-dev-sdk-dev
     replicas: 1
     resources:
       requests: { cpu: 500m, memory: 512Mi }
