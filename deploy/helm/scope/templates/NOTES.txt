@@ -4,7 +4,7 @@ Scope has been deployed as release "{{ .Release.Name }}" in namespace
 {{- if .Values.api.ingress.enabled }}
 API:    https://{{ .Values.api.ingress.host }}
 {{- else }}
-API:    kubectl -n {{ .Values.global.namespace }} port-forward svc/{{ include "scope.componentName" (dict "component" "api" "context" .) }} 3100:{{ .Values.api.port }}
+API:    kubectl -n {{ .Values.global.namespace }} port-forward svc/api 3100:{{ .Values.api.port }}
 {{- end }}
 {{- if .Values.portal.ingress.enabled }}
 Portal: https://{{ .Values.portal.ingress.host }}

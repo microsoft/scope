@@ -2,7 +2,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "scope.componentName" (dict "component" "api" "context" .) }}
+  # Hardcoded to literal "api" (NOT the usual "<release>-api" componentName
+  # prefix): the portal image's apps/portal/nginx.conf bakes in
+  # `proxy_pass http://api:80` at build time with no templating hook, so
+  # the Service DNS name this chart creates must match it exactly,
+  # regardless of Helm release name.
+  name: api
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "scope.labels" . | nindent 4 }}

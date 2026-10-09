@@ -42,7 +42,7 @@ spec:
             # (CRITERIA_DIR) is unused in prod since this image ships no
             # /app/config/criteria — kept only for parity with dev.
             - name: CRITERIA_API_URL
-              value: "http://{{ include "scope.componentName" (dict "component" "api" "context" .) }}:{{ .Values.api.port }}"
+              value: "http://api:{{ .Values.api.port }}"
             - name: JUDGE_MODEL
               value: {{ .Values.judge.judgeModel | quote }}
             - name: FEEDBACK_MODEL

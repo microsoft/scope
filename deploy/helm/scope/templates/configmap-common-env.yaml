@@ -18,7 +18,7 @@ data:
   AZURE_KEYVAULT_URI: {{ required "azure.keyVaultUri is required (see deploy/azure output keyVaultUri)" .Values.azure.keyVaultUri | quote }}
   TOKEN_MANAGER_URL: "http://{{ include "scope.componentName" (dict "component" "token-manager" "context" .) }}:{{ .Values.tokenManager.port }}"
   JUDGE_SERVICE_URL: "http://{{ include "scope.componentName" (dict "component" "judge" "context" .) }}:{{ .Values.judge.port }}"
-  SCOPE_MT_API_URL: "http://{{ include "scope.componentName" (dict "component" "api" "context" .) }}:{{ .Values.api.port }}"
+  SCOPE_MT_API_URL: "http://api:{{ .Values.api.port }}"
   AZURE_STORAGE_QUEUE_REPORT: report-queue
   # Discrete Redis connection settings (Azure Cache for Redis: TLS-only on
   # 6380). REDIS_PASSWORD (the access key) comes from the KV-synced

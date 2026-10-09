@@ -8,11 +8,23 @@ metadata:
     {{- include "scope.labels" . | nindent 4 }}
     app.kubernetes.io/component: db-migrate
   annotations:
-    # Runs before api/judge/scheduler/token-manager come up, mirroring
-    # docker-compose's `depends_on: db-migrate: condition:
+    # Mirrors docker-compose's `depends_on: db-migrate: condition:
     # service_completed_successfully`. Re-run on every `helm upgrade` too,
     # since new migrations can ship with any release.
-    "helm.sh/hook": pre-install,pre-upgrade
+    #
+    # Must be post-install/post-upgrade, NOT pre-install/pre-upgrade: Helm
+    # creates every pre-install/pre-upgrade hook BEFORE any regular release
+    # resource exists, so a pre-install db-migrate Job would run before the
+    # ServiceAccount (workload identity) and SecretProviderClass (Key Vault
+    # CSI sync) templates below even exist — the pod can't authenticate or
+    # mount `kv-secrets`, and `envFrom.secretRef: scope-secrets` fails with
+    # "secret not found". Running post-install/post-upgrade instead means
+    # those regular resources are already applied, at the cost of api/
+    # judge/scheduler/token-manager pods starting up slightly before
+    # migrations finish (acceptable: these services retry transient DB
+    # errors — see the `resilience` skill's retry/backoff conventions used
+    # throughout this codebase).
+    "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "0"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
@@ -21,8 +33,10 @@ spec:
     metadata:
       labels:
         {{- include "scope.selectorLabels" (dict "component" "db-migrate" "context" .) | nindent 8 }}
+        azure.workload.identity/use: "true"
     spec:
       restartPolicy: Never
+      serviceAccountName: {{ include "scope.serviceAccountName" . }}
       {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -42,4 +56,19 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ .Values.secrets.k8sSecretName }}
+          volumeMounts:
+            # Not read directly by migrate:up — mounting the CSI volume is
+            # what makes the Secrets Store CSI driver sync the Key Vault
+            # secrets into the `scope-secrets` K8s Secret before this
+            # container starts, which `envFrom.secretRef` below depends on.
+            - name: kv-secrets
+              mountPath: /mnt/secrets
+              readOnly: true
+      volumes:
+        - name: kv-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "scope.componentName" (dict "component" "azure-kv" "context" .) }}
 {{- end -}}

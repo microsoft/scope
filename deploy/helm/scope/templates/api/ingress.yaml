@@ -23,7 +23,8 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "scope.componentName" (dict "component" "api" "context" .) }}
+                # Must match the literal "api" Service name (see api/service.yaml).
+                name: api
                 port:
                   number: {{ .Values.api.port }}
 {{- end -}}
