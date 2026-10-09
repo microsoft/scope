@@ -99,8 +99,8 @@ helm install scope deploy/helm/scope -n scope -f my-values.yaml
 This pulls all 6 core images from `global.imageRegistry` (defaults to
 `ghcr.io/microsoft`, i.e. `ghcr.io/microsoft/scope-api`, etc. — override with
 `--set global.imageRegistry=ghcr.io/<your-fork-owner>` if you publish your
-own fork's images). The `db-migrate` Job (a `pre-install,pre-upgrade` Helm
-hook) runs automatically before the Deployments start.
+own fork's images). The `db-migrate` Job (a `post-install,post-upgrade` Helm
+hook) runs automatically after the Deployments are created.
 
 ## Configuration
 
@@ -216,3 +216,55 @@ sync. Agent registration is not run automatically by `helm install`/
 `upgrade` on its own — rerun `scripts/bootstrap-workers.sh` (or
 `scripts/register-agent.sh` directly) whenever you roll a new worker image
 or version.
+
+## Quickstart: run a sample scenario
+
+Scenarios and personas (`config/scenarios/`, `config/personas/`) are **not**
+server-side data — `scope run submit --scenario <path> --persona <path>`
+reads them straight off disk, so there's nothing to import for those. The
+one piece that *is* server-side and project-scoped is **criteria**: several
+scenarios (the `version: v2` ones) reference reusable criteria IDs like
+`has_react`/`has_typescript` instead of inlining their own, and those IDs
+must exist in the target project before the judge can evaluate a run
+against them.
+
+This seed step is deliberately **not** templated as a Helm hook. Unlike
+`db-migrate`, it's project-scoped business data, not infrastructure, and no
+project exists until the `db-migrate` Job's "Initial Project" migration has
+run — baking a project assumption into the chart would be surprising for
+anyone bringing their own projects. Run it yourself once the core app (and
+at least one Phase 3 worker, to actually execute the run) is up:
+
+```bash
+kubectl -n scope port-forward svc/api 18080:80 &
+
+# Discover the project to seed into (the "Initial Project" created by
+# db-migrate on first install, or one of your own)
+scope project list --url http://localhost:18080
+
+# Import every reusable criterion (upsert — safe to rerun)
+scope criteria import config/criteria --project <project-id> --url http://localhost:18080
+
+# Try the simplest sample scenario end to end
+scope run submit \
+  --scenario config/scenarios/hello-world-express-v2.yaml \
+  --persona config/personas/vibe-coder.yaml \
+  --worker coder-acp-copilot \
+  --project <project-id> \
+  --url http://localhost:18080
+```
+
+`--worker` must be one of the agent IDs registered in Phase 3
+(`scope agent list --url http://localhost:18080`). `hello-world-express-v2.yaml`
+only needs `has_azure_doc`/`has_azure_azd` (plus their `has_iac`/`has_azure`/
+`has_cloud` ancestors); importing the whole `config/criteria` directory is
+simpler than cherry-picking a dependency closure and covers every sample
+scenario, including `react-snake-game-v2.yaml`.
+
+> **Note:** this quickstart surfaced (and this change fixes) a bug where
+> `scope criteria import`/`scope prompt-feature import` never sent the
+> `projectId` the API's `/criteria/seed`/`/prompt-features/seed` routes
+> require, so both commands always failed with a 400. Make sure your CLI
+> build includes the `--project` option on `criteria import` /
+> `prompt-feature import` before following the steps above.
+
