@@ -31,8 +31,9 @@ below and is also usable standalone via the Azure CLI.
   (Azure AD) authentication enabled; an access key is also provisioned as a
   compatibility fallback for clients that don't yet support Entra ID auth.
 - **Storage account**: blob and queue services only, private endpoints only, with the
-  workload identity granted `Storage Blob Data Contributor` and
-  `Storage Queue Data Contributor`.
+  workload identity granted `Storage Blob Data Owner` (not just Contributor — the app
+  sets Blob Index Tags on snapshot uploads, which Contributor's data actions don't
+  permit) and `Storage Queue Data Contributor`.
 - A **user-assigned managed identity** federated with the AKS OIDC issuer, for use as
   the Kubernetes workload identity.
 

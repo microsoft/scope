@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "2851849210250783861"
+      "templateHash": "2497683425523852478"
     }
   },
   "parameters": {
@@ -24800,7 +24800,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.48.1.52935",
-              "templateHash": "17771906189410179044"
+              "templateHash": "1617650439842007560"
             }
           },
           "parameters": {
@@ -24855,7 +24855,7 @@
           "variables": {
             "blobPrivateDnsZoneName": "privatelink.blob.core.windows.net",
             "queuePrivateDnsZoneName": "privatelink.queue.core.windows.net",
-            "workloadIdentityRoleAssignments": "[if(not(empty(parameters('workloadIdentityPrincipalId'))), createArray(createObject('roleDefinitionIdOrName', 'Storage Blob Data Contributor', 'principalId', parameters('workloadIdentityPrincipalId'), 'principalType', 'ServicePrincipal'), createObject('roleDefinitionIdOrName', 'Storage Queue Data Contributor', 'principalId', parameters('workloadIdentityPrincipalId'), 'principalType', 'ServicePrincipal')), createArray())]"
+            "workloadIdentityRoleAssignments": "[if(not(empty(parameters('workloadIdentityPrincipalId'))), createArray(createObject('roleDefinitionIdOrName', 'Storage Blob Data Owner', 'principalId', parameters('workloadIdentityPrincipalId'), 'principalType', 'ServicePrincipal'), createObject('roleDefinitionIdOrName', 'Storage Queue Data Contributor', 'principalId', parameters('workloadIdentityPrincipalId'), 'principalType', 'ServicePrincipal')), createArray())]"
           },
           "resources": [
             {

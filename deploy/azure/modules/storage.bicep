@@ -37,7 +37,12 @@ var queuePrivateDnsZoneName = 'privatelink.queue.core.windows.net'
 var workloadIdentityRoleAssignments = !empty(workloadIdentityPrincipalId)
   ? [
       {
-        roleDefinitionIdOrName: 'Storage Blob Data Contributor'
+        // Blob Data Owner (not just Contributor) is required because the app sets Blob Index
+        // Tags (requestId/runId/iteration) on per-iteration workspace snapshot uploads via the
+        // x-ms-tags header; Contributor's data actions do not include
+        // Microsoft.Storage/storageAccounts/blobServices/containers/blobs/tags/write, so tagged
+        // uploads 403 with AuthorizationPermissionMismatch under Contributor alone.
+        roleDefinitionIdOrName: 'Storage Blob Data Owner'
         principalId: workloadIdentityPrincipalId
         principalType: 'ServicePrincipal'
       }
