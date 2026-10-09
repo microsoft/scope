@@ -23,6 +23,16 @@
 #   --chart <path>           Helm chart path (default: deploy/helm/scope,
 #                            relative to repo root)
 #   --image-tag <tag>        Tag to build/push/deploy (default: latest)
+#   --values-file <path>     Same values override file passed to the
+#                            original `helm install ... -f <path>` (see
+#                            README.md "Install (Phase 2)"). Strongly
+#                            recommended: without it, this script falls back
+#                            to `helm upgrade --reuse-values`, which freezes
+#                            the release's previously computed values and
+#                            will NOT pick up new default keys added to the
+#                            chart's values.yaml since the initial install
+#                            (this silently broke worker agentVersion/
+#                            queueName in testing — see README "Phase 3").
 #   --skip-copilot           Skip the coder-acp-copilot worker entirely
 #   --skip-claude-code       Skip the coder-acp-claude-code worker entirely
 #   --skip-build             Reuse already-pushed images; skip `az acr build`
@@ -48,6 +58,7 @@ NAMESPACE="scope"
 RELEASE_NAME="scope"
 CHART_PATH="deploy/helm/scope"
 IMAGE_TAG="latest"
+VALUES_FILE=""
 ACR_NAME=""
 SKIP_COPILOT=false
 SKIP_CLAUDE_CODE=false
@@ -86,6 +97,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --image-tag)
       IMAGE_TAG="$2"
+      shift 2
+      ;;
+    --values-file)
+      VALUES_FILE="$2"
       shift 2
       ;;
     --skip-copilot)
@@ -129,6 +144,10 @@ case "$ACR_LOGIN_SERVER" in
   *) ACR_LOGIN_SERVER="${ACR_NAME}.azurecr.io" ;;
 esac
 ACR_SHORT_NAME="${ACR_LOGIN_SERVER%%.*}"
+
+if [ -n "$VALUES_FILE" ] && [ ! -f "$VALUES_FILE" ]; then
+  die "--values-file not found: $VALUES_FILE"
+fi
 
 for bin in az helm kubectl curl node; do
   command -v "$bin" >/dev/null 2>&1 || die "$bin is required on PATH"
@@ -276,7 +295,22 @@ fi
 
 if [ "${#HELM_SET_ARGS[@]}" -gt 0 ]; then
   log "helm upgrade $RELEASE_NAME (enabling workers)"
-  helm upgrade "$RELEASE_NAME" "$CHART_PATH" -n "$NAMESPACE" --reuse-values "${HELM_SET_ARGS[@]}" --wait --timeout 5m
+  if [ -n "$VALUES_FILE" ]; then
+    # Re-merge the chart's current values.yaml with the same override file
+    # used at install time. This is deliberately NOT `--reuse-values`:
+    # that flag freezes the release's previously *computed* values and
+    # silently drops any new default key added to values.yaml since install
+    # (e.g. workers.<name>.agentVersion/queueName), because the frozen
+    # object simply never had that key to begin with.
+    helm upgrade "$RELEASE_NAME" "$CHART_PATH" -n "$NAMESPACE" -f "$VALUES_FILE" "${HELM_SET_ARGS[@]}" --wait --timeout 5m
+  else
+    echo "warning: --values-file not provided; falling back to --reuse-values." >&2
+    echo "         This reuses this release's frozen computed values and will NOT" >&2
+    echo "         pick up new chart defaults (e.g. agentVersion/queueName) added" >&2
+    echo "         to values.yaml since the original install. Re-run with" >&2
+    echo "         --values-file <same file you passed to 'helm install -f'> to avoid this." >&2
+    helm upgrade "$RELEASE_NAME" "$CHART_PATH" -n "$NAMESPACE" --reuse-values "${HELM_SET_ARGS[@]}" --wait --timeout 5m
+  fi
 
   log "Waiting for worker Deployments to roll out"
   [ "$SKIP_COPILOT" = false ] && kubectl -n "$NAMESPACE" rollout status deployment/"$RELEASE_NAME"-coder-acp-copilot --timeout=5m
