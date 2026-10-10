@@ -1,0 +1,22 @@
+{{- if .Values.api.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  # Hardcoded to literal "api" (NOT the usual "<release>-api" componentName
+  # prefix): the portal image's apps/portal/nginx.conf bakes in
+  # `proxy_pass http://api:80` at build time with no templating hook, so
+  # the Service DNS name this chart creates must match it exactly,
+  # regardless of Helm release name.
+  name: api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "scope.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    {{- include "scope.selectorLabels" (dict "component" "api" "context" .) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.api.port }}
+      targetPort: http
+{{- end -}}

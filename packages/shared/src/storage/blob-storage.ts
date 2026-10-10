@@ -16,6 +16,7 @@ import { createGunzip } from "zlib";
 import { extract } from "tar";
 import type { LogEvent } from "../types/types.js";
 import type { ToolCall } from "../har/types.js";
+import { withRetry } from "../utils/retry.js";
 
 const SNAPSHOTS_CONTAINER = "snapshots";
 const LOGS_CONTAINER = "logs";
@@ -38,6 +39,22 @@ const EXCLUDE_PATTERNS = [
 export interface BlobStorageConfig {
   storageAccountName: string;
   storageConnectionString?: string; // For local Azurite
+}
+
+/**
+ * True for Azure Storage's `AuthorizationPermissionMismatch` error. In an
+ * RBAC-only (workload identity) setup this shows up as a transient failure —
+ * most commonly in the few seconds/minutes right after `createIfNotExists`
+ * auto-creates a container for the first time, where the data-plane
+ * authorization check for the new container hasn't fully propagated yet even
+ * though the account-level role assignment has existed for a long time.
+ * Retrying with backoff resolves it without any code or infra change.
+ */
+function isAuthorizationPropagationError(error: unknown): boolean {
+  const err = error as { statusCode?: number; code?: string; message?: string } | undefined;
+  if (!err) return false;
+  if (err.code === "AuthorizationPermissionMismatch") return true;
+  return err.statusCode === 403 && /not authorized to perform this operation/i.test(err.message ?? "");
 }
 
 export class BlobStorage {
@@ -71,6 +88,22 @@ export class BlobStorage {
    */
   async ensureContainer(): Promise<void> {
     await this.containerClient.createIfNotExists();
+  }
+
+  /**
+   * Wraps a snapshots-container write with a short retry for the
+   * `AuthorizationPermissionMismatch` container-creation propagation race
+   * described on {@link isAuthorizationPropagationError}. Non-idempotent
+   * writes here (blob uploads) are safe to retry: each overwrites the same
+   * blob name, so a retried attempt simply re-sends identical content.
+   */
+  private async withContainerRetry<T>(fn: () => Promise<T>): Promise<T> {
+    return withRetry(fn, {
+      maxRetries: 4,
+      baseDelayMs: 1000,
+      maxDelayMs: 8000,
+      isRetryable: isAuthorizationPropagationError,
+    });
   }
 
   /**
@@ -219,9 +252,11 @@ export class BlobStorage {
     const blobName = `${requestId}/runs/${runId}/iteration-${iteration}/tool-calls.jsonl`;
     const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
     const body = toolCalls.map((tc) => JSON.stringify(tc)).join("\n") + "\n";
-    await blockBlobClient.upload(body, Buffer.byteLength(body), {
-      blobHTTPHeaders: { blobContentType: "application/x-ndjson" },
-    });
+    await this.withContainerRetry(() =>
+      blockBlobClient.upload(body, Buffer.byteLength(body), {
+        blobHTTPHeaders: { blobContentType: "application/x-ndjson" },
+      }),
+    );
   }
 
   /**
@@ -328,16 +363,18 @@ export class BlobStorage {
       );
 
       // Upload to blob storage
-      await blockBlobClient.uploadFile(archivePath, {
-        blobHTTPHeaders: {
-          blobContentType: "application/gzip",
-        },
-        tags: {
-          requestId,
-          runId,
-          iteration: String(iteration),
-        },
-      });
+      await this.withContainerRetry(() =>
+        blockBlobClient.uploadFile(archivePath, {
+          blobHTTPHeaders: {
+            blobContentType: "application/gzip",
+          },
+          tags: {
+            requestId,
+            runId,
+            iteration: String(iteration),
+          },
+        }),
+      );
 
       return blockBlobClient.url;
     } finally {
@@ -377,15 +414,17 @@ export class BlobStorage {
       );
 
       // Upload to blob storage
-      await blockBlobClient.uploadFile(archivePath, {
-        blobHTTPHeaders: {
-          blobContentType: "application/gzip",
-        },
-        tags: {
-          requestId,
-          iteration: String(iteration),
-        },
-      });
+      await this.withContainerRetry(() =>
+        blockBlobClient.uploadFile(archivePath, {
+          blobHTTPHeaders: {
+            blobContentType: "application/gzip",
+          },
+          tags: {
+            requestId,
+            iteration: String(iteration),
+          },
+        }),
+      );
 
       return blockBlobClient.url;
     } finally {
@@ -406,11 +445,13 @@ export class BlobStorage {
     await this.ensureContainer();
 
     const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
-    await blockBlobClient.uploadFile(filePath, {
-      blobHTTPHeaders: {
-        blobContentType: contentType,
-      },
-    });
+    await this.withContainerRetry(() =>
+      blockBlobClient.uploadFile(filePath, {
+        blobHTTPHeaders: {
+          blobContentType: contentType,
+        },
+      }),
+    );
 
     return blockBlobClient.url;
   }
@@ -432,9 +473,11 @@ export class BlobStorage {
     const body = typeof data === "string" ? data : JSON.stringify(data);
     const buf = Buffer.from(body, "utf-8");
     const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
-    await blockBlobClient.uploadData(buf, {
-      blobHTTPHeaders: { blobContentType: "application/json" },
-    });
+    await this.withContainerRetry(() =>
+      blockBlobClient.uploadData(buf, {
+        blobHTTPHeaders: { blobContentType: "application/json" },
+      }),
+    );
     return blockBlobClient.url;
   }
 
@@ -454,9 +497,11 @@ export class BlobStorage {
 
     const buf = Buffer.from(text, "utf-8");
     const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
-    await blockBlobClient.uploadData(buf, {
-      blobHTTPHeaders: { blobContentType: contentType },
-    });
+    await this.withContainerRetry(() =>
+      blockBlobClient.uploadData(buf, {
+        blobHTTPHeaders: { blobContentType: contentType },
+      }),
+    );
     return blockBlobClient.url;
   }
 

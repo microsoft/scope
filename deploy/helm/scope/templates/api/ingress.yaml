@@ -1,0 +1,30 @@
+{{- if and .Values.api.enabled .Values.api.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "scope.componentName" (dict "component" "api" "context" .) }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "scope.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- with .Values.api.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.api.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ required "api.ingress.host is required when api.ingress.enabled is true" .Values.api.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                # Must match the literal "api" Service name (see api/service.yaml).
+                name: api
+                port:
+                  number: {{ .Values.api.port }}
+{{- end -}}

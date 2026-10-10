@@ -1,0 +1,261 @@
+# -----------------------------------------------------------------------------
+# Default values for the Scope umbrella chart.
+#
+# This chart is designed to be deployed against the AKS cluster provisioned by
+# deploy/azure/ (the "Deploy to Azure" Bicep template). Values under `azure:`
+# correspond directly to that template's outputs:
+#
+#   az deployment group show -g <rg> -n <deployment> --query properties.outputs
+#
+#   azure.acrLoginServer            <- output acrLoginServer
+#   azure.keyVaultName              <- output keyVaultName
+#   azure.keyVaultUri               <- output keyVaultUri
+#   azure.workloadIdentityClientId  <- output workloadIdentityClientId
+#   azure.serviceAccountName        <- output workloadIdentityServiceAccountName
+#   azure.tenantId                  <- your Azure AD tenant ID
+#   azure.storageAccountName        <- output storageAccountName
+#   azure.redisHostName             <- output redisHostName
+#
+# This repo ships ONE values.yaml with sane open-source defaults. There are no
+# per-environment overlay files in-repo — layer your own `-f my-values.yaml`
+# (or `--set`) on top for environment-specific overrides.
+# -----------------------------------------------------------------------------
+
+global:
+  # Namespace all resources are deployed into. Must match the namespace the
+  # Bicep template federated the workload identity to
+  # (output workloadIdentityServiceAccountNamespace, default "scope").
+  namespace: scope
+
+  # Container registry the core app service images (api, portal, judge,
+  # tokenManager, scheduler, workers.reportGenerator) are pulled from.
+  # Defaults to this repo's GHCR package namespace — AKS can pull public GHCR
+  # images with no imagePullSecrets. Override to your own fork's GHCR
+  # namespace (or any registry you've published these 6 images to, including
+  # the Bicep-provisioned ACR) with `--set global.imageRegistry=...`.
+  #
+  # The two ACP coding-agent workers (workers.coderAcpCopilot/
+  # coderAcpClaudeCode) and the db-migrate job are NOT published here — they
+  # are built/pushed to the Bicep-provisioned ACR as a separate, later step
+  # (see deploy/helm/scope/README.md "Phase 3"), and use their own
+  # `image.registry` override below instead of this global default.
+  imageRegistry: "ghcr.io/microsoft"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+
+  imageTag: "latest"
+
+# -----------------------------------------------------------------------------
+# Azure integration: Key Vault (via Secrets Store CSI driver) + workload
+# identity (direct SDK access for Blob/Queue storage and token-manager's
+# live Key Vault calls).
+# -----------------------------------------------------------------------------
+azure:
+  tenantId: ""
+  keyVaultName: ""
+  # Full Key Vault URI (output keyVaultUri), e.g. https://<name>.vault.azure.net/.
+  # Used directly by token-manager's Key Vault SDK client (DefaultAzureCredential
+  # via workload identity) — distinct from keyVaultName, which the Secrets
+  # Store CSI driver's SecretProviderClass wants instead.
+  keyVaultUri: ""
+  # Client ID of the user-assigned managed identity the Bicep template
+  # created and federated to the Kubernetes ServiceAccount below.
+  workloadIdentityClientId: ""
+  # Must exactly match the Bicep's federated subject
+  # (system:serviceaccount:<namespace>:<serviceAccountName>).
+  serviceAccountName: scope-workload-identity
+  storageAccountName: ""
+  # Hostname of the Azure Cache for Redis instance (output redisHostName).
+  # Non-secret — goes straight into the common-env ConfigMap as REDIS_HOST.
+  # Azure Cache for Redis only accepts TLS on 6380, so redisPort/redisTls
+  # below are fixed for that output; override only if you point this chart
+  # at a non-Azure Redis (e.g. plain 6379, no TLS).
+  redisHostName: ""
+  redisPort: 6380
+  redisTls: true
+
+# Secret object names as they exist in Key Vault, synced into a single K8s
+# Secret (named by `secrets.k8sSecretName`) via the Secrets Store CSI
+# driver's secretObjects feature. `mongoConnectionString` and
+# `redisPassword` are pre-populated by the Bicep template (as
+# `cosmos-connection-string` and `redis-primary-key` respectively — Redis is
+# an access *key*, not a connection string, so it pairs with
+# `azure.redisHostName`/`redisPort`/`redisTls` above to form the discrete
+# REDIS_HOST/PORT/PASSWORD/TLS env vars every service actually reads). The
+# rest are bring-your-own (add them to the Key Vault before or after install).
+secrets:
+  k8sSecretName: scope-secrets
+  keyVaultSecretNames:
+    mongoConnectionString: cosmos-connection-string
+    redisPassword: redis-primary-key
+    githubToken: github-token
+    anthropicApiKey: anthropic-api-key
+
+# -----------------------------------------------------------------------------
+# Per-service configuration. Each service supports `enabled`, `image`,
+# `replicas`, and `resources`; resource defaults mirror the "mirrors prod
+# K8s" limits already documented in docker-compose.yml.
+# -----------------------------------------------------------------------------
+
+api:
+  enabled: true
+  image:
+    repository: scope-api
+    tag: ""
+  port: 80
+  replicas: 1
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: "500m", memory: 512Mi }
+  ingress:
+    enabled: false
+    className: ""
+    host: ""
+    tls: []
+
+portal:
+  enabled: true
+  image:
+    repository: scope-portal
+    tag: ""
+  port: 80
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+  # Runtime-only toggles (see apps/portal/docker-entrypoint.sh) — these do
+  # NOT require rebuilding the portal image. The actual IdP tenant/client
+  # config (VITE_AUTH_*) is baked into the image at build time instead (see
+  # docs/architecture/auth-rbac.md §8); rebuild+republish your own portal
+  # image if you need a different Entra app registration than this chart's
+  # default GHCR image ships with.
+  #
+  # Defaults to false (unlike the portal image's own "secure by default"
+  # fallback): the publicly-published GHCR portal image has no Entra app
+  # registration baked in, so setting this true out of the box makes every
+  # fresh Helm install land on a dead-end "Authentication not configured"
+  # page (apps/portal/src/components/auth/RequireAuth.tsx) with no way to
+  # sign in. Set to true (and rebuild the portal image with your own
+  # VITE_AUTH_* values) once you've wired up a real IdP.
+  authEnabled: false
+  docsBaseUrl: ""
+  ingress:
+    enabled: false
+    className: ""
+    host: ""
+    tls: []
+
+judge:
+  enabled: true
+  image:
+    repository: scope-judge
+    tag: ""
+  port: 80
+  replicas: 1
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  judgeModel: gpt-5.4-mini
+  feedbackModel: gpt-5.4-mini
+  judgeStrategy: bundled
+
+tokenManager:
+  enabled: true
+  image:
+    repository: scope-token-manager
+    tag: ""
+  port: 80
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+scheduler:
+  enabled: true
+  image:
+    repository: scope-scheduler
+    tag: ""
+  port: 8080
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+workers:
+  reportGenerator:
+    enabled: true
+    image:
+      repository: scope-report-generator
+      tag: ""
+    replicas: 1
+    reportModel: gpt-5.4-mini
+    resources:
+      requests: { cpu: 250m, memory: 256Mi }
+      limits: { cpu: "500m", memory: 512Mi }
+  # ACP coding-agent workers are intentionally disabled by default and kept
+  # out of the main `helm install`. They are not published to GHCR (their
+  # images need the Kubedock/MCP-gateway sidecar story in
+  # docs/architecture/kubedock.md, which this chart does not yet template)
+  # and are built/pushed to the Bicep-provisioned ACR as "Phase 3" — see
+  # deploy/helm/scope/README.md. Set `enabled: true` and `image.registry` to
+  # your ACR login server (`az acr build` pushes there) only once you're
+  # ready to deploy them.
+  coderAcpCopilot:
+    enabled: false
+    image:
+      # Bicep-provisioned ACR login server, e.g. myacr.azurecr.io. Not GHCR —
+      # this image is never published there.
+      registry: ""
+      repository: scope-coder-acp-copilot
+      tag: ""
+    queueName: queue-coder-acp-copilot
+    # Must match the `agentVersion` you register via
+    # scripts/register-agent.sh (see deploy/helm/scope/README.md "Phase 3").
+    # apps/workers/coder-acp-copilot/agent-version.dev.yaml's "copilot-dev"
+    # is a dev-only placeholder — set this to a real version string
+    # (and register a matching, non-dev agent-version manifest) for
+    # anything beyond chart smoke-testing.
+    agentVersion: copilot-dev
+    replicas: 1
+    resources:
+      requests: { cpu: 500m, memory: 512Mi }
+      limits: { cpu: "1", memory: 1Gi }
+  coderAcpClaudeCode:
+    enabled: false
+    image:
+      registry: ""
+      repository: scope-coder-acp-claude-code
+      tag: ""
+    queueName: queue-coder-acp-claude-code
+    # See workers.coderAcpCopilot.agentVersion above for the registration
+    # contract this must satisfy.
+    agentVersion: claude-agent-acp-dev-sdk-dev
+    replicas: 1
+    resources:
+      requests: { cpu: 500m, memory: 512Mi }
+      limits: { cpu: "1", memory: 1Gi }
+
+jobs:
+  dbMigrate:
+    enabled: true
+    image:
+      repository: scope-api
+      # packages/db-migrations' migrate:up script runs its .ts migrations
+      # directly via tsx; the production `scope-api:latest` image only ships
+      # compiled dist/ for db-migrations (no src/, no tsx), so this job must
+      # run against the Dockerfile's `builder` stage instead. The GHCR
+      # publish workflow pushes that stage as a distinct `:builder` tag of
+      # the same scope-api image.
+      tag: "builder"
+  # NOT YET IMPLEMENTED as a chart template. Registering the ACP
+  # coding-agent types (scripts/register-agent.sh + each worker's
+  # agent.yaml) only matters once those workers are actually deployed —
+  # which, per this chart's split, happens in Phase 3 (see
+  # deploy/helm/scope/README.md), alongside building/pushing their images
+  # to ACR. Run scripts/register-agent.sh manually (or curl the API) at
+  # that point instead of via `helm install`.
+  registerAgents:
+    enabled: false
+    image:
+      repository: alpine
+      tag: "3.21"
