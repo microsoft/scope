@@ -2,14 +2,13 @@
 // Licensed under the MIT License.
 
 import { Command } from "commander";
-import EventSource from "eventsource";
 import { configureHelp } from "../utils/helpFormatter.js";
 import { banner, colorLevel, dimTimestamp, errorText, successText, label, value, warnBanner } from "../utils/style.js";
 import { formatData, isMachineReadable } from "../utils/formatters.js";
 import type { OutputFormat, DisplayField } from "../utils/types.js";
-import { normalizeUrl, withOutputOption, withProjectOption, getCliName, getDefaultApiUrl } from "../utils/shared.js";
+import { withOutputOption, withProjectOption, getCliName, getDefaultApiUrl } from "../utils/shared.js";
 import { requireProjectId } from "../utils/config.js";
-import { apiFetch, getApiBasePath } from "../utils/api-client.js";
+import { apiFetch, apiEventSource } from "../utils/api-client.js";
 
 export function registerReportCommands(program: Command): void {
 // ─── Report management ──────────────────────────────────────────────────────
@@ -51,9 +50,7 @@ report
 
       if (options.stream) {
         console.log(`\n${label('Streaming logs...')}\n`);
-        const eventSource = new EventSource(
-          `${normalizeUrl(options.url)}${getApiBasePath()}/reports/${result.id}/logs?fromStart=true`
-        );
+        const eventSource = await apiEventSource(options.url, `/reports/${result.id}/logs?fromStart=true`);
 
         eventSource.onmessage = (event: MessageEvent) => {
           try {
@@ -262,10 +259,8 @@ report
         process.exit(1);
       }
 
-      const fromStartParam = options.fromStart ? "&fromStart=true" : "";
-      const eventSource = new EventSource(
-        `${normalizeUrl(options.url)}${getApiBasePath()}/reports/${options.id}/logs?${fromStartParam}`
-      );
+      const fromStartParam = options.fromStart ? "?fromStart=true" : "";
+      const eventSource = await apiEventSource(options.url, `/reports/${options.id}/logs${fromStartParam}`);
 
       eventSource.onmessage = (event: MessageEvent) => {
         try {

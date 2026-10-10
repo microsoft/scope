@@ -107,6 +107,53 @@ modules. Coverage includes the extensionless installed `scope` executable, mock
 API commands, missing-URL failures, explicit URL precedence, offline help/version,
 and update checks; no release is published by these tests.
 
+## Named connections
+
+`scope env` stores explicit API URLs, optional Scope bearer tokens, and project
+preferences in separate `environments/<name>.env` files. A separate
+`active-environment` file stores only the selected name. Configuration lives in
+`$XDG_CONFIG_HOME/scope` (default `~/.config/scope`) on macOS/Linux, and
+`%LOCALAPPDATA%/scope` on Windows. Files contain plaintext credentials and use
+owner-only permissions where supported. The legacy `config.json` (selected
+project) and `update-check.json` cooldown live in the same directory; an
+existing `~/.config/scope/config.json` is still read until the next
+`scope project use` writes the new location.
+
+```bash
+scope env add local --url http://127.0.0.1:43127
+scope env use local
+scope project list
+scope project use <project-id>
+scope --env staging run list --project <project-id>
+scope env use --clear
+```
+
+`local` is an ordinary name. The server does not edit CLI configuration and the
+client does not discover a local server or infer a data-set identity.
+
+| Priority | Connection selection |
+| --- | --- |
+| 1 | An explicitly supplied API URL option uses the legacy URL, auth, and project resolution for the operation, even when its value equals `SCOPE_API_URL`. |
+| 2 | Root `--env <name>` selects that named connection. |
+| 3 | The saved active environment is used. |
+| 4 | Without either named selection, existing legacy configuration is used. |
+
+`ScopeCommand` pins a named connection in `AsyncLocalStorage` for the full
+command, including REST, SSE, polling, retries, and downloads. A named
+connection without a token or project does not inherit ambient values or the
+legacy project selection. Explicit `--project` still overrides its project.
+For MCP create/update, `--api-url/-u` selects Scope; resource `--url` and the
+MCP process's `--env` remain independent.
+
+`scope secret` uses the same named URL and bearer token for every operation.
+Credentials belong to the selected server, not a project, so these commands do
+not require `SCOPE_PROJECT`. For example, `scope --env staging secret list`
+lists staging's credential metadata. An explicit `secret ... --url` opts out
+of the named connection and uses legacy authentication. Creation and validation
+request/response bodies remain redacted in API logs in either mode.
+
+See [CLI usage](../../apps/cli/README.md) for `env show/set/unset/remove`.
+
 ## Versioning
 
 The release workflow sorts valid `cli/v*` tags in `microsoft/scope` semantically
@@ -218,17 +265,22 @@ manages the selection:
 | `scope project list [--include-deleted]` | List projects (optionally including soft-deleted ones) |
 | `scope project create --name <name> [--description <text>] [--use]` | Create a project (`--use` selects it after creating) |
 | `scope project show` | Show the currently selected project |
-| `scope project use <id>` | Persist the selected project to `~/.config/scope/config.json` |
+| `scope project use <id>` | Persist the selected project to `config.json` in the CLI config directory (see Named connections) |
 | `scope project update <id> [--name <name>] [--description <text>]` | Update a project's name or description |
 | `scope project delete <id>` | Soft-delete a project |
 | `scope project restore <id>` | Restore a soft-deleted project |
 
-Scoped commands (`run list`/`run submit`, and every entity `list`/`search`/`create`/
-`import`) resolve the effective project with this precedence:
+In legacy connection mode, scoped commands (`run list`/`run submit`, and every
+entity `list`/`search`/`create`/`import`) resolve the effective project with this
+precedence:
 
 1. `--project <id>` flag (per-invocation override)
 2. `SCOPE_PROJECT` environment variable
 3. the saved selection from `scope project use <id>`
+
+With a named connection, the order is instead `--project` then that
+environment's `SCOPE_PROJECT`. `scope project use` updates the named file rather
+than the legacy config. An explicit API URL opts back into the legacy mode.
 
 There is **no default project**. When none of these resolves, scoped commands
 **fail fast**: `requireProjectId()` throws and the top-level handler in `index.ts`

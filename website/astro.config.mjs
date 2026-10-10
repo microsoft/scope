@@ -108,6 +108,7 @@ export default defineConfig({
 						{ label: 'Access', slug: 'getting-started/access' },
 						{ label: 'Local development', slug: 'getting-started/local-development' },
 						{ label: 'Install the CLI', slug: 'getting-started/install-cli' },
+						{ label: 'Configure the CLI', slug: 'getting-started/configure-cli' },
 						{ label: 'Your first run', slug: 'getting-started/first-run' },
 					],
 				},

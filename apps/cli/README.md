@@ -22,6 +22,74 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ## Configuration
 
+### Named environments
+
+```bash
+scope env add local --url http://127.0.0.1:43127
+scope env add staging --url https://your-scope-api.example.com --token <token>
+scope env add local --url http://127.0.0.1:43127 --force
+scope env list
+scope env show staging
+scope env use local
+scope project list
+scope project use <project-id>
+scope --env staging run list --project <project-id>
+scope --env staging env set url https://new-api.example.com
+scope --env staging env set project <project-id>
+printf '%s' "$MY_SCOPE_TOKEN" | scope --env staging env set token
+scope --env staging env unset token
+scope env use --clear
+scope env remove staging
+```
+
+`local` is an ordinary, explicitly configured name. The server never adds or
+selects it for you; there is no `--local`, server discovery, or dataset identity
+mechanism. `env add` refuses an existing name so a saved token or project is not
+silently discarded; pass `--force` to replace the whole entry, or use `env set`
+to edit individual values. `env set` and `unset` accept `url`, `token`,
+`project`, or `SCOPE_API_URL`, `SCOPE_TOKEN`, `SCOPE_PROJECT`. A URL is required
+and cannot be unset; remove the environment instead. Omit a `set` value to read
+it from piped stdin (useful for avoiding tokens in shell history).
+`list`/`show` redact tokens.
+
+Each named environment has an independent `environments/<name>.env` file plus
+an `active-environment` selector under:
+
+- macOS/Linux: `$XDG_CONFIG_HOME/scope`, or `~/.config/scope`.
+- Windows: `%LOCALAPPDATA%/scope`, or `~/AppData/Local/scope`.
+
+Files are plaintext and written with owner-only permissions where supported.
+The same directory also holds the legacy-mode `config.json` (selected project)
+and the update-check cooldown.
+Protect them like credentials. Names are lowercase letters/digits, hyphens and
+underscores, 1–64 characters, beginning with a letter or digit.
+
+Connection precedence:
+
+1. An **explicit command-owned API URL** (`--url`/`-u`, or MCP
+   create/update's `--api-url`/`-u`) uses legacy URL, token and project resolution,
+   even when a named environment is selected or the URL equals `SCOPE_API_URL`.
+2. Root **`--env <name>`**, placed before the command.
+3. The saved selection from **`env use`**.
+4. Legacy configuration, if neither selector exists.
+
+Named connections do not inherit ambient `SCOPE_API_URL`, `SCOPE_TOKEN`,
+`SCOPE_PROJECT`, legacy project selection or legacy re-auth providers. An
+explicit `--project` still overrides the named project's preference. `project use`
+saves to that environment. Each operation retains its named URL/token/project
+across REST calls, SSE/reconnects, retries, polling and artifact downloads.
+
+MCP's resource `--url` and process `--env KEY=VALUE...` remain independent:
+
+```bash
+scope --env local mcp server create --id example --name Example --type stdio \
+  --command node --env FOO=bar --project <project-id>
+scope --env local mcp server create --id remote --name Remote --type http \
+  --url https://mcp.example.com --project <project-id>
+```
+
+### Legacy configuration
+
 There is no default API URL in either the installed CLI or source-mode
 development. Set the URL of your Scope instance explicitly:
 

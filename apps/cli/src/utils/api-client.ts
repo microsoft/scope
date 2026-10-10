@@ -30,6 +30,8 @@
  */
 import ky, { type KyInstance, type BeforeRequestHook } from "ky";
 import { normalizeUrl } from "./shared.js";
+import { currentEnvironment, resolveApiUrl } from "./connection.js";
+import EventSource from "eventsource";
 
 /** Init accepted by {@link apiFetch}. Adds a couple of client-only knobs to `RequestInit`. */
 export interface ApiFetchInit extends RequestInit {
@@ -435,7 +437,8 @@ const authHook: BeforeRequestHook = async ({ request }) => {
   request.headers.delete(SKIP_AUTH_HEADER);
   if (skip) return;
   if (request.headers.has("authorization")) return;
-  const token = await tokenProvider();
+  const environment = currentEnvironment();
+  const token = environment ? environment.token : await tokenProvider();
   if (token) request.headers.set("authorization", `Bearer ${token}`);
 };
 
@@ -475,7 +478,8 @@ function getClient(): KyInstance {
  *          `response.ok` / `response.json()` / streaming handling.
  */
 export async function apiFetch(baseUrl: string | undefined, path: string, init?: ApiFetchInit): Promise<Response> {
-  const url = `${normalizeUrl(baseUrl)}${withProjectId(resolveApiPath(path), init?.projectId)}`;
+  const environment = currentEnvironment();
+  const url = `${normalizeUrl(resolveApiUrl(baseUrl))}${withProjectId(resolveApiPath(path), init?.projectId)}`;
 
   const headers = new Headers(init?.headers);
   if (init?.skipAuth) headers.set(SKIP_AUTH_HEADER, "1");
@@ -486,7 +490,7 @@ export async function apiFetch(baseUrl: string | undefined, path: string, init?:
 
   let response = await dispatch(url, finalInit, init?.body, init?.sensitiveBody);
 
-  if (response.status === 401 && reauthHandler) {
+  if (response.status === 401 && reauthHandler && !environment) {
     const shouldRetry = await reauthHandler(response);
     if (shouldRetry) {
       // Re-dispatch: the auth hook re-resolves the (possibly refreshed) token.
@@ -495,6 +499,19 @@ export async function apiFetch(baseUrl: string | undefined, path: string, init?:
   }
 
   return response;
+}
+
+/**
+ * EventSource owns reconnects; its fixed URL and headers retain this operation's
+ * connection. Uses the same bearer as {@link apiFetch}: the named environment's
+ * token, otherwise the legacy {@link tokenProvider}.
+ */
+export async function apiEventSource(baseUrl: string | undefined, path: string): Promise<EventSource> {
+  const environment = currentEnvironment();
+  const url = `${normalizeUrl(resolveApiUrl(baseUrl))}${resolveApiPath(path)}`;
+  const token = environment ? environment.token : await tokenProvider();
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+  return new EventSource(url, headers ? { headers } : undefined);
 }
 
 /** Single request attempt through `ky`, wrapped with logging-sink instrumentation. */
