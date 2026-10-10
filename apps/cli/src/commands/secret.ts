@@ -17,12 +17,15 @@ import { configureHelp } from "../utils/helpFormatter.js";
 import { getDefaultApiUrl, withOutputOption } from "../utils/shared.js";
 import type { DisplayField, OutputFormat } from "../utils/types.js";
 
-type KeyMetadata = Pick<KeyDocument, "_id" | "type" | "enabled" | "capabilities" | "lastValidationStatus" | "lastValidationError" | "comment">;
+type KeyMetadata = Omit<Pick<KeyDocument, "_id" | "type" | "enabled" | "capabilities" | "lastValidationStatus" | "comment" | "expiresAt">, "expiresAt"> & {
+  expiresAt?: Date | string | null;
+};
 const keyFields: DisplayField<KeyMetadata>[] = [
   { key: "_id", label: "ID" }, { key: "type", label: "Type" },
   { key: "enabled", label: "Enabled" }, { key: "lastValidationStatus", label: "Validation" },
   { key: "capabilities", label: "Capabilities", formatter: (key) => key.capabilities?.join(", ") ?? "" },
-  { key: "comment", label: "Comment" }, { key: "lastValidationError", label: "Error" },
+  { key: "expiresAt", label: "Expires", formatter: (key) => key.expiresAt ? new Date(key.expiresAt).toISOString() : "N/A" },
+  { key: "comment", label: "Comment" },
 ];
 const validationFields: DisplayField<KeyValidationResult>[] = [
   { key: "status", label: "Status" }, { key: "capabilities", label: "Capabilities", formatter: (result) => result.capabilities?.join(", ") ?? "" },

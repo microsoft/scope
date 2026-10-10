@@ -165,7 +165,13 @@ describe("secret CLI", () => {
     // that allowlist. Pin the guarantee so a future field addition cannot leak a
     // credential through an output formatter.
     const leaked = "sk-SHOULD-NEVER-BE-PRINTED";
-    const withValue = { ...metadata, value: leaked, secretName: "token-azure-ai-foundry-key-id" };
+    const leakedError = "last-validation-error-SHOULD-NEVER-BE-PRINTED";
+    const withValue = {
+      ...metadata,
+      value: leaked,
+      secretName: "token-azure-ai-foundry-key-id",
+      lastValidationError: leakedError,
+    };
     const formats: OutputFormat[] = ["table", "json", "yaml", "tsv"];
     for (const format of formats) {
       reply = () => json([withValue]);
@@ -177,9 +183,34 @@ describe("secret CLI", () => {
     }
     const printed = vi.mocked(console.log).mock.calls.map((call) => String(call[0])).join("\n");
     expect(printed).not.toContain(leaked);
+    expect(printed).not.toContain(leakedError);
     expect(printed).not.toContain("secretName");
     // The commands still produced real output rather than silently printing nothing.
     expect(printed).toContain("key-id");
+  });
+
+  it.each(["table", "json", "yaml", "tsv"] as OutputFormat[])("includes expiration metadata in %s output", async (output) => {
+    const expiresAt = "2030-01-02T03:04:05.000Z";
+    reply = () => json({ ...metadata, expiresAt });
+    await run("secret", "get", "key-id", "-o", output);
+
+    const printed = vi.mocked(console.log).mock.calls.at(-1)?.[0] as string;
+    expect(printed).toContain(expiresAt);
+
+    reply = () => json({ ...metadata, expiresAt });
+    await run("secret", "create", "--type", "anthropic-api-key", "--value", "fixture", "--expires-at", expiresAt, "-o", output);
+    expect(JSON.parse(requests.at(-1)!.body)).toMatchObject({ expiresAt });
+    expect(vi.mocked(console.log).mock.calls.at(-1)?.[0]).toContain(expiresAt);
+
+    reply = () => json({ ...metadata, expiresAt });
+    await run("secret", "update", "key-id", "--expires-at", expiresAt, "-o", output);
+    expect(JSON.parse(requests.at(-1)!.body)).toEqual({ expiresAt });
+    expect(vi.mocked(console.log).mock.calls.at(-1)?.[0]).toContain(expiresAt);
+
+    reply = () => json({ ...metadata, expiresAt: null });
+    await run("secret", "update", "key-id", "--clear-expiry", "-o", output);
+    expect(JSON.parse(requests.at(-1)!.body)).toEqual({ expiresAt: null });
+    expect(vi.mocked(console.log).mock.calls.at(-1)?.[0]).toContain("N/A");
   });
 
   it("lists/gets metadata, updates metadata, previews/validates and deletes through the same API", async () => {
