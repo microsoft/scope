@@ -145,6 +145,13 @@ legacy project selection. Explicit `--project` still overrides its project.
 For MCP create/update, `--api-url/-u` selects Scope; resource `--url` and the
 MCP process's `--env` remain independent.
 
+`scope secret` uses the same named URL and bearer token for every operation.
+Credentials belong to the selected server, not a project, so these commands do
+not require `SCOPE_PROJECT`. For example, `scope --env staging secret list`
+lists staging's credential metadata. An explicit `secret ... --url` opts out
+of the named connection and uses legacy authentication. Creation and validation
+request/response bodies remain redacted in API logs in either mode.
+
 See [CLI usage](../../apps/cli/README.md) for `env show/set/unset/remove`.
 
 ## Versioning

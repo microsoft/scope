@@ -159,6 +159,40 @@ scope --help
 scope run --help
 ```
 
+### Provider secrets
+
+`scope secret` manages provider credentials (GitHub tokens, Anthropic keys,
+Azure AI Foundry keys) through the Secrets/Token Manager API, matching the
+Portal's secrets page:
+
+```bash
+printf '%s' "$ANTHROPIC_API_KEY" | scope secret create \
+  --type anthropic-api-key --value-stdin --comment 'Claude Code worker'
+printf '%s' "$FOUNDRY_KEY" | scope secret create --type azure-ai-foundry \
+  --endpoint https://<resource>.services.ai.azure.com/models --api-key-stdin [--model <model>]
+scope secret list [--capability <capability>]
+scope secret get <key-id>
+scope secret validate <key-id>
+scope secret update <key-id> --disable
+scope secret delete <key-id>
+```
+
+`secret preview` accepts the same credential inputs as `create` and validates
+them with the provider without storing anything. Creation returns metadata
+immediately; use `secret get` to inspect asynchronous validation. Secret values
+are immutable: `update` edits only the enabled state, comment, or expiration.
+`list` and `get` include expiration metadata but omit stored validation error
+details. Validation failures report a safe error and HTTP status rather than
+provider response bodies or exception details, which may contain credential
+material.
+
+The CLI never fetches or prints secret values in any output format, and
+credential request/response bodies are fully redacted in API logs. Prefer
+`--value-stdin`/`--api-key-stdin`; `--value`/`--api-key` print a warning
+because they expose the secret in shell history and process listings. Writes
+(`create`, `preview`) are never retried automatically; metadata reads retry
+transient failures.
+
 ## Updating
 
 Update to the latest version:

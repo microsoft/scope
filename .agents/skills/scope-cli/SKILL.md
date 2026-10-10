@@ -187,6 +187,20 @@ Saved connections (URL, token, project) that override `SCOPE_API_URL`/`SCOPE_TOK
 | Edit a value | `pnpm cli --env staging env set project <project-id>` |
 | Remove | `pnpm cli env remove staging` |
 
+### Provider Secrets
+
+Secret values are never printed; prefer the `*-stdin` flags.
+
+| Action | Command |
+|--------|---------|
+| List keys (metadata only) | `pnpm cli secret list` |
+| Get key metadata | `pnpm cli secret get <key-id>` |
+| Store a key | `printf '%s' "$KEY" \| pnpm cli secret create --type anthropic-api-key --value-stdin` |
+| Validate without storing | `printf '%s' "$KEY" \| pnpm cli secret preview --type anthropic-api-key --value-stdin` |
+| Revalidate | `pnpm cli secret validate <key-id>` |
+| Enable / disable | `pnpm cli secret update <key-id> --disable` |
+| Delete | `pnpm cli secret delete <key-id>` |
+
 ---
 
 ## Output Formats

@@ -12,9 +12,10 @@ import { registerReportCommands } from "../commands/report.js";
 import { registerMcpCommands } from "../commands/mcp.js";
 import { registerCodebaseCommands } from "../commands/codebase.js";
 import { registerAgentCommands } from "../commands/agent.js";
+import { registerSecretCommands } from "../commands/secret.js";
 import { ScopeCommand, currentEnvironment } from "./connection.js";
 import { EnvironmentStore, environmentConfigDir } from "./environments.js";
-import { apiFetch, apiEventSource, resetApiClient, setReauthHandler, setTokenProvider } from "./api-client.js";
+import { apiFetch, apiEventSource, resetApiClient, setApiLogSink, setReauthHandler, setTokenProvider, type ApiLogEntry } from "./api-client.js";
 import { resolveProjectId, setSelectedProjectId } from "./config.js";
 import { getDefaultApiUrl } from "./shared.js";
 
@@ -52,6 +53,7 @@ function cli(): ScopeCommand {
   registerMcpCommands(program);
   registerCodebaseCommands(program);
   registerAgentCommands(program);
+  registerSecretCommands(program);
   return program;
 }
 
@@ -178,6 +180,89 @@ describe("integrated environment resolution and precedence", () => {
     expect(store.active()).toBe("local");
     expect(currentEnvironment()).toBeUndefined();
     expect(process.env.SCOPE_API_URL).toBe("https://legacy.example");
+  });
+
+  describe("secret commands with named environments", () => {
+    const key = { _id: "test-key", type: "anthropic-api-key", enabled: true, lastValidationStatus: "valid" };
+    const commands = [
+      ["list"],
+      ["get", "test-key"],
+      ["create", "--type", "anthropic-api-key", "--value", "test-secret-value"],
+      ["preview", "--type", "anthropic-api-key", "--value", "test-secret-value"],
+      ["update", "test-key", "--disable"],
+      ["delete", "test-key"],
+      ["validate", "test-key"],
+    ];
+
+    function secretReply(request: Request): Response {
+      const path = new URL(request.url).pathname;
+      return json(path.endsWith("/preview") ? { status: "valid" }
+        : request.method === "GET" && path.endsWith("/keys") ? [key] : key);
+    }
+
+    it.each(commands.map((args) => [args[0], args] as const))(
+      "%s uses the saved connection and root override without requiring a project",
+      async (_name, args) => {
+        reply = secretReply;
+        store.set("local", "SCOPE_PROJECT");
+        store.set("staging", "SCOPE_PROJECT");
+        store.use("local");
+        await run("secret", ...args);
+        await run("--env", "staging", "secret", ...args);
+        expect(requests.map((request) => [new URL(request.url).origin, request.token])).toEqual([
+          ["http://127.0.0.1:43127", "Bearer local-token"],
+          ["https://staging.example", "Bearer staging-token"],
+        ]);
+        expect(requests.every((request) => !new URL(request.url).searchParams.has("projectId"))).toBe(true);
+        expect(store.active()).toBe("local");
+        expect(currentEnvironment()).toBeUndefined();
+      },
+    );
+
+    it.each(["--url", "-u"])("explicit %s bypasses even a missing environment and uses legacy auth", async (flag) => {
+      reply = secretReply;
+      store.use("local");
+      await run("--env", "missing", "secret", "list", flag, getDefaultApiUrl()!);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({
+        url: "https://legacy.example/api/v1/keys",
+        token: "Bearer ambient-token",
+      });
+    });
+
+    it("does not borrow legacy credentials or reauthenticate a tokenless named connection", async () => {
+      store.add("anonymous", "http://127.0.0.1:4000");
+      const provider = vi.fn(() => "provider-token");
+      const reauth = vi.fn(() => true);
+      setTokenProvider(provider);
+      setReauthHandler(reauth);
+      reply = secretReply;
+      await run("--env", "anonymous", "secret", "list");
+      expect(requests[0].token).toBeNull();
+      reply = () => json({ error: "unauthorized" }, 401);
+      await expect(run("--env", "anonymous", "secret", "list")).rejects.toThrow();
+      expect(requests).toHaveLength(2);
+      expect(requests[1].token).toBeNull();
+      expect(provider).not.toHaveBeenCalled();
+      expect(reauth).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["create", "--type", "anthropic-api-key", "--value", "test-secret-value"],
+      ["preview", "--type", "anthropic-api-key", "--value", "test-secret-value"],
+      ["validate", "test-key"],
+    ])("redacts %s request and response bodies under a named connection", async (...args) => {
+      const entries: ApiLogEntry[] = [];
+      setApiLogSink({ record: (entry) => entries.push(entry) });
+      reply = () => json({ ...key, value: "test-secret-value" });
+      await run("--env", "staging", "secret", ...args);
+      expect(requests[0].url).toContain("https://staging.example/api/v1/keys");
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({ requestBody: "[REDACTED]", responseBody: "[REDACTED]" });
+      const output = JSON.stringify(entries) + vi.mocked(console.log).mock.calls.flat().join("\n");
+      expect(output).not.toContain("test-secret-value");
+      expect(output).not.toContain("staging-token");
+    });
   });
 
   it.each(["--url", "-u"])("explicit caller API %s restores legacy auth/project even when equal to the default", async (flag) => {

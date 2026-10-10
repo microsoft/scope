@@ -42,6 +42,12 @@ scope --env local run list             # use another environment for one command
 scope env use --clear                  # go back to legacy configuration
 ```
 
+Provider credential commands use the selected deployment too:
+`scope --env staging secret list` lists staging's credential metadata.
+These commands do not require a project. See
+[Managing provider credentials](/guides/managing-credentials/) for the
+available operations.
+
 Place the root `--env <name>` option before the command name. This
 matters for commands such as `scope mcp server create`, which has its
 own `--env KEY=VALUE` option for MCP process variables:

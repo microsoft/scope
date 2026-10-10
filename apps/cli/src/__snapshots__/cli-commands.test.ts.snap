@@ -898,6 +898,74 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       },
     },
   },
+  "secret": {
+    "subcommands": {
+      "create": {
+        "options": [
+          "--api-key",
+          "--api-key-stdin",
+          "--comment",
+          "--endpoint",
+          "--expires-at",
+          "--model",
+          "--no-enabled",
+          "--output",
+          "--type",
+          "--url",
+          "--value",
+          "--value-stdin",
+        ],
+      },
+      "delete": {
+        "options": [
+          "--url",
+        ],
+      },
+      "get": {
+        "options": [
+          "--output",
+          "--url",
+        ],
+      },
+      "list": {
+        "options": [
+          "--capability",
+          "--output",
+          "--url",
+        ],
+      },
+      "preview": {
+        "options": [
+          "--api-key",
+          "--api-key-stdin",
+          "--endpoint",
+          "--model",
+          "--output",
+          "--type",
+          "--url",
+          "--value",
+          "--value-stdin",
+        ],
+      },
+      "update": {
+        "options": [
+          "--clear-expiry",
+          "--comment",
+          "--disable",
+          "--enable",
+          "--expires-at",
+          "--output",
+          "--url",
+        ],
+      },
+      "validate": {
+        "options": [
+          "--output",
+          "--url",
+        ],
+      },
+    },
+  },
   "skill": {
     "subcommands": {
       "delete": {
