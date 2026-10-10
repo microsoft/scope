@@ -132,6 +132,7 @@ export default defineConfig({
 								{ label: 'Agent profiles', slug: 'guides/defining-profiles' },
 								{ label: 'Prompt features', slug: 'guides/prompt-features' },
 								{ label: 'Choose a coding agent', slug: 'guides/choosing-a-coding-agent' },
+								{ label: 'Model catalog & lifecycle', slug: 'guides/model-lifecycle' },
 								{ label: 'Software stacks', slug: 'guides/software-stacks' },
 							],
 						},
