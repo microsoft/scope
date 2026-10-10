@@ -8,7 +8,8 @@ You can access Scope through the web Portal, the REST API, or the
 
 This page assumes you have access to an existing deployment. To run Scope
 yourself, follow [Local development](/getting-started/local-development/) for
-prerequisites, setup, authentication, and a first evaluation.
+prerequisites, setup, authentication, and a first evaluation. To host a
+shared deployment on Kubernetes, see [Self-hosting](/self-hosting/overview/).
 
 ## Requirements
 

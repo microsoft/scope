@@ -61,5 +61,6 @@ These detailed engineering references live alongside the source code:
 | Agent context | [Skills](https://github.com/microsoft/scope/blob/main/docs/architecture/skills.md) and [codebases](https://github.com/microsoft/scope/blob/main/docs/architecture/codebases.md) |
 | Scheduling and recovery | [Queue scheduler](https://github.com/microsoft/scope/blob/main/docs/architecture/queue-scheduler.md) |
 | Configuration and authentication | [Environment variables](https://github.com/microsoft/scope/blob/main/ENV_VARIABLES.md) |
+| Kubernetes and Azure deployment | [Self-hosting](/self-hosting/overview/) |
 | AI limitations and data handling | [Responsible AI FAQ](https://github.com/microsoft/scope/blob/main/docs/responsible-ai-faq.md) |
 | More architecture, operations, and research | [Documentation index](https://github.com/microsoft/scope/blob/main/docs/README.md) |

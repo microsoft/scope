@@ -92,3 +92,29 @@ tasks. See [Working with prompt features](/guides/prompt-features/).
 
 The prompt the LLM uses to decide whether a given prompt feature
 applies to a task prompt. Stored on the feature catalog entry.
+
+## Helm chart
+
+The package that installs Scope on Kubernetes, in
+`deploy/helm/scope`. See [Deploy with Helm](/self-hosting/deploy-helm/).
+
+## Flux
+
+A GitOps tool that keeps a cluster in sync with Git. Scope's Flux path
+installs the Helm chart through a `HelmRelease`. See
+[Deploy with Flux](/self-hosting/deploy-flux/).
+
+## External Secrets Operator (ESO)
+
+A Kubernetes operator that copies secrets from Azure Key Vault into
+Kubernetes Secrets. See [Secrets](/self-hosting/configuration/#secrets).
+
+## Azure Service Operator (ASO)
+
+A Kubernetes operator that creates Azure resources, such as storage
+queues and database collections, from Kubernetes manifests.
+
+## KEDA
+
+Kubernetes Event-driven Autoscaling. Scales each worker from zero based
+on the length of its queue. See [Workers](/self-hosting/configuration/#workers).
