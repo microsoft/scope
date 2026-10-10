@@ -45,6 +45,7 @@ export const ReportResponseSchema = z
     insightReferences: z.array(InsightReferenceSchema).optional(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date().optional(),
+    deletedAt: z.coerce.date().optional(),
     projectId: z.string(),
   })
   .openapi("ReportResponse");
@@ -65,7 +66,7 @@ export const BulkCreateReportsInputSchema = z
 
 export const BulkReportStatusInputSchema = z
   .object({
-    reportIds: z.array(z.string()),
+    requestIds: z.array(z.string()),
   })
   .openapi("BulkReportStatusInput");
 
