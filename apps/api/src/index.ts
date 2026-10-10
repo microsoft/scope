@@ -219,7 +219,6 @@ async function initializeClients(): Promise<void> {
     { key: "models", label: "Models" },
     { key: "agents", label: "Agents" },
     { key: "tokens", label: "Tokens" },
-    { key: "extensions", label: "VS Code Extensions" },
     { key: "statistics-graph", label: "Statistics Graph" },
     // Gate pipeline: Run and Deploy are not ready for users yet — hidden in the
     // portal by default. Backend/CLI stay permissive; flip these on in Admin

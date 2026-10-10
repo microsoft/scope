@@ -13,6 +13,15 @@ Extensions are only used by the **VS Code Copilot** coding
 CLI and Claude Code CLI agents do not support extensions — see
 [Choosing a coding agent](/guides/choosing-a-coding-agent/).
 
+:::note
+The Portal only shows **Extensions** (the navigation entry, the
+extensions pages, and the extension pickers on run and profile
+forms) while at least one available coding agent declares the
+`supportsExtensions` capability. Run and profile forms show the
+picker only when the selected agent supports extensions. There is
+no feature flag to toggle this.
+:::
+
 ## Extension IDs
 
 Every VS Code extension has a marketplace ID in the form

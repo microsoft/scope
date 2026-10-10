@@ -17,7 +17,7 @@ import {
   X, Save, Plus, ChevronDown, FilePlus2, History, ArrowLeft, Check, FolderGit2, FileText, Boxes,
 } from "lucide-react";
 import {
-  getActiveAgentVersions, isAgentAvailable, isAgentVersionAvailable, type CodingAgent, type McpServerDocument,
+  agentSupportsExtensions, getActiveAgentVersions, isAgentAvailable, isAgentVersionAvailable, type CodingAgent, type McpServerDocument,
   type ProfileWithVersion, type ProfileVersionDocument, type ResourceBindingSpec, type Run,
 } from "@/types";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -292,7 +292,7 @@ export function SubmitRun() {
   const selectedAgent = activeAgents.find((a: CodingAgent) => a._id === worker);
   const supportsMcpServers = !strictAgentCapabilities || selectedAgent?.capabilities?.supportsMcpServers === true;
   const supportsSkills = !strictAgentCapabilities || selectedAgent?.capabilities?.supportsSkills === true;
-  const supportsExtensions = !strictAgentCapabilities || selectedAgent?.capabilities?.supportsExtensions === true;
+  const supportsExtensions = agentSupportsExtensions(selectedAgent);
   const showMcpServers = supportsMcpServers || (profileLocked && selectedMcpServers.length > 0);
   const showSkills = supportsSkills || (profileLocked && selectedSkills.length > 0);
   const showExtensions = supportsExtensions || (profileLocked && selectedExtensions.length > 0);
