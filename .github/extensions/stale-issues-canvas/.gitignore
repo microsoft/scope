@@ -1,0 +1,6 @@
+# Runtime data (issue dataset + set-aside state) normally lives in the session
+# workspace's files/ dir (~/.copilot/session-state/<id>/files), NOT here. These
+# entries only guard the degraded fallback path used when infinite sessions are
+# disabled and the extension writes next to itself.
+aside-state.json
+data.json
