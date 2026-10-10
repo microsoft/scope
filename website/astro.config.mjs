@@ -146,6 +146,13 @@ export default defineConfig({
 								{ label: 'Use tools, skills & extensions', slug: 'guides/mcp-skills-extensions' },
 							],
 						},
+						{
+							label: 'Admin',
+							collapsed: true,
+							items: [
+								{ label: 'Manage provider credentials', slug: 'guides/managing-credentials' },
+							],
+						},
 					],
 				},
 				{

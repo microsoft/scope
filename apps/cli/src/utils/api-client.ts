@@ -33,6 +33,8 @@ import { normalizeUrl } from "./shared.js";
 
 /** Init accepted by {@link apiFetch}. Adds a couple of client-only knobs to `RequestInit`. */
 export interface ApiFetchInit extends RequestInit {
+  /** Redact entire request/response log bodies when registering or validating credentials. */
+  sensitiveBody?: boolean;
   /**
    * Skip `Authorization` header injection for this request (e.g. truly public
    * endpoints). Defaults to `false` — every Scope API call is authenticated.
@@ -479,16 +481,16 @@ export async function apiFetch(baseUrl: string | undefined, path: string, init?:
   if (init?.skipAuth) headers.set(SKIP_AUTH_HEADER, "1");
 
   // Strip our client-only fields before handing the init to ky.
-  const { skipAuth: _skipAuth, projectId: _projectId, ...rest } = init ?? {};
+  const { skipAuth: _skipAuth, projectId: _projectId, sensitiveBody: _sensitiveBody, ...rest } = init ?? {};
   const finalInit: RequestInit = { ...rest, headers };
 
-  let response = await dispatch(url, finalInit, init?.body);
+  let response = await dispatch(url, finalInit, init?.body, init?.sensitiveBody);
 
   if (response.status === 401 && reauthHandler) {
     const shouldRetry = await reauthHandler(response);
     if (shouldRetry) {
       // Re-dispatch: the auth hook re-resolves the (possibly refreshed) token.
-      response = await dispatch(url, finalInit, init?.body);
+      response = await dispatch(url, finalInit, init?.body, init?.sensitiveBody);
     }
   }
 
@@ -496,7 +498,7 @@ export async function apiFetch(baseUrl: string | undefined, path: string, init?:
 }
 
 /** Single request attempt through `ky`, wrapped with logging-sink instrumentation. */
-async function dispatch(url: string, init: RequestInit, originalBody: BodyInit | null | undefined): Promise<Response> {
+async function dispatch(url: string, init: RequestInit, originalBody: BodyInit | null | undefined, sensitiveBody = false): Promise<Response> {
   const send = getClient();
   if (!logSink) {
     return send(url, init);
@@ -509,7 +511,7 @@ async function dispatch(url: string, init: RequestInit, originalBody: BodyInit |
     method: (init.method ?? "GET").toUpperCase(),
     url,
     requestHeaders: redactedRequestHeaders(init.headers),
-    requestBody: previewBody(originalBody),
+    requestBody: sensitiveBody ? REDACTED : previewBody(originalBody),
   };
 
   try {
@@ -518,7 +520,7 @@ async function dispatch(url: string, init: RequestInit, originalBody: BodyInit |
     // Gated on content type/length so binary and streaming bodies aren't buffered.
     let responseBody: string | undefined;
     try {
-      responseBody = await captureResponseBody(response);
+      responseBody = sensitiveBody ? REDACTED : await captureResponseBody(response);
     } catch {
       responseBody = undefined;
     }

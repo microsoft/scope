@@ -13,20 +13,13 @@ import {
   UpdateKeyRequest,
   AcquireKeyRequest,
   deriveSecretName,
+  KEY_TYPES,
+  isKeyType,
 } from "shared";
 import { SecretStore } from "./keyvault-store.js";
 import { validateToken } from "./token-validators.js";
 import { RoundRobinMap } from "./round-robin.js";
 
-const VALID_TYPES: KeyType[] = [
-  "github-pat-classic",
-  "github-pat-fine-grained",
-  "github-oauth",
-  "github-oauth-cookie-state",
-  "anthropic-api-key",
-  "anthropic-oauth",
-  "azure-ai-foundry",
-];
 const VALID_CAPABILITIES: KeyCapability[] = [
   "github-models",
   "github-public-api",
@@ -52,9 +45,9 @@ export function createKeyRouter(
     try {
       const { type, value } = req.body as { type: KeyType; value: string };
 
-      if (!type || !VALID_TYPES.includes(type)) {
+      if (!type || !isKeyType(type)) {
         res.status(400).json({
-          error: `Invalid type. Must be one of: ${VALID_TYPES.join(", ")}`,
+          error: `Invalid type. Must be one of: ${KEY_TYPES.join(", ")}`,
         });
         return;
       }
@@ -78,9 +71,9 @@ export function createKeyRouter(
       const body = req.body as CreateKeyRequest;
 
       // Validate required fields
-      if (!body.type || !VALID_TYPES.includes(body.type)) {
+      if (!body.type || !isKeyType(body.type)) {
         res.status(400).json({
-          error: `Invalid type. Must be one of: ${VALID_TYPES.join(", ")}`,
+          error: `Invalid type. Must be one of: ${KEY_TYPES.join(", ")}`,
         });
         return;
       }
