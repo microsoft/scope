@@ -1,0 +1,259 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "basics": [
+      {
+        "name": "environmentNameControl",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Environment name",
+        "defaultValue": "scope",
+        "toolTip": "A short name used to derive the names of the resources this template creates (e.g. \"scope-demo\"). Lowercase alphanumeric and hyphens only, 3-20 characters.",
+        "constraints": {
+          "required": true,
+          "regex": "^[a-z0-9-]{3,20}$",
+          "validationMessage": "Use 3-20 lowercase alphanumeric characters or hyphens."
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "aks",
+        "label": "AKS cluster",
+        "elements": [
+          {
+            "name": "kubernetesVersionControl",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Kubernetes version",
+            "defaultValue": "",
+            "toolTip": "Leave empty to use the AKS default version.",
+            "constraints": {
+              "required": false
+            }
+          },
+          {
+            "name": "systemNodePool",
+            "type": "Microsoft.Common.Section",
+            "label": "System node pool",
+            "elements": [
+              {
+                "name": "systemNodeVmSizeControl",
+                "type": "Microsoft.Compute.SizeSelector",
+                "label": "System node pool VM size",
+                "toolTip": "VM size used for the AKS System node pool.",
+                "recommendedSizes": [
+                  "Standard_D4s_v5",
+                  "Standard_D2s_v5"
+                ],
+                "osPlatform": "Linux",
+                "count": 1
+              },
+              {
+                "name": "systemNodeCountControl",
+                "type": "Microsoft.Common.Slider",
+                "label": "System node pool count",
+                "defaultValue": 3,
+                "min": 1,
+                "max": 10,
+                "step": 1,
+                "toolTip": "Number of nodes in the System node pool.",
+                "showStepMarkers": false
+              }
+            ]
+          },
+          {
+            "name": "userNodePool",
+            "type": "Microsoft.Common.Section",
+            "label": "User node pool",
+            "elements": [
+              {
+                "name": "userNodeVmSizeControl",
+                "type": "Microsoft.Compute.SizeSelector",
+                "label": "User node pool VM size",
+                "toolTip": "VM size used for the AKS User node pool.",
+                "recommendedSizes": [
+                  "Standard_D4s_v5",
+                  "Standard_D2s_v5"
+                ],
+                "osPlatform": "Linux",
+                "count": 1
+              },
+              {
+                "name": "userNodeCountControl",
+                "type": "Microsoft.Common.Slider",
+                "label": "User node pool count",
+                "defaultValue": 2,
+                "min": 1,
+                "max": 10,
+                "step": 1,
+                "toolTip": "Number of nodes in the User node pool.",
+                "showStepMarkers": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "dataServices",
+        "label": "Data services",
+        "elements": [
+          {
+            "name": "acrSkuControl",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Container registry SKU",
+            "defaultValue": "Standard",
+            "toolTip": "SKU for the Azure Container Registry that hosts the worker image.",
+            "constraints": {
+              "allowedValues": [
+                { "label": "Basic", "value": "Basic" },
+                { "label": "Standard", "value": "Standard" },
+                { "label": "Premium", "value": "Premium" }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "cosmosConsistencyControl",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Cosmos DB consistency level",
+            "defaultValue": "Session",
+            "toolTip": "Default consistency level for the Cosmos DB (MongoDB API) account.",
+            "constraints": {
+              "allowedValues": [
+                { "label": "Session", "value": "Session" },
+                { "label": "Eventual", "value": "Eventual" },
+                { "label": "Consistent prefix", "value": "ConsistentPrefix" },
+                { "label": "Bounded staleness", "value": "BoundedStaleness" },
+                { "label": "Strong", "value": "Strong" }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "redisSkuControl",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Redis cache SKU",
+            "defaultValue": "Balanced B1",
+            "toolTip": "SKU for Azure Managed Redis (Balanced tier). Capacity is encoded in the SKU name itself.",
+            "constraints": {
+              "allowedValues": [
+                { "label": "Balanced B0", "value": "Balanced_B0" },
+                { "label": "Balanced B1", "value": "Balanced_B1" },
+                { "label": "Balanced B3", "value": "Balanced_B3" },
+                { "label": "Balanced B5", "value": "Balanced_B5" },
+                { "label": "Balanced B10", "value": "Balanced_B10" }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "storageSkuControl",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Storage account SKU",
+            "defaultValue": "Standard_LRS",
+            "toolTip": "Replication SKU for the storage account (blob + queue).",
+            "constraints": {
+              "allowedValues": [
+                { "label": "Locally-redundant storage (LRS)", "value": "Standard_LRS" },
+                { "label": "Zone-redundant storage (ZRS)", "value": "Standard_ZRS" },
+                { "label": "Geo-redundant storage (GRS)", "value": "Standard_GRS" }
+              ],
+              "required": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "networking",
+        "label": "Networking",
+        "elements": [
+          {
+            "name": "vnetAddressPrefixControl",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Virtual network address space (CIDR)",
+            "defaultValue": "10.20.0.0/16",
+            "toolTip": "Address space for the virtual network.",
+            "constraints": {
+              "required": true,
+              "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+              "validationMessage": "Enter a valid CIDR range, e.g. 10.20.0.0/16."
+            }
+          },
+          {
+            "name": "aksSubnetPrefixControl",
+            "type": "Microsoft.Common.TextBox",
+            "label": "AKS node subnet address prefix (CIDR)",
+            "defaultValue": "10.20.0.0/20",
+            "toolTip": "Address prefix for the AKS node subnet. Must be contained within the virtual network address space.",
+            "constraints": {
+              "required": true,
+              "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+              "validationMessage": "Enter a valid CIDR range, e.g. 10.20.0.0/20."
+            }
+          },
+          {
+            "name": "privateEndpointSubnetPrefixControl",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Private endpoints subnet address prefix (CIDR)",
+            "defaultValue": "10.20.16.0/24",
+            "toolTip": "Address prefix for the subnet used by private endpoints (Key Vault, Cosmos DB, Redis, Storage). Must be contained within the virtual network address space.",
+            "constraints": {
+              "required": true,
+              "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+              "validationMessage": "Enter a valid CIDR range, e.g. 10.20.16.0/24."
+            }
+          }
+        ]
+      },
+      {
+        "name": "workloadIdentity",
+        "label": "Workload identity",
+        "elements": [
+          {
+            "name": "workloadIdentityNamespaceControl",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Kubernetes service account namespace",
+            "defaultValue": "scope",
+            "toolTip": "Kubernetes namespace of the service account that will use workload identity to access Azure resources (Key Vault, Storage).",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+              "validationMessage": "Enter a valid Kubernetes namespace name."
+            }
+          },
+          {
+            "name": "workloadIdentityServiceAccountControl",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Kubernetes service account name",
+            "defaultValue": "scope-workload-identity",
+            "toolTip": "Name of the Kubernetes service account that will be federated with the workload identity.",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+              "validationMessage": "Enter a valid Kubernetes service account name."
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "outputs": {
+    "environmentName": "[basics('environmentNameControl')]",
+    "location": "[location()]",
+    "kubernetesVersion": "[steps('aks').kubernetesVersionControl]",
+    "aksSystemNodeVmSize": "[steps('aks').systemNodePool.systemNodeVmSizeControl]",
+    "aksSystemNodeCount": "[steps('aks').systemNodePool.systemNodeCountControl]",
+    "aksUserNodeVmSize": "[steps('aks').userNodePool.userNodeVmSizeControl]",
+    "aksUserNodeCount": "[steps('aks').userNodePool.userNodeCountControl]",
+    "acrSkuName": "[steps('dataServices').acrSkuControl]",
+    "cosmosDbConsistencyLevel": "[steps('dataServices').cosmosConsistencyControl]",
+    "redisSkuName": "[steps('dataServices').redisSkuControl]",
+    "storageSkuName": "[steps('dataServices').storageSkuControl]",
+    "vnetAddressPrefix": "[steps('networking').vnetAddressPrefixControl]",
+    "aksSubnetPrefix": "[steps('networking').aksSubnetPrefixControl]",
+    "privateEndpointSubnetPrefix": "[steps('networking').privateEndpointSubnetPrefixControl]",
+    "workloadIdentityServiceAccountNamespace": "[steps('workloadIdentity').workloadIdentityNamespaceControl]",
+    "workloadIdentityServiceAccountName": "[steps('workloadIdentity').workloadIdentityServiceAccountControl]"
+  }
+}
