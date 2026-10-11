@@ -47,6 +47,10 @@ Scope is a pnpm workspaces monorepo (TypeScript, with a Rust component for the A
   Copilot entitlement**; `gh auth login` alone does not grant Copilot access.
 - **Rust / Cargo** — only needed if you work on the AI gateway (`apps/gateway/`).
 
+On Linux, [`scripts/setup-linux-prereqs.sh`](./scripts/setup-linux-prereqs.sh) checks these
+prerequisites and installs the missing ones (`--check` only reports). On Windows, develop inside
+WSL 2: see [Set up Scope on Windows with WSL](./docs/tips/03-windows-wsl-dev-setup.md).
+
 ## Getting started
 
 ```bash

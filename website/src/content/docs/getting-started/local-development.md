@@ -27,6 +27,10 @@ quotas. The local backing services don't require an Azure subscription.
 The commands below use a Bash-compatible shell. Rust is only required on the
 host if you build or modify the gateway outside Docker.
 
+On Windows, run them inside WSL 2 with Docker Desktop. The
+[Windows and WSL setup guide](https://github.com/microsoft/scope/blob/main/docs/tips/03-windows-wsl-dev-setup.md)
+installs these prerequisites on Ubuntu, with setup scripts or by hand.
+
 ## 1. Clone and install
 
 ```bash
