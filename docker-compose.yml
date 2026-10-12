@@ -9,6 +9,7 @@
 #   docker compose --profile vscode-web up               # + VS Code Web worker
 #   docker compose --profile claude-code --profile copilot up  # multiple workers
 #   docker compose --profile report up                   # + Report Generator worker
+#   docker compose --profile taxonomy up                 # + Taxonomy handler worker
 #   docker compose up mongodb redis azurite              # infra only (run app services natively)
 #
 # Host-native debugging:
@@ -868,6 +869,51 @@ services:
         condition: service_healthy
       api:
         condition: service_started
+
+  taxonomy-handler:
+    build:
+      context: .
+      dockerfile: apps/workers/taxonomy/Dockerfile
+    profiles: [taxonomy, all]
+    environment:
+      <<: *common-env
+      AZURE_STORAGE_QUEUE_TAXONOMY: pp-taxonomy-queue
+      TAXONOMY_MODEL: ${TAXONOMY_MODEL:-gpt-5.4}
+      SCOPE_MT_API_URL: http://api:80
+      SCHEDULER_URL: http://scheduler:8080
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      TOKEN_MANAGER_URL: http://token-manager:80
+      GIT_COMMIT: ${GIT_COMMIT:-development}
+      SESSION_TIMEOUT_MS: ${SESSION_TIMEOUT_MS:-300000}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+        required: false
+      redis:
+        condition: service_healthy
+      azurite:
+        condition: service_healthy
+      api:
+        condition: service_started
+      scheduler:
+        condition: service_started
+      register-handler-taxonomy:
+        condition: service_completed_successfully
+
+  register-handler-taxonomy:
+    build:
+      context: .
+      dockerfile: apps/workers/taxonomy/Dockerfile
+    profiles: [taxonomy, all]
+    environment:
+      <<: *common-env
+      HANDLER_YAML_PATH: apps/workers/taxonomy/handler.yaml
+      SCHEDULER_URL: http://scheduler:8080
+    depends_on:
+      scheduler:
+        condition: service_started
+    restart: "no"
+    entrypoint: ["npx", "tsx", "packages/shared/src/scripts/register-handler.ts"]
 
   register-handler-post-processor:
     build:
