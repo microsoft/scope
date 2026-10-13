@@ -20,6 +20,10 @@ be added alongside it in the future. The deployment flow is:
 3. Configure the coding-agent workers. For the Azure quickstart, follow
    [Enable coding-agent workers](/self-hosting/deploy-helm/#phase-3-enable-coding-agent-workers).
 
+To hand the release to GitOps instead, follow
+[Deploy with Flux](/self-hosting/deploy-flux/): declare a Flux
+`HelmRelease` in Git and let the cluster reconcile it.
+
 The Azure option uses a resource-group-scoped open-source template from
 [`deploy/azure`](https://github.com/microsoft/scope/tree/main/deploy/azure).
 It is separate from the repository's internal development infrastructure.

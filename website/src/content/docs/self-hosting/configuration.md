@@ -7,6 +7,13 @@ Layer a private values file over
 [`deploy/helm/scope/values.yaml`](https://github.com/microsoft/scope/blob/main/deploy/helm/scope/values.yaml).
 Generate the Azure-specific values with
 `scripts/generate-values-from-bicep.sh`, then add only your overrides.
+The same values work for `helm install` and for a Flux `HelmRelease`; only
+where you write them differs.
+
+| Path | Where values live |
+| --- | --- |
+| [Helm](/self-hosting/deploy-helm/) | your values file, passed with `--values` |
+| [Flux](/self-hosting/deploy-flux/) | `spec.values` and `spec.valuesFrom` in the `HelmRelease` |
 
 ## Global values
 

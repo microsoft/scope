@@ -5,7 +5,9 @@ description: Create the Azure resources required to run Scope on AKS.
 
 The [`deploy/azure`](https://github.com/microsoft/scope/tree/main/deploy/azure)
 template provisions the infrastructure required by the Scope Helm chart.
-It does not install the application.
+It does not install the application. When it finishes, continue with
+[Deploy with Helm](/self-hosting/deploy-helm/) or
+[Deploy with Flux](/self-hosting/deploy-flux/).
 
 ## Deploy through the Azure portal
 
@@ -91,6 +93,8 @@ The backend service account defaults to `scope-workload-identity` in the
 | `privateEndpointSubnetPrefix` | `10.20.16.0/24` |
 | Backend namespace and service account | `scope`, `scope-workload-identity` |
 | Worker namespace and service account | `scope`, `scope-worker-workload-identity` |
+
+<a id="outputs"></a>
 
 ## Outputs and generated Helm values
 

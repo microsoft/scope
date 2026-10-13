@@ -98,6 +98,12 @@ applies to a task prompt. Stored on the feature catalog entry.
 The package that installs Scope on Kubernetes, in
 `deploy/helm/scope`. See [Deploy with Helm](/self-hosting/deploy-helm/).
 
+## Flux
+
+A GitOps tool that keeps a cluster in sync with Git. Scope's Flux path
+installs the Helm chart through a `HelmRelease`. See
+[Deploy with Flux](/self-hosting/deploy-flux/).
+
 ## Azure Key Vault Secrets Provider
 
 The AKS add-on that uses the Secrets Store CSI Driver to mount Key Vault

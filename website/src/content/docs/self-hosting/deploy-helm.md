@@ -7,6 +7,8 @@ The Scope chart is in
 [`deploy/helm/scope`](https://github.com/microsoft/scope/tree/main/deploy/helm/scope).
 Use it after [provisioning Azure infrastructure](/self-hosting/provision-aks/).
 
+<a id="1-publish-the-images"></a>
+
 ## Image strategy
 
 The API, Portal, Judge, Token Manager, Scheduler, and Report Generator images
@@ -78,6 +80,8 @@ Run `./scripts/bootstrap-workers.sh --help` for the namespace, release,
 chart, image-tag, skip-build, skip-worker, and skip-registration flags. Pass
 the original `--values-file`; without it, the script falls back to
 `--reuse-values`, which can omit defaults introduced after the first install.
+
+<a id="4-verify"></a>
 
 ## Verify
 
