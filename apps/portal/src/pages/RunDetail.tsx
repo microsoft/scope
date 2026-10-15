@@ -950,20 +950,20 @@ export function RunDetail() {
         onValueChange={(value) => navigate(`/runs/${id}/${value}${selectedRunId ? `?runId=${selectedRunId}` : ""}`)}
       >
         <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="turns">
             Turns {activeRun?.turns ? `(${activeRun?.turns.length})` : ""}
           </TabsTrigger>
           {activeRun?.turns && activeRun?.turns.length > 0 && (
             <TabsTrigger value="conversation">Conversation</TabsTrigger>
           )}
+          <TabsTrigger value="reports">
+            Reports {reports && reports.length > 0 ? `(${reports.length})` : ""}
+          </TabsTrigger>
           {hasHarData && <TabsTrigger value="network">Network</TabsTrigger>}
           {hasHarData && <TabsTrigger value="tool-calls">Tool Calls</TabsTrigger>}
           {hasVideoData && <TabsTrigger value="video"><Video className="h-3.5 w-3.5 mr-1" />Videos ({videoCount})</TabsTrigger>}
           <TabsTrigger value="logs">Logs</TabsTrigger>
-          <TabsTrigger value="reports">
-            Reports {reports && reports.length > 0 ? `(${reports.length})` : ""}
-          </TabsTrigger>
-          <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
         {/* Turns tab */}
