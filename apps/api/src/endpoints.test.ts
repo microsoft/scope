@@ -2933,4 +2933,142 @@ describe("API Endpoints", () => {
       expect(res.body).toEqual({ updated: 2, skipped: 0 });
     });
   });
+  describe("Report template eligibility", () => {
+    const templates = [
+      { id: "default", name: "Default" },
+      { id: "always", name: "Always", trigger: { type: "always" } },
+      { id: "criteria-any", name: "Criteria any", trigger: { type: "criteria", criteriaIds: ["quality", "missing"] } },
+      { id: "criteria-all", name: "Criteria all", trigger: { type: "criteria", criteriaIds: ["quality", "missing"], match: "all" } },
+      { id: "task", name: "Task", trigger: { type: "taskPrompt", taskPromptIds: ["prompt-1"] } },
+      { id: "feature", name: "Feature", trigger: { type: "promptFeature", featureIds: ["typescript"] } },
+      { id: "undetected", name: "Undetected", trigger: { type: "promptFeature", featureIds: ["python"] } },
+    ];
+    const matchingIds = ["default", "always", "criteria-any", "task", "feature"];
+
+    beforeEach(() => {
+      vi.mocked(mocks.collection.findOne).mockResolvedValue({
+        _id: "r1", projectId: TEST_PROJECT_ID, taskPromptId: "prompt-1",
+        scenario: { criteria: ["quality"] },
+      });
+      vi.mocked(mocks.taskPromptCollection.findOne).mockResolvedValue({
+        _id: "prompt-1", features: [
+          { featureId: "typescript", detected: true },
+          { featureId: "python", detected: false },
+        ],
+      });
+      const cursor = mocks.reportTemplateCollection.find();
+      vi.mocked(mocks.reportTemplateCollection.find).mockReturnValue({
+        ...cursor, toArray: vi.fn().mockResolvedValue(templates),
+      });
+    });
+
+    it("previews exactly the templates that single and bulk triggering execute", async () => {
+      const preview = await request(testServer()).get("/api/v1/reports/eligibility?requestId=r1&projectId=ignored");
+      expect(preview.status).toBe(200);
+      expect(preview.body).toEqual({
+        activeTemplateCount: templates.length,
+        templates: templates.filter((t) => matchingIds.includes(t.id)).map(({ id, name }) => ({ id, name })),
+      });
+      expect(mocks.reportTemplateCollection.find).toHaveBeenCalledWith({
+        projectId: TEST_PROJECT_ID, deletedAt: { $exists: false },
+      });
+      expect(mocks.taskPromptCollection.findOne).toHaveBeenCalledWith({ _id: "prompt-1" });
+      expect(mocks.reportCollection.insertOne).not.toHaveBeenCalled();
+      expect(mocks.reportQueueClient.sendMessage).not.toHaveBeenCalled();
+
+      const triggered = await request(testServer()).post("/api/v1/reports/trigger").send({ requestId: "r1" });
+      expect(triggered.status).toBe(201);
+      expect(triggered.body.triggered).toBe(matchingIds.length);
+      expect(vi.mocked(mocks.reportCollection.insertOne).mock.calls.map(([report]) => report.templateId)).toEqual(matchingIds);
+      expect(vi.mocked(mocks.reportCollection.insertOne).mock.calls.every(([report]) => report.projectId === TEST_PROJECT_ID)).toBe(true);
+
+      const cursor = mocks.collection.find();
+      vi.mocked(mocks.collection.find).mockReturnValue({
+        ...cursor, toArray: vi.fn().mockResolvedValue([{
+          _id: "r1", projectId: TEST_PROJECT_ID, taskPromptId: "prompt-1", scenario: { criteria: ["quality"] },
+        }]),
+      });
+      vi.mocked(mocks.reportCollection.insertOne).mockClear();
+      const bulk = await request(testServer()).post("/api/v1/reports/bulk-trigger").send({ requestIds: ["r1"] });
+      expect(bulk.status).toBe(201);
+      expect(bulk.body.created).toBe(matchingIds.length);
+      expect(vi.mocked(mocks.reportCollection.insertOne).mock.calls.map(([report]) => report.templateId)).toEqual(matchingIds);
+    });
+
+    it("distinguishes no active templates from nonmatching triggers", async () => {
+      const cursor = mocks.reportTemplateCollection.find();
+      vi.mocked(mocks.reportTemplateCollection.find).mockReturnValue({
+        ...cursor, toArray: vi.fn().mockResolvedValue([]),
+      });
+      const empty = await request(testServer()).get("/api/v1/reports/eligibility?requestId=r1");
+      expect(empty.body).toEqual({ activeTemplateCount: 0, templates: [] });
+      vi.mocked(mocks.reportTemplateCollection.find).mockReturnValue({
+        ...cursor, toArray: vi.fn().mockResolvedValue([templates[3]]),
+      });
+      const unmatched = await request(testServer()).get("/api/v1/reports/eligibility?requestId=r1");
+      expect(unmatched.body).toEqual({ activeTemplateCount: 1, templates: [] });
+    });
+
+    it("uses each run's project for bulk generation and excludes deleted templates", async () => {
+      const scopedTemplates = [
+        { id: "local", name: "Local", projectId: TEST_PROJECT_ID },
+        { id: "foreign", name: "Foreign", projectId: "other-project" },
+        { id: "deleted", name: "Deleted", projectId: TEST_PROJECT_ID, deletedAt: new Date() },
+      ];
+      const cursor = mocks.reportTemplateCollection.find();
+      vi.mocked(mocks.reportTemplateCollection.find).mockImplementation((filter) => ({
+        ...cursor,
+        toArray: vi.fn().mockResolvedValue(scopedTemplates.filter((template) =>
+          template.projectId === filter?.projectId && !template.deletedAt)),
+      }));
+      const preview = await request(testServer()).get("/api/v1/reports/eligibility?requestId=r1&projectId=other-project");
+      expect(preview.body).toEqual({ activeTemplateCount: 1, templates: [{ id: "local", name: "Local" }] });
+      const runCursor = mocks.collection.find();
+      vi.mocked(mocks.collection.find).mockReturnValue({
+        ...runCursor,
+        toArray: vi.fn().mockResolvedValue([
+          { _id: "r1", projectId: TEST_PROJECT_ID },
+          { _id: "r2", projectId: "other-project" },
+        ]),
+      });
+      const bulk = await request(testServer()).post("/api/v1/reports/bulk-trigger").send({ requestIds: ["r1", "r2"] });
+      expect(bulk.status).toBe(201);
+      expect(vi.mocked(mocks.reportCollection.insertOne).mock.calls.map(([report]) =>
+        [report.requestId, report.templateId, report.projectId])).toEqual([
+        ["r1", "local", TEST_PROJECT_ID], ["r2", "foreign", "other-project"],
+      ]);
+      expect(mocks.reportTemplateCollection.find).toHaveBeenCalledWith({
+        projectId: "other-project", deletedAt: { $exists: false },
+      });
+    });
+
+    it("handles absent task prompt data without matching feature triggers", async () => {
+      vi.mocked(mocks.taskPromptCollection.findOne).mockResolvedValue(null);
+      const result = await request(testServer()).get("/api/v1/reports/eligibility?requestId=r1");
+      expect(result.body.templates.map((template: { id: string }) => template.id)).toEqual(["default", "always", "criteria-any", "task"]);
+    });
+
+    it("rejects missing or empty request IDs and nonexistent requests", async () => {
+      for (const query of ["", "?requestId="]) {
+        expect((await request(testServer()).get(`/api/v1/reports/eligibility${query}`)).status).toBe(400);
+      }
+      vi.mocked(mocks.collection.findOne).mockResolvedValue(null);
+      expect((await request(testServer()).get("/api/v1/reports/eligibility?requestId=missing")).status).toBe(404);
+      expect(mocks.reportTemplateCollection.find).not.toHaveBeenCalledWith({
+        projectId: TEST_PROJECT_ID, deletedAt: { $exists: false },
+      });
+    });
+
+    it("surfaces database failures instead of returning an empty preview", async () => {
+      vi.mocked(mocks.reportTemplateCollection.find).mockImplementation(() => { throw new Error("Database unavailable"); });
+      expect((await request(testServer()).get("/api/v1/reports/eligibility?requestId=r1")).status).toBe(500);
+    });
+
+    it("fails closed when the run has no project", async () => {
+      vi.mocked(mocks.collection.findOne).mockResolvedValue({ _id: "legacy" });
+      vi.mocked(mocks.reportTemplateCollection.find).mockClear();
+      expect((await request(testServer()).get("/api/v1/reports/eligibility?requestId=legacy")).status).toBe(500);
+      expect(mocks.reportTemplateCollection.find).not.toHaveBeenCalled();
+    });
+  });
 });

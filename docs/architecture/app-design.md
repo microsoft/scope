@@ -541,6 +541,27 @@ completion site (the queue processors' terminal writes via `durationSetFields`, 
 `cancel.ts` and the stuck-run reaper) and **backfilled** for existing finished runs by
 migration 022. Unfinished runs leave it unset.
 
+### Report generation availability
+
+`GET /api/v1/reports/eligibility?requestId=<request UUID>` previews report
+generation without writing reports or queue messages. The response contains
+`activeTemplateCount` (non-deleted templates in the request's project) and
+`templates` (matching template IDs and names). The project is derived from the
+request, not from the selected Portal project or a client-supplied project ID.
+
+Preview, single-trigger, and bulk-trigger routes share the same project-scoped
+template selection and `evaluateTrigger` logic, including criteria, task-prompt,
+and detected prompt-feature matching. No trigger defaults to `always`. Preview
+does not add a completed-run requirement that the trigger routes do not enforce.
+Generation re-evaluates eligibility when invoked; a preview is not a reservation.
+
+The Run Details Reports tab distinguishes missing templates from nonmatching
+triggers, lists matching template names and IDs, and disables Generate Report
+while eligibility is loading, failed, or empty (and while generation is pending).
+Existing manual and historical reports remain visible independently of template
+availability. CLI users can inspect the same preview with
+`scope report eligibility --id <request UUID> --output json`.
+
 ### Facets
 
 `GET /api/v1/requests/facets` drives the filter rail: it returns, per categorical dimension,
