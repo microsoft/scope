@@ -36,7 +36,8 @@
       "prompt-feature-extraction": 30,
       "judge-instructions": 30,
       "developer-feedback": 25,
-      "run-report": 30
+      "run-report": 30,
+      "external-contribution-triage": 5
     }
   },
   "files": [
@@ -97,6 +98,14 @@
       "families": [
         "task-prompt-generation",
         "task-prompt-variation"
+      ]
+    },
+    {
+      "path": "v1/contribution-triage.jsonl",
+      "sha256": "4d53ffc94cfd577c2fa5f35b1e93cd5713d9645cef6cb514e4178d8e4d7f2993",
+      "rows": 5,
+      "families": [
+        "external-contribution-triage"
       ]
     }
   ]
