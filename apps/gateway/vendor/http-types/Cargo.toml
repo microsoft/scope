@@ -1,0 +1,100 @@
+# Vendored copy of http-types 2.12.0 (last published release), patched for
+# the Dependabot security alert GHSA-cq8v-f236-94qc ("rand is unsound with a
+# custom logger using rand::rng()").
+#
+# http-types 2.12.0 hard-pins `rand ^0.7`, which has no patched release (the
+# advisory's first fixed version is 0.8.6). It is pulled in transitively via
+# azure_core 0.21 -> azure_storage{,_blobs} 0.21, none of which can be bumped
+# without migrating to the rewritten Azure SDK. We therefore vendor http-types
+# and bump only its `rand` requirement to ^0.8. http-types' sole use of rand
+# (src/trace/trace_context.rs: `rand::thread_rng()` + `Rng::gen()`) is
+# API-identical between 0.7 and 0.8, so no source changes are required.
+#
+# This crate is wired in via [patch.crates-io] in ../../Cargo.toml. The only
+# delta from the upstream 2.12.0 source is the rand version requirement below.
+#
+# TODO(tech-debt): remove this vendored crate (and the [patch.crates-io] entry
+# in ../../Cargo.toml) once the gateway migrates off the azure_core /
+# azure_storage{,_blobs} 0.21 generation, which drops http-types entirely.
+
+[package]
+edition = "2018"
+name = "http-types"
+version = "2.12.0"
+authors = ["Yoshua Wuyts <yoshuawuyts@gmail.com>"]
+description = "Common types for HTTP operations."
+documentation = "https://docs.rs/http-types"
+readme = "README.md"
+keywords = ["http", "types", "request", "response", "h2"]
+categories = ["asynchronous", "web-programming", "web-programming::http-client", "web-programming::http-server", "web-programming::websocket"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/http-rs/http-types"
+[package.metadata.docs.rs]
+features = ["docs"]
+rustdoc-args = ["--cfg", "feature=\"docs\""]
+[dependencies.anyhow]
+version = "1.0.26"
+
+[dependencies.async-channel]
+version = "1.5.1"
+
+[dependencies.async-std]
+version = "1.6.0"
+optional = true
+
+[dependencies.base64]
+version = "0.13.0"
+
+[dependencies.cookie]
+version = "0.14.0"
+features = ["percent-encode"]
+optional = true
+
+[dependencies.futures-lite]
+version = "1.11.1"
+
+[dependencies.http]
+version = "0.2.0"
+optional = true
+
+[dependencies.infer]
+version = "0.2.3"
+
+[dependencies.pin-project-lite]
+version = "0.2.0"
+
+[dependencies.rand]
+version = "0.8"
+
+[dependencies.serde]
+version = "1.0.106"
+features = ["derive"]
+
+[dependencies.serde_json]
+version = "1.0.51"
+
+[dependencies.serde_qs]
+version = "0.8.3"
+
+[dependencies.serde_urlencoded]
+version = "0.7.0"
+
+[dependencies.url]
+version = "2.1.1"
+features = ["serde"]
+[dev-dependencies.async-std]
+version = "1.6.0"
+features = ["attributes"]
+
+[dev-dependencies.http]
+version = "0.2.0"
+
+[features]
+async_std = ["fs"]
+cookie-secure = ["cookies", "cookie/secure"]
+cookies = ["cookie"]
+default = ["fs", "cookie-secure"]
+docs = ["unstable"]
+fs = ["async-std"]
+hyperium_http = ["http"]
+unstable = []
