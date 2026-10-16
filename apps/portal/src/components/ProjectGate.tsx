@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { FolderKanban, Loader2 } from "lucide-react";
 
@@ -150,7 +151,52 @@ export function ProjectFirstRunScreen() {
  * and stay reachable without a selection.
  */
 export function ProjectGate({ children }: { children: ReactNode }) {
-  const { hasProject } = useProjectContext();
+  const { hasProject, selectedProjectId } = useProjectContext();
+  const selectProject = useSelectProject();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedProjectId = searchParams.get("projectId");
+  const { data: projects, isError, refetch } = useQuery({
+    queryKey: ["projects"],
+    queryFn: () => api.listProjects(),
+    enabled: linkedProjectId !== null,
+  });
+  const linkedProjectExists = projects?.some((project) => projectId(project) === linkedProjectId);
+
+  useEffect(() => {
+    if (!linkedProjectId || !linkedProjectExists || isError) return;
+    if (selectedProjectId !== linkedProjectId) {
+      selectProject(linkedProjectId);
+    } else {
+      // Consume the scope hint so later manual project switches remain possible.
+      setSearchParams((previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete("projectId");
+        return next;
+      }, { replace: true });
+    }
+  }, [linkedProjectId, linkedProjectExists, isError, selectedProjectId, selectProject, setSearchParams]);
+
+  if (linkedProjectId !== null) {
+    if (isError) {
+      return (
+        <div role="alert" className="p-6 space-y-3">
+          <p>Could not load the project for this shared link.</p>
+          <Button onClick={() => void refetch()}>Retry</Button>
+        </div>
+      );
+    }
+    if (!linkedProjectId || (projects && !linkedProjectExists)) {
+      return (
+        <div role="alert" className="p-6 space-y-3">
+          <p>The project in this shared link is unavailable.</p>
+          <Link to="/projects" className="underline">Choose a project</Link>
+        </div>
+      );
+    }
+    if (!linkedProjectExists || selectedProjectId !== linkedProjectId) {
+      return <p role="status" className="p-6">Opening shared project...</p>;
+    }
+  }
   if (!hasProject) return <ProjectFirstRunScreen />;
   return <>{children}</>;
 }

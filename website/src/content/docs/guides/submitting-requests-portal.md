@@ -80,9 +80,23 @@ profile to capture it for re-use.
 
 ## 4. Submit
 
-Click **Submit**. The Portal navigates to the request detail page.
-The request is assigned a unique ID and queued; a run is created when
-a worker picks it up.
+Click **Submit**. For a single request, the Portal navigates to the request
+detail page. For a batch of profile variations or repetitions, it opens the
+submission's results grouped by profile.
+
+The requests are assigned unique IDs and queued. All requests created by that
+submit call also share one **submission ID**.
+
+## Share related results
+
+Use the **Copy submission link** icon beside a submission ID in the Runs table,
+or in the header when viewing one submission. The link includes every variation
+and repetition from that submission, together with its project.
+
+When a recipient opens the link, the Portal selects that project before loading
+the results. If the project is unavailable, it shows an error rather than results
+from another selected project. Recipients still need access to your deployment;
+sharing a link does not grant access.
 
 ## Watch a run
 

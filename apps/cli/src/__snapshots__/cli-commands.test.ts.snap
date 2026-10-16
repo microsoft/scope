@@ -813,6 +813,13 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--url",
         ],
       },
+      "share": {
+        "options": [
+          "--portal-url",
+          "--project",
+          "--submission-id",
+        ],
+      },
       "status": {
         "options": [
           "--id",
