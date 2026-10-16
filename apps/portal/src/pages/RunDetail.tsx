@@ -1573,6 +1573,11 @@ export function RunDetail() {
                     >
                       {formatId(run.agentsMdPromptId)}
                     </TaskPromptBadge>
+                    {run.experimentId && (
+                      <Badge variant="outline" className="font-mono">
+                        experiment: {run.experimentId}
+                      </Badge>
+                    )}
                     {run.agentsMdParentIds && run.agentsMdParentIds.length > 0 && (
                       <Badge variant="secondary" className="font-mono">
                         {run.agentsMdParentIds.length === 1 ? "mutation" : "merge"} · {run.agentsMdParentIds.length} parent{run.agentsMdParentIds.length === 1 ? "" : "s"}

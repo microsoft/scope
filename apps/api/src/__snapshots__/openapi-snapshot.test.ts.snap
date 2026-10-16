@@ -912,6 +912,10 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "codebaseRevisionId": {
             "type": "string",
           },
+          "experimentId": {
+            "minLength": 1,
+            "type": "string",
+          },
           "extensions": {
             "items": {
               "type": "string",
@@ -2661,6 +2665,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "string",
               "null",
             ],
+          },
+          "experimentId": {
+            "type": "string",
           },
           "extensions": {
             "items": {
@@ -8709,6 +8716,24 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           {
             "in": "query",
+            "name": "experimentId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+              ],
+            },
+          },
+          {
+            "in": "query",
             "name": "profileId",
             "required": false,
             "schema": {
@@ -8850,6 +8875,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                 "task",
                 "submissionId",
                 "profile",
+                "experiment",
               ],
               "type": "string",
             },
