@@ -1402,9 +1402,10 @@ export function SubmitRun() {
           ) : (
             <>
               <div className="space-y-2">
-                <Label className="text-sm">Base Profile</Label>
+                <Label htmlFor="base-profile" className="text-sm">Base Profile</Label>
                 <div className="flex items-center gap-2">
                   <ProfilePicker
+                    inputId="base-profile"
                     profiles={selectableProfileList}
                     selectedProfileId={selectedProfileId}
                     onSelect={applyProfile}
@@ -1608,34 +1609,22 @@ export function SubmitRun() {
                     }}
                   >
                     <div className="flex items-end gap-2">
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-xs">Variation #{index + 1}</Label>
-                        <Select
-                          value={draft.profileId || undefined}
-                          onValueChange={(value) => {
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <Label htmlFor={`variation-profile-${index}`} className="text-xs">Variation #{index + 1}</Label>
+                        <ProfilePicker
+                          inputId={`variation-profile-${index}`}
+                          profiles={availableProfiles}
+                          selectedProfileId={draft.profileId || null}
+                          workerNameById={agentNameById}
+                          onSelect={(value) => {
+                            if (!value) return;
                             const selectedProfile = profileList.find((p) => p._id === value);
                             updateVariationDraft(index, {
                               profileId: value,
                               profileVersion: selectedProfile?.latestVersion,
                             });
                           }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select profile" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {selectedVariationIsUnavailable && selectedVariationProfile && (
-                              <SelectItem value={selectedVariationProfile._id} disabled>
-                                {selectedVariationProfile.name} (unavailable)
-                              </SelectItem>
-                            )}
-                            {availableProfiles.map((p) => (
-                              <SelectItem key={p._id} value={p._id}>
-                                {p.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        />
                         {!draft.profileId && hasAvailableProfiles && (
                           <p className="text-xs text-muted-foreground">Select a profile for this variation.</p>
                         )}
@@ -1673,6 +1662,12 @@ export function SubmitRun() {
                         <X className="h-3.5 w-3.5" />
                       </Button>
                     </div>
+                    {draft.profileId && (
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {selectedVariationProfile?.name ?? draft.profileId}
+                        {selectedVariationIsUnavailable ? " (unavailable)" : ""}
+                      </p>
+                    )}
                   </div>
                 );
               })}
