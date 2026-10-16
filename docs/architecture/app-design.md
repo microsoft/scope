@@ -614,6 +614,16 @@ full-bleed shell. Opening or closing the preview keeps the tabs and filter rail
 aligned with the navigation. Key registration and full-detail routes retain the
 standard page padding.
 
+### Run detail navigation
+
+Run detail tabs appear in this order: **Details**, **Turns**, **Conversation**,
+**Reports**, **Network**, **Tool Calls**, **Videos**, **Logs**. Conversation
+requires at least one turn; Network and Tool Calls require HAR data; Videos
+requires run, setup, or turn video data. Videos remains next to the diagnostic
+tabs, with Logs last. Reordering does not change the default selection: completed
+runs with turns open Turns, while other runs open Logs. Explicit tab routes and
+the selected attempt (`?runId=`) are preserved.
+
 ### Project scoping (selected project, no default)
 
 The Portal mirrors the API's fail-fast model: it holds a **selected project** (never a default) and injects it as `?projectId=` on every scoped request.
