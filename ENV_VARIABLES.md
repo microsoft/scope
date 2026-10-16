@@ -26,6 +26,40 @@ worktree. The inspector listens on port `9229` inside the container and is
 published to `127.0.0.1` only. Use the **Attach API (Docker)** VS Code launch
 configuration and enter the current worktree's generated `API_DEBUG_PORT`.
 
+## Public Run Sharing
+
+### SCOPE_RUN_SHARING_ENABLED
+**Default:** `false`
+**Type:** boolean (`true` to enable on the API)
+
+Enables configurable, anonymous, read-only links to individual run attempts.
+Apply migration `031-create-run-share-indexes.ts` and update the report-generator
+worker before enabling. Only reports with worker-stamped attempt provenance
+can be shared. Publishing
+and managing links requires an active, authenticated Scope user, even in
+installations that otherwise support anonymous API callers. Users manage only
+their own links. The Portal discovers availability through
+`GET /api/v1/version` (`runSharingEnabled`).
+
+Disabling the switch denies public reads/downloads and link management; it does
+not delete link records. Re-enabling restores unexpired, unrevoked links. Revoke
+links before disabling if they must not become available again.
+
+Public URLs use `/shared/runs#<secret>`. The fragment is sent to fixed API paths
+in `X-Scope-Run-Share`, not as a URL path or query. Do not capture that header or
+share-creation/rotation response bodies in custom ingress, tracing, or analytics
+configuration. Public responses are no-store and noindex. Rates are bounded
+per API replica: 600 public requests/minute per trusted connection IP and
+60 management requests/minute per Scope user. Additional ingress controls may
+be appropriate for public deployments; forwarded IP headers are not trusted
+by the application.
+
+Default expiry is seven days; publishers can choose another future expiry or
+no expiry. Public downloads have a 128 MiB limit; shared logs return up to the
+last 1 MiB of persisted entries. See
+[shared run design](docs/architecture/app-design.md#public-run-sharing) and the
+[user guide](website/src/content/docs/guides/sharing-runs.md).
+
 ## Agent Target Validation
 
 ### SCOPE_STRICT_AGENT_CAPABILITIES

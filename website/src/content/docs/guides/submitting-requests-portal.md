@@ -99,6 +99,12 @@ The request detail page has these tabs:
 The status badge at the top tracks the run's lifecycle: **pending →
 running → completed** (or **failed**).
 
+## Share results
+
+When your installation enables run sharing, click **Share** on a run to create
+a configurable, read-only link for someone without a Scope account. See
+[Sharing runs](/guides/sharing-runs/) for content controls, expiry, and revocation.
+
 ## Re-prioritize, pause, or resume
 
 Pending and running requests can be reordered or paused. See

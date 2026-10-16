@@ -49,6 +49,8 @@ import { registerProfilesRoutes } from "./routes/profiles.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { ProjectScopeError } from "./utils/project-scope.js";
 import { registerUsersRoutes } from "./routes/users.js";
+import { registerRunShareRoutes } from "./routes/run-shares.js";
+import { registerPublicRunShareRoutes } from "./routes/public-run-shares.js";
 import type { RouteContext } from "./route-context.js";
 import type {
   CriteriaDocument,
@@ -77,7 +79,6 @@ const mcpSecretClient: McpSecretClient | null = TOKEN_MANAGER_URL
 
 const app: Express = express();
 app.use(cors());
-app.use(express.json());
 
 // Configuration from environment
 // K8s: MONGO_CONNECTION_STRING from secret, STORAGE_CONNECTION_STRING from secret
@@ -321,6 +322,8 @@ const routeCtx: RouteContext = {
 };
 
 // ─── Route registration ───────────────────────────────────────────────────────
+registerPublicRunShareRoutes(routeCtx);
+app.use(express.json());
 app.use("/api/v1/users/me", (_req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   next();
@@ -332,6 +335,7 @@ app.use(
 );
 registerUsersRoutes(routeCtx);
 app.use(createUserAccessMiddleware(() => userAccessResolver));
+registerRunShareRoutes(routeCtx);
 
 // Secrets/proxy routes must be registered first (before :id param routes)
 registerSecretsRoutes(routeCtx);
@@ -422,6 +426,7 @@ export interface TestDependencies {
   db?: Db;
   collection?: Collection<RequestDocument>;
   runsCollection?: Collection<RunHistoryDocument>;
+  projectCollection?: Collection<ProjectDocument>;
   criteriaCollection?: Collection<CriteriaDocument>;
   promptFeatureCollection?: Collection<PromptFeatureDocument>;
   reportCollection?: Collection<ReportDocument>;
@@ -463,6 +468,7 @@ export function _injectTestDependencies(deps: TestDependencies): void {
   if (deps.db) db = deps.db;
   if (deps.collection) collection = deps.collection;
   if (deps.runsCollection) runsCol = deps.runsCollection;
+  if (deps.projectCollection) projectCollection = deps.projectCollection;
   if (deps.criteriaCollection) criteriaCollection = deps.criteriaCollection;
   if (deps.promptFeatureCollection) promptFeatureCollection = deps.promptFeatureCollection;
   if (deps.reportCollection) reportCollection = deps.reportCollection;
