@@ -28,7 +28,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import {
-  Loader2, Sparkles, CheckCircle2, XCircle, MinusCircle, Plus, Check, RefreshCw,
+  Loader2, Sparkles, CheckCircle2, Plus, Check, RefreshCw,
   ListFilter,
 } from "lucide-react";
 import type { TaskPromptFeatureExtractionResult, SuggestedPromptFeature, PromptFeatureResult } from "@/types";
@@ -164,8 +164,6 @@ export function TaskPromptFeatures({
   }, [extractedFeatures, manuallyAddedIds, entityMode]);
 
   const detectedFeatures = features.filter((f) => f.detected);
-  const notDetectedFeatures = features.filter((f) => !f.detected && f.evaluated);
-  const skippedFeatures = features.filter((f) => !f.evaluated);
   const suggestedFeatures = extraction?.suggestedFeatures ?? [];
   const hasFeatures = features.length > 0;
   const canToggle = entityMode;
@@ -226,74 +224,33 @@ export function TaskPromptFeatures({
         </p>
       )}
 
-      {/* Feature badges */}
-      {features.length > 0 && !extractMutation.isPending && (
+      {/* Feature badges — only detected features are shown */}
+      {detectedFeatures.length > 0 && !extractMutation.isPending && (
         <div className="space-y-3">
           {canToggle && (
             <p className="text-xs text-muted-foreground italic">
-              Click a feature badge to toggle its detected status
+              Click a feature to mark it as not detected
             </p>
           )}
-          {detectedFeatures.length > 0 && (
-            <div>
-              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
-                Detected ({detectedFeatures.length})
-              </h4>
-              <div className="flex flex-wrap gap-1.5">
-                {detectedFeatures.map((f) => (
-                  <Badge
-                    key={f.featureId}
-                    variant="default"
-                    className={`gap-1 font-mono text-xs ${canToggle ? "cursor-pointer hover:bg-destructive/80" : ""} transition-colors`}
-                    title={canToggle ? `Click to mark "${f.featureId}" as not detected` : f.featureId}
-                    onClick={canToggle ? () => toggleMutation.mutate({ featureId: f.featureId, detected: false }) : undefined}
-                  >
-                    <CheckCircle2 className="h-3 w-3" />
-                    {f.featureId}
-                  </Badge>
-                ))}
-              </div>
+          <div>
+            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+              Detected ({detectedFeatures.length})
+            </h4>
+            <div className="flex flex-wrap gap-1.5">
+              {detectedFeatures.map((f) => (
+                <Badge
+                  key={f.featureId}
+                  variant="default"
+                  className={`gap-1 font-mono text-xs ${canToggle ? "cursor-pointer hover:bg-destructive/80" : ""} transition-colors`}
+                  title={canToggle ? `Click to mark "${f.featureId}" as not detected` : f.featureId}
+                  onClick={canToggle ? () => toggleMutation.mutate({ featureId: f.featureId, detected: false }) : undefined}
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  {f.featureId}
+                </Badge>
+              ))}
             </div>
-          )}
-          {notDetectedFeatures.length > 0 && (
-            <div>
-              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
-                Not detected ({notDetectedFeatures.length})
-              </h4>
-              <div className="flex flex-wrap gap-1.5">
-                {notDetectedFeatures.map((f) => (
-                  <Badge
-                    key={f.featureId}
-                    variant="outline"
-                    className={`gap-1 font-mono text-xs text-muted-foreground ${canToggle ? "cursor-pointer hover:bg-primary/10" : ""} transition-colors`}
-                    title={canToggle ? `Click to mark "${f.featureId}" as detected` : f.featureId}
-                    onClick={canToggle ? () => toggleMutation.mutate({ featureId: f.featureId, detected: true }) : undefined}
-                  >
-                    <XCircle className="h-3 w-3" />
-                    {f.featureId}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-          {skippedFeatures.length > 0 && (
-            <div>
-              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
-                Skipped ({skippedFeatures.length})
-              </h4>
-              <div className="flex flex-wrap gap-1.5">
-                {skippedFeatures.map((f) => (
-                  <Badge key={f.featureId} variant="outline" className="gap-1 font-mono text-xs text-muted-foreground/50">
-                    <MinusCircle className="h-3 w-3" />
-                    {f.featureId}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-          {features.length === 0 && (
-            <p className="text-sm text-muted-foreground italic">No prompt features defined yet.</p>
-          )}
+          </div>
         </div>
       )}
 
