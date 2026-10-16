@@ -28,6 +28,7 @@ import { StatusBadge, OutcomeBadge } from "@/components/StatusBadge";
 import { TaskPromptBadge } from "@/components/TaskPromptBadge";
 import { AgentBadge } from "@/components/AgentBadge";
 import { ShortId } from "@/components/ShortId";
+import { SubmissionLink } from "@/components/SubmissionLink";
 import {
   ListLayout,
   FilterRail,
@@ -1346,16 +1347,11 @@ export function RunsList() {
     {
       id: "submission",
       header: "Submission",
-      width: "120px",
+      width: "190px",
       hidden: columnVisibility.isHidden("submission"),
       cell: (r) =>
         r.submissionId ? (
-          <Link
-            to={`/submissions/${r.submissionId}`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <ShortId id={r.submissionId} label="submission ID" />
-          </Link>
+          <SubmissionLink submissionId={r.submissionId} />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         ),
@@ -2511,6 +2507,12 @@ export function RunsList() {
 
                   switch (column.id) {
                     case "submission":
+                      if (
+                        groupBy === "submissionId" &&
+                        groupKey !== "no-submission"
+                      ) {
+                        return <SubmissionLink submissionId={groupKey} />;
+                      }
                       return distinct("submissions", (r) => r.submissionId);
                     case "task":
                       return distinct("tasks", (r) => r.scenario?.task);
@@ -2689,12 +2691,7 @@ export function RunsList() {
                       </button>
                       <div className="flex shrink-0 items-center gap-3">
                         {groupBy === "submissionId" && groupKey !== "no-submission" && (
-                          <Link
-                            to={`/submissions/${groupKey}`}
-                            className="text-xs font-medium text-primary hover:underline"
-                          >
-                            View submission
-                          </Link>
+                          <SubmissionLink submissionId={groupKey} />
                         )}
                         <span className="text-xs text-muted-foreground font-normal">
                           {runs.length} run{runs.length !== 1 ? "s" : ""}

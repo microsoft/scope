@@ -47,6 +47,7 @@ export const CreateReportTemplateInputSchema = z
   .object({
     id: z.string(),
     name: z.string(),
+    subject: z.enum(["run", "submission"]).default("run"),
     description: z.string().optional(),
     userPrompt: z.string(),
     systemPrompt: ReportTemplateSystemPromptSchema.optional(),
@@ -59,6 +60,7 @@ export const CreateReportTemplateInputSchema = z
 export const UpdateReportTemplateInputSchema = z
   .object({
     name: z.string().optional(),
+    subject: z.enum(["run", "submission"]).optional(),
     description: z.string().optional(),
     userPrompt: z.string().optional(),
     systemPrompt: ReportTemplateSystemPromptSchema.nullable().optional(),
@@ -73,6 +75,7 @@ export const ReportTemplateResponseSchema = z
     _id: z.string(),
     id: z.string(),
     name: z.string(),
+    subject: z.enum(["run", "submission"]).default("run"),
     description: z.string().optional(),
     userPrompt: z.string(),
     systemPrompt: ReportTemplateSystemPromptSchema.optional(),

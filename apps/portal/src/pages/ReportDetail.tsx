@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
 import { LogViewer } from "@/components/LogViewer";
 import { useLogStream } from "@/hooks/use-log-stream";
-import { ArrowLeft, Copy, Check, ExternalLink, ClipboardCopy, Lightbulb } from "lucide-react";
+import { ArrowLeft, Copy, Check, Download, ExternalLink, ClipboardCopy, Lightbulb } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
@@ -131,6 +131,14 @@ export function ReportDetail() {
             </div>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <ReportStatusBadge status={report.status} />
+              {report.structuredArtifact && (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={api.reportStructuredUrl(report._id)} download>
+                    <Download className="mr-1 h-3.5 w-3.5" />
+                    Structured JSON
+                  </a>
+                </Button>
+              )}
               {report.templateId && (
                 <Link
                   to={`/reports/templates/${report.templateId}`}
@@ -141,13 +149,25 @@ export function ReportDetail() {
                   </Badge>
                 </Link>
               )}
-              <Link
-                to={`/runs/${report.requestId}`}
-                className="flex items-center gap-1 hover:text-foreground transition-colors"
-              >
-                <span className="font-mono">Run: {report.requestId.slice(0, 8)}…</span>
-                <ExternalLink className="h-3 w-3" />
-              </Link>
+              {report.submissionId ? (
+                <Link
+                  to={`/submissions/${report.submissionId}`}
+                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                >
+                  <span className="font-mono">
+                    Submission: {report.submissionId.slice(0, 8)}…
+                  </span>
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              ) : report.requestId ? (
+                <Link
+                  to={`/runs/${report.requestId}`}
+                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                >
+                  <span className="font-mono">Run: {report.requestId.slice(0, 8)}…</span>
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              ) : null}
               <span>Created {formatDate(report.createdAt)}</span>
             </div>
           </div>
@@ -330,13 +350,24 @@ export function ReportDetail() {
                   <span className="font-mono">{report._id}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Run ID:</span>{" "}
-                  <Link
-                    to={`/runs/${report.requestId}`}
-                    className="font-mono text-primary hover:underline"
-                  >
-                    {report.requestId}
-                  </Link>
+                  <span className="text-muted-foreground">
+                    {report.submissionId ? "Submission run:" : "Run ID:"}
+                  </span>{" "}
+                  {report.submissionId ? (
+                    <Link
+                      to={`/submissions/${report.submissionId}`}
+                      className="font-mono text-primary hover:underline"
+                    >
+                      {report.submissionRunId}
+                    </Link>
+                  ) : report.requestId ? (
+                    <Link
+                      to={`/runs/${report.requestId}`}
+                      className="font-mono text-primary hover:underline"
+                    >
+                      {report.requestId}
+                    </Link>
+                  ) : "—"}
                 </div>
                 <div>
                   <span className="text-muted-foreground">Created:</span>{" "}

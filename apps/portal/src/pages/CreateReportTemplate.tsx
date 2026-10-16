@@ -66,6 +66,7 @@ export function CreateReportTemplate() {
   const [id, setId] = useState("");
   const [idManuallyEdited, setIdManuallyEdited] = useState(false);
   const [description, setDescription] = useState("");
+  const [subject, setSubject] = useState<"run" | "submission">("run");
   const [userPrompt, setUserPrompt] = useState("");
   const [sysMode, setSysMode] = useState<"none" | "append" | "override">("none");
   const [sysContent, setSysContent] = useState("");
@@ -106,6 +107,7 @@ export function CreateReportTemplate() {
     const body: Parameters<typeof api.createReportTemplate>[0] = {
       id: id.trim(),
       name: name.trim(),
+      subject,
       userPrompt: userPrompt.trim(),
     };
 
@@ -123,7 +125,7 @@ export function CreateReportTemplate() {
     }
 
     // Trigger
-    if (triggerType !== "always") {
+    if (subject === "run" && triggerType !== "always") {
       const idsArray = triggerIds.split(",").map(s => s.trim()).filter(Boolean);
       if (triggerType === "criteria") {
         body.trigger = { type: "criteria", criteriaIds: triggerCriteriaIds, match: triggerMatch };
@@ -192,6 +194,29 @@ export function CreateReportTemplate() {
             />
           </div>
 
+          <div className="space-y-2">
+            <Label>Report scope</Label>
+            <Select
+              value={subject}
+              onValueChange={(value: "run" | "submission") => {
+                setSubject(value);
+                if (value === "submission") setTriggerType("always");
+              }}
+            >
+              <SelectTrigger className="w-64" aria-label="Report scope">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="run">Individual run</SelectItem>
+                <SelectItem value="submission">Submission attempt</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Submission templates run once after the exact submission attempt
+              and its generated evidence are complete.
+            </p>
+          </div>
+
           <Separator />
 
           {/* User Prompt */}
@@ -250,7 +275,7 @@ export function CreateReportTemplate() {
           <div className="space-y-2">
             <Label>System Prompt (optional)</Label>
             <Select value={sysMode} onValueChange={(v) => setSysMode(v as "none" | "append" | "override")}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-48" aria-label="System prompt mode">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -277,10 +302,18 @@ export function CreateReportTemplate() {
           <div className="space-y-2">
             <Label>Trigger</Label>
             <p className="text-xs text-muted-foreground mb-2">
-              Controls when this template is used for automatic report generation after a run completes
+              {subject === "submission"
+                ? "Runs automatically once the submission attempt and its generated evidence are complete."
+                : "Controls when this template is used for automatic report generation after a run completes."}
             </p>
-            <Select value={triggerType} onValueChange={(v) => setTriggerType(v as any)}>
-              <SelectTrigger className="w-48">
+            <Select
+              value={triggerType}
+              onValueChange={(value: "always" | "criteria" | "taskPrompt" | "promptFeature") =>
+                setTriggerType(value)
+              }
+              disabled={subject === "submission"}
+            >
+              <SelectTrigger className="w-48" aria-label="Trigger">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

@@ -119,7 +119,17 @@ apiRoute(ctx.app, ctx.registry, {
   },
   handler: async (req, res, next) => {
     try {
-      const { id, name, description, userPrompt, systemPrompt, trigger, model, timeoutMs } = req.body;
+      const {
+        id,
+        name,
+        subject = "run",
+        description,
+        userPrompt,
+        systemPrompt,
+        trigger,
+        model,
+        timeoutMs,
+      } = req.body;
       const projectId = getQueryProjectId(req);
 
       if (!id || typeof id !== "string") {
@@ -136,6 +146,16 @@ apiRoute(ctx.app, ctx.registry, {
       }
       if (!userPrompt || typeof userPrompt !== "string") {
         res.status(400).json({ error: "userPrompt is required and must be a string" });
+        return;
+      }
+      if (
+        subject === "submission" &&
+        trigger !== undefined &&
+        trigger.type !== "always"
+      ) {
+        res.status(400).json({
+          error: "Submission report templates currently support the automatic trigger only",
+        });
         return;
       }
 
@@ -196,6 +216,7 @@ apiRoute(ctx.app, ctx.registry, {
           {
             $set: {
               name,
+              subject,
               ...(description !== undefined ? { description } : {}),
               userPrompt,
               ...(systemPrompt !== undefined ? { systemPrompt } : {}),
@@ -214,6 +235,7 @@ apiRoute(ctx.app, ctx.registry, {
           projectId,
           id,
           name,
+          subject,
           ...(description ? { description } : {}),
           userPrompt,
           ...(systemPrompt ? { systemPrompt } : {}),
@@ -248,7 +270,16 @@ apiRoute(ctx.app, ctx.registry, {
     try {
       const { id } = req.params;
       const projectId = getQueryProjectId(req);
-      const { name, description, userPrompt, systemPrompt, trigger, model, timeoutMs } = req.body;
+      const {
+        name,
+        subject,
+        description,
+        userPrompt,
+        systemPrompt,
+        trigger,
+        model,
+        timeoutMs,
+      } = req.body;
 
       const existing = await ctx.reportTemplateCollection.findOne({ projectId, id, deletedAt: { $exists: false } });
       if (!existing) {
@@ -258,6 +289,7 @@ apiRoute(ctx.app, ctx.registry, {
 
       const updateFields: Record<string, unknown> = { updatedAt: new Date() };
       if (name !== undefined) updateFields.name = name;
+      if (subject !== undefined) updateFields.subject = subject;
       if (description !== undefined) updateFields.description = description;
       if (userPrompt !== undefined) {
         if (typeof userPrompt !== "string" || !userPrompt.trim()) {
@@ -290,6 +322,18 @@ apiRoute(ctx.app, ctx.registry, {
           const triggerError = validateTrigger(trigger);
           if (triggerError) {
             res.status(400).json({ error: triggerError });
+            return;
+          }
+          const effectiveSubject = subject ?? existing.subject ?? "run";
+          const effectiveTrigger = trigger ?? existing.trigger;
+          if (
+            effectiveSubject === "submission" &&
+            effectiveTrigger !== undefined &&
+            effectiveTrigger.type !== "always"
+          ) {
+            res.status(400).json({
+              error: "Submission report templates currently support the automatic trigger only",
+            });
             return;
           }
           updateFields.trigger = trigger;

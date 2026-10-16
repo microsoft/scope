@@ -181,9 +181,18 @@ function validateFamilyContract(row: DatasetCase, prefix: string, errors: string
       assert(typeof input.includeDescendantGuard === "boolean", `${prefix}: input.includeDescendantGuard must be boolean`, errors);
       break;
     case "run-report":
-      assert(stringField(input, "requestId"), `${prefix}: input.requestId is required`, errors);
-      assert(stringField(input, "reportId"), `${prefix}: input.reportId is required`, errors);
-      assert(stringField(input, "userPrompt"), `${prefix}: input.userPrompt is required`, errors);
+      if (row.variant === "submission-readout") {
+        assert(isRecord(input.evidence), `${prefix}: input.evidence is required`, errors);
+      } else if (row.variant === "submission-template") {
+        assert(stringField(input, "submissionId"), `${prefix}: input.submissionId is required`, errors);
+        assert(stringField(input, "submissionRunId"), `${prefix}: input.submissionRunId is required`, errors);
+        assert(stringField(input, "reportId"), `${prefix}: input.reportId is required`, errors);
+        assert(stringField(input, "userPrompt"), `${prefix}: input.userPrompt is required`, errors);
+      } else {
+        assert(stringField(input, "requestId"), `${prefix}: input.requestId is required`, errors);
+        assert(stringField(input, "reportId"), `${prefix}: input.reportId is required`, errors);
+        assert(stringField(input, "userPrompt"), `${prefix}: input.userPrompt is required`, errors);
+      }
       if (row.variant === "append" || row.variant === "override-control") {
         assert(stringField(input, "systemPromptContent"), `${prefix}: input.systemPromptContent is required for ${row.variant}`, errors);
       }
@@ -345,9 +354,14 @@ export async function validateDataset(
   assert(
     syntheticCases.every((row) =>
       row.family === "judge-instructions"
-      || (row.family === "run-report" && (row.variant === "default" || row.variant === "override-control"))
+      || (row.family === "run-report" && (
+        row.variant === "default"
+        || row.variant === "override-control"
+        || row.variant === "submission-readout"
+        || row.variant === "submission-template"
+      ))
       || (row.family === "developer-feedback" && row.variant === "persona")),
-    "synthetic cases are only permitted for unavailable judge evidence, feedback persona, and report override controls",
+    "synthetic cases are only permitted for unavailable judge evidence, feedback persona, report override controls, submission readouts, and submission templates",
     errors,
   );
   const hasTag = (family: QualityFamily, tag: string): boolean =>

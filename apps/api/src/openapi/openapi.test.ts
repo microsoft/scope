@@ -36,6 +36,7 @@ import {
   BulkCreateReportsInputSchema,
   BulkReportStatusInputSchema,
   TriggerReportsInputSchema,
+  TriggerSubmissionReportsInputSchema,
   BulkTriggerReportsInputSchema,
   SkillResponseSchema,
   SkillRevisionResponseSchema,
@@ -432,6 +433,17 @@ apiRoute(testApp, registry, {
   response: z.object({ triggered: z.number(), reports: z.array(ReportResponseSchema) }),
   successStatus: 201,
   errorResponses: { 400: { description: "Invalid input" }, 404: { description: "Run not found" } }, handler: noop,
+});
+apiRoute(testApp, registry, {
+  method: "post", path: "/api/v1/reports/trigger-submission", tags: ["Reports"],
+  summary: "Trigger submission reports", body: TriggerSubmissionReportsInputSchema,
+  response: z.object({ triggered: z.number(), reports: z.array(ReportResponseSchema) }),
+  successStatus: 201,
+  errorResponses: {
+    404: { description: "Submission attempt not found" },
+    409: { description: "Submission attempt is not ready" },
+  },
+  handler: noop,
 });
 apiRoute(testApp, registry, {
   method: "post", path: "/api/v1/reports/bulk-trigger", tags: ["Reports"],

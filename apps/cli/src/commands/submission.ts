@@ -33,6 +33,7 @@ interface SubmissionSummary {
     runId: string;
     reason: string;
   }>;
+  report?: { reportId?: string; url?: string; updatedAt?: string };
 }
 async function responseJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
@@ -108,6 +109,9 @@ export function registerSubmissionCommands(program: Command): void {
       console.log(`${label("Attempt:")} ${value(String(doc.attemptNumber))}`);
       console.log(`${label("Readiness:")} ${value(doc.readiness)}`);
       console.log(`${label("Submission run:")} ${value(doc.submissionRunId)}`);
+      if (doc.report?.reportId) {
+        console.log(`${label("Report:")} ${value(doc.report.reportId)}`);
+      }
       for (const request of doc.requests) {
         console.log(
           `  ${value(request.requestId)} ${request.status}` +
@@ -161,6 +165,51 @@ export function registerSubmissionCommands(program: Command): void {
       ];
       console.log(
         formatData(body.runs, runFields, (options.output ?? "table") as OutputFormat),
+      );
+    } catch (error) {
+      console.error(errorText("Error:"), error instanceof Error ? error.message : error);
+      process.exitCode = 1;
+    }
+  });
+
+  withOutputOption(
+    submission
+      .command("reports")
+      .description("List reports for a submission")
+      .argument("<id>", "Submission ID")
+      .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
+  ).action(async (id: string, options) => {
+    try {
+      const response = await apiFetch(
+        options.url,
+        `/submissions/${encodeURIComponent(id)}/reports`,
+      );
+      if (!response.ok) await throwApiError(response);
+      const reports = await responseJson<Array<{
+        id: string;
+        submissionRunId?: string;
+        status: string;
+        reporter?: { model?: string };
+        createdAt: string;
+      }>>(response);
+      const reportFields: DisplayField[] = [
+        { key: "id", label: "Report" },
+        { key: "submissionRunId", label: "Submission Run" },
+        { key: "status", label: "Status" },
+        {
+          key: "model",
+          label: "Model",
+          formatter: (row: Record<string, unknown>) =>
+            (row.reporter as { model?: string } | undefined)?.model ?? "",
+        },
+        { key: "createdAt", label: "Created" },
+      ];
+      console.log(
+        formatData(
+          reports,
+          reportFields,
+          (options.output ?? "table") as OutputFormat,
+        ),
       );
     } catch (error) {
       console.error(errorText("Error:"), error instanceof Error ? error.message : error);

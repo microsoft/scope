@@ -215,12 +215,21 @@ export function InsightDetail() {
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <Link
-                        to={`/runs/${report.requestId}`}
-                        className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline"
-                      >
-                        {formatId(report.requestId)}
-                      </Link>
+                      {report.submissionId ? (
+                        <Link
+                          to={`/submissions/${report.submissionId}`}
+                          className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline"
+                        >
+                          {formatId(report.submissionId)}
+                        </Link>
+                      ) : report.requestId ? (
+                        <Link
+                          to={`/runs/${report.requestId}`}
+                          className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline"
+                        >
+                          {formatId(report.requestId)}
+                        </Link>
+                      ) : "–"}
                     </TableCell>
                     <TableCell>
                       <ReportStatusBadge status={report.status} />

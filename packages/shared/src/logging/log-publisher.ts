@@ -87,9 +87,13 @@ export class LogPublisher {
     // The Redis channel is keyed on requestId so SSE listeners receive logs
     // for whichever attempt is currently running.
     const channel = `logs:${requestId}`;
+    const redisLogEvent: LogEvent = {
+      ...logEvent,
+      data: { ...data, runId },
+    };
     try {
       await this.redisBreaker.execute(() =>
-        this.redis.publish(channel, JSON.stringify(logEvent))
+        this.redis.publish(channel, JSON.stringify(redisLogEvent))
       );
     } catch (error) {
       // Silently ignore - circuit breaker handles logging state changes

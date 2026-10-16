@@ -651,6 +651,8 @@ export interface SubmissionRunState {
   handlerStatus?: Record<string, HandlerRunStatus>;
   blocking: SubmissionBlockingDetail[];
   report?: SubmissionReportPointer;
+  /** Exactly-once guard for automatic submission-scoped report templates. */
+  reportsTriggeredAt?: Date;
   /** Internal scheduler hold used by bulk request retry so one completed
    * replacement batch produces one vector rollover. Expiry self-heals crashes. */
   reconcileAfter?: Date;
@@ -939,14 +941,24 @@ export interface Reporter {
   agentVersion: string;  // @github/copilot-sdk package version
 }
 
+export interface StructuredReportArtifact {
+  schemaId: string;
+  schemaVersion: string;
+  contentType: "application/json";
+  url: string;
+}
+
 /** Report document stored in MongoDB */
 export interface ReportDocument {
   _id: string;           // UUID
-  requestId: string;     // FK → RequestDocument._id
+  requestId?: string;    // FK → RequestDocument._id for run reports
+  submissionId?: string; // FK → SubmissionDocument._id for submission reports
+  submissionRunId?: string; // Exact immutable submission attempt
   projectId: string;     // FK → ProjectDocument._id (denormalized from request)
   templateId?: string;   // FK → ReportTemplateDocument.id (slug of template that generated this report)
   reporter?: Reporter;   // Set by the worker when it picks up the job
   content?: string;      // Generated markdown report
+  structuredArtifact?: StructuredReportArtifact;
   status: ReportStatus;
   error?: string;
   insightReferences?: InsightReference[];  // Insights discovered/referenced by this report
@@ -1005,6 +1017,7 @@ export interface ReportTemplateDocument {
   projectId: string;                     // FK → ProjectDocument._id (immutable scope)
   id: string;                            // Human-readable slug (e.g. "default", "failure-analysis")
   name: string;                          // Display name
+  subject?: "run" | "submission";        // Defaults to "run" for legacy templates
   description?: string;
   userPrompt: string;                    // REQUIRED — the instruction sent to the agent
   systemPrompt?: ReportTemplateSystemPrompt;  // OPTIONAL — customize base system prompt

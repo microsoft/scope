@@ -13,11 +13,13 @@ import {
   ReportDocument,
   ReportTemplateDocument,
   Reporter,
+  SUBMISSION_REPORT_SYSTEM_PROMPT,
   TokenManagerClient,
   type VisibilityHeartbeat,
 } from "shared";
 import { trackMetric, trackEvent } from "telemetry";
 import { createReportTools } from "./tools.js";
+import { createSubmissionReportTools } from "./submission-tools.js";
 import { REPORT_SYSTEM_PROMPT, withRetry } from "shared";
 
 export interface ReportQueueProcessorConfig extends BaseQueueProcessorConfig {
@@ -36,21 +38,22 @@ export interface ResolvedReportPrompts {
 
 export function resolveReportPrompts(
   template: Pick<ReportTemplateDocument, "userPrompt" | "systemPrompt">,
-  requestId: string,
+  subjectId: string,
+  defaultSystemPrompt = REPORT_SYSTEM_PROMPT,
 ): ResolvedReportPrompts {
   const userPrompt = template.userPrompt.replace(
-    /\{\{requestId\}\}|\{requestId\}/g,
-    requestId,
+    /\{\{requestId\}\}|\{requestId\}|\{\{submissionId\}\}|\{submissionId\}/g,
+    subjectId,
   );
   if (!template.systemPrompt) {
-    return { userPrompt, systemPrompt: REPORT_SYSTEM_PROMPT };
+    return { userPrompt, systemPrompt: defaultSystemPrompt };
   }
   if (template.systemPrompt.mode === "override") {
     return { userPrompt, systemPrompt: template.systemPrompt.content };
   }
   return {
     userPrompt,
-    systemPrompt: `${REPORT_SYSTEM_PROMPT}\n\n${template.systemPrompt.content}`,
+    systemPrompt: `${defaultSystemPrompt}\n\n${template.systemPrompt.content}`,
   };
 }
 
@@ -88,14 +91,33 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
     const generationStart = Date.now();
     const reportId = doc._id;
     const requestId = doc.requestId;
+    const submissionId = doc.submissionId;
+    const submissionRunId = doc.submissionRunId;
+    if (!requestId && !(submissionId && submissionRunId)) {
+      throw new Error(
+        `Report ${reportId} has no run or submission subject`,
+      );
+    }
 
     if (!ReportQueueProcessor.coldStartTracked) {
       ReportQueueProcessor.coldStartTracked = true;
       trackMetric({ name: "report_generator.cold_start_ms", value: process.uptime() * 1000, properties: { service: "report-generator" } });
     }
 
-    trackEvent({ name: "report_generator.generation_started", properties: { requestId, reportId, templateId: doc.templateId || "unknown" } });
-    await log("info", `Starting report generation for run ${requestId}`);
+    trackEvent({
+      name: "report_generator.generation_started",
+      properties: {
+        requestId: requestId ?? "submission",
+        reportId,
+        templateId: doc.templateId || "unknown",
+      },
+    });
+    await log(
+      "info",
+      requestId
+        ? `Starting report generation for run ${requestId}`
+        : `Starting report generation for submission ${submissionId}/${submissionRunId}`,
+    );
 
     // --- Prepare snapshots temp directory ---
     const snapshotsDir = join(tmpdir(), `report-${reportId}`);
@@ -103,12 +125,18 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
 
     try {
       // --- Create Copilot SDK tools ---
-      const tools = createReportTools(
-        this.reportConfig.apiBaseUrl,
-        requestId,
-        snapshotsDir,
-        reportId
-      );
+      const tools = requestId
+        ? createReportTools(
+            this.reportConfig.apiBaseUrl,
+            requestId,
+            snapshotsDir,
+            reportId,
+          )
+        : createSubmissionReportTools(
+            this.reportConfig.apiBaseUrl,
+            submissionId!,
+            submissionRunId!,
+          );
 
       await log("info", "Initialized tools, starting Copilot SDK session");
 
@@ -151,18 +179,19 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
 
       await log("info", `Reporter: ${reporter.agentId}@${reporter.agentVersion}, model: ${reporter.model}`);
 
-      const {
-        userPrompt: resolvedUserPrompt,
-        systemPrompt: resolvedSystemPrompt,
-      } = resolveReportPrompts(template, requestId);
+      const prompts = resolveReportPrompts(
+        template,
+        requestId ?? submissionId!,
+        requestId ? REPORT_SYSTEM_PROMPT : SUBMISSION_REPORT_SYSTEM_PROMPT,
+      );
 
       // --- Run Copilot SDK session ---
       const resolvedTimeoutMs = template.timeoutMs ?? this.reportConfig.sessionTimeoutMs ?? 5 * 60 * 1000;
       const llmStart = Date.now();
       const content = await this.runCopilotSession(
         tools,
-        resolvedUserPrompt,
-        resolvedSystemPrompt,
+        prompts.userPrompt,
+        prompts.systemPrompt,
         resolvedModel,
         resolvedTimeoutMs,
         log
@@ -183,7 +212,10 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
 
       await log("info", `Report completed (${content.length} chars)`, { final: true });
       trackMetric({ name: "report_generator.generation_duration_ms", value: Date.now() - generationStart, properties: { service: "report-generator" } });
-      trackEvent({ name: "report_generator.generation_completed", properties: { requestId, reportId } });
+      trackEvent({
+        name: "report_generator.generation_completed",
+        properties: { requestId: requestId ?? "submission", reportId },
+      });
     } finally {
       // Clean up extracted snapshot files
       if (existsSync(snapshotsDir)) {
@@ -211,7 +243,9 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
    * real-time progress on the Logs tab.
    */
   private async runCopilotSession(
-    tools: ReturnType<typeof createReportTools>,
+    tools:
+      | ReturnType<typeof createReportTools>
+      | ReturnType<typeof createSubmissionReportTools>,
     userPrompt: string,
     systemPrompt: string,
     model: string,

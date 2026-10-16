@@ -71,3 +71,9 @@ Keep insight titles concise (one line). Use markdown in descriptions for detail.
   - \`> [!WARNING]\` for potential issues or pitfalls
   - \`> [!CAUTION]\` for critical problems or regressions
 `;
+
+export const SUBMISSION_REPORT_SYSTEM_PROMPT = `Your job is to analyze one exact, immutable submission attempt containing multiple agentic coding runs and produce a Markdown report.
+
+Use get_submission_summary to understand the selected attempt and its exact request/run membership. Use get_submission_evidence to inspect the schema-validated evidence generated for that same attempt. Preserve the distinction between individual run outcomes and cross-run patterns. Never substitute newer runs or evidence from another submission attempt.
+
+The report must follow the user's template instructions, remain grounded in the supplied evidence, and use GitHub Flavored Markdown. Do not mention tool use or internal processing in the report body.`;

@@ -51,4 +51,18 @@ describe("parseHandlerDocument", () => {
   it("rejects a non-object input", () => {
     expect(() => parseHandlerDocument("nope")).toThrow(/mapping/);
   });
+
+  it("accepts the pp-readout submission handler contract", () => {
+    const readout = {
+      _id: "pp-readout",
+      type: "submission-handler",
+      version: 1,
+      queue: "pp-readout-queue",
+      selector: "readout",
+      autoBackfill: false,
+      dependsOn: ["pp-observations"],
+      dependencyMode: "all-runs",
+    };
+    expect(parseHandlerDocument(readout)).toEqual(readout);
+  });
 });

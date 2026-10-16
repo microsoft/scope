@@ -3,7 +3,13 @@
 
 import type { ReportTemplateSystemPrompt } from "../../../../packages/shared/src/index.js";
 import { createReportTools } from "../../../../apps/workers/report-generator/src/tools.js";
+import { createSubmissionReportTools } from "../../../../apps/workers/report-generator/src/submission-tools.js";
 import { resolveReportPrompts } from "../../../../apps/workers/report-generator/src/report-queue-processor.js";
+import { SUBMISSION_REPORT_SYSTEM_PROMPT } from "../../../../packages/shared/src/index.js";
+import {
+  READOUT_SYSTEM_PROMPT,
+  composeReadoutUserPrompt,
+} from "../../../../apps/workers/readout/src/prompt.js";
 import type {
   CompletionOptions,
   ComposedPromptRequest,
@@ -14,6 +20,8 @@ import { normalizeTools } from "./common.js";
 
 interface ReportInput {
   requestId: string;
+  submissionId?: string;
+  submissionRunId?: string;
   reportId: string;
   userPrompt: string;
   systemPrompt?: ReportTemplateSystemPrompt;
@@ -50,7 +58,22 @@ function parseReportInput(input: unknown, variant: string): ReportInput {
     );
   }
   return {
-    requestId: requiredString(value.requestId, "input.requestId"),
+    requestId:
+      variant === "submission-template"
+        ? optionalString(value.requestId, "input.requestId") ?? ""
+        : requiredString(value.requestId, "input.requestId"),
+    ...(variant === "submission-template"
+      ? {
+          submissionId: requiredString(
+            value.submissionId,
+            "input.submissionId",
+          ),
+          submissionRunId: requiredString(
+            value.submissionRunId,
+            "input.submissionRunId",
+          ),
+        }
+      : {}),
     reportId:
       optionalString(value.reportId, "input.reportId") ?? "prompt-eval-report",
     userPrompt: requiredString(value.userPrompt, "input.userPrompt"),
@@ -80,9 +103,10 @@ function parseReportInput(input: unknown, variant: string): ReportInput {
 function createFixtureToolOptions(
   evidenceContext: Record<string, unknown> | undefined,
 ): CompletionOptions {
-  const request = evidenceContext
-    ? record(evidenceContext.request, "input.evidenceContext.request")
-    : {};
+  const request =
+    evidenceContext?.request === undefined
+      ? {}
+      : record(evidenceContext.request, "input.evidenceContext.request");
   const turns = Array.isArray(request.turns)
     ? request.turns.filter(
         (turn): turn is Record<string, unknown> =>
@@ -98,6 +122,13 @@ function createFixtureToolOptions(
           ? (arguments_ as Record<string, unknown>)
           : {};
       switch (name) {
+        case "get_submission_summary":
+          return evidenceContext?.submission ?? {};
+        case "get_submission_evidence":
+          return {
+            reportId: "prompt-eval-readout",
+            evidence: evidenceContext?.evidence ?? {},
+          };
         case "get_run_summary":
           return request;
         case "list_turns":
@@ -176,19 +207,30 @@ function composeParsedReportRequest(
   variant: string,
   defaultModel: string,
 ): ComposedPromptRequest {
+  const submissionTemplate = variant === "submission-template";
+  const subjectId = submissionTemplate
+    ? parsed.submissionId!
+    : parsed.requestId;
   const prompts = resolveReportPrompts(
     {
       userPrompt: parsed.userPrompt,
       systemPrompt: parsed.systemPrompt,
     },
-    parsed.requestId,
+    subjectId,
+    submissionTemplate ? SUBMISSION_REPORT_SYSTEM_PROMPT : undefined,
   );
-  const tools = createReportTools(
-    parsed.apiBaseUrl,
-    parsed.requestId,
-    parsed.snapshotsDir,
-    parsed.reportId,
-  );
+  const tools = submissionTemplate
+    ? createSubmissionReportTools(
+        parsed.apiBaseUrl,
+        parsed.submissionId!,
+        parsed.submissionRunId!,
+      )
+    : createReportTools(
+        parsed.apiBaseUrl,
+        parsed.requestId,
+        parsed.snapshotsDir,
+        parsed.reportId,
+      );
   return {
     messages: [
       { role: "system", content: prompts.systemPrompt },
@@ -200,8 +242,12 @@ function composeParsedReportRequest(
       adapterId: `run-report/${variant}`,
       productionSources: [
         "apps/workers/report-generator/src/report-queue-processor.ts#resolveReportPrompts",
-        "apps/workers/report-generator/src/tools.ts#createReportTools",
-        "packages/shared/src/report-templates/prompt.ts#REPORT_SYSTEM_PROMPT",
+        submissionTemplate
+          ? "apps/workers/report-generator/src/submission-tools.ts#createSubmissionReportTools"
+          : "apps/workers/report-generator/src/tools.ts#createReportTools",
+        submissionTemplate
+          ? "packages/shared/src/report-templates/prompt.ts#SUBMISSION_REPORT_SYSTEM_PROMPT"
+          : "packages/shared/src/report-templates/prompt.ts#REPORT_SYSTEM_PROMPT",
       ],
       fidelity: "exact",
     },
@@ -213,6 +259,32 @@ export function composeReportRequest(
   variant: string,
   defaultModel: string,
 ): ComposedPromptRequest {
+  if (variant === "submission-readout") {
+    const value = record(input);
+    const evidence = record(value.evidence, "input.evidence");
+    return {
+      messages: [
+        { role: "system", content: READOUT_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: composeReadoutUserPrompt(
+            evidence as unknown as Parameters<typeof composeReadoutUserPrompt>[0],
+          ),
+        },
+      ],
+      model:
+        optionalString(value.model, "input.model") ?? defaultModel,
+      tools: [],
+      metadata: {
+        adapterId: "run-report/submission-readout",
+        productionSources: [
+          "apps/workers/readout/src/prompt.ts#READOUT_SYSTEM_PROMPT",
+          "apps/workers/readout/src/readout-generator.ts#composeReadoutUserPrompt",
+        ],
+        fidelity: "exact",
+      },
+    };
+  }
   return composeParsedReportRequest(
     parseReportInput(input, variant),
     variant,
@@ -222,8 +294,24 @@ export function composeReportRequest(
 
 export const reportAdapter: PromptTargetAdapter<string> = {
   family: "run-report",
-  variants: ["default", "append", "override-control"],
+  variants: [
+    "default",
+    "append",
+    "override-control",
+    "submission-readout",
+    "submission-template",
+  ],
   async run(input, variant, context) {
+    if (variant === "submission-readout") {
+      const request = composeReportRequest(input, variant, context.model);
+      const completion = await context.complete(request);
+      return {
+        request,
+        rawResponse: completion.content,
+        output: completion.content.trim(),
+        invocationMetadata: completion.metadata,
+      };
+    }
     const parsed = parseReportInput(input, variant);
     const request = composeParsedReportRequest(parsed, variant, context.model);
     const completion = await context.complete(

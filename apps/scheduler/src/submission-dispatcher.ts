@@ -11,6 +11,7 @@ import {
   type SubmissionQueueMessagePayload,
   type SubmissionRunHistoryDocument,
   type ServiceHandlerDocument,
+  withRetry,
 } from "shared";
 
 export class SubmissionDispatcher {
@@ -28,6 +29,7 @@ export class SubmissionDispatcher {
     private readonly createQueueClient: (queueName: string) => QueueClient,
     private readonly pollIntervalMs = 30_000,
     private readonly batchSize = 30,
+    private readonly apiUrl = "http://api:3000",
   ) {
     this.coordinator = new SubmissionCoordinator(
       {
@@ -63,7 +65,7 @@ export class SubmissionDispatcher {
       { projection: { submissionId: 1 } },
     );
     if (request?.submissionId) {
-      await this.coordinator.reconcile(request.submissionId);
+      await this.reconcileAndTrigger(request.submissionId);
     }
   }
 
@@ -87,12 +89,70 @@ export class SubmissionDispatcher {
           ? candidates.at(-1)?._id ?? null
           : null;
       for (const candidate of candidates) {
-        await this.coordinator.reconcile(candidate._id);
+        await this.reconcileAndTrigger(candidate._id);
       }
     } catch (error) {
       console.error("[SubmissionDispatcher] Poll failed:", error);
     } finally {
       this.dispatching = false;
+    }
+  }
+
+  private async reconcileAndTrigger(submissionId: string): Promise<void> {
+    const reconciled = await this.coordinator.reconcile(submissionId);
+    if (!reconciled || reconciled.readiness !== "done") return;
+    const submissionRunId = reconciled.submission.run._id;
+    if (reconciled.submission.run.reportsTriggeredAt) return;
+
+    const now = new Date();
+    const claimed = await this.submissions.findOneAndUpdate(
+      {
+        _id: submissionId,
+        "run._id": submissionRunId,
+        "run.reportsTriggeredAt": { $exists: false },
+      },
+      {
+        $set: {
+          "run.reportsTriggeredAt": now,
+          "run.updatedAt": now,
+          updatedAt: now,
+        },
+      },
+      { returnDocument: "after" },
+    );
+    if (!claimed) return;
+
+    const url = `${this.apiUrl}/api/v1/reports/trigger-submission`;
+    try {
+      await withRetry(async () => {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ submissionId, submissionRunId }),
+        });
+        if (!response.ok) {
+          const detail = await response.text().catch(() => "");
+          throw new Error(
+            `POST ${url} -> ${response.status} ${detail}`.trim(),
+          );
+        }
+      });
+      console.log(
+        `[SubmissionDispatcher] Triggered report templates for ${submissionId}/${submissionRunId}`,
+      );
+    } catch (error) {
+      const failedAt = new Date();
+      await this.submissions.updateOne(
+        { _id: submissionId, "run._id": submissionRunId },
+        {
+          $unset: { "run.reportsTriggeredAt": "" },
+          $set: {
+            "run.updatedAt": failedAt,
+            updatedAt: failedAt,
+          },
+        },
+      );
+      throw error;
     }
   }
 

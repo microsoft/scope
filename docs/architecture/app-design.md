@@ -528,12 +528,25 @@ discard a message when `claimSubmissionHandler()` returns `null`. Final writes
 use `completeSubmissionHandler()`, whose compare-and-swap rejects stale
 publication after supersession.
 
+`pp-readout` writes a normal append-only `ReportDocument` directly; it does not
+invoke report templates or the report-generator worker. Run reports retain
+`requestId`. Submission reports instead carry `submissionId` and the exact
+`submissionRunId`, with no report-kind discriminator. Their optional structured
+artifact reference identifies `scope.submission-readout@1.0`,
+`application/json`, and the blob URL. The Markdown `content` is rendered from
+that validated object. Each successful regeneration uses a new report id, while
+the current embedded submission run points only to its latest successful
+report. The internal `pp-readout` handler and `scope.submission-readout` schema
+names do not define the public submission API resource name.
+
 The API exposes:
 
 - `GET /api/v1/submissions?projectId=...`
 - `GET /api/v1/submissions/:id`
+- `GET /api/v1/submissions/:id/reports`
 - `GET /api/v1/submissions/:id/runs`
 - `GET /api/v1/submissions/:id/runs/:submissionRunId`
+- `GET /api/v1/submissions/:id/runs/:submissionRunId/logs`
 - `POST /api/v1/submissions/:id/retry`
 
 Responses expose readiness, exact blocking request/run pairs, handler progress,
@@ -541,6 +554,32 @@ supersession metadata, resolved request summaries, and the current report
 pointer without queue names or scheduler claim fields. Portal submit flows
 navigate to Submission Detail, and the CLI mirrors list/get/history/retry
 capabilities under `scope submission`.
+
+Submission Detail uses an attempt-scoped view rather than rendering every
+attempt at once. Its attempt picker switches the exact immutable request/run
+vector, dependency projection, processing logs, and report subject together.
+Horizontal Reports, Runs, and Processing tabs keep member runs one click away
+while a long report is open. Reports are first scoped to the selected attempt,
+then grouped by report type: template-based reports use `templateId`, while
+template-less handler reports use `reporter.id`. A second horizontal tab row
+uses browser-style tabs connected to the report panel, shows the newest report
+for each type, and deliberately does not expose same-type version history. The
+`attempt` and `report` query parameters form the stable deep-link contract.
+Selecting an attempt or report adds a browser-history entry; stale duplicate
+report ids are canonicalized to the newest report of that type for the selected
+attempt. Only the report referenced by the embedded current attempt is labeled
+current.
+
+Report templates have a `subject` of `run` (the backward-compatible default) or
+`submission`. Run templates retain their criteria/task/prompt-feature triggers.
+Submission templates currently use the automatic trigger: after `pp-readout`
+finishes for the exact current `submissionRunId`, the scheduler atomically
+claims `run.reportsTriggeredAt` and asks the API to create at most one
+template-based report per template and attempt. The normal report-generator
+worker consumes that report, reads the exact attempt plus its validated
+structured readout evidence, and stores Markdown as a sibling report type. A
+failed trigger clears the exact-attempt claim so polling can retry; archived
+attempts are never trigger targets.
 
 ## Runs List Query API
 

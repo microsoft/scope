@@ -207,6 +207,8 @@ async function main(): Promise<void> {
     db,
     createQueueClient,
     ppPollIntervalMs,
+    30,
+    API_URL,
   );
   submissionDispatcher.start();
   console.log(`[Scheduler] Submission dispatcher started (poll=${ppPollIntervalMs}ms)`);

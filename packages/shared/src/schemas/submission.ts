@@ -87,6 +87,7 @@ export const SubmissionRunStateSchema = z
     handlerStatus: z.record(z.string(), SubmissionHandlerStatusSchema).optional(),
     blocking: z.array(SubmissionBlockingDetailSchema).default([]),
     report: SubmissionReportPointerSchema.optional(),
+    reportsTriggeredAt: z.coerce.date().optional(),
     reconcileAfter: z.coerce.date().optional(),
     rollover: SubmissionRolloverClaimSchema.optional(),
     supersededAt: z.coerce.date().optional(),

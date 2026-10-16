@@ -68,6 +68,7 @@ describe("LogPublisher", () => {
       expect(parsed.message).toBe("hello");
       expect(parsed.level).toBe("info");
       expect(parsed.source).toBe("test-worker");
+      expect(parsed.data.runId).toBe("attempt-1");
     });
 
     it("persists the log event via appendLogEvent under the per-attempt path", async () => {

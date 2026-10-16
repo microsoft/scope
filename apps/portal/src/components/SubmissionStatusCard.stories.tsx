@@ -41,7 +41,7 @@ const submission: Submission = {
     {
       requestId: "request-2",
       runId: "run-2",
-      handlerId: "pp-observations",
+      handlerId: "security-scan",
       state: "ready",
     },
   ],
@@ -59,7 +59,32 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Processing: Story = {};
+export const GeneratingReport: Story = {};
+
+export const Retryable: Story = {
+  args: {
+    submission: {
+      ...submission,
+      readiness: "ready",
+      handlerProgress: {
+        "pp-readout": { status: "failed", version: 1, error: "Model timeout" },
+      },
+    },
+  },
+};
+
+export const ReportReady: Story = {
+  args: {
+    submission: {
+      ...submission,
+      readiness: "done",
+      report: { reportId: "report-123" },
+      handlerProgress: {
+        "pp-readout": { status: "done", version: 1 },
+      },
+    },
+  },
+};
 
 export const Blocked: Story = {
   args: {
@@ -70,7 +95,7 @@ export const Blocked: Story = {
         {
           requestId: "request-2",
           runId: "run-2",
-          handlerId: "pp-observations",
+          handlerId: "security-scan",
           reason: "dependency-failed",
         },
       ],

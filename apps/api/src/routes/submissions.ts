@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
+import type { Response } from "express";
 import {
   SubmissionCoordinator,
   SubmissionListResponseSchema,
+  ReportResponseSchema,
   SubmissionResponseSchema,
   SubmissionRetryResponseSchema,
   SubmissionRunResponseSchema,
@@ -15,6 +17,8 @@ import type { SubmissionDocument } from "../route-context.js";
 import type { RouteContext } from "../route-context.js";
 import { apiRoute } from "../openapi/api-route.js";
 import { ProjectIdQuerySchema, getQueryProjectId } from "../utils/project-scope.js";
+import { subscribeClient, unsubscribeClient } from "../utils/sse.js";
+import type { SSEClient } from "../utils/sse.js";
 
 function coordinator(ctx: RouteContext): SubmissionCoordinator {
   return new SubmissionCoordinator({
@@ -47,6 +51,159 @@ function retryBlocking(submission: SubmissionDocument) {
       reason: "dependency-not-ready" as const,
       ...(dependency.error ? { error: dependency.error } : {}),
     }));
+}
+
+async function streamSubmissionRunLogs(
+  ctx: RouteContext,
+  req: import("express").Request,
+  res: Response,
+  submission: SubmissionDocument,
+  submissionRunId: string,
+  fromStart: boolean,
+): Promise<void> {
+  const isCurrent = submission.run._id === submissionRunId;
+  const historical = isCurrent
+    ? undefined
+    : await ctx.submissionRunsCollection.findOne({
+        _id: submissionRunId,
+        submissionId: submission._id,
+      });
+  const attempt = isCurrent ? submission.run : historical;
+  if (!attempt) {
+    res.status(404).json({ error: "Submission attempt not found" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  if (fromStart) {
+    try {
+      const pastLogs = await ctx.blobStorage.getLogEvents(
+        submission._id,
+        submissionRunId,
+      );
+      for (const log of pastLogs) {
+        res.write(`data: ${JSON.stringify(log)}\n\n`);
+      }
+    } catch (error) {
+      console.error(
+        `Failed to replay logs for submission ${submission._id}/${submissionRunId}:`,
+        error,
+      );
+      res.write(
+        `event: error\ndata: ${JSON.stringify({ message: "Cannot connect to log storage" })}\n\n`,
+      );
+      res.end();
+      return;
+    }
+  }
+
+  const readiness = deriveSubmissionReadiness(attempt);
+  if (
+    !isCurrent ||
+    readiness === "done" ||
+    readiness === "failed" ||
+    readiness === "blocked"
+  ) {
+    res.write(
+      `event: done\ndata: ${JSON.stringify({ status: readiness })}\n\n`,
+    );
+    res.end();
+    return;
+  }
+
+  let cleaned = false;
+  let redisSubscribed = false;
+  let changeStream: ReturnType<typeof ctx.submissionCollection.watch> | null =
+    null;
+  const heartbeat = setInterval(() => {
+    if (!cleaned) res.write(`:\n\n`);
+  }, 30_000);
+
+  const client: SSEClient = {
+    res,
+    accepts: (event) => event.data?.runId === submissionRunId,
+    cleanup: () => {
+      if (cleaned) return;
+      cleaned = true;
+      clearInterval(heartbeat);
+      if (changeStream) {
+        changeStream.close().catch((error: unknown) => {
+          console.error("Error closing submission log change stream:", error);
+        });
+      }
+      if (redisSubscribed) unsubscribeClient(submission._id, client);
+      res.end();
+    },
+  };
+
+  if (process.env.REDIS_HOST) {
+    try {
+      await subscribeClient(submission._id, client);
+      redisSubscribed = true;
+    } catch (error) {
+      console.error(
+        `Redis subscription failed for submission ${submission._id}:`,
+        error,
+      );
+    }
+  }
+
+  try {
+    changeStream = ctx.submissionCollection.watch(
+      [
+        {
+          $match: {
+            "documentKey._id": submission._id,
+            operationType: "update",
+          },
+        },
+      ],
+      { fullDocument: "updateLookup" },
+    );
+    changeStream.on("change", (change: {
+      operationType?: string;
+      fullDocument?: SubmissionDocument;
+    }) => {
+      const updated = change.fullDocument;
+      if (change.operationType !== "update" || !updated) return;
+      if (updated.run._id !== submissionRunId) {
+        res.write(
+          `event: done\ndata: ${JSON.stringify({ status: "superseded" })}\n\n`,
+        );
+        client.cleanup();
+        return;
+      }
+      const updatedReadiness = deriveSubmissionReadiness(updated.run);
+      if (
+        updatedReadiness === "done" ||
+        updatedReadiness === "failed" ||
+        updatedReadiness === "blocked"
+      ) {
+        res.write(
+          `event: done\ndata: ${JSON.stringify({ status: updatedReadiness })}\n\n`,
+        );
+        client.cleanup();
+      }
+    });
+    changeStream.on("error", (error: unknown) => {
+      console.error(
+        `Submission log change stream failed for ${submission._id}:`,
+        error,
+      );
+    });
+  } catch (error) {
+    console.error(
+      `Failed to create submission log change stream for ${submission._id}:`,
+      error,
+    );
+  }
+
+  req.on("close", () => client.cleanup());
 }
 
 async function toResponse(ctx: RouteContext, submission: SubmissionDocument) {
@@ -120,6 +277,68 @@ export function registerSubmissionsRoutes(ctx: RouteContext): void {
       res.json({
         submissions: await Promise.all(docs.map((doc) => toResponse(ctx, doc))),
       });
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/submissions/:id/runs/:submissionRunId/logs",
+    tags: ["Submissions"],
+    summary: "Stream logs for a submission attempt (SSE)",
+    params: z.object({
+      id: z.string(),
+      submissionRunId: z.string(),
+    }),
+    response: z.any(),
+    rawResponse: true,
+    responseDescription: "Server-sent event stream of log entries",
+    errorResponses: {
+      404: { description: "Submission or submission attempt not found" },
+    },
+    handler: async (req, res) => {
+      const submission = await ctx.submissionCollection.findOne({
+        _id: req.params.id,
+      });
+      if (!submission) {
+        res.status(404).json({ error: "Submission not found" });
+        return;
+      }
+      await streamSubmissionRunLogs(
+        ctx,
+        req,
+        res,
+        submission,
+        req.params.submissionRunId,
+        req.query.fromStart === "true",
+      );
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/submissions/:id/reports",
+    tags: ["Reports"],
+    summary: "Get reports for submission",
+    params: z.object({ id: z.string() }),
+    response: z.array(ReportResponseSchema),
+    errorResponses: { 404: { description: "Submission not found" } },
+    handler: async (req, res, next) => {
+      try {
+        const submission = await ctx.submissionCollection.findOne({
+          _id: req.params.id,
+        });
+        if (!submission) {
+          res.status(404).json({ error: "Submission not found" });
+          return;
+        }
+        const reports = await ctx.reportCollection.find({
+          projectId: submission.projectId,
+          submissionId: submission._id,
+        }).sort({ createdAt: -1 }).toArray();
+        res.json(reports.map((report) => ({ ...report, id: report._id })));
+      } catch (error) {
+        next(error);
+      }
     },
   });
 

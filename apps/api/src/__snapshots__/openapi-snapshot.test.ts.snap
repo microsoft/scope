@@ -906,6 +906,14 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "name": {
             "type": "string",
           },
+          "subject": {
+            "default": "run",
+            "enum": [
+              "run",
+              "submission",
+            ],
+            "type": "string",
+          },
           "systemPrompt": {
             "$ref": "#/components/schemas/ReportTemplateSystemPrompt",
           },
@@ -2450,6 +2458,15 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             ],
             "type": "string",
           },
+          "structuredArtifact": {
+            "$ref": "#/components/schemas/StructuredReportArtifact",
+          },
+          "submissionId": {
+            "type": "string",
+          },
+          "submissionRunId": {
+            "type": "string",
+          },
           "templateId": {
             "type": "string",
           },
@@ -2463,7 +2480,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         },
         "required": [
           "_id",
-          "requestId",
           "status",
           "createdAt",
           "projectId",
@@ -2529,6 +2545,14 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
           "projectId": {
+            "type": "string",
+          },
+          "subject": {
+            "default": "run",
+            "enum": [
+              "run",
+              "submission",
+            ],
             "type": "string",
           },
           "systemPrompt": {
@@ -2817,8 +2841,26 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             },
             "type": "array",
           },
+          "submissionExpectedRequestCount": {
+            "minimum": 1,
+            "type": "integer",
+          },
+          "submissionFinalizedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
           "submissionId": {
             "type": "string",
+          },
+          "submissionInitialRunId": {
+            "type": "string",
+          },
+          "submissionRequestIndex": {
+            "minimum": 0,
+            "type": "integer",
           },
           "taskPromptId": {
             "type": "string",
@@ -3655,6 +3697,471 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
         "type": "object",
       },
+      "StructuredReportArtifact": {
+        "properties": {
+          "contentType": {
+            "enum": [
+              "application/json",
+            ],
+            "type": "string",
+          },
+          "schemaId": {
+            "type": "string",
+          },
+          "schemaVersion": {
+            "type": "string",
+          },
+          "url": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "schemaId",
+          "schemaVersion",
+          "contentType",
+          "url",
+        ],
+        "type": "object",
+      },
+      "SubmissionBlockingDetail": {
+        "properties": {
+          "error": {
+            "type": "string",
+          },
+          "handlerId": {
+            "type": "string",
+          },
+          "reason": {
+            "enum": [
+              "request-missing",
+              "run-changed",
+              "dependency-not-ready",
+              "dependency-failed",
+              "dependency-blocked",
+            ],
+            "type": "string",
+          },
+          "requestId": {
+            "type": "string",
+          },
+          "runId": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "requestId",
+          "runId",
+          "handlerId",
+          "reason",
+        ],
+        "type": "object",
+      },
+      "SubmissionDependencyProjection": {
+        "properties": {
+          "error": {
+            "type": "string",
+          },
+          "handlerId": {
+            "type": "string",
+          },
+          "requestId": {
+            "type": "string",
+          },
+          "runId": {
+            "type": "string",
+          },
+          "state": {
+            "enum": [
+              "waiting",
+              "ready",
+              "failed",
+              "blocked",
+            ],
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "version": {
+            "type": "number",
+          },
+        },
+        "required": [
+          "requestId",
+          "runId",
+          "handlerId",
+          "state",
+        ],
+        "type": "object",
+      },
+      "SubmissionHandlerStatus": {
+        "properties": {
+          "error": {
+            "type": "string",
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "processing",
+              "done",
+              "failed",
+            ],
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "version": {
+            "type": "number",
+          },
+        },
+        "required": [
+          "status",
+        ],
+        "type": "object",
+      },
+      "SubmissionListResponse": {
+        "properties": {
+          "submissions": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionResponse",
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "submissions",
+        ],
+        "type": "object",
+      },
+      "SubmissionReportPointer": {
+        "properties": {
+          "reportId": {
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "url": {
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "SubmissionRequestRef": {
+        "properties": {
+          "requestId": {
+            "type": "string",
+          },
+          "runId": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "requestId",
+          "runId",
+        ],
+        "type": "object",
+      },
+      "SubmissionRequestSummary": {
+        "properties": {
+          "model": {
+            "type": "string",
+          },
+          "outcome": {
+            "type": "string",
+          },
+          "profileId": {
+            "type": "string",
+          },
+          "requestId": {
+            "type": "string",
+          },
+          "runId": {
+            "type": "string",
+          },
+          "status": {
+            "type": "string",
+          },
+          "task": {
+            "type": "string",
+          },
+          "workerType": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "requestId",
+          "runId",
+          "task",
+          "status",
+          "workerType",
+        ],
+        "type": "object",
+      },
+      "SubmissionResponse": {
+        "properties": {
+          "attemptNumber": {
+            "type": "integer",
+          },
+          "blocking": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionBlockingDetail",
+            },
+            "type": "array",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "dependencyProjection": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionDependencyProjection",
+            },
+            "type": "array",
+          },
+          "handlerProgress": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SubmissionHandlerStatus",
+            },
+            "type": "object",
+          },
+          "projectId": {
+            "type": "string",
+          },
+          "readiness": {
+            "enum": [
+              "waiting",
+              "ready",
+              "blocked",
+              "processing",
+              "done",
+              "failed",
+            ],
+            "type": "string",
+          },
+          "report": {
+            "$ref": "#/components/schemas/SubmissionReportPointer",
+          },
+          "requestIds": {
+            "items": {
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionRequestSummary",
+            },
+            "type": "array",
+          },
+          "submissionId": {
+            "type": "string",
+          },
+          "submissionRunId": {
+            "type": "string",
+          },
+          "supersededAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "supersededBySubmissionRunId": {
+            "type": "string",
+          },
+          "supersededReason": {
+            "enum": [
+              "request-vector-changed",
+              "manual-retry",
+            ],
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+        },
+        "required": [
+          "submissionId",
+          "projectId",
+          "requestIds",
+          "createdAt",
+          "submissionRunId",
+          "attemptNumber",
+          "readiness",
+          "requests",
+          "dependencyProjection",
+          "blocking",
+        ],
+        "type": "object",
+      },
+      "SubmissionRetryResponse": {
+        "properties": {
+          "attemptNumber": {
+            "type": "integer",
+          },
+          "blocking": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionBlockingDetail",
+            },
+            "type": "array",
+          },
+          "readiness": {
+            "enum": [
+              "waiting",
+              "ready",
+              "blocked",
+              "processing",
+              "done",
+              "failed",
+            ],
+            "type": "string",
+          },
+          "submissionId": {
+            "type": "string",
+          },
+          "submissionRunId": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "submissionId",
+          "submissionRunId",
+          "attemptNumber",
+          "readiness",
+          "blocking",
+        ],
+        "type": "object",
+      },
+      "SubmissionRunResponse": {
+        "properties": {
+          "_id": {
+            "type": "string",
+          },
+          "attemptNumber": {
+            "minimum": 1,
+            "type": "integer",
+          },
+          "blocking": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SubmissionBlockingDetail",
+            },
+            "type": "array",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "dependencyProjection": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SubmissionDependencyProjection",
+            },
+            "type": "array",
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "handlerStatus": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SubmissionHandlerStatus",
+            },
+            "type": "object",
+          },
+          "projectId": {
+            "type": "string",
+          },
+          "report": {
+            "$ref": "#/components/schemas/SubmissionReportPointer",
+          },
+          "reportsTriggeredAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionRequestRef",
+            },
+            "type": "array",
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "submissionId": {
+            "type": "string",
+          },
+          "supersededAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "supersededBySubmissionRunId": {
+            "type": "string",
+          },
+          "supersededReason": {
+            "enum": [
+              "request-vector-changed",
+              "manual-retry",
+            ],
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "vectorFingerprint": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "_id",
+          "attemptNumber",
+          "vectorFingerprint",
+          "requests",
+          "createdAt",
+        ],
+        "type": "object",
+      },
       "SuggestedPromptFeature": {
         "properties": {
           "behavior": {
@@ -3757,6 +4264,21 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         },
         "required": [
           "requestId",
+        ],
+        "type": "object",
+      },
+      "TriggerSubmissionReportsInput": {
+        "properties": {
+          "submissionId": {
+            "type": "string",
+          },
+          "submissionRunId": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "submissionId",
+          "submissionRunId",
         ],
         "type": "object",
       },
@@ -3994,6 +4516,13 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             ],
           },
           "name": {
+            "type": "string",
+          },
+          "subject": {
+            "enum": [
+              "run",
+              "submission",
+            ],
             "type": "string",
           },
           "systemPrompt": {
@@ -8349,6 +8878,22 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           {
             "in": "query",
+            "name": "submissionId",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "submissionRunId",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "projectId",
             "required": false,
             "schema": {
@@ -8600,6 +9145,56 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
       },
     },
+    "/api/v1/reports/trigger-submission": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerSubmissionReportsInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "reports": {
+                      "items": {
+                        "$ref": "#/components/schemas/ReportResponse",
+                      },
+                      "type": "array",
+                    },
+                    "triggered": {
+                      "type": "number",
+                    },
+                  },
+                  "required": [
+                    "triggered",
+                    "reports",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Submission attempt not found",
+          },
+          "409": {
+            "description": "Submission attempt is not ready",
+          },
+        },
+        "summary": "Trigger submission reports",
+        "tags": [
+          "Reports",
+        ],
+      },
+    },
     "/api/v1/reports/{id}": {
       "get": {
         "parameters": [
@@ -8784,6 +9379,32 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "summary": "Stream report logs (SSE)",
+        "tags": [
+          "Reports",
+        ],
+      },
+    },
+    "/api/v1/reports/{id}/structured": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+          },
+          "404": {
+            "description": "Report or structured artifact not found",
+          },
+        },
+        "summary": "Download a report's structured JSON artifact",
         "tags": [
           "Reports",
         ],
@@ -11590,6 +12211,292 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "List skill revisions",
         "tags": [
           "Skills",
+        ],
+      },
+    },
+    "/api/v1/submissions": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionListResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "List submissions",
+        "tags": [
+          "Submissions",
+        ],
+      },
+    },
+    "/api/v1/submissions/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Submission not found",
+          },
+        },
+        "summary": "Get a submission",
+        "tags": [
+          "Submissions",
+        ],
+      },
+    },
+    "/api/v1/submissions/{id}/reports": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReportResponse",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Submission not found",
+          },
+        },
+        "summary": "Get reports for submission",
+        "tags": [
+          "Reports",
+        ],
+      },
+    },
+    "/api/v1/submissions/{id}/retry": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "submissionRunId": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "submissionRunId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionRetryResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Submission not found",
+          },
+          "409": {
+            "description": "Submission attempt is stale or dependencies are blocked",
+          },
+        },
+        "summary": "Retry current submission processing",
+        "tags": [
+          "Submissions",
+        ],
+      },
+    },
+    "/api/v1/submissions/{id}/runs": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "runs": {
+                      "items": {
+                        "$ref": "#/components/schemas/SubmissionRunResponse",
+                      },
+                      "type": "array",
+                    },
+                  },
+                  "required": [
+                    "runs",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Submission not found",
+          },
+        },
+        "summary": "List current and historical submission attempts",
+        "tags": [
+          "Submissions",
+        ],
+      },
+    },
+    "/api/v1/submissions/{id}/runs/{submissionRunId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "submissionRunId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionRunResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Submission attempt not found",
+          },
+        },
+        "summary": "Get one submission attempt",
+        "tags": [
+          "Submissions",
+        ],
+      },
+    },
+    "/api/v1/submissions/{id}/runs/{submissionRunId}/logs": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "submissionRunId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-sent event stream of log entries",
+          },
+          "404": {
+            "description": "Submission or submission attempt not found",
+          },
+        },
+        "summary": "Stream logs for a submission attempt (SSE)",
+        "tags": [
+          "Submissions",
         ],
       },
     },

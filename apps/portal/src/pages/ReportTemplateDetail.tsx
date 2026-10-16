@@ -87,6 +87,7 @@ export function ReportTemplateDetail() {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editSubject, setEditSubject] = useState<"run" | "submission">("run");
   const [editUserPrompt, setEditUserPrompt] = useState("");
   const [editSysMode, setEditSysMode] = useState<"none" | "append" | "override">("none");
   const [editSysContent, setEditSysContent] = useState("");
@@ -108,6 +109,7 @@ export function ReportTemplateDetail() {
     if (!template) return;
     setEditName(template.name);
     setEditDescription(template.description ?? "");
+    setEditSubject(template.subject ?? "run");
     setEditUserPrompt(template.userPrompt);
     setEditSysMode(template.systemPrompt?.mode ?? "none");
     setEditSysContent(template.systemPrompt?.content ?? "");
@@ -150,6 +152,7 @@ export function ReportTemplateDetail() {
   const handleSave = () => {
     const body: Record<string, unknown> = {};
     if (editName.trim()) body.name = editName.trim();
+    body.subject = editSubject;
     body.description = editDescription.trim() || undefined;
     if (editUserPrompt.trim()) body.userPrompt = editUserPrompt.trim();
 
@@ -169,7 +172,7 @@ export function ReportTemplateDetail() {
     }
 
     // Trigger
-    if (editTriggerType === "always") {
+    if (editSubject === "submission" || editTriggerType === "always") {
       body.trigger = { type: "always" };
     } else {
       const idsArray = editTriggerIds.split(",").map(s => s.trim()).filter(Boolean);
@@ -218,6 +221,9 @@ export function ReportTemplateDetail() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{template.name}</h1>
             <p className="font-mono text-sm text-muted-foreground">{template.id}</p>
+            <Badge variant="outline" className="mt-2">
+              {template.subject === "submission" ? "Submission" : "Run"} scope
+            </Badge>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -265,6 +271,24 @@ export function ReportTemplateDetail() {
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <Input id="description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Optional description" />
+            </div>
+            <div className="space-y-2">
+              <Label>Report scope</Label>
+              <Select
+                value={editSubject}
+                onValueChange={(value: "run" | "submission") => {
+                  setEditSubject(value);
+                  if (value === "submission") setEditTriggerType("always");
+                }}
+              >
+                <SelectTrigger className="w-64" aria-label="Report scope">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="run">Individual run</SelectItem>
+                  <SelectItem value="submission">Submission attempt</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Separator />
             <div className="space-y-2">
@@ -320,7 +344,13 @@ export function ReportTemplateDetail() {
             <Separator />
             <div className="space-y-2">
               <Label>Trigger</Label>
-              <Select value={editTriggerType} onValueChange={(v) => setEditTriggerType(v as any)}>
+              <Select
+                value={editTriggerType}
+                onValueChange={(value: "always" | "criteria" | "taskPrompt" | "promptFeature") =>
+                  setEditTriggerType(value)
+                }
+                disabled={editSubject === "submission"}
+              >
                 <SelectTrigger className="w-48">
                   <SelectValue />
                 </SelectTrigger>

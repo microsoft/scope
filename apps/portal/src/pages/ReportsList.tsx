@@ -89,7 +89,7 @@ export function ReportsList() {
   const columnOptions: CustomizeColumnsOption[] = [
     { id: "id", label: "ID", required: true },
     { id: "task", label: "Task" },
-    { id: "runId", label: "Run ID" },
+    { id: "runId", label: "Subject" },
     { id: "status", label: "Status" },
     { id: "template", label: "Template" },
     { id: "model", label: "Model" },
@@ -116,17 +116,30 @@ export function ReportsList() {
     },
     {
       id: "runId",
-      header: "Run ID",
+      header: "Subject",
       width: "120px",
       hidden: columnVisibility.isHidden("runId"),
-      cell: (r) => (
+      cell: (r) => r.submissionId ? (
         <span
           className="font-mono text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-          onClick={(e) => { e.stopPropagation(); navigate(`/runs/${r.requestId}`); }}
+          onClick={(event) => {
+            event.stopPropagation();
+            navigate(`/submissions/${r.submissionId}`);
+          }}
         >
-          {formatId(r.requestId)}
+          Submission {formatId(r.submissionId)}
         </span>
-      ),
+      ) : r.requestId ? (
+        <span
+          className="font-mono text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+          onClick={(event) => {
+            event.stopPropagation();
+            navigate(`/runs/${r.requestId}`);
+          }}
+        >
+          Run {formatId(r.requestId)}
+        </span>
+      ) : <span className="text-xs text-muted-foreground">—</span>,
     },
     {
       id: "status",
@@ -150,7 +163,9 @@ export function ReportsList() {
             {r.templateId}
           </Badge>
         ) : (
-          <span className="text-xs text-muted-foreground">default</span>
+          <span className="text-xs text-muted-foreground">
+            {r.submissionId ? "template-less" : "default"}
+          </span>
         ),
     },
     {
@@ -190,7 +205,7 @@ export function ReportsList() {
       <div className="min-h-0 flex-1">
         <ListLayout
           title="Reports"
-          description="LLM-generated analysis reports for benchmark runs"
+          description="Generated analysis reports for benchmark runs and submissions"
           railStorageKey="reports"
           filterRail={
             <FilterRail

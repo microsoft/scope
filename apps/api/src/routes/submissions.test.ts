@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Collection, Db } from "mongodb";
 import type {
   RequestDocument,
+  ReportDocument,
   ServiceHandlerDocument,
   SubmissionDocument,
   SubmissionRunHistoryDocument,
@@ -28,6 +29,13 @@ function buildApp(input: {
   requests: RequestDocument[];
   submission: SubmissionDocument;
   history?: SubmissionRunHistoryDocument[];
+  reports?: ReportDocument[];
+  logs?: Array<{
+    timestamp: string;
+    level: "info" | "warn" | "error" | "debug";
+    source: string;
+    message: string;
+  }>;
 }) {
   let submission = structuredClone(input.submission);
   const services: ServiceHandlerDocument[] = [
@@ -90,6 +98,22 @@ function buildApp(input: {
     requestCollection: {
       find: vi.fn(() => queryResult(input.requests)),
     } as unknown as Collection<RequestDocument>,
+    reportCollection: {
+      find: vi.fn((filter: Record<string, unknown>) =>
+        queryResult((input.reports ?? []).filter((report) =>
+          Object.entries(filter).every(([key, value]) =>
+            report[key as keyof ReportDocument] === value
+          )
+        )),
+      ),
+      findOne: vi.fn(async (filter: Record<string, unknown>) =>
+        (input.reports ?? []).find((report) =>
+          Object.entries(filter).every(([key, value]) =>
+            report[key as keyof ReportDocument] === value
+          )
+        ) ?? null
+      ),
+    } as unknown as Collection<ReportDocument>,
     submissionCollection,
     submissionRunsCollection: {
       find: vi.fn(() => queryResult(input.history ?? [])),
@@ -97,6 +121,9 @@ function buildApp(input: {
         (input.history ?? []).find((run) => run._id === filter._id) ?? null,
       ),
     } as unknown as Collection<SubmissionRunHistoryDocument>,
+    blobStorage: {
+      getLogEvents: vi.fn(async () => input.logs ?? []),
+    },
   } as unknown as RouteContext;
   ctx.app.use(express.json());
   registerSubmissionsRoutes(ctx);
@@ -249,5 +276,81 @@ describe("submission routes", () => {
         reason: "dependency-not-ready",
       },
     ]);
+  });
+
+  it("lists current and historical reports for the submission", async () => {
+    const currentReport: ReportDocument = {
+      _id: "report-current",
+      projectId: "project-1",
+      submissionId: "submission-1",
+      submissionRunId: "submission-run-1",
+      status: "completed",
+      content: "# Current",
+      createdAt: new Date("2026-01-02T00:00:00.000Z"),
+    };
+    const historicalReport: ReportDocument = {
+      ...currentReport,
+      _id: "report-historical",
+      submissionRunId: "submission-run-0",
+      content: "# Historical",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    };
+    const response = await request(
+      buildApp({
+        requests: [requestDocument],
+        submission: {
+          ...submissionDocument,
+          run: {
+            ...submissionDocument.run,
+            report: { reportId: "report-current" },
+          },
+        },
+        reports: [currentReport, historicalReport],
+      }),
+    ).get("/api/v1/submissions/submission-1/reports");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject([
+      {
+        _id: "report-current",
+        submissionRunId: "submission-run-1",
+      },
+      {
+        _id: "report-historical",
+        submissionRunId: "submission-run-0",
+      },
+    ]);
+  });
+
+  it("replays logs for the exact submission attempt", async () => {
+    const response = await request(
+      buildApp({
+        requests: [requestDocument],
+        submission: {
+          ...submissionDocument,
+          run: {
+            ...submissionDocument.run,
+            handlerStatus: {
+              "pp-readout": { status: "done", version: 1 },
+            },
+          },
+        },
+        logs: [
+          {
+            timestamp: "2026-01-01T00:00:00.000Z",
+            level: "info",
+            source: "pp-readout",
+            message: "Submission report completed",
+          },
+        ],
+      }),
+    ).get(
+      "/api/v1/submissions/submission-1/runs/submission-run-1/logs?fromStart=true",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/event-stream");
+    expect(response.text).toContain("Submission report completed");
+    expect(response.text).toContain("event: done");
   });
 });

@@ -2,12 +2,24 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect } from 'vitest';
-import { REPORT_SYSTEM_PROMPT } from './prompt.js';
+import {
+  REPORT_SYSTEM_PROMPT,
+  SUBMISSION_REPORT_SYSTEM_PROMPT,
+} from './prompt.js';
 
 describe('REPORT_SYSTEM_PROMPT', () => {
   it('is a non-empty string', () => {
     expect(typeof REPORT_SYSTEM_PROMPT).toBe('string');
     expect(REPORT_SYSTEM_PROMPT.length).toBeGreaterThan(0);
+  });
+
+  describe('SUBMISSION_REPORT_SYSTEM_PROMPT', () => {
+    it('requires exact submission-attempt evidence', () => {
+      expect(SUBMISSION_REPORT_SYSTEM_PROMPT).toContain('exact, immutable submission attempt');
+      expect(SUBMISSION_REPORT_SYSTEM_PROMPT).toContain('get_submission_summary');
+      expect(SUBMISSION_REPORT_SYSTEM_PROMPT).toContain('get_submission_evidence');
+      expect(SUBMISSION_REPORT_SYSTEM_PROMPT).toContain('Never substitute newer runs');
+    });
   });
 
   it('describes the report generation task', () => {

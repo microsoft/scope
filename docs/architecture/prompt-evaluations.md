@@ -30,7 +30,7 @@ families:
 | Prompt-feature extraction | Positive, negative, ambiguous, ancestor/descendant, and empty-feature cases |
 | Judge instructions | Bundled and independent strategies; file, tool-history, response, conflicting, missing, and prior-pass evidence |
 | Developer feedback | Default persona, custom persona, descendant guard on/off, and multiple root failures |
-| Run reports | Default and appended system prompts; override as a control where the default prompt is intentionally absent |
+| Run reports and submission readouts | Default and appended run-report system prompts; override as a control where the default prompt is intentionally absent; exact-vector submission readout synthesis; submission-template report composition from exact-attempt summary and structured evidence tools |
 
 Judge and report tool descriptions are static AI-facing instructions, but they
 are evaluated through their owning end-to-end judge and report families rather

@@ -112,6 +112,7 @@ export function ReportTemplateList() {
   const columnOptions: CustomizeColumnsOption[] = [
     { id: "id", label: "ID", required: true },
     { id: "name", label: "Name" },
+    { id: "subject", label: "Scope" },
     { id: "trigger", label: "Trigger" },
     { id: "model", label: "Model" },
     { id: "systemPrompt", label: "Sys Prompt" },
@@ -132,6 +133,17 @@ export function ReportTemplateList() {
       width: "200px",
       hidden: columnVisibility.isHidden("name"),
       cell: (t) => <span className="text-sm">{t.name}</span>,
+    },
+    {
+      id: "subject",
+      header: "Scope",
+      width: "120px",
+      hidden: columnVisibility.isHidden("subject"),
+      cell: (template) => (
+        <Badge variant="outline">
+          {template.subject === "submission" ? "Submission" : "Run"}
+        </Badge>
+      ),
     },
     {
       id: "trigger",
