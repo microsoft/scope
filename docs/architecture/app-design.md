@@ -609,6 +609,22 @@ Workers publish log events to Redis Pub/Sub channels keyed by run ID. The API su
 
 The Portal desktop shell uses a persistent left navigation sidebar. It defaults to the compact icon rail, and users can expand it to show navigation labels; the choice is stored in `localStorage` under `scope:layout:sidebar-expanded`. Mobile navigation remains a sheet-based menu with labels always visible.
 
+### Conversation tool-call identity
+
+The Run Detail Conversation tab shows an **MCP: server** badge next to the
+tool name when the captured name identifies its server. Explicit
+`mcp__<server>__<tool>` names work without catalog lookups. Copilot's flattened
+`<server>-<tool>` names are recognized only against the run's recorded
+`mcpServers` identifiers, using the longest exact prefix. No generic splitting
+of hyphens, underscores, or dots is used to infer MCP identity.
+
+Tool-call payloads contain the recorded function name, not a separate server
+identity. If a flattened prefix differs from the recorded server identifier
+(for example, a worker uses a display name), or historical server metadata is
+missing, the original name remains visible rather than assigning a guessed
+server. Expanding an identified MCP call also shows its original recorded name;
+arguments, responses, timestamps, and stored/API/CLI payloads are unchanged.
+
 The Keys list and its nested `/secrets/keys/:id/preview` route use the same
 full-bleed shell. Opening or closing the preview keeps the tabs and filter rail
 aligned with the navigation. Key registration and full-detail routes retain the
