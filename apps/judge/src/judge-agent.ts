@@ -12,6 +12,7 @@ import {
 } from "shared";
 import { getCriteriaProvider } from "shared/criteria-provider-factory";
 import { createJudgeStrategy } from "./judge-strategies.js";
+import type { AgentTrajectory } from "./agent-trajectory.js";
 import { FeedbackGenerator } from "./feedback-generator.js";
 
 export interface EvaluationInput {
@@ -27,6 +28,8 @@ export interface EvaluationInput {
    *  the whole run (1..N), exposed to the judge via list_tool_calls /
    *  search_tool_outputs / get_tool_output. */
   iterationToolCalls?: IterationToolCalls[];
+  /** ATIF trajectory supplied by observation post-processing. */
+  trajectory?: AgentTrajectory;
   /** The run's project — scopes criteria resolution to that project (per-project isolation). */
   projectId?: string;
   /** The coding agent's response (prose) for the iteration being judged, exposed to the judge via read_agent_response. */
@@ -109,6 +112,7 @@ export async function evaluateWorkspace(
       onProgress: input.onProgress,
       gate: input.gate,
       iterationToolCalls: input.iterationToolCalls,
+      trajectory: input.trajectory,
       currentAgentResponse: input.currentAgentResponse,
     });
 

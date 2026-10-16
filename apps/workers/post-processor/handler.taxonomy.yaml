@@ -1,0 +1,17 @@
+# Post-process handler registration metadata for the observation evaluator.
+# Read by the generic register-handler script and POSTed to the
+# scheduler's POST /handlers/register endpoint on deploy.
+#
+# pp-taxonomy records per-iteration boolean observations (kind:"observation"
+# criteria) by reusing the judge. It depends on pp-atif so each turn's ATIF
+# trajectory is available, giving the judge codebase (snapshot) + trajectory
+# (ATIF) access. Shares the post-processor-queue with pp-atif (same worker).
+# See issue #1156.
+_id: pp-taxonomy
+type: post-process-handler
+version: 1
+queue: post-processor-queue
+selector: taxonomy
+autoBackfill: true
+dependsOn:
+  - pp-atif

@@ -507,4 +507,27 @@ export class BlobStorage {
     const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
     return blockBlobClient.downloadToBuffer();
   }
+
+  /**
+   * Downloads and parses a JSON blob. Accepts either a full blob URL (Azure or
+   * Azurite) or a bare blob name within the snapshots container. Used by the
+   * judge to load ATIF trajectory JSON for observation evaluation. Issue #1156.
+   */
+  async downloadJson<T = unknown>(urlOrBlobName: string): Promise<T> {
+    await this.ensureContainer();
+    let blobName = urlOrBlobName;
+    if (urlOrBlobName.startsWith("http://") || urlOrBlobName.startsWith("https://")) {
+      const url = new URL(urlOrBlobName);
+      const containerPrefix = `/${SNAPSHOTS_CONTAINER}/`;
+      const containerIndex = url.pathname.indexOf(containerPrefix);
+      if (containerIndex === -1) {
+        throw new Error(
+          `Blob URL does not contain container '${SNAPSHOTS_CONTAINER}': ${urlOrBlobName}`,
+        );
+      }
+      blobName = decodeURIComponent(url.pathname.substring(containerIndex + containerPrefix.length));
+    }
+    const buf = await this.downloadBlobToBuffer(blobName);
+    return JSON.parse(buf.toString("utf-8")) as T;
+  }
 }

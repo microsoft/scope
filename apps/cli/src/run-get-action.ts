@@ -5,7 +5,8 @@
  * Action handler for `run get` subcommand — extracted for testability.
  */
 import { colorLevel, dimTimestamp, errorText, successText, label, value, banner, warnBanner, criterionIcon } from "./utils/style.js";
-import { GATE_METADATA, GATE_ORDER, type ConversationTurn, type GateId, type GateRunSummary, type RequestDocument } from "shared/types";
+import { TAXONOMY_ELEMENT_METADATA } from "shared";
+import { GATE_METADATA, GATE_ORDER, type ConversationTurn, type GateId, type GateRunSummary, type RequestDocument, type TaxonomyElementId } from "shared/types";
 import { formatData, isMachineReadable } from "./utils/formatters.js";
 import type { OutputFormat, DisplayField } from "./utils/types.js";
 import { apiFetch } from "./utils/api-client.js";
@@ -167,6 +168,80 @@ export async function runGetAction(options: RunGetOptions): Promise<void> {
           : '';
         console.log(`    ${label(`Iteration ${turn.iteration}:`)} ${passIcon}${criteriaStr}`);
       });
+    }
+  }
+
+  // Observations (kind:"observation" criteria), grouped by taxonomy dimension.
+  // Whole-run (subject:"run") results live at run level; per-iteration
+  // (subject:"iteration") results live on each turn.
+  const runObs = rs?.observationResults ?? [];
+  const turnsWithObs = (rs?.turns ?? []).filter((t) => (t.observationResults?.length ?? 0) > 0);
+  if (runObs.length > 0 || turnsWithObs.length > 0) {
+    // Build criterionId → taxonomyElementId map from the criteria store (best effort).
+    const taxById = new Map<string, TaxonomyElementId | undefined>();
+    try {
+      const cr = await apiFetch(options.url, "/criteria?kind=observation", {
+        projectId: run.projectId,
+      });
+      if (cr.ok) {
+        const obs = await cr.json() as Array<{ id: string; taxonomyElementId?: TaxonomyElementId }>;
+        for (const o of obs) taxById.set(o.id, o.taxonomyElementId);
+      }
+    } catch { /* grouping is best-effort */ }
+
+    const dimLabelOf = (dim: string) =>
+      dim === "unclassified" ? "Unclassified" : (TAXONOMY_ELEMENT_METADATA[dim as TaxonomyElementId]?.label ?? dim);
+
+    console.log(`\n${banner('─── Observations ───')}`);
+
+    // Whole-run observations: one verdict + evidence per criterion.
+    if (runObs.length > 0) {
+      const byDimRun = new Map<string, typeof runObs>();
+      for (const r of runObs) {
+        const dim = taxById.get(r.criterionId) ?? "unclassified";
+        const arr = byDimRun.get(dim) ?? [];
+        arr.push(r);
+        byDimRun.set(dim, arr);
+      }
+      console.log(`  ${label('Whole run')}`);
+      for (const [dim, results] of byDimRun) {
+        console.log(`    ${label(dimLabelOf(dim))}`);
+        for (const r of results.sort((a, b) => a.criterionId.localeCompare(b.criterionId))) {
+          const verdict = r.evaluated ? (r.passed ? successText('true') : errorText('false')) : warnBanner('not evaluated');
+          console.log(`      ${value(r.criterionId)} — ${verdict}`);
+          if (r.feedback) console.log(`        ${dimTimestamp(r.feedback.replace(/\n/g, ' ').slice(0, 200))}`);
+        }
+      }
+    }
+
+    // Per-iteration observations: detected/evaluated tally per criterion id.
+    if (turnsWithObs.length > 0) {
+      const tally = new Map<string, { detected: number; evaluated: number }>();
+      for (const t of turnsWithObs) {
+        for (const r of t.observationResults ?? []) {
+          const e = tally.get(r.criterionId) ?? { detected: 0, evaluated: 0 };
+          e.evaluated += 1;
+          if (r.passed) e.detected += 1;
+          tally.set(r.criterionId, e);
+        }
+      }
+
+      const byDim = new Map<string, string[]>();
+      for (const id of tally.keys()) {
+        const dim = taxById.get(id) ?? "unclassified";
+        const arr = byDim.get(dim) ?? [];
+        arr.push(id);
+        byDim.set(dim, arr);
+      }
+
+      console.log(`  ${label('Per iteration')}`);
+      for (const [dim, ids] of byDim) {
+        console.log(`    ${label(dimLabelOf(dim))}`);
+        for (const id of ids.sort()) {
+          const { detected, evaluated } = tally.get(id)!;
+          console.log(`      ${value(id)} — ${detected}/${evaluated} iterations detected`);
+        }
+      }
     }
   }
 

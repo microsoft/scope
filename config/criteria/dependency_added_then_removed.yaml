@@ -1,0 +1,9 @@
+id: dependency_added_then_removed
+prompt: |
+  During the run the agent installed a package and later uninstalled or removed
+  it before finishing (e.g. added left-pad then removed it). This is only
+  derivable from the agent's trajectory (mid-run tool calls), not from the final
+  codebase snapshot, because the dependency is absent in the end state. Inspect
+  the trajectory of tool calls to detect a transient add-then-remove.
+kind: observation
+taxonomy_element_id: dimension:dependency-currency
