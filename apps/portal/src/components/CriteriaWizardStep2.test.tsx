@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CriteriaWizardStep2 } from "./CriteriaWizardStep2";
 import type { CriteriaWizardState } from "@/hooks/useCriteriaWizard";
 import type { CriteriaDocument } from "@/types";
+import { PORTAL_AI_REGISTRATION_GUIDANCE } from "@/lib/portal-ai-copy";
 
 // The picker fetches the full criteria list via api.listCriteria.
 const CRITERIA: CriteriaDocument[] = [
@@ -43,7 +44,7 @@ function Harness({
   initialChildren?: string[];
   parentCandidates?: boolean;
   childCandidates?: boolean;
-  generationError?: Error;
+  generationError?: unknown;
 }) {
   const [dependsOn, setDependsOn] = useState<string[]>(initialParents);
   const [acceptedChildren, setAcceptedChildren] = useState<string[]>(initialChildren);
@@ -171,6 +172,16 @@ describe("CriteriaWizardStep2 — generation errors", () => {
     expect(
       await screen.findByText(
         /AI generation failed — LLM request failed: Unsupported parameter: 'max_tokens'/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("shows Copilot SDK registration guidance when the API error has no message", async () => {
+    renderStep2({ generationError: { status: 503 } });
+
+    expect(
+      await screen.findByText(
+        `AI generation failed — ${PORTAL_AI_REGISTRATION_GUIDANCE}`,
       ),
     ).toBeTruthy();
   });

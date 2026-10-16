@@ -56,40 +56,129 @@ queue. Local Compose sets it to the checked-in development manifest version.
 ## LLM Configuration (Portal AI Features)
 
 The portal's AI features — criteria prompt generation, prompt-feature
-extraction/generation, and task-prompt generation/variation — all call an
-OpenAI-style chat-completions endpoint through the
-[`@azure-rest/ai-inference`](https://www.npmjs.com/package/@azure-rest/ai-inference)
-SDK. Two backends are supported, resolved in `acquireInferenceClient`
-([`apps/api/src/llm-token.ts`](apps/api/src/llm-token.ts)) using the
-following priority order. The **first source that returns a credential
-wins**; later sources are not consulted.
+extraction/generation, and task-prompt generation/variation — support Azure AI
+Foundry, the GitHub Copilot SDK, and a legacy GitHub Models fallback. The
+**first source that returns a credential wins**; later sources are not
+consulted.
+
+The Copilot SDK provider is primarily a **desktop and simple self-hosting
+convenience**: a GitHub OAuth flow can enable Portal AI without provisioning a
+separate inference resource. The SDK runs a Copilot CLI child process and Scope
+must maintain a bounded pool of those processes. For production deployments,
+prefer Azure AI Foundry or another direct chat-completions endpoint, which
+avoids subprocess lifecycle and pool-capacity overhead and exposes native
+inference controls.
 
 | # | Source | Trigger | `via` log tag |
 |---|--------|---------|---------------|
 | 1 | Azure AI Foundry via env vars | `AZURE_AI_INFERENCE_ENDPOINT` + `AZURE_AI_INFERENCE_API_KEY` both set | `azure-ai-foundry-env` |
 | 2 | Azure AI Foundry via Token Manager | At least one `azure-ai-foundry` key registered at the Portal `/secrets/keys/new` (recommended for integration / prod — credentials live in Key Vault, the API round-robins across valid keys) | `azure-ai-foundry-token-manager` |
-| 3 | GitHub Models via env var | `GITHUB_MODELS_API_KEY` set | `github-models-env` |
-| 4 | GitHub Models via Token Manager | A `github-models` key registered at `/secrets/keys/new` | `github-models-token-manager` |
-| 5 | Bare GitHub token fallback | `GITHUB_TOKEN` set | `github-token` |
+| 3 | GitHub Copilot SDK | `GITHUB_TOKEN` is set, or a classic PAT/OAuth token with the validated `copilot-sdk` capability is registered at `/secrets/keys/new` | `copilot-sdk-env` or `copilot-sdk-token-manager` |
+| 4 | GitHub Models legacy fallback | `GITHUB_MODELS_API_KEY`, a registered `github-models` key, or the legacy `GITHUB_TOKEN` path | `github-models-*` |
 
 **Two important properties of this chain:**
 
-- **Foundry beats GitHub Models, and env vars beat the Token Manager
-  within each backend.** Having both a Foundry env var and a registered
-  `github-models` key means every call goes to Foundry; the GitHub
-  Models key is dormant.
+- **Foundry beats Copilot SDK, which beats legacy GitHub Models.** Environment
+  Foundry credentials override registered Foundry keys. A classic PAT or OAuth
+  token that validates with `copilot-sdk` enables Portal AI without requiring
+  GitHub Models access.
 - **There is no automatic failover at request time.** The chain only
   steps down when the predecessor returns *nothing* (env var unset, no
   key registered). It does **not** step down when the predecessor
-  returns a credential that then 4xx/5xx's on the actual chat-completion
-  call. This is intentional — silent fallback would mask misconfiguration
-  (e.g. a wrong Foundry deployment name) and hide the real error from
-  the user.
+  returns a credential that then fails authentication, times out, is rate
+  limited, or fails inference. This is intentional — silent fallback would
+  mask misconfiguration and hide the real provider error.
 
 If no source returns a credential, the portal's AI buttons return HTTP
-`503` with a single actionable error message (`LLM not configured: no
-inference backend available. Please register a new secret key for GitHub
-Model or Azure Foundry.`), and the rest of the API works unchanged.
+`503` with actionable guidance to register Foundry or a classic PAT/OAuth
+token with Copilot SDK capability. GitHub Models is identified as a legacy
+fallback, and the rest of the API works unchanged.
+
+### Portal AI Copilot SDK isolation and limits
+
+The Copilot SDK provider uses a bounded client pool. Each Portal AI operation
+waits only for the configured pool-acquisition timeout and then runs under a
+separate response timeout. Each request creates a one-shot SDK session and
+destroys it in `finally`, including after errors and timeouts, before the client
+returns to the pool.
+
+Sessions are created with an empty tool set and receive no MCP servers, skills,
+or repository/workspace context. The Copilot CLI child process receives a
+sanitized environment with only the runtime and authentication variables it
+needs; the API service's unrelated credentials are not forwarded. Sessions are
+never reused across Portal AI requests.
+
+These controls make the SDK path practical for desktop use and smaller
+self-hosted installations, but they do not remove the cost of running child
+processes in the API container. Production operators should normally configure
+Foundry or a direct completion endpoint instead of sizing and operating a
+Copilot runtime pool.
+
+The Copilot SDK adapter preserves the Portal operation's system prompt and user
+prompt. Its model resolves independently from the REST default, in this order:
+an explicit request override, `PORTAL_COPILOT_MODEL`, `LLM_MODEL`, then automatic
+selection from the models available to the authenticated Copilot account. The
+automatic preference order is `gpt-5.4-mini`, `gpt-5.4`, `gpt-5.1`,
+`gpt-5-mini`, then the first model returned by Copilot. The SDK session API does
+not expose the REST chat-completions `temperature` or maximum-token controls, so
+those two settings apply only to the Foundry and legacy GitHub Models REST
+providers.
+
+### PORTAL_COPILOT_MODEL
+**Default:** automatic model discovery
+**Type:** string
+
+Optional Portal AI model override for the Copilot SDK provider. Resolution is:
+explicit request override → `PORTAL_COPILOT_MODEL` → `LLM_MODEL` → automatic
+available-model preference (`gpt-5.4-mini`, `gpt-5.4`, `gpt-5.1`,
+`gpt-5-mini`, then the first listed model). Do not assume the REST default
+`gpt-4.1` is available to the Copilot account.
+
+### PORTAL_COPILOT_POOL_SIZE
+**Default:** `2`
+**Type:** positive integer
+
+Maximum number of Copilot SDK clients that can serve Portal AI requests
+concurrently. Additional requests wait for a pooled client until
+`PORTAL_COPILOT_ACQUIRE_TIMEOUT_MS` expires.
+
+### PORTAL_COPILOT_ACQUIRE_TIMEOUT_MS
+**Default:** `30000` (30 seconds)
+**Type:** positive integer (milliseconds)
+
+Maximum time a Portal AI request waits for an available Copilot SDK client.
+Expiration fails the request; it does not trigger the GitHub Models fallback.
+
+### PORTAL_COPILOT_STARTUP_TIMEOUT_MS
+**Default:** `30000` (30 seconds)
+**Type:** positive integer (milliseconds)
+
+Maximum time allowed to start and ping a pooled Copilot CLI runtime. A runtime
+that cannot become ready in time is destroyed and is not added to the pool.
+
+### PORTAL_COPILOT_REQUEST_TIMEOUT_MS
+**Default:** `300000` (5 minutes)
+**Type:** positive integer (milliseconds)
+
+Maximum time for the one-shot Copilot SDK session to produce a response.
+Expiration destroys the session, returns the client to the pool, and fails the
+request without runtime provider failover.
+
+### PORTAL_COPILOT_SHUTDOWN_TIMEOUT_MS
+**Default:** `10000` (10 seconds)
+**Type:** positive integer (milliseconds)
+
+Maximum graceful shutdown time for an individual pooled Copilot CLI runtime and
+for draining the pool during API shutdown. Scope force-stops runtimes that do
+not stop within this limit.
+
+### PORTAL_COPILOT_IDLE_TIMEOUT_MS
+**Default:** `60000` (1 minute)
+**Type:** positive integer (milliseconds)
+
+How long an unused Copilot SDK client remains in the zero-minimum pool before
+it is reaped. The pool recreates clients on demand up to
+`PORTAL_COPILOT_POOL_SIZE`.
 
 Every successful acquisition also logs a single line so operators can
 verify which provider served a given AI call:
@@ -156,29 +245,36 @@ API key for the Foundry endpoint.
   ExternalSecret (Key Vault key `azure-ai-inference-api-key`).
 
 ### GITHUB_MODELS_API_KEY
-**Optional (used as fallback when Foundry is not configured)**
+**Optional (legacy fallback after Foundry and Copilot SDK)**
 **Type:** string
 
 GitHub personal access token (with the `models` read permission) used to
 authenticate with GitHub Models (`https://models.inference.ai.azure.com`).
-Useful for local dev where no Foundry endpoint is available. Goes in `.env`
+Retained for compatibility where neither Foundry nor a Copilot SDK credential
+is available. New deployments should prefer Foundry or register a classic PAT
+or OAuth token with Copilot access. Goes in `.env`
 (or `.env.base`) since it is read via Compose variable substitution, not
 the api service's `env_file`.
 
-> **Note:** This is separate from `GITHUB_TOKEN`, which is used by the Judge
-> and worker services for Copilot SDK / ACP access and does **not** need the
-> `models` permission. If `GITHUB_MODELS_API_KEY` is unset the API also
-> accepts `GITHUB_TOKEN` (or `TOKEN_MANAGER_URL` with a registered
-> `github-models` token) as a fallback.
+> **Note:** A classic PAT or OAuth token with the `copilot-sdk` capability can
+> enable Portal AI directly and does not need the `models` permission.
+> `GITHUB_MODELS_API_KEY`, registered `github-models` tokens, and the bare
+> `GITHUB_TOKEN` path are legacy compatibility fallbacks.
 
 ### LLM_MODEL
-**Default:** `gpt-4.1` (applied inside the API when unset)
+**Default:** `gpt-4.1` for REST inference; automatic discovery for Copilot SDK
 **Type:** string
 
-Model name / deployment name used by both backends. For Foundry, this must
-match the deployment name on the Foundry resource. Examples: `gpt-4.1`,
-`gpt-4o`, `gpt-4.1-mini`, `gpt-5.4-mini`. Put in `.env.local` (see note above).
-The API discovers supported token-limit and sampling parameters from structured
+Fallback model/deployment override shared by Portal AI providers. For Foundry,
+this must match the deployment name on the Foundry resource. Foundry and legacy
+GitHub Models default to `gpt-4.1` when this is unset. Copilot SDK considers
+`LLM_MODEL` only after an explicit request model and `PORTAL_COPILOT_MODEL`; when
+all three are unset it discovers an available Copilot model instead of assuming
+`gpt-4.1`.
+
+REST examples include `gpt-4.1`, `gpt-4o`, `gpt-4.1-mini`, and
+`gpt-5.4-mini`. Put this setting in `.env.local` (see note above). The REST
+adapter discovers supported token-limit and sampling parameters from structured
 inference errors at runtime. Learned compatibility is cached in each API
 process by endpoint and deployment name. It is relearned after a process
 restart or when Azure rejects a previously accepted request shape.

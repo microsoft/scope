@@ -11,11 +11,23 @@ vi.mock("@azure-rest/ai-inference", () => ({
 // Mock the inference client acquisition; the per-test `postSpy` drives responses.
 const postSpy = vi.fn();
 vi.mock("./llm-token.js", () => ({
-  acquireInferenceClient: vi.fn(async () => ({
-    client: { path: () => ({ post: postSpy }) },
-    endpoint: "https://test.example.com/models",
-    model: "test-model",
-  })),
+  completePortalLlm: vi.fn(async (request: {
+    messages: Array<{ role: string; content: string }>;
+    model: string;
+    temperature: number;
+    max_tokens: number;
+  }, explicitModel?: string) => {
+    const { postAdaptiveChatCompletion } = await import("./adaptive-chat-completions.js");
+    const response = await postAdaptiveChatCompletion({
+      endpoint: "https://test.example.com/models",
+      model: explicitModel || request.model,
+      messages: request.messages,
+      temperature: request.temperature,
+      maxTokens: request.max_tokens,
+      send: (body) => postSpy({ body }),
+    });
+    return response.body.choices[0].message.content;
+  }),
   isLlmAvailable: () => true,
 }));
 
