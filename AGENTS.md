@@ -154,7 +154,7 @@ Personas, scenarios (tasks), criteria, and prompt features are stored in **Mongo
 - `personas/` — Reviewer personas combining traits (e.g. `demanding-senior.yaml`, `vibe-coder.yaml`)
 - `scenarios/` — Task definitions agents must implement (e.g. `hello-world-express.yaml`, `react-snake-game-v2.yaml`)
 - `criteria/` — Evaluation criteria forming a DAG with parent-child dependencies, consumed by the judge
-- `prompt-features/` — Feature flags tracking what capabilities agents request
+- `prompt-features/` — Detection prompts that categorize task prompts (e.g. `asks_for_docker`). Analysis metadata only: features filter and group runs, and never affect what an agent is asked to do or how results are scored.
 
 ## Database Migrations (`packages/db-migrations/`)
 
