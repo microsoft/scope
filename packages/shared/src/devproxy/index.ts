@@ -38,7 +38,7 @@ export function createProxyClient(): ProxyClient {
       downloadCertificate: (p) => gw.downloadCertificate(p),
       createCombinedCaBundle: (c, o) => gw.createCombinedCaBundle(c, o),
       startRecording: async () => {
-        const maxSessionDurationSecs = parseInt(process.env.COPILOT_MAX_SESSION_DURATION_SECS || "3600", 10);
+        const maxSessionDurationSecs = parseInt(process.env.COPILOT_MAX_SESSION_DURATION_SECS || "7200", 10);
         const plugins: Record<string, unknown> = {};
 
         // Enable the copilot_token auto-refresh plugin when TOKEN_MANAGER_URL is set
