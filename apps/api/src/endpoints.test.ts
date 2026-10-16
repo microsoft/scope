@@ -1955,6 +1955,44 @@ describe("API Endpoints", () => {
       expect(res.status).toBe(201);
       const doc = (mocks.collection.insertOne as any).mock.calls[0][0];
       expect(doc).toHaveProperty("reasoningEffort", "high");
+      expect(doc).toHaveProperty("submissionExpectedRequestCount", 1);
+      const submissionInsert = (mocks.submissionCollection.updateOne as any).mock.calls[0][1].$setOnInsert;
+      expect(submissionInsert.requestIds).toEqual([doc._id]);
+      expect(submissionInsert.run.requests).toEqual([
+        { requestId: doc._id, runId: doc.run._id },
+      ]);
+    });
+
+    it("creates one complete submission vector for count fan-out", async () => {
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          count: 3,
+        });
+
+      expect(res.status).toBe(201);
+      const docs = (mocks.collection.insertMany as any).mock.calls[0][0];
+      expect(docs).toHaveLength(3);
+      expect(docs.every((doc: { submissionExpectedRequestCount: number }) =>
+        doc.submissionExpectedRequestCount === 3)).toBe(true);
+      expect(
+        docs.map((doc: { submissionRequestIndex: number }) => doc.submissionRequestIndex),
+      ).toEqual([0, 1, 2]);
+      expect(
+        docs.every(
+          (doc: { submissionInitialRunId: string; run: { _id: string } }) =>
+            doc.submissionInitialRunId === doc.run._id,
+        ),
+      ).toBe(true);
+      const submissionInsert = (mocks.submissionCollection.updateOne as any).mock.calls[0][1].$setOnInsert;
+      expect(submissionInsert.requestIds).toEqual(docs.map((doc: { _id: string }) => doc._id));
+      expect(submissionInsert.run.requests).toEqual(
+        docs.map((doc: { _id: string; run: { _id: string } }) => ({
+          requestId: doc._id,
+          runId: doc.run._id,
+        })),
+      );
     });
 
     it("profile reasoningEffort takes precedence over client-provided effort", async () => {
@@ -2259,6 +2297,7 @@ describe("API Endpoints", () => {
         new Set(["base-profile", "var-profile"]),
       );
       for (const doc of docs) {
+        expect(doc.submissionExpectedRequestCount).toBe(2);
         expect(Array.isArray(doc.gates)).toBe(true);
         const selectGate = doc.gates.find((g: { gate: string }) => g.gate === "select");
         const buildGate = doc.gates.find((g: { gate: string }) => g.gate === "build");
@@ -2269,6 +2308,10 @@ describe("API Endpoints", () => {
         expect(buildGate.promptId).toBe("tp-build");
         expect(buildGate.promptText).toBeUndefined();
       }
+      const submissionInsert = (mocks.submissionCollection.updateOne as any).mock.calls[0][1].$setOnInsert;
+      expect(submissionInsert.requestIds).toEqual(
+        docs.map((doc: { _id: string }) => doc._id),
+      );
       // Response surfaces the configured gate count.
       expect(res.body.gates).toBe(2);
     });
@@ -2426,6 +2469,9 @@ describe("API Endpoints", () => {
       expect(insertCall[0]).toHaveProperty("taskPromptId", "tp-123");
       expect(insertCall[0]).toHaveProperty("model", "gpt-4o");
       expect(insertCall[0]).toHaveProperty("maxIterations", 5);
+      expect(insertCall[0]).toHaveProperty("submissionExpectedRequestCount", 1);
+      const submissionInsert = (mocks.submissionCollection.updateOne as any).mock.calls[0][1].$setOnInsert;
+      expect(submissionInsert.requestIds).toEqual([insertCall[0]._id]);
     });
 
     it("applies profile override: uses profile fields for worker, model, mcpServers, skillRevisions, extensions", async () => {
@@ -2802,11 +2848,13 @@ describe("API Endpoints", () => {
     it("retries eligible requests and skips non-terminal ones", async () => {
       const doc1 = {
         _id: "req-1",
+        submissionId: "submission-1",
         workerType: "coder-acp-copilot",
         run: { _id: "run-1", attemptNumber: 1, status: "done", outcome: "failed" },
       };
       const doc2 = {
         _id: "req-2",
+        submissionId: "submission-1",
         workerType: "coder-acp-copilot",
         run: { _id: "run-2", attemptNumber: 1, status: "processing" },
       };
@@ -2830,6 +2878,22 @@ describe("API Endpoints", () => {
         { _id: "req-1", "run._id": "run-1" },
         expect.objectContaining({
           $set: expect.objectContaining({ agentVersion: "1.0.0" }),
+        }),
+      );
+      expect(mocks.submissionCollection.updateMany).toHaveBeenNthCalledWith(
+        1,
+        { _id: { $in: ["submission-1"] } },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            "run.reconcileAfter": expect.any(Date),
+          }),
+        }),
+      );
+      expect(mocks.submissionCollection.updateMany).toHaveBeenNthCalledWith(
+        2,
+        { _id: { $in: ["submission-1"] } },
+        expect.objectContaining({
+          $unset: { "run.reconcileAfter": "" },
         }),
       );
     });

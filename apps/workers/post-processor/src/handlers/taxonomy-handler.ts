@@ -26,7 +26,7 @@ interface CriterionMeta {
 }
 
 /**
- * Taxonomy Handler (pp-taxonomy): records boolean observations.
+ * Taxonomy Handler (pp-observations): records boolean observations.
  *
  * Each selected observation criterion is routed by its `subject` (#1156):
  *
@@ -40,12 +40,12 @@ interface CriterionMeta {
  *   behavior (e.g. a dependency added in one turn and removed in another) visible.
  *
  * Reuses the judge service; never gates, never steers the agent. Empty/absent
- * `observations` → no-op. pp-taxonomy is dispatched exactly once per run (the
+ * `observations` → no-op. pp-observations is dispatched exactly once per run (the
  * scheduler never sets `message.iteration`), so the run-subject branch runs once
  * with no idempotency guard.
  */
 export class TaxonomyHandler implements PostProcessHandler {
-  readonly type = "taxonomy";
+  readonly type = "observations";
   readonly version = POST_PROCESSOR_VERSION;
   readonly autoBackfill = true;
   private readonly judge: JudgeClient;

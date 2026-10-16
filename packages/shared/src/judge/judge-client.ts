@@ -18,11 +18,11 @@ export interface JudgeEvaluateRequest {
   /** Blob URL of this iteration's captured tool calls/outputs (build/test/run output). */
   toolCallsUrl?: string;
   /** Blob URL of this iteration's ATIF trajectory JSON. Normalized superset of
-   *  tool calls; sent by pp-taxonomy in place of toolCallsUrl so observations
+   *  tool calls; sent by pp-observations in place of toolCallsUrl so observations
    *  can be evaluated against the full agent trajectory. See issue #1156. */
   atifUrl?: string;
   /** Blob URLs of EVERY iteration's ATIF trajectory JSON, in iteration order.
-   *  Sent by pp-taxonomy for `subject:"run"` observations so the judge merges
+   *  Sent by pp-observations for `subject:"run"` observations so the judge merges
    *  them into one whole-run trajectory (cross-iteration behavior is visible in a
    *  single evaluation). Takes precedence over `atifUrl`. See issue #1156. */
   atifUrls?: string[];

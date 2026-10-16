@@ -48,7 +48,7 @@ async function call(
 
 /**
  * Realistic ATIF blob: system + user step, then agent steps that install,
- * use, and uninstall `left-pad`. Mirrors the real ATIF shape pp-taxonomy
+ * use, and uninstall `left-pad`. Mirrors the real ATIF shape pp-observations
  * downloads (steps carry their own tool_calls AND the matching
  * observation.results, paired by source_call_id === tool_call_id).
  */
