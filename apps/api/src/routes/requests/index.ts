@@ -2207,11 +2207,19 @@ apiRoute(ctx.app, ctx.registry, {
     ).toArray();
     const existingIds = new Set(existingDocs.map(d => d._id));
 
-    // Soft-delete all matching documents
+    // Soft-delete all matching documents and their associated reports.
+    // Use one timestamp so the cascade is traceable as a single deletion event.
+    const deletedAt = new Date();
     const result = await ctx.requestCollection.updateMany(
       { _id: { $in: ids }, deletedAt: { $exists: false } },
-      { $set: { deletedAt: new Date() } }
+      { $set: { deletedAt } }
     );
+    if (existingIds.size > 0) {
+      await ctx.reportCollection.updateMany(
+        { requestId: { $in: [...existingIds] }, deletedAt: { $exists: false } },
+        { $set: { deletedAt, updatedAt: deletedAt } },
+      );
+    }
 
     // Determine which IDs were not found or already deleted
     const notFound = ids.filter(id => !existingIds.has(id));
@@ -2235,20 +2243,37 @@ apiRoute(ctx.app, ctx.registry, {
   handler: async (req, res) => {
     const { id } = req.params;
 
+    const deletedAt = new Date();
     const result = await ctx.requestCollection.updateOne(
       { _id: id, deletedAt: { $exists: false } },
-      { $set: { deletedAt: new Date() } }
+      { $set: { deletedAt } }
     );
 
     if (result.matchedCount === 0) {
       const exists = await ctx.requestCollection.findOne({ _id: id });
       if (!exists) {
         res.status(404).json({ error: "Request not found" });
-      } else {
-        res.status(410).json({ error: "Request already deleted" });
+        return;
       }
+
+      // Retrying a delete after the request was already soft-deleted should still
+      // finish the report cascade. The first attempt may have deleted the request
+      // and then failed before reaching the report update.
+      const cascadeDeletedAt =
+        exists.deletedAt instanceof Date ? exists.deletedAt : deletedAt;
+      await ctx.reportCollection.updateMany(
+        { requestId: id, deletedAt: { $exists: false } },
+        { $set: { deletedAt: cascadeDeletedAt, updatedAt: cascadeDeletedAt } },
+      );
+
+      res.status(410).json({ error: "Request already deleted" });
       return;
     }
+
+    await ctx.reportCollection.updateMany(
+      { requestId: id, deletedAt: { $exists: false } },
+      { $set: { deletedAt, updatedAt: deletedAt } },
+    );
 
     res.json({ id, deleted: true });
   },
