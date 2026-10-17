@@ -274,6 +274,7 @@ describe("Experiment API contract", () => {
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}/logs",
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports",
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports/{reportId}/structured",
+      "/api/v1/experiments/{id}/requests",
       "/api/v1/experiments/{id}/retry",
     ]);
     expect(document.paths).not.toHaveProperty("/api/v1/submissions");

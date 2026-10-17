@@ -1,14 +1,17 @@
 # Experiments Architecture
 
-> **Status:** PR A foundation and client contract, current as of October 2026.
+> **Status:** Foundation, built-in readout, and existing-run membership
+> revisions, current as of October 2026.
 
 Experiments are project-scoped, named benchmark compositions. An Experiment
 stores durable metadata, one immutable revision, and one current processing
 execution. Previous executions are immutable history records.
 
-PR A provides the canonical storage model, project-scoped public API contract,
-CLI commands, Portal creation/list/detail flows, and run correlation. It does
-not add mutable membership or cascading lifecycle behavior.
+The foundation provides the canonical storage model, project-scoped public API
+contract, CLI commands, Portal creation/list/detail flows, and run correlation.
+The built-in `pp-readout` Experiment handler adds generic Reports presentation.
+Existing-run membership workflows publish new immutable revisions while
+preserving Experiment history as the authority.
 
 ## Model
 
@@ -70,8 +73,9 @@ An **Experiment execution** is one processing attempt over that revision:
 - freeze, discard, and supersession state.
 
 Retry creates a new execution attempt over the same stored request vector. It
-does not create a new revision or retry member runs. Revision membership
-mutation is deferred to PR C.
+does not create a new revision or retry member runs. A membership replacement
+instead creates exactly one new revision and one new execution from the
+complete next request/run vector.
 
 ### Exact request/run vector
 
@@ -136,6 +140,9 @@ an existing deterministic ID whose identity or contents differ.
 ## Publication and concurrency
 
 Experiment creation and execution rollover use a prepare-then-publish protocol.
+Membership replacement uses the same representation-independent protocol:
+preplan one complete `FixedPayload`, claim request ownership, archive the
+current execution, and atomically install the next revision and execution.
 
 ```mermaid
 sequenceDiagram
@@ -192,6 +199,20 @@ execution. A caller can resume this sequence after interruption without
 inventing state. Prepared chunks that were never published can be removed with
 `discardUnpublished()`.
 
+Membership repair runs before generic rollover repair because denormalized
+request ownership must be claimed before publication. Claims use the exact
+project, request, and current run IDs. A run retry between planning and claim
+aborts the unpublished successor, discards its unpublished chunks, and replans
+once from current run identities. Other ownership conflicts abort without
+partial publication and report the exact request IDs and current owners.
+Replaying a completed mutation returns its deterministic successor revision.
+
+After publication, removed requests have `experimentId` cleared and retained
+requests carry the published membership revision. The Experiment revision and
+archived exact vectors remain authoritative; `request.experimentId` is only a
+denormalized lookup field. An empty membership revision remains visible and
+non-dispatchable, and a later add can resume it with another revision.
+
 ## Collection and index ownership
 
 | Collection | Owner and contents | Indexes created by migration 034 |
@@ -227,16 +248,28 @@ All routes require `?projectId=`:
 
 | Method | Route | Behavior |
 | --- | --- | --- |
-| `POST` | `/api/v1/experiments` | Create from `{ mode: "compose", metadata, requests }` or `{ mode: "empty", metadata, requests: [] }` |
+| `POST` | `/api/v1/experiments` | Create from composed definitions, explicitly empty membership, or `{ mode: "existing", metadata, requestIds }` |
 | `GET` | `/api/v1/experiments` | Cursor-page finalized Experiments |
 | `GET` | `/api/v1/experiments/:id` | Read the public Experiment and current execution |
 | `GET` | `/api/v1/experiments/:id/executions` | List current and archived execution summaries |
 | `GET` | `/api/v1/experiments/:id/executions/:experimentExecutionId` | Read one exact current or archived execution |
 | `POST` | `/api/v1/experiments/:id/retry` | Start a new processing attempt for the current exact vector |
+| `POST` | `/api/v1/experiments/:id/requests` | Add or move standalone requests in one complete-set revision |
+| `DELETE` | `/api/v1/experiments/:id/requests` | Remove members to standalone status in one complete-set revision |
 
 Creation metadata requires `name` and accepts an optional `description`.
-Compose mode requires one or more complete request definitions and empty mode
-requires an empty request array.
+Compose mode requires one or more complete request definitions, existing mode
+requires one or more current standalone request IDs, and empty mode requires an
+empty request array.
+
+Membership mutation requires the expected current revision ID. Every selected
+request must exist in the same project with a current run. Duplicate IDs,
+cross-project or missing requests, already-assigned requests, and
+Experiment-to-Experiment reassignment fail the complete operation. Direct
+member deletion first publishes one removal revision, clears `experimentId`,
+and only then soft-deletes the request. A bulk delete can coordinate standalone
+requests plus members from one Experiment; selections spanning several
+Experiments fail with exact owner conflicts.
 
 The public view exposes identity, project, metadata, revision, current
 execution, readiness, blockers, handler progress, supersession, current report,
@@ -250,6 +283,10 @@ The CLI provides:
 
 ```text
 scope experiment create
+scope experiment create --name <name> --request-id <request-id> [--request-id ...]
+scope experiment add <experiment-id> --revision <revision-id> --request-id <request-id> [--request-id ...]
+scope experiment move <experiment-id> --revision <revision-id> --request-id <request-id> [--request-id ...]
+scope experiment remove <experiment-id> --revision <revision-id> --request-id <request-id> [--request-id ...]
 scope experiment list
 scope experiment get <experiment-id>
 scope experiment executions <experiment-id> [experiment-execution-id]
@@ -257,8 +294,10 @@ scope experiment retry <experiment-id> --execution <current-execution-id>
 ```
 
 Creation reuses run configuration flags, adds Experiment metadata, supports
-composition preview, and supports explicit empty creation. Every command
-requires project scope.
+composition preview, explicit empty creation, and creation from existing
+standalone requests. `add`/`move` and `remove` accept repeatable request IDs and
+print the resulting revision and execution identities. Every command requires
+project scope.
 
 The Portal provides `/experiments`, `/experiments/new`, and
 `/experiments/:id`. The shared creation form retains the established run
@@ -307,6 +346,14 @@ Run list and detail views link `experimentId` back to the Experiment. A
 historical correlation that has no Experiment document is view-only and cannot
 trigger retry.
 
+The Runs list can bulk-create an Experiment from eligible standalone selections
+or move them into an existing Experiment. The current attempt's Runs tab can
+select and remove members back to standalone status in one revision-guarded
+operation; historical attempts remain read-only. Conflicts keep the selection
+visible, identify ineligible requests and owners, and avoid partial navigation.
+Coordinated deletion warns about membership changes and shows the resulting
+revision.
+
 ## Permanent request creation and composition deprecation
 
 `POST /api/v1/requests`, `scope run submit`, and the Portal's **New Run** flow
@@ -331,17 +378,14 @@ Experiment creation.
 
 ## Deferred capabilities
 
-The following are explicitly outside PR A:
+The following remain outside the current implementation:
 
 | Follow-up | Deferred capability |
 | --- | --- |
-| PR B | Additional derived readout orchestration beyond PR A's stored/public current and historical execution views |
-| PR C | Membership mutation and new revision creation after initial publication |
 | PR D | Report-template attachment or template-driven report orchestration |
 | PR E | Cascading lifecycle operations across an Experiment and its member requests/runs |
 
-GEPA restacking is also excluded. PR A must not imply these capabilities
-through storage methods, client actions, or API contracts.
+GEPA restacking is also excluded.
 
 ## Key files
 
@@ -355,6 +399,7 @@ through storage methods, client actions, or API contracts.
 | `packages/shared/src/experiments/experiment-store.ts` | Creation, CAS processing, freeze, archive, rollover, retry, and repair |
 | `packages/db-migrations/src/migrations/034-create-experiment-storage-indexes.ts` | Collection index ownership |
 | `apps/api/src/experiment-coordinator.ts` | API-owned workflow policy and repair |
+| `apps/api/src/experiment-membership.ts` | Complete-set membership validation, request ownership, publication, and repair |
 | `apps/api/src/experiment-dispatcher.ts` | Durable polling and queue delivery |
 | `apps/cli/src/commands/experiment.ts` | Project-scoped CLI surface |
 | `apps/portal/src/lib/experiments.ts` | Public response parsing |

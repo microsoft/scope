@@ -472,15 +472,20 @@ Profile fan-out mode is also supported for comparative runs:
 
 ### Experiment identity and processing executions
 
-An [Experiment](experiments.md) is created only through the deliberate
-Experiment creation surface. It owns a stable project-scoped identity, revision,
-and exact request/run vector. The current execution is embedded in the bounded
+An [Experiment](experiments.md) is created only through a deliberate Experiment
+creation surface, including bulk creation from existing standalone requests. It
+owns a stable project-scoped identity, immutable revision history, and an exact
+request/run vector per revision. Complete-set add/move/remove operations publish
+one new revision and execution. The current execution is embedded in the bounded
 root, immutable history is archived separately, and deterministic fixed buckets
 keep large vectors below Cosmos DB's universal 2 MB limit.
 
 Standalone request creation, profile fan-out, and bulk resubmission remain
-first-class request workflows and never infer an Experiment. Only legacy
-composition inputs that overlap Experiment creation are deprecated.
+first-class request workflows and never infer an Experiment. Request documents
+denormalize the current `experimentId` for lookup, but Experiment history is
+authoritative. Direct deletion of a member publishes a removal revision and
+clears that field before soft deletion. Only legacy composition inputs that
+overlap Experiment creation are deprecated.
 
 ## Runs List Query API
 
