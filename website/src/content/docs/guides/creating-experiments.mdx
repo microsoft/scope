@@ -45,8 +45,16 @@ directly. The compact header is followed by three tabs:
   Experiment has more than one report type. Structured JSON and the report
   detail link remain scoped to the selected attempt and version.
 - **Processing** shows handler progress, blockers, errors, execution metadata,
-  and retry controls. Processing retry is available only for the current
-  attempt.
+  retry controls, and report-template configuration. Selectable manual reports
+  are separate from automatic-always and automatic linked-run reports.
+  Publishing a manual selection change creates a new immutable Experiment
+  revision; processing retry is available only for the current attempt.
+
+The built-in readout always completes before configurable Experiment reports.
+Each configurable report freezes the exact immutable template version used by
+that execution. Editing a template does not reinterpret historical reports,
+and retrying a selected report appends a version within the same exact
+execution.
 
 The selected attempt, tab, report type, and report version are preserved in
 the URL. Old links without these values continue to use the latest defaults,

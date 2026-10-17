@@ -146,6 +146,7 @@ function experiment(): ExperimentDocument {
       revisionNumber: 1,
       memberCount: 1,
       membershipFingerprint: "membership",
+      reportTemplateIds: [],
       definitionFingerprint: "definition",
       createdAt: now,
     },
@@ -169,6 +170,7 @@ function experiment(): ExperimentDocument {
           updatedAt: now,
         },
       },
+      reportTemplates: {},
       blocking: [],
       createdAt: now,
       updatedAt: now,
@@ -269,6 +271,207 @@ function requestVector(count: number): ExperimentRequestState[] {
 }
 
 describe("ExperimentStore CAS contracts", () => {
+  it("treats duplicate and order-only report-template selections as a no-op", async () => {
+    const root = experiment();
+    root.revision.reportTemplateIds = ["alpha", "beta"];
+    const experiments = atomicCollection(root);
+    const store = new ExperimentStore({
+      experiments: experiments as unknown as Collection<ExperimentDocument>,
+      executions:
+        historyCollection() as unknown as Collection<ExperimentExecutionHistoryDocument>,
+      chunks: chunkCollection() as unknown as Collection,
+    });
+
+    const result = await store.replaceReportTemplates({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      expectedExperimentRevisionId: "revision-1",
+      expectedRevisionNumber: 1,
+      expectedExperimentExecutionId: "execution-1",
+      expectedExecutionVersion: 1,
+      nextExperimentRevisionId: "revision-2",
+      nextExperimentExecutionId: "execution-2",
+      reportTemplateIds: ["beta", "alpha", "beta"],
+    });
+
+    expect(result?.revision.experimentRevisionId).toBe("revision-1");
+    expect(result?.execution.experimentExecutionId).toBe("execution-1");
+    expect(experiments.current().stateVersion).toBe(2);
+  });
+
+  it("publishes a template-only revision and reuses only exact immutable report identities", async () => {
+    const root = experiment();
+    root.execution.handlerSummary["pp-readout"] = {
+      status: "done",
+      version: 1,
+      updatedAt: root.updatedAt,
+    };
+    root.execution.report = {
+      reportId: "readout-1",
+      url: "/reports/readout-1",
+      updatedAt: root.updatedAt,
+    };
+    root.execution.reportTemplates = {
+      unchanged: {
+        templateId: "unchanged",
+        templateVersionId: "unchanged:v2",
+        templateVersion: 2,
+        templateContentFingerprint: "fingerprint-2",
+        source: "selected",
+        status: "done",
+        matchingRunCount: 0,
+        blockers: [],
+        report: {
+          reportId: "report-unchanged",
+          url: "/reports/report-unchanged",
+          updatedAt: root.updatedAt,
+        },
+        updatedAt: root.updatedAt,
+      },
+      changed: {
+        templateId: "changed",
+        templateVersionId: "changed:v1",
+        templateVersion: 1,
+        templateContentFingerprint: "fingerprint-1",
+        source: "selected",
+        status: "done",
+        matchingRunCount: 0,
+        blockers: [],
+        report: {
+          reportId: "report-changed",
+          url: "/reports/report-changed",
+          updatedAt: root.updatedAt,
+        },
+        updatedAt: root.updatedAt,
+      },
+    };
+    const experiments = atomicCollection(root);
+    const store = new ExperimentStore({
+      experiments: experiments as unknown as Collection<ExperimentDocument>,
+      executions:
+        historyCollection() as unknown as Collection<ExperimentExecutionHistoryDocument>,
+      chunks: chunkCollection() as unknown as Collection,
+    });
+
+    const result = await store.replaceReportTemplates({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      expectedExperimentRevisionId: "revision-1",
+      expectedRevisionNumber: 1,
+      expectedExperimentExecutionId: "execution-1",
+      expectedExecutionVersion: 1,
+      nextExperimentRevisionId: "revision-2",
+      nextExperimentExecutionId: "execution-2",
+      reportTemplateIds: ["changed", "unchanged"],
+      reusableTemplateVersionIds: {
+        unchanged: "unchanged:v2",
+        changed: "changed:v2",
+      },
+    });
+
+    expect(result).toMatchObject({
+      revision: {
+        experimentRevisionId: "revision-2",
+        revisionNumber: 2,
+        reportTemplateIds: ["changed", "unchanged"],
+      },
+      execution: {
+        experimentExecutionId: "execution-2",
+        attemptNumber: 1,
+        handlerSummary: {
+          "pp-readout": { status: "done" },
+        },
+        reportTemplates: {
+          unchanged: {
+            templateVersionId: "unchanged:v2",
+            status: "done",
+          },
+        },
+      },
+    });
+    expect(result?.execution.reportTemplates.changed).toBeUndefined();
+  });
+
+  it("rejects stale report-template claims and completion tokens", async () => {
+    const root = experiment();
+    root.execution.reportTemplates = {
+      summary: {
+        templateId: "summary",
+        templateVersionId: "summary:v1",
+        templateVersion: 1,
+        templateContentFingerprint: "fingerprint",
+        source: "selected",
+        status: "queued",
+        claimToken: "claim-1",
+        matchingRunCount: 0,
+        blockers: [],
+        updatedAt: root.updatedAt,
+      },
+    };
+    const experiments = atomicCollection(root);
+    const store = new ExperimentStore({
+      experiments: experiments as unknown as Collection<ExperimentDocument>,
+      executions: {} as Collection<ExperimentExecutionHistoryDocument>,
+      chunks: {} as Collection,
+    });
+
+    await expect(
+      store.claimReportTemplate({
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-1",
+        expectedExecutionVersion: 1,
+        templateId: "summary",
+        templateVersionId: "summary:v2",
+        claimToken: "claim-1",
+      }),
+    ).resolves.toBeNull();
+
+    const claimed = await store.claimReportTemplate({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      experimentExecutionId: "execution-1",
+      expectedExecutionVersion: 1,
+      templateId: "summary",
+      templateVersionId: "summary:v1",
+      claimToken: "claim-1",
+    });
+    expect(claimed?.execution.version).toBe(2);
+
+    await expect(
+      store.completeReportTemplate({
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-1",
+        expectedExecutionVersion: 2,
+        templateId: "summary",
+        templateVersionId: "summary:v1",
+        claimToken: "stale",
+        status: "done",
+      }),
+    ).resolves.toBeNull();
+
+    const completed = await store.completeReportTemplate({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      experimentExecutionId: "execution-1",
+      expectedExecutionVersion: 2,
+      templateId: "summary",
+      templateVersionId: "summary:v1",
+      claimToken: "claim-1",
+      status: "done",
+      report: {
+        reportId: "report-1",
+        url: "/reports/report-1",
+        updatedAt: new Date("2026-01-01T00:01:00.000Z"),
+      },
+    });
+    expect(completed?.execution.reportTemplates.summary).toMatchObject({
+      status: "done",
+      report: { reportId: "report-1" },
+    });
+  });
+
   it("publishes inline membership revisions without changing representation", async () => {
     const experiments = atomicCollection(experiment());
     const histories = historyCollection();

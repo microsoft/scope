@@ -67,6 +67,8 @@ function triggerSummary(trigger?: ReportTrigger): string {
       return `taskPrompt: ${trigger.taskPromptIds.join(", ")}`;
     case "promptFeature":
       return `promptFeature: ${trigger.featureIds.join(", ")} (match: ${trigger.match ?? "all"})`;
+    case "run-report-templates":
+      return `linked run reports: ${trigger.reportTemplateIds.join(", ")}`;
     default:
       return "unknown";
   }
@@ -82,6 +84,11 @@ export function ReportTemplateDetail() {
     queryFn: () => api.getReportTemplate(id!),
     enabled: !!id,
   });
+  const { data: versions = [] } = useQuery({
+    queryKey: ["report-template-versions", id],
+    queryFn: () => api.listReportTemplateVersions(id!),
+    enabled: !!id,
+  });
 
   // Edit state
   const [editing, setEditing] = useState(false);
@@ -90,7 +97,8 @@ export function ReportTemplateDetail() {
   const [editUserPrompt, setEditUserPrompt] = useState("");
   const [editSysMode, setEditSysMode] = useState<"none" | "append" | "override">("none");
   const [editSysContent, setEditSysContent] = useState("");
-  const [editTriggerType, setEditTriggerType] = useState<"always" | "criteria" | "taskPrompt" | "promptFeature">("always");
+  const [editTriggerType, setEditTriggerType] = useState<"manual" | "always" | "criteria" | "taskPrompt" | "promptFeature" | "run-report-templates">("always");
+  const [editEnabled, setEditEnabled] = useState(true);
   const [editTriggerIds, setEditTriggerIds] = useState("");
   const [editTriggerCriteriaIds, setEditTriggerCriteriaIds] = useState<string[]>([]);
   const [editTriggerTaskPromptIds, setEditTriggerTaskPromptIds] = useState<string[]>([]);
@@ -111,7 +119,11 @@ export function ReportTemplateDetail() {
     setEditUserPrompt(template.userPrompt);
     setEditSysMode(template.systemPrompt?.mode ?? "none");
     setEditSysContent(template.systemPrompt?.content ?? "");
-    setEditTriggerType(template.trigger?.type ?? "always");
+    setEditTriggerType(
+      template.trigger?.type ??
+        (template.subject === "experiment" ? "manual" : "always"),
+    );
+    setEditEnabled(template.enabled);
     setEditTriggerIds(getTriggerIds(template.trigger).join(", "));
     setEditTriggerCriteriaIds(
       template.trigger?.type === "criteria" ? (template.trigger as any).criteriaIds ?? [] : []
@@ -135,6 +147,7 @@ export function ReportTemplateDetail() {
     onSuccess: () => {
       setEditing(false);
       queryClient.invalidateQueries({ queryKey: ["report-template", id] });
+      queryClient.invalidateQueries({ queryKey: ["report-template-versions", id] });
       queryClient.invalidateQueries({ queryKey: ["report-templates"] });
     },
   });
@@ -151,6 +164,7 @@ export function ReportTemplateDetail() {
     const body: Record<string, unknown> = {};
     if (editName.trim()) body.name = editName.trim();
     body.description = editDescription.trim() || undefined;
+    body.enabled = editEnabled;
     if (editUserPrompt.trim()) body.userPrompt = editUserPrompt.trim();
 
     // Model
@@ -169,7 +183,9 @@ export function ReportTemplateDetail() {
     }
 
     // Trigger
-    if (editTriggerType === "always") {
+    if (editTriggerType === "manual") {
+      body.trigger = null;
+    } else if (editTriggerType === "always") {
       body.trigger = { type: "always" };
     } else {
       const idsArray = editTriggerIds.split(",").map(s => s.trim()).filter(Boolean);
@@ -179,6 +195,8 @@ export function ReportTemplateDetail() {
         body.trigger = { type: "taskPrompt", taskPromptIds: editTriggerTaskPromptIds };
       } else if (editTriggerType === "promptFeature") {
         body.trigger = { type: "promptFeature", featureIds: idsArray, match: editTriggerMatch };
+      } else if (editTriggerType === "run-report-templates") {
+        body.trigger = { type: "run-report-templates", reportTemplateIds: idsArray };
       }
     }
 
@@ -218,6 +236,13 @@ export function ReportTemplateDetail() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{template.name}</h1>
             <p className="font-mono text-sm text-muted-foreground">{template.id}</p>
+            <div className="mt-2 flex gap-2">
+              <Badge variant="outline">{template.subject}</Badge>
+              <Badge variant={template.enabled ? "default" : "secondary"}>
+                {template.enabled ? "Enabled" : "Disabled"}
+              </Badge>
+              <Badge variant="secondary">Version {template.currentVersion}</Badge>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -265,6 +290,16 @@ export function ReportTemplateDetail() {
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <Input id="description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Optional description" />
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={editEnabled ? "enabled" : "disabled"} onValueChange={(value) => setEditEnabled(value === "enabled")}>
+                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="enabled">Enabled</SelectItem>
+                  <SelectItem value="disabled">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Separator />
             <div className="space-y-2">
@@ -325,10 +360,19 @@ export function ReportTemplateDetail() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {template.subject === "experiment" && (
+                    <SelectItem value="manual">Manual selection</SelectItem>
+                  )}
                   <SelectItem value="always">Always</SelectItem>
-                  <SelectItem value="criteria">Criteria</SelectItem>
-                  <SelectItem value="taskPrompt">Task Prompt</SelectItem>
-                  <SelectItem value="promptFeature">Prompt Feature</SelectItem>
+                  {template.subject === "run" ? (
+                    <>
+                      <SelectItem value="criteria">Criteria</SelectItem>
+                      <SelectItem value="taskPrompt">Task Prompt</SelectItem>
+                      <SelectItem value="promptFeature">Prompt Feature</SelectItem>
+                    </>
+                  ) : (
+                    <SelectItem value="run-report-templates">Linked run reports</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               {editTriggerType === "criteria" && (
@@ -347,6 +391,14 @@ export function ReportTemplateDetail() {
                   />
                   <p className="text-xs text-muted-foreground">Comma-separated IDs</p>
                 </>
+              )}
+              {editTriggerType === "run-report-templates" && (
+                <Input
+                  value={editTriggerIds}
+                  onChange={(e) => setEditTriggerIds(e.target.value)}
+                  placeholder="run-template-1, run-template-2"
+                  className="font-mono text-sm"
+                />
               )}
               {(editTriggerType === "criteria" || editTriggerType === "promptFeature") && (
                 <Select value={editTriggerMatch} onValueChange={(v) => setEditTriggerMatch(v as "any" | "all")}>
@@ -464,6 +516,45 @@ export function ReportTemplateDetail() {
               </CardContent>
             </Card>
           )}
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>Version History</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {versions.map((version) => (
+                <div
+                  key={version._id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant={
+                        version._id === template.currentVersionId
+                          ? "default"
+                          : "outline"
+                      }
+                    >
+                      Version {version.version}
+                    </Badge>
+                    {version._id === template.currentVersionId && (
+                      <span className="text-xs text-muted-foreground">Current</span>
+                    )}
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground">
+                    <div>{formatDate(version.createdAt)}</div>
+                    <div className="font-mono">
+                      {version.contentFingerprint.slice(0, 12)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {versions.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No immutable versions are available.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>

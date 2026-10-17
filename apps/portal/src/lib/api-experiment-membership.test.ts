@@ -67,6 +67,7 @@ describe("Experiment membership API", () => {
       metadata: { name: "Existing runs" },
       requests: [],
       requestIds: ["request-1", "request-2"],
+      reportTemplateIds: [],
     });
   });
 

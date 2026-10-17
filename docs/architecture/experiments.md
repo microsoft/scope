@@ -62,6 +62,8 @@ An **Experiment revision** describes the composition itself:
 - exact `memberCount`;
 - `membershipFingerprint` for the member set;
 - `definitionFingerprint` for the complete definition;
+- the canonical, deduplicated, sorted `reportTemplateIds` selected from active
+  manual Experiment templates;
 - immutable creation time.
 
 An **Experiment execution** is one processing attempt over that revision:
@@ -76,6 +78,34 @@ Retry creates a new execution attempt over the same stored request vector. It
 does not create a new revision or retry member runs. A membership replacement
 instead creates exactly one new revision and one new execution from the
 complete next request/run vector.
+
+Replacing `reportTemplateIds` is also revision-producing. Duplicate or
+order-only changes are no-ops; a real set change creates revision N+1 and
+attempt 1 even when the request/run vector is unchanged. The successor reuses
+the immutable built-in readout and completed configurable reports only when
+their exact frozen template-version identities are unchanged.
+
+### Configurable report templates
+
+The existing project-scoped report-template catalog serves both runs and
+Experiments. A root template has stable `id`, `subject: run | experiment`,
+name, description, enablement, and a pointer to immutable content versions.
+Every content edit appends a version containing the canonical prompt, optional
+system prompt, trigger, model, timeout, and SHA-256 content fingerprint.
+Metadata-only edits do not append a content version.
+
+Experiment templates have three distinct modes:
+
+- no trigger: selectable and persisted in a revision's `reportTemplateIds`;
+- `trigger: { type: "always" }`: automatic for every completed exact
+  execution;
+- `trigger: { type: "run-report-templates", reportTemplateIds: [...] }`:
+  automatic after all required exact child run reports are ready.
+
+Linked IDs are a canonical non-empty set of active, nondeleted, same-project
+`subject: run` templates. Manual selection is atomic: any missing, inactive,
+deleted, cross-project, wrong-subject, or automatic ID rejects the full
+operation with the invalid IDs.
 
 ### Exact request/run vector
 
@@ -256,6 +286,8 @@ All routes require `?projectId=`:
 | `POST` | `/api/v1/experiments/:id/retry` | Start a new processing attempt for the current exact vector |
 | `POST` | `/api/v1/experiments/:id/requests` | Add or move standalone requests in one complete-set revision |
 | `DELETE` | `/api/v1/experiments/:id/requests` | Remove members to standalone status in one complete-set revision |
+| `PUT` | `/api/v1/experiments/:id/report-templates` | Replace the complete selectable manual-template set and publish a revision |
+| `POST` | `/api/v1/experiments/:id/executions/:experimentExecutionId/reports/:templateId/retry` | Append a retry version using the execution's frozen template identity |
 
 Creation metadata requires `name` and accepts an optional `description`.
 Compose mode requires one or more complete request definitions, existing mode
@@ -291,6 +323,8 @@ scope experiment list
 scope experiment get <experiment-id>
 scope experiment executions <experiment-id> [experiment-execution-id]
 scope experiment retry <experiment-id> --execution <current-execution-id>
+scope experiment reports set <experiment-id> --revision <revision-id> --template <template-id> [...]
+scope experiment report retry <experiment-id> --execution <execution-id> --template <template-id>
 ```
 
 Creation reuses run configuration flags, adds Experiment metadata, supports
@@ -340,8 +374,11 @@ values fall back safely to the current data and are removed from the URL.
 Detail defaults to **Reports** when a report document exists, **Processing**
 while an artifact-free attempt is active or blocked, and **Runs** otherwise.
 Public UI terminology remains generic **Reports**; `pp-readout` is only the
-internal handler identifier. This projection does not add Experiment report
-template attachment, selection, or triggering; those remain deferred to PR D.
+internal handler identifier. The Processing tab separates selectable manual,
+automatic-always, and automatic linked-run templates, shows matching-run
+counts and independent blockers, and warns that selection changes publish a
+revision. Configurable types coexist with `pp-readout` in the existing compact
+type selector and append-only version selector.
 Run list and detail views link `experimentId` back to the Experiment. A
 historical correlation that has no Experiment document is view-only and cannot
 trigger retry.
@@ -398,6 +435,7 @@ GEPA restacking is also excluded.
 | `packages/shared/src/experiments/fixed-payload-store.ts` | Deterministic chunk publication and verified reads |
 | `packages/shared/src/experiments/experiment-store.ts` | Creation, CAS processing, freeze, archive, rollover, retry, and repair |
 | `packages/db-migrations/src/migrations/034-create-experiment-storage-indexes.ts` | Collection index ownership |
+| `packages/db-migrations/src/migrations/035-version-report-templates.ts` | Existing-template backfill, immutable template versions, and report lookup indexes |
 | `apps/api/src/experiment-coordinator.ts` | API-owned workflow policy and repair |
 | `apps/api/src/experiment-membership.ts` | Complete-set membership validation, request ownership, publication, and repair |
 | `apps/api/src/experiment-dispatcher.ts` | Durable polling and queue delivery |

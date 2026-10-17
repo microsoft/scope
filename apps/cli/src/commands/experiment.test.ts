@@ -150,6 +150,7 @@ describe("experiment commands", () => {
         metadata: { name: "Empty" },
         requests: [],
         requestIds: [],
+        reportTemplateIds: [],
       }),
     });
     expect(requests[0]?.url).toBe(
@@ -192,6 +193,7 @@ describe("experiment commands", () => {
           metadata: { name: "Existing" },
           requests: [],
           requestIds: ["request-1", "request-2"],
+          reportTemplateIds: [],
         }),
       });
   });
