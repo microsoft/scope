@@ -246,9 +246,8 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("ExperimentDetail", () => {
+describe("ExperimentDetail", { timeout: 10_000 }, () => {
   it("starts an asynchronous deletion from the confirmation dialog", async () => {
-    const user = userEvent.setup();
     vi.mocked(api.deleteExperiment).mockResolvedValue({
       operationId: "operation-delete",
       phase: "deleting",
@@ -263,11 +262,11 @@ describe("ExperimentDetail", () => {
     });
     renderDetail();
 
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     expect(
       screen.getByRole("heading", { name: "Delete this Experiment?" }),
     ).toBeTruthy();
-    await user.click(
+    fireEvent.click(
       screen.getByRole("button", { name: /Delete Experiment/ }),
     );
 

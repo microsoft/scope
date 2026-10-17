@@ -321,6 +321,20 @@ pre-asserts no composite duplicates, reuses 025's Cosmos-safe helpers (composite
 non-unique on Cosmos, unique on real MongoDB), and its `down()` unsets `slug`/`ref` (index changes
 log-only). The dead `prompt-feature-extractions` drop is guarded against a missing namespace.
 
+### GEPA optimization
+
+The Python optimizer in `apps/gepa-optimizer` is a client of the canonical
+Experiment API described in [experiments.md](experiments.md). One optimization
+creates or targets one Experiment. Each candidate batch first creates
+standalone requests, then publishes those exact request IDs through the
+membership API, producing a new immutable revision and execution. The optimizer
+records those identities and reads reports through the exact execution route.
+
+**GEPA scoring is not persisted.** Its metric (fraction of criteria passed,
+aggregated across turns) is derived from `run.turns[].criteriaResults` and
+remains algorithm-specific. Candidate lineage is reconstructed from GEPA's
+public parent indices in the optimizer result artifact.
+
 ## Judge Pipeline
 
 The judge evaluates coding agent output against criteria. Two strategies are supported:

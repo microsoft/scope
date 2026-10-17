@@ -429,6 +429,27 @@ confirmation dialog; a deleted Experiment exposes **Restore**. Membership,
 retry, and report publication controls stay disabled while lifecycle work is
 active.
 
+## GEPA optimizer integration
+
+`apps/gepa-optimizer` treats the Experiment model as the durable record of one
+prompt-optimization run:
+
+1. It creates one empty Experiment, or targets `SCOPE_EXPERIMENT_ID` and reads
+   its current revision.
+2. Each candidate batch submits standalone requests without retrying the
+   submission POSTs.
+3. It adds the successful request IDs in one revision-guarded membership POST.
+4. It polls the exact request runs and exact `experimentExecutionId` using
+   idempotent GET retries, then reads reports from that exact execution.
+5. It stores `experimentId`, `experimentRevisionId`,
+   `experimentExecutionId`, and report references in GEPA outputs and
+   reflective trajectories.
+
+The Experiment therefore remains operable through the normal API, CLI, and
+Portal. Membership revisions provide the durable candidate-batch boundaries;
+the algorithm-specific criteria score and post-hoc candidate lineage remain in
+the optimizer's `results.json` rather than extending Scope persistence.
+
 ## Permanent request creation and composition deprecation
 
 `POST /api/v1/requests`, `scope run submit`, and the Portal's **New Run** flow

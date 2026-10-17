@@ -591,7 +591,17 @@ describe("ExperimentStore CAS contracts", () => {
     const payloadStore = new FixedPayloadStore(
       chunks as unknown as Collection<Document>,
     );
-    const currentRequests = requestVector(4_000);
+    const chunkedRequests = (count: number) =>
+      requestVector(count).map((request) => ({
+        ...request,
+        dependencies: Array.from({ length: 4 }, (_, index) => ({
+          handlerId: `handler-${index}`.padEnd(200, "x"),
+          state: "ready" as const,
+          version: 3,
+        })),
+        blockers: [],
+      }));
+    const currentRequests = chunkedRequests(320);
     const root = experiment();
     root.revision.memberCount = currentRequests.length;
     root.revision.membershipFingerprint =
@@ -621,7 +631,7 @@ describe("ExperimentStore CAS contracts", () => {
         historyCollection() as unknown as Collection<ExperimentExecutionHistoryDocument>,
       chunks: chunks as unknown as Collection,
     });
-    const grownRequests = requestVector(4_200);
+    const grownRequests = chunkedRequests(330);
     const grown = await grow.replaceMembership({
       projectId: "project-1",
       experimentId: "experiment-1",

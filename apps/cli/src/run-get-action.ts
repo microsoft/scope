@@ -5,7 +5,7 @@
  * Action handler for `run get` subcommand — extracted for testability.
  */
 import { colorLevel, dimTimestamp, errorText, successText, label, value, banner, warnBanner, criterionIcon } from "./utils/style.js";
-import { TAXONOMY_ELEMENT_METADATA } from "shared";
+import { TAXONOMY_ELEMENT_METADATA } from "shared/observation-taxonomy";
 import { GATE_METADATA, GATE_ORDER, type ConversationTurn, type GateId, type GateRunSummary, type RequestDocument, type TaxonomyElementId } from "shared/types";
 import { formatData, isMachineReadable } from "./utils/formatters.js";
 import type { OutputFormat, DisplayField } from "./utils/types.js";
