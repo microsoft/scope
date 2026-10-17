@@ -38,6 +38,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
       listExperimentReports: vi.fn(),
       retryExperiment: vi.fn(),
       updateExperimentRequests: vi.fn(),
+      deleteExperiment: vi.fn(),
+      restoreExperiment: vi.fn(),
       experimentReportStructuredUrl: vi.fn(
         (_experimentId: string, executionId: string, reportId: string) =>
           `/api/v1/experiments/experiment-1/executions/${executionId}/reports/${reportId}/structured?projectId=project-1`,
@@ -234,6 +236,8 @@ beforeAll(() => {
 beforeEach(() => {
   vi.mocked(api.listExperimentReports).mockReset();
   vi.mocked(api.listExperimentReports).mockResolvedValue([]);
+  vi.mocked(api.deleteExperiment).mockReset();
+  vi.mocked(api.restoreExperiment).mockReset();
 });
 
 afterEach(() => {
@@ -243,6 +247,75 @@ afterEach(() => {
 });
 
 describe("ExperimentDetail", () => {
+  it("starts an asynchronous deletion from the confirmation dialog", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.deleteExperiment).mockResolvedValue({
+      operationId: "operation-delete",
+      phase: "deleting",
+      stateVersion: 2,
+      progress: {
+        expectedRequests: 11,
+        completedRequests: 0,
+        expectedReports: 2,
+        completedReports: 0,
+      },
+      blocking: [],
+    });
+    renderDetail();
+
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    expect(
+      screen.getByRole("heading", { name: "Delete this Experiment?" }),
+    ).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: /Delete Experiment/ }),
+    );
+
+    await waitFor(() => {
+      expect(api.deleteExperiment).toHaveBeenCalledWith("experiment-1");
+    });
+  });
+
+  it("shows deleted lifecycle progress and restores the Experiment", async () => {
+    const user = userEvent.setup();
+    const deletedExperiment: ExperimentView = {
+      ...experiment,
+      deletedAt: "2026-10-16T12:00:00.000Z",
+      lifecycle: {
+        operationId: "operation-delete",
+        phase: "deleted",
+        stateVersion: 3,
+        progress: {
+          expectedRequests: 11,
+          completedRequests: 11,
+          expectedReports: 2,
+          completedReports: 2,
+        },
+        blocking: [],
+      },
+    };
+    vi.mocked(api.restoreExperiment).mockResolvedValue({
+      ...deletedExperiment.lifecycle!,
+      operationId: "operation-restore",
+      phase: "restoring",
+      stateVersion: 4,
+    });
+    renderDetail("/experiments/experiment-1?includeDeleted=true", deletedExperiment);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Lifecycle operation · deleted",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText("Requests 11/11 · Reports 2/2")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+
+    await waitFor(() => {
+      expect(api.restoreExperiment).toHaveBeenCalledWith("experiment-1");
+    });
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+  });
+
   it("defaults to the current attempt and paginates its shared runs table", async () => {
     renderDetail();
 
@@ -349,6 +422,7 @@ describe("ExperimentDetail", () => {
     expect(api.listExperimentReports).toHaveBeenCalledWith(
       "experiment-1",
       "execution-history",
+      { includeDeleted: false },
     );
     expect(
       screen.getByRole("link", { name: "Structured JSON" }).getAttribute("href"),
@@ -364,6 +438,7 @@ describe("ExperimentDetail", () => {
       expect(api.listExperimentReports).toHaveBeenCalledWith(
         "experiment-1",
         "execution-current",
+        { includeDeleted: false },
       );
     });
   });
@@ -383,6 +458,7 @@ describe("ExperimentDetail", () => {
     expect(api.listExperimentReports).toHaveBeenLastCalledWith(
       "experiment-1",
       "execution-current",
+      { includeDeleted: false },
     );
     expect(
       await screen.findByText("Runs in attempt 2"),

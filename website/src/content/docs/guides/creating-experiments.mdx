@@ -61,6 +61,34 @@ the URL. Old links without these values continue to use the latest defaults,
 and stale selections fall back to available data. Empty Experiments remain
 useful as durable placeholders.
 
+## Delete and restore an Experiment
+
+Experiment deletion is an asynchronous, recoverable cascade. Starting it makes
+the Experiment non-dispatchable immediately, then soft-deletes current member
+requests and generated report records. Report artifacts and immutable
+execution history remain retained. Records that were deleted independently are
+not claimed by the cascade and are not restored with the Experiment.
+
+In Experiment Detail, select **Delete**, review the confirmation, and start the
+operation. The page shows the stable operation ID, request/report progress, and
+exact blockers while deletion or restore is active. Deleted Experiments are
+hidden from the list by default; select **Show deleted** to find them. Open a
+deleted Experiment and select **Restore**. Restore processes matching child
+records first, revives the Experiment, and reconciles its current run vector.
+
+The CLI polls to the terminal state by default:
+
+```bash
+scope experiment delete <experiment-id> --project "$SCOPE_PROJECT"
+scope experiment status <experiment-id> --project "$SCOPE_PROJECT"
+scope experiment restore <experiment-id> --project "$SCOPE_PROJECT"
+```
+
+Add `--no-wait` to `delete` or `restore` to return as soon as the API accepts
+the operation. Use `scope experiment list --include-deleted` or
+`scope experiment get <experiment-id> --include-deleted` to inspect recoverable
+records.
+
 ## Create from the CLI
 
 `scope experiment create` accepts the run configuration flags from
@@ -157,6 +185,20 @@ Content-Type: application/json
   "requests": []
 }
 ```
+
+Start deletion and poll its stable lifecycle operation:
+
+```http
+DELETE /api/v1/experiments/experiment-123?projectId=project-123
+```
+
+The API returns `202` with `operationId`, `phase`, `stateVersion`, request and
+report progress, and blockers. Poll
+`GET /api/v1/experiments/experiment-123/lifecycle?projectId=project-123`.
+Restore uses
+`POST /api/v1/experiments/experiment-123/restore?projectId=project-123` and
+also returns `202`. Incompatible lifecycle intent returns a machine-readable
+`409`.
 
 ## Composition field mapping
 

@@ -245,16 +245,20 @@ non-dispatchable, and a later add can resume it with another revision.
 
 ## Collection and index ownership
 
-| Collection | Owner and contents | Indexes created by migration 034 |
+| Collection | Owner and contents | Indexes |
 | --- | --- | --- |
-| `experiments` | One finalized/current document per Experiment; `_id` equals `experimentId` | `{ projectId: 1, _id: 1 }` for project-scoped paging and lookup |
+| `experiments` | One finalized/current document per Experiment; `_id` equals `experimentId` | `{ projectId: 1, _id: 1 }` for project-scoped paging and lookup; `{ "lifecycle.phase": 1 }` for lifecycle repair |
 | `experiment-executions` | Immutable archived execution history; `_id` equals `experimentExecutionId` | `{ projectId: 1 }`; `{ experimentId: 1, attemptNumber: -1 }` |
 | `experiment-chunks` | Deterministic immutable request-vector chunks | No secondary index; chunks are addressed directly by deterministic `_id` |
+| `requests` | Current request ownership and lifecycle provenance | `{ "deletionProvenance.operationId": 1 }` for exact cascade repair |
+| `reports` | Current and historical report records with retained artifacts | `{ experimentId: 1 }`; `{ "deletionProvenance.operationId": 1 }` |
 
 The `ExperimentStore` owns root and history writes. `FixedPayloadStore` owns
 chunk preparation, read verification, and unpublished cleanup. Migration
 `034-create-experiment-storage-indexes.ts` owns the secondary indexes and
 intentionally leaves removal to a manual operation in `down()`.
+Migration `036-add-experiment-lifecycle-indexes.ts` owns lifecycle repair and
+provenance indexes using Cosmos-compatible single-field definitions.
 
 Every lookup includes `projectId` in addition to the entity ID. An Experiment
 ID is never resolved globally.
@@ -265,6 +269,22 @@ The API owns `ExperimentCoordinator`, including authoritative run projection,
 readiness, rollover, retry, publication repair, and Experiment-handler
 dispatch policy. Its polling loop repairs missed notifications, vector drift,
 dropped queue notices, and interrupted publication or rollover.
+
+`ExperimentLifecycleCoordinator` owns recoverable delete and restore
+operations. A stable operation ID and compare-and-swap `stateVersion` advance
+the root through `deleting`, `deleted`, and `restoring`. Starting deletion
+makes the Experiment non-dispatchable immediately. Exact immutable target
+snapshots reuse `FixedPayloadStore`; requests and reports are soft-deleted only
+when they were active and receive `{ experimentId, operationId }` provenance.
+Independent deletions are never claimed. Restore processes matching children
+first, revives the Experiment, then reconciles the current request/run vector
+and rolls to a fresh execution only when drift exists. Archived executions and
+report blobs remain immutable.
+
+The dispatcher polls lifecycle operations alongside publication repair so
+partial cascades, dropped notifications, and process restarts converge. Queue
+claims and worker final writes require an active, nondeleted request or report,
+which prevents stale in-flight work from publishing after deletion starts.
 
 The scheduler continues to own coding-agent and per-run handler dispatch. For
 Experiment handlers it only applies exact claim and completion messages
@@ -279,8 +299,11 @@ All routes require `?projectId=`:
 | Method | Route | Behavior |
 | --- | --- | --- |
 | `POST` | `/api/v1/experiments` | Create from composed definitions, explicitly empty membership, or `{ mode: "existing", metadata, requestIds }` |
-| `GET` | `/api/v1/experiments` | Cursor-page finalized Experiments |
-| `GET` | `/api/v1/experiments/:id` | Read the public Experiment and current execution |
+| `GET` | `/api/v1/experiments` | Cursor-page finalized Experiments; `includeDeleted=true` includes lifecycle records |
+| `GET` | `/api/v1/experiments/:id` | Read the public Experiment and current execution; `includeDeleted=true` reads a deleted record |
+| `DELETE` | `/api/v1/experiments/:id` | Start or resume a recoverable cascading delete and return `202` |
+| `POST` | `/api/v1/experiments/:id/restore` | Start or resume child-first restore and return `202` |
+| `GET` | `/api/v1/experiments/:id/lifecycle` | Read and repair lifecycle progress and blockers |
 | `GET` | `/api/v1/experiments/:id/executions` | List current and archived execution summaries |
 | `GET` | `/api/v1/experiments/:id/executions/:experimentExecutionId` | Read one exact current or archived execution |
 | `POST` | `/api/v1/experiments/:id/retry` | Start a new processing attempt for the current exact vector |
@@ -325,6 +348,9 @@ scope experiment executions <experiment-id> [experiment-execution-id]
 scope experiment retry <experiment-id> --execution <current-execution-id>
 scope experiment reports set <experiment-id> --revision <revision-id> --template <template-id> [...]
 scope experiment report retry <experiment-id> --execution <execution-id> --template <template-id>
+scope experiment delete <experiment-id> [--no-wait]
+scope experiment restore <experiment-id> [--no-wait]
+scope experiment status <experiment-id>
 ```
 
 Creation reuses run configuration flags, adds Experiment metadata, supports
@@ -332,6 +358,11 @@ composition preview, explicit empty creation, and creation from existing
 standalone requests. `add`/`move` and `remove` accept repeatable request IDs and
 print the resulting revision and execution identities. Every command requires
 project scope.
+
+Delete and restore commands poll the stable lifecycle operation by default.
+`--no-wait` returns the accepted state immediately for automation that polls
+separately. `scope experiment status` prints exact progress and blockers, while
+`list --include-deleted` and `get --include-deleted` expose recoverable records.
 
 The Portal provides `/experiments`, `/experiments/new`, and
 `/experiments/:id`. The shared creation form retains the established run
@@ -391,6 +422,13 @@ visible, identify ineligible requests and owners, and avoid partial navigation.
 Coordinated deletion warns about membership changes and shows the resulting
 revision.
 
+The Experiments list hides deleted records by default and provides a
+**Show deleted** toggle. Experiment Detail displays lifecycle phase, operation
+ID, request/report progress, and exact blockers. Deletion uses an explicit
+confirmation dialog; a deleted Experiment exposes **Restore**. Membership,
+retry, and report publication controls stay disabled while lifecycle work is
+active.
+
 ## Permanent request creation and composition deprecation
 
 `POST /api/v1/requests`, `scope run submit`, and the Portal's **New Run** flow
@@ -415,14 +453,7 @@ Experiment creation.
 
 ## Deferred capabilities
 
-The following remain outside the current implementation:
-
-| Follow-up | Deferred capability |
-| --- | --- |
-| PR D | Report-template attachment or template-driven report orchestration |
-| PR E | Cascading lifecycle operations across an Experiment and its member requests/runs |
-
-GEPA restacking is also excluded.
+GEPA restacking is excluded from the Experiment lifecycle implementation.
 
 ## Key files
 
@@ -433,10 +464,13 @@ GEPA restacking is also excluded.
 | `packages/shared/src/experiments/layout.ts` | BSON limits and inline/chunked layout selection |
 | `packages/shared/src/experiments/routing.ts` | SHA-256 bucket routing, chunk IDs, and fingerprints |
 | `packages/shared/src/experiments/fixed-payload-store.ts` | Deterministic chunk publication and verified reads |
+| `packages/shared/src/experiments/lifecycle-target-store.ts` | Exact chunk-backed lifecycle target snapshots |
 | `packages/shared/src/experiments/experiment-store.ts` | Creation, CAS processing, freeze, archive, rollover, retry, and repair |
 | `packages/db-migrations/src/migrations/034-create-experiment-storage-indexes.ts` | Collection index ownership |
 | `packages/db-migrations/src/migrations/035-version-report-templates.ts` | Existing-template backfill, immutable template versions, and report lookup indexes |
+| `packages/db-migrations/src/migrations/036-add-experiment-lifecycle-indexes.ts` | Lifecycle repair and deletion-provenance indexes |
 | `apps/api/src/experiment-coordinator.ts` | API-owned workflow policy and repair |
+| `apps/api/src/experiment-lifecycle.ts` | Recoverable delete/restore orchestration and reconciliation |
 | `apps/api/src/experiment-membership.ts` | Complete-set membership validation, request ownership, publication, and repair |
 | `apps/api/src/experiment-dispatcher.ts` | Durable polling and queue delivery |
 | `apps/cli/src/commands/experiment.ts` | Project-scoped CLI surface |

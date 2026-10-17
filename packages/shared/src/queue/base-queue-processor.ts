@@ -235,6 +235,13 @@ export abstract class BaseQueueProcessor<TDocument extends { _id: string } = any
         await this.safeDeleteMessage(message.messageId, currentPopReceipt);
         return;
       }
+      if ((doc as { deletedAt?: unknown }).deletedAt) {
+        console.log(
+          `[${this.workerName}] Discarding queue message for deleted document ${documentId}`,
+        );
+        await this.safeDeleteMessage(message.messageId, currentPopReceipt);
+        return;
+      }
       document = doc as TDocument;
 
       // Resolve the runId for log persistence. Prefer the runId carried in
@@ -349,6 +356,7 @@ export abstract class BaseQueueProcessor<TDocument extends { _id: string } = any
                 "run._id": runId,
                 "run.status": "processing",
                 "run.worker.instanceId": this.instanceId,
+                deletedAt: { $exists: false },
               } as any,
               {
                 $set: {
@@ -387,7 +395,7 @@ export abstract class BaseQueueProcessor<TDocument extends { _id: string } = any
           } else {
             // Legacy fallback: top-level fields (pre-migration / no runId in message).
             await withRetry(() => this.collection.updateOne(
-              { _id: documentId } as any,
+              { _id: documentId, deletedAt: { $exists: false } } as any,
               {
                 $set: {
                   status: "done",
