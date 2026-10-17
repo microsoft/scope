@@ -50,6 +50,15 @@ describe("Experiment OpenAPI contract", () => {
     expect(document.paths).toHaveProperty(
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}",
     );
+    expect(document.paths).toHaveProperty(
+      "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports",
+    );
+    expect(document.paths).toHaveProperty(
+      "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports/{reportId}/structured",
+    );
+    expect(document.paths).toHaveProperty(
+      "/api/v1/experiments/{id}/executions/{experimentExecutionId}/logs",
+    );
     expect(document.paths).toHaveProperty("/api/v1/experiments/{id}/retry");
     expect(
       Object.keys(document.paths ?? {}).filter((path) =>

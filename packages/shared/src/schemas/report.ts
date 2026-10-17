@@ -33,13 +33,25 @@ export const ReportStatusSchema = z.enum([
   "failed",
 ]);
 
+export const StructuredReportArtifactSchema = z
+  .object({
+    schemaId: z.string(),
+    schemaVersion: z.string(),
+    contentType: z.literal("application/json"),
+    url: z.string(),
+  })
+  .openapi("StructuredReportArtifact");
+
 export const ReportResponseSchema = z
   .object({
     _id: z.string(),
-    requestId: z.string(),
+    requestId: z.string().optional(),
+    experimentId: z.string().optional(),
+    experimentExecutionId: z.string().optional(),
     templateId: z.string().optional(),
     reporter: ReporterSchema.optional(),
     content: z.string().optional(),
+    structuredArtifact: StructuredReportArtifactSchema.optional(),
     status: ReportStatusSchema,
     error: z.string().optional(),
     insightReferences: z.array(InsightReferenceSchema).optional(),
@@ -47,6 +59,16 @@ export const ReportResponseSchema = z
     updatedAt: z.coerce.date().optional(),
     projectId: z.string(),
   })
+  .refine(
+    (report) =>
+      report.requestId !== undefined ||
+      (report.experimentId !== undefined &&
+        report.experimentExecutionId !== undefined),
+    {
+      message:
+        "Report must identify either a request or an exact Experiment execution",
+    },
+  )
   .openapi("ReportResponse");
 
 export const CreateReportInputSchema = z

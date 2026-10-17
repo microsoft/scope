@@ -230,7 +230,6 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--resources",
           "--scenario",
           "--skills",
-          "--tags",
           "--traits",
           "--url",
           "--worker",
@@ -258,6 +257,22 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--limit",
           "--output",
           "--project",
+          "--url",
+        ],
+      },
+      "logs": {
+        "options": [
+          "--from-start",
+          "--project",
+          "--url",
+        ],
+      },
+      "reports": {
+        "options": [
+          "--output",
+          "--project",
+          "--report",
+          "--structured",
           "--url",
         ],
       },
@@ -645,11 +660,14 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
         "options": [
           "--id",
           "--output",
+          "--structured",
           "--url",
         ],
       },
       "list": {
         "options": [
+          "--experiment",
+          "--experiment-execution",
           "--output",
           "--project",
           "--run",

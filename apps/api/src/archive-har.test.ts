@@ -99,6 +99,7 @@ describe("rewriteHarUrlsForArchive", () => {
     expect(result.run!.turns![1].toolCallsUrl).toBe("iteration-2.tool-calls.jsonl");
     expect(result.run!.turns![2].toolCallsUrl).toBeUndefined();
   });
+
 });
 
 // --- blobNameFromSnapshotsUrl ---
@@ -902,7 +903,6 @@ describe("packRunIntoTar", () => {
     await packRunIntoTar(p, run, container, "run-011", () => true);
     p.finalize();
     await entriesPromise;
-
     expect(run.codebase!.archiveUrl).toBe(blobUrl);
   });
 });

@@ -121,6 +121,14 @@ const ExperimentExecutionBaseSchema = z
         message: "handlerSummary is limited to 64 handlers",
       }),
     blocking: z.array(ExperimentBlockerSchema).max(32),
+    report: z
+      .object({
+        reportId: IdSchema,
+        url: z.string().min(1).max(2_048),
+        updatedAt: z.coerce.date(),
+      })
+      .strict()
+      .optional(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
     startedAt: z.coerce.date().optional(),

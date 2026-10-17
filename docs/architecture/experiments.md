@@ -269,15 +269,43 @@ to Experiment Detail after creation. The Experiments list uses the shared
 full-height, edge-to-edge `ListLayout`, `FilterRail`, `DataTable`, column
 customization, and cursor-aware `Pagination` interaction model used by Runs
 while retaining Experiment-specific status, revision, attempt, and run-count
-columns. Detail selects the current processing attempt by default and supports
-direct historical links via `?executionId=`.
-A header attempt selector renders exactly one current or historical execution
-at a time, including its state, blockers, and a shared
-sortable/customizable/paginated Runs `DataTable`. Run rows link to the exact
-stored request/run pair. Retry remains current-attempt-only. Run list and
-detail views link `experimentId` back to the Experiment. A historical
-correlation that has no Experiment document is view-only and cannot trigger
-retry.
+columns.
+
+Experiment Detail keeps the Experiment identity, concise status, and global
+attempt selector in a compact header. The horizontal **Runs**, **Reports**, and
+**Processing** tabs follow that header directly so their active content is
+available without scrolling through overview cards. The selected attempt
+scopes all three tabs:
+
+- **Runs** renders the exact stored request/run vector in an inset,
+  sortable, customizable, paginated shared `DataTable`. Rows link to the exact
+  request/run pair.
+- **Reports** groups append-only report documents by persisted `templateId` or
+  reporter identity. It shows a type selector only when multiple report types
+  exist and a version selector only when a type has history. The newest type
+  and newest version are the defaults, and exactly one version is rendered.
+  Markdown, structured JSON, the global report-detail link, loading/error
+  retry, and status use the exact
+  `experimentId + experimentExecutionId + reportId` identity. Completed,
+  processing, failed, blocked, and no-artifact states share one stable panel
+  shell: identity, selectors, badges, and actions keep their positions while
+  only the content region changes. Artifact-only actions are disabled when no
+  artifact exists, while addressable report versions retain their direct link.
+- **Processing** owns handler progress, blockers, errors, execution metadata,
+  and processing retry/recovery. Retry remains current-attempt-only.
+
+Browser history preserves the selected attempt, tab, report type, and report
+version through `executionId`, `tab`, `reportType`, and `reportId` query
+parameters. Missing parameters retain backward-compatible defaults. Stale
+values fall back safely to the current data and are removed from the URL.
+Detail defaults to **Reports** when a report document exists, **Processing**
+while an artifact-free attempt is active or blocked, and **Runs** otherwise.
+Public UI terminology remains generic **Reports**; `pp-readout` is only the
+internal handler identifier. This projection does not add Experiment report
+template attachment, selection, or triggering; those remain deferred to PR D.
+Run list and detail views link `experimentId` back to the Experiment. A
+historical correlation that has no Experiment document is view-only and cannot
+trigger retry.
 
 ## Permanent request creation and composition deprecation
 

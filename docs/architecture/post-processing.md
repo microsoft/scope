@@ -34,7 +34,23 @@ Two paths trigger post-processing:
     - Updates `run.turns.$.atifUrl` in the request document
 
 4. On success, stamps `run.handlerStatus["pp-atif"] = { status: "done", version: N }` (while legacy `run.postProcessorVersion` / `run.postProcessorStatus` may still be mirrored during the transition)
-5. Triggers any downstream handlers once the scheduler sees the dependency graph is satisfied. (Reports are **not** a DAG handler — see [Report Triggering](#report-triggering-on-dag-drain).)
+5. Triggers the downstream taxonomy handler once the scheduler sees the dependency graph is satisfied. (Reports are **not** a DAG handler — see [Report Triggering](#report-triggering-on-dag-drain).)
+
+## Taxonomy Generation
+
+The taxonomy handler (`apps/workers/taxonomy/`) consumes messages from the dedicated `pp-taxonomy-queue` and produces a structured JSON artifact for a completed run. It uses the GitHub Copilot SDK with a tool-backed session to fetch run metadata and ATIF trajectories from the API, then validates the generated JSON against the shared taxonomy Zod schema.
+
+### Flow
+
+1. Queue message arrives: `{ type: "taxonomy", requestId, runId }`
+2. Worker fetches the request document from MongoDB and marks `run.handlerStatus["pp-taxonomy"].status = "processing"`
+3. Copilot SDK session calls:
+   - `get_run_data` to fetch the request + active run from the API
+   - `get_atif_trajectory` to fetch per-iteration ATIF JSON from the API (`GET /api/v1/requests/:id/runs/:runId/atif?iteration=N`)
+4. The worker validates the assistant response with `taxonomySchema.safeParse()`
+5. If validation fails, the worker feeds the schema errors back into the same session and retries up to 3 total attempts
+6. On success, the worker uploads `taxonomy.json` to `{requestId}/runs/{runId}/taxonomy.json`
+7. The worker stamps `run.handlerStatus["pp-taxonomy"] = { status: "done", version: 1 }` and calls `POST /notify/handler-complete`
 
 ### Blob Storage Layout
 
@@ -45,7 +61,10 @@ Two paths trigger post-processing:
       atif.trajectory.json
     iteration-2/
       atif.trajectory.json
+    taxonomy.json
 ```
+
+The completed run stores the taxonomy blob URL on `run.taxonomyUrl`.
 
 ### API Endpoints
 
@@ -53,8 +72,41 @@ Two paths trigger post-processing:
 | --- | --- |
 | `GET /api/v1/requests/:id/atif?iteration=N` | Download ATIF for the latest run |
 | `GET /api/v1/requests/:id/runs/:runId/atif?iteration=N` | Download ATIF for a specific run |
+| `GET /api/v1/requests/:id/taxonomy` | Download taxonomy JSON for the latest run |
+| `GET /api/v1/requests/:id/runs/:runId/taxonomy` | Download taxonomy JSON for a specific run |
 
-The `iteration` query parameter is mandatory for the ATIF endpoints. ATIF files are also included in archive exports as `iteration-{N}.atif.trajectory.json`.
+The `iteration` query parameter is mandatory only for the ATIF endpoints. ATIF files are also included in archive exports as `iteration-{N}.atif.trajectory.json`.
+
+### Local troubleshooting: taxonomy CLI
+
+The Copilot SDK generation loop lives in `apps/workers/taxonomy/src/taxonomy-generator.ts` (`generateTaxonomy()`), shared by both the queue processor and a standalone developer CLI (`src/cli.ts`). The CLI invokes generation directly against an existing `requestId`, streams the session events live, and saves the validated taxonomy to a local file — **it never writes to MongoDB, blob storage, or the scheduler** (read-only). It is a developer tool and is intentionally not part of the Scope CLI.
+
+Because both taxonomy tools (`get_run_data` and `get_atif_trajectory`) read through the API, the CLI needs only an API URL and a Copilot token — no storage connection string. This lets it run against any environment (local or a remote deployment such as integration) given a reachable API.
+
+```bash
+# Local stack (use your worktree's host-mapped API port):
+SCOPE_MT_API_URL=http://localhost:3001 \
+GITHUB_TOKEN=$(gh auth token) \
+pnpm taxonomy <requestId> [--run <runId>] [--model <model>] [--timeout <ms>] [-o out.json] [--stdout] [--quiet]
+
+# Integration (read-only against the deployed API):
+SCOPE_MT_API_URL=https://msscope-int.azurewebsites.net \
+GITHUB_TOKEN=$(gh auth token) \
+pnpm taxonomy <requestId> -o taxonomy-int.json
+```
+
+The root `pnpm taxonomy` script proxies to `pnpm --filter taxonomy-handler taxonomy` (i.e. `tsx src/cli.ts`).
+
+| Option | Description |
+| --- | --- |
+| `--run, -r <runId>` | Run id used in the prompt/logging (default: active run resolved from the API) |
+| `--model <model>` | Override `TAXONOMY_MODEL` (e.g. A/B a reasoning model vs the `gpt-5.4` default) |
+| `--timeout <ms>` | Override `SESSION_TIMEOUT_MS` (per-attempt session timeout) |
+| `--output, -o <file>` | Output file path (default: `taxonomy-<requestId>.json` in the cwd) |
+| `--stdout` | Also print the taxonomy JSON to stdout |
+| `--quiet` | Suppress live session-event streaming on stderr |
+
+Live progress (tool calls, errors, deltas) is written to stderr so the saved JSON file stays clean. The CLI exits non-zero on failure (empty response, JSON/schema validation failure after 3 attempts, timeout, or model rate limit) and surfaces the underlying error message — making it well suited to diagnosing the oversized-`get_atif_trajectory` paging loop and Copilot model rate limits.
 
 ## Taxonomy Observations (`pp-taxonomy`)
 
@@ -92,7 +144,11 @@ Gate criteria are always `subject: "iteration"` (the API rejects `"run"` for gat
    - **Runs exactly once per run:** the scheduler dispatches `pp-taxonomy` a single time (it never sets `message.iteration`), so the run-subject branch needs no idempotency guard.
 5. Stamps `run.handlerStatus["pp-taxonomy"] = { status: "done", version: N }` and notifies the scheduler.
 
-Dimension grouping is **derived at read time** by joining each result's `criterionId` → criterion `taxonomyElementId` (the three R&A Readout dimensions; unset = unclassified). It never feeds back to the agent and never affects pass/fail. (#1053 later extends this worker with a richer scorecard artifact.)
+Dimension grouping is **derived at read time** by joining each result's
+`criterionId` → criterion `taxonomyElementId` (the three R&A Readout
+dimensions; unset = unclassified). It never feeds back to the agent and never
+affects pass/fail. Experiment readout synthesis consumes these classifications
+after every exact-vector dependency is ready.
 
 
 ## Handler Interface
@@ -165,7 +221,7 @@ The `AtifHandler` has two complementary test suites:
 
 The post-processor uses a version-based re-processing scheme:
 
-- Each handler is registered independently in the `services` collection using a `post-process-handler` document keyed by handler ID (for example `pp-atif`)
+- Each handler is registered independently in the `services` collection using a `post-process-handler` document keyed by handler ID (for example `pp-atif`, `pp-taxonomy`)
 - Each registration stores the handler `version`, queue name, selector, `autoBackfill` behavior, and `dependsOn` DAG edges
 - The scheduler compares each request's per-handler status/version state (for example `run.handlerStatus["pp-atif"]`) against the registered handler entry for that selector
 - Requests with missing or outdated handler state are re-dispatched for that specific handler once its dependencies are satisfied
@@ -174,17 +230,18 @@ This allows deploying handler improvements and having them automatically applied
 
 ## Handler Registration
 
-Each post-process handler declares its DAG metadata in a `handler.yaml` file colocated with the worker (e.g. `apps/workers/post-processor/handler.yaml`). This mirrors the coding-agent `agent.yaml` registration pattern.
+Each post-process handler declares its DAG metadata in a `handler.yaml` file colocated with the worker (e.g. `apps/workers/taxonomy/handler.yaml`). This mirrors the coding-agent `agent.yaml` registration pattern.
 
 ```yaml
-# apps/workers/post-processor/handler.yaml
-_id: pp-atif
+# apps/workers/taxonomy/handler.yaml
+_id: pp-taxonomy
 type: post-process-handler
 version: 1
-queue: post-processor-queue
-selector: atif
-autoBackfill: true
-dependsOn: []
+queue: pp-taxonomy-queue
+selector: taxonomy
+autoBackfill: false
+dependsOn:
+  - pp-atif
 ```
 
 On deploy, a generic registration script — `packages/shared/src/scripts/register-handler.ts` — reads the `handler.yaml` pointed to by `HANDLER_YAML_PATH`, waits for the scheduler's `/health`, and POSTs the parsed document to `${SCHEDULER_URL}/handlers/register` (with retry). The scheduler validates the document, runs a cycle check against the existing topology, and upserts it into the `services` collection via `HandlerDispatcher.registerHandler`. **Workers never write to the `services` collection directly** — the scheduler is the sole owner.
@@ -209,11 +266,33 @@ flowchart LR
 
 Experiment handlers use the same `services` registration endpoint but declare
 `type: experiment-handler` and `dependencyMode: all-runs`. Their dependencies
-name run-level DAG handlers. The coordinator projects those dependencies for
-the current Experiment's exact request/run vector and dispatches only its
-embedded current execution. Built-in readout processing is not part of this
-foundation; see [Experiments](experiments.md) for the queue and rollover
-contracts.
+name run-level DAG handlers. The coordinator projects those dependencies for the current Experiment's exact
+request/run vector and dispatches only its embedded current execution.
+
+The built-in `pp-readout` handler has `dependencyMode: all-runs` and depends on
+`pp-observations`. A `done` observation handler is evidence even when the
+coding outcome is `failed` or an observation has `passed: false`; failed or
+dependency-blocked observations prevent dispatch, while unrelated handler
+failures do not. Its queue message is attempt-scoped and includes the exact
+`experimentId`, `experimentExecutionId`, execution version, handler version,
+and claim token.
+
+The public surface remains generic:
+`GET /api/v1/experiments/:id/executions/:experimentExecutionId/reports` returns
+the exact execution's reports newest first. The global report endpoint resolves
+the same append-only document, and the nested `/structured` route proxies its
+schema-validated JSON artifact. The worker derives Markdown from that JSON and
+atomically publishes the execution report pointer with final handler completion.
+Internal handler, queue, and schema identifiers retain `readout` because they
+identify this synthesis implementation rather than a public report type.
+
+Experiment-handler logs are persisted under the exact execution and streamed
+through
+`GET /api/v1/experiments/:id/executions/:experimentExecutionId/logs`. Queue
+processors use `experimentExecutionId` as the log attempt key, so superseded
+executions remain independently replayable and cannot inherit logs from a newer
+current attempt. See [Experiments](experiments.md#built-in-readout) for the
+full stale-work, storage, and final compare-and-swap contract.
 
 To **add or change a handler**, edit its `handler.yaml` (bump `version`, adjust `dependsOn`, etc.) — no code or migration changes are needed for registration.
 
@@ -233,7 +312,7 @@ active template's trigger and creates the properly-templated `ReportDocument`(s)
 
 ```mermaid
 flowchart LR
-    RT["run done"] --> DAG["scheduler dispatches DAG<br/>(pp-atif → …)"]
+    RT["run done"] --> DAG["scheduler dispatches DAG<br/>(pp-atif → pp-taxonomy)"]
     DAG -->|"all handlers terminal"| DR{DAG drained?}
     DR -->|yes| TRIG["POST /api/v1/reports/trigger<br/>{ requestId }"]
     TRIG --> API["API evaluates each template trigger<br/>→ ReportDocument + report-queue {reportId}"]
@@ -246,7 +325,7 @@ flowchart LR
 registered handler is terminal. A run with **zero** registered handlers is
 vacuously drained, so reports trigger immediately on run completion.
 
-**Trigger regardless of handler success.** A flaky handler must not block report
+**Trigger regardless of handler success.** A flaky taxonomy must not block report
 generation (reports analyze the run/ATIF), so the scheduler triggers reports
 whenever the DAG drains — not only when every handler succeeded.
 
@@ -290,18 +369,20 @@ stateDiagram-v2
 | Environment Variable | Default | Description |
 | --- | --- | --- |
 | `AZURE_STORAGE_QUEUE_POSTPROCESSOR` | `post-processor-queue` | Queue name for ATIF post-processor messages |
+| `AZURE_STORAGE_QUEUE_TAXONOMY` | `pp-taxonomy-queue` | Queue name for taxonomy-generation jobs |
 | `SCHEDULER_PP_POLL_INTERVAL_MS` | `30000` | Scheduler backfill polling interval |
 | `BATCH_SIZE` | `1` | Messages to process per poll (worker-side) |
 | `POLL_INTERVAL_MS` | `5000` | Worker queue polling interval |
-| `SCOPE_MT_API_URL` / `API_BASE_URL` | `http://localhost:3001` | API URL used by report Copilot tools |
-| `SESSION_TIMEOUT_MS` | `300000` | Timeout for report Copilot SDK sessions |
+| `SCOPE_MT_API_URL` / `API_BASE_URL` | `http://localhost:3001` | API URL used by report/taxonomy Copilot tools |
+| `TAXONOMY_MODEL` | `gpt-5.4` | Copilot SDK model used by the taxonomy handler |
+| `SESSION_TIMEOUT_MS` | `300000` | Timeout for report/taxonomy Copilot SDK sessions |
 | `SCHEDULER_URL` | _(unset)_ | Scheduler base URL — used by handlers to notify completion and by the register-handler script to reach `/handlers/register` |
 | `API_URL` | `http://api:80` | API base URL the **scheduler** uses to call `POST /api/v1/reports/trigger` when a run's handler DAG drains |
 | `HANDLER_YAML_PATH` | _(unset)_ | Path to a handler's `handler.yaml`, read by the generic `register-handler` script |
 
 ## Infrastructure
 
-- **Queues:** Azure Storage Queues (`post-processor-queue` for ATIF, `report-queue` for reports)
+- **Queues:** Azure Storage Queues (`post-processor-queue` for ATIF, `pp-taxonomy-queue` for taxonomy, `report-queue` for reports)
 - **Blob Storage:** `snapshots` container (shared with HAR, tool-calls, and other artifacts)
 - **Database:** MongoDB `requests` collection (`run.handlerStatus` map keyed by handler ID, with deprecated `run.postProcessorStatus` / `run.postProcessorVersion` compatibility fields during migration)
 - **KEDA:** ScaledObject scales the worker to zero when queue is empty

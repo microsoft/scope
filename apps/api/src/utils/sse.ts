@@ -13,6 +13,7 @@ export type SSEClient = {
   res: Response;
   cleanup: () => void;
   onActivity?: () => void;
+  accepts?: (event: LogEvent) => boolean;
 };
 
 const sseClients: Map<string, Set<SSEClient>> = new Map();
@@ -50,20 +51,24 @@ function getOrCreateSubscriber(): InstanceType<typeof Redis> {
     sharedSubscriber.on("message", (channel: string, message: string) => {
       const requestId = channel.replace("logs:", "");
       const clients = sseClients.get(requestId);
+      let logEvent: LogEvent | undefined;
+      try {
+        logEvent = JSON.parse(message) as LogEvent;
+      } catch {
+        // Preserve legacy forwarding for clients that do not filter events.
+      }
       if (clients) {
         for (const client of clients) {
+          if (client.accepts && (!logEvent || !client.accepts(logEvent))) {
+            continue;
+          }
           client.res.write(`data: ${message}\n\n`);
           client.onActivity?.();
 
           // Check for completion
-          try {
-            const logEvent = JSON.parse(message) as LogEvent;
-            if (logEvent.data?.final === true) {
-              client.res.write(`event: done\ndata: {"status":"done"}\n\n`);
-              client.cleanup();
-            }
-          } catch {
-            // Ignore parse errors
+          if (logEvent?.data?.final === true) {
+            client.res.write(`event: done\ndata: {"status":"done"}\n\n`);
+            client.cleanup();
           }
         }
       }

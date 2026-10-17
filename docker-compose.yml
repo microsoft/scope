@@ -9,6 +9,7 @@
 #   docker compose --profile vscode-web up               # + VS Code Web worker
 #   docker compose --profile claude-code --profile copilot up  # multiple workers
 #   docker compose --profile report up                   # + Report Generator worker
+#   docker compose --profile readout up                  # + Experiment readout worker
 #   docker compose up mongodb redis azurite              # infra only (run app services natively)
 #
 # Host-native debugging:
@@ -869,6 +870,51 @@ services:
       api:
         condition: service_started
 
+  readout-handler:
+    build:
+      context: .
+      dockerfile: apps/workers/readout/Dockerfile
+      args:
+        <<: *npm-build-args
+    profiles: [readout, all]
+    environment:
+      <<: *common-env
+      AZURE_STORAGE_QUEUE_READOUT: pp-readout-queue
+      READOUT_MODEL: ${READOUT_MODEL:-gpt-5.4}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      TOKEN_MANAGER_URL: http://token-manager:80
+      GIT_COMMIT: ${GIT_COMMIT:-development}
+      READOUT_SESSION_TIMEOUT_MS: ${READOUT_SESSION_TIMEOUT_MS:-300000}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+        required: false
+      redis:
+        condition: service_healthy
+      azurite:
+        condition: service_healthy
+      scheduler:
+        condition: service_started
+      register-handler-readout:
+        condition: service_completed_successfully
+
+  register-handler-readout:
+    build:
+      context: .
+      dockerfile: apps/workers/readout/Dockerfile
+      args:
+        <<: *npm-build-args
+    profiles: [readout, all]
+    environment:
+      <<: *common-env
+      HANDLER_YAML_PATH: apps/workers/readout/handler.yaml
+      SCHEDULER_URL: http://scheduler:8080
+    depends_on:
+      scheduler:
+        condition: service_started
+    restart: "no"
+    entrypoint: ["npx", "tsx", "packages/shared/src/scripts/register-handler.ts"]
+
   register-handler-post-processor:
     build:
       context: .
@@ -892,6 +938,8 @@ services:
     build:
       context: .
       dockerfile: apps/workers/post-processor/Dockerfile
+      args:
+        <<: *npm-build-args
     profiles: [post-processor]
     environment:
       <<: *common-env

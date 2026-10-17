@@ -1614,6 +1614,29 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             ],
             "type": "string",
           },
+          "report": {
+            "properties": {
+              "reportId": {
+                "type": "string",
+              },
+              "updatedAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "url": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "reportId",
+              "url",
+              "updatedAt",
+            ],
+            "type": "object",
+          },
           "startedAt": {
             "format": "date-time",
             "type": [
@@ -1801,6 +1824,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                     "type": "string",
                   },
                 },
+                "required": [
+                  "reportId",
+                  "url",
+                  "updatedAt",
+                ],
                 "type": "object",
               },
               "startedAt": {
@@ -2982,6 +3010,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "error": {
             "type": "string",
           },
+          "experimentExecutionId": {
+            "type": "string",
+          },
+          "experimentId": {
+            "type": "string",
+          },
           "insightReferences": {
             "items": {
               "$ref": "#/components/schemas/InsightReference",
@@ -3006,6 +3040,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             ],
             "type": "string",
           },
+          "structuredArtifact": {
+            "$ref": "#/components/schemas/StructuredReportArtifact",
+          },
           "templateId": {
             "type": "string",
           },
@@ -3019,7 +3056,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         },
         "required": [
           "_id",
-          "requestId",
           "status",
           "createdAt",
           "projectId",
@@ -4289,6 +4325,32 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "name",
           "source",
           "internal",
+        ],
+        "type": "object",
+      },
+      "StructuredReportArtifact": {
+        "properties": {
+          "contentType": {
+            "enum": [
+              "application/json",
+            ],
+            "type": "string",
+          },
+          "schemaId": {
+            "type": "string",
+          },
+          "schemaVersion": {
+            "type": "string",
+          },
+          "url": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "schemaId",
+          "schemaVersion",
+          "contentType",
+          "url",
         ],
         "type": "object",
       },
@@ -6470,6 +6532,181 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Get one exact experiment execution",
         "tags": [
           "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/executions/{experimentExecutionId}/logs": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "experimentExecutionId",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "fromStart",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-sent event stream of log entries",
+          },
+          "404": {
+            "description": "Experiment execution not found",
+          },
+        },
+        "summary": "Stream logs for one exact Experiment execution",
+        "tags": [
+          "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "experimentExecutionId",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReportResponse",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment execution not found",
+          },
+        },
+        "summary": "List reports for one exact Experiment execution",
+        "tags": [
+          "Reports",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports/{reportId}/structured": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "experimentExecutionId",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "reportId",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment report or structured artifact not found",
+          },
+        },
+        "summary": "Download structured JSON for an exact Experiment report",
+        "tags": [
+          "Reports",
         ],
       },
     },
@@ -9327,6 +9564,22 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           {
             "in": "query",
+            "name": "experimentId",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "experimentExecutionId",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "projectId",
             "required": false,
             "schema": {
@@ -9762,6 +10015,32 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "summary": "Stream report logs (SSE)",
+        "tags": [
+          "Reports",
+        ],
+      },
+    },
+    "/api/v1/reports/{id}/structured": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+          },
+          "404": {
+            "description": "Report or structured artifact not found",
+          },
+        },
+        "summary": "Download a report's structured JSON artifact",
         "tags": [
           "Reports",
         ],
