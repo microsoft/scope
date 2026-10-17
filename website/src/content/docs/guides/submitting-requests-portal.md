@@ -30,6 +30,13 @@ From the Portal navigation, click **New Run** (the form name in the
 Portal — it submits a request). The form is split into the three
 sections above.
 
+**New Run** remains the permanent path for one request, whether it
+uses a profile or inline configuration. For named multi-run
+composition, open **Experiments** and select **New Experiment**. The
+Experiment form starts with metadata and scenario selection. Leaving
+the scenario empty creates an empty Experiment; selecting a scenario
+reveals the run configuration and an exact expanded-run count.
+
 ## 1. Write the task prompt
 
 Type the prompt text into the **Task** field. You can also pick from
@@ -84,6 +91,12 @@ Click **Submit**. The Portal navigates to the request detail page.
 The request is assigned a unique ID and queued; a run is created when
 a worker picks it up.
 
+If you use occurrences greater than one or add profile variations in
+**New Run**, the Portal shows the accessible
+`legacy-request-composition` notice and preserves the existing
+expansion behavior. New compositions should use
+[New Experiment](/guides/creating-experiments/).
+
 ## Watch a run
 
 The request detail page has these tabs:
@@ -126,3 +139,5 @@ This is useful for sampling variability of an agent on the same prompt.
 - Automate this workflow with the [REST API](/guides/submitting-requests-api/)
   or the [CLI](/guides/submitting-requests-cli/).
 - Save your favorite setup as a [profile](/guides/defining-profiles/).
+- Create and inspect a named
+  [Experiment](/guides/creating-experiments/).

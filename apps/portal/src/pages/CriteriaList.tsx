@@ -35,7 +35,11 @@ import {
   type CustomizeColumnsOption,
 } from "@/components/list-layout";
 import { HelpTooltip } from "@/components/HelpTooltip";
-import { CriteriaKindBadge, CriteriaSubjectBadge } from "@/components/CriteriaBadge";
+import {
+  CriteriaBadge,
+  CriteriaKindBadge,
+  CriteriaSubjectBadge,
+} from "@/components/CriteriaBadge";
 import { TAXONOMY_ELEMENT_METADATA } from "@/types";
 
 const FILTER_KEYS = ["gate", "kind"] as const;

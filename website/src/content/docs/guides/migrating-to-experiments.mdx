@@ -1,0 +1,144 @@
+---
+title: Migrate composition to Experiments
+description: Move deprecated multi-request composition from request submission to canonical Experiments.
+---
+
+Canonical Experiments replace the historical pattern of expanding a
+multi-request composition directly through request submission.
+
+## What remains permanent
+
+`POST /api/v1/requests`, `scope run submit`, and **New Run** remain
+the permanent interfaces for one request. These ordinary cases do
+not produce a deprecation notice:
+
+- one inline worker configuration;
+- one saved profile;
+- manual configuration of model, tools, criteria, or resources;
+- `count: 1`;
+- no profile variations.
+
+Only overlapping composition controls on request submission are
+deprecated:
+
+- `count` greater than `1`; or
+- a non-empty `profileVariations` array.
+
+Clients identify that case as `legacy-request-composition`. The CLI
+writes the warning to stderr. The Portal exposes an accessible notice.
+The expansion still runs; this is a migration warning, not a failure.
+
+## REST API migration
+
+### Before: expand through request submission
+
+```http
+POST /api/v1/requests?projectId=project-123
+Content-Type: application/json
+
+{
+  "scenario": {
+    "task": "Implement the feature.",
+    "criteria": ["builds", "tests-pass"]
+  },
+  "profileId": "copilot-profile@3",
+  "profileVariations": ["claude-profile@2"],
+  "count": 5
+}
+```
+
+### After: create a canonical Experiment
+
+```http
+POST /api/v1/experiments?projectId=project-123
+Content-Type: application/json
+
+{
+  "metadata": {
+    "name": "Copilot and Claude comparison",
+    "description": "Five occurrences per pinned profile"
+  },
+  "request": {
+    "scenario": {
+      "task": "Implement the feature.",
+      "criteria": ["builds", "tests-pass"]
+    },
+    "profileId": "copilot-profile@3",
+    "profileVariations": ["claude-profile@2"],
+    "count": 5
+  }
+}
+```
+
+The run configuration is unchanged except that it moves under
+`request`. Experiment metadata is new. The response changes from an
+expanded request result to a public Experiment view with
+`createdRequestIds`.
+
+## CLI migration
+
+### Before
+
+```bash
+scope run submit \
+  --project "$SCOPE_PROJECT" \
+  --message "Implement the feature." \
+  --criteria builds tests-pass \
+  --profile copilot-profile@3 \
+  --profile-variations-file variations.json \
+  --count 5 \
+  --no-stream
+```
+
+This remains executable but emits the
+`legacy-request-composition` warning to stderr.
+
+### After
+
+```bash
+scope experiment create \
+  --project "$SCOPE_PROJECT" \
+  --name "Copilot and Claude comparison" \
+  --description "Five occurrences per pinned profile" \
+  --message "Implement the feature." \
+  --criteria builds tests-pass \
+  --profile copilot-profile@3 \
+  --profile-variations-file variations.json \
+  --count 5
+```
+
+Use `--preview --output json` before creation when automation needs to
+verify the expanded run count and request body.
+
+## Behavioral differences
+
+| Legacy request composition | Canonical Experiment |
+| --- | --- |
+| Expansion is initiated from request submission | Expansion is initiated from `POST /experiments` |
+| No required composition name | `metadata.name` is required |
+| Response focuses on created request IDs | Response is an Experiment view plus `createdRequestIds` |
+| Run pages are the main destination | Clients navigate to Experiment Detail |
+| No canonical current/history processing view | Current execution and execution history are first-class |
+| Retry individual requests separately | `POST /experiments/:id/retry` retries Experiment processing for the current execution |
+| Correlation ID may exist without a document | Canonical Experiment IDs resolve to a project-scoped document |
+
+Retrying Experiment processing does not mutate membership and does not
+retry member runs. Membership mutation and lifecycle cascade behavior
+are outside this migration.
+
+Historical runs may carry an `experimentId` that does not resolve to
+an Experiment document. Clients show that value as a view-only
+correlation. It cannot trigger retry or other Experiment processing.
+
+## Project scope
+
+Every Experiment client call is explicitly project-scoped:
+
+- `POST /api/v1/experiments?projectId=...`
+- `GET /api/v1/experiments?projectId=...`
+- `GET /api/v1/experiments/:id?projectId=...`
+- `GET /api/v1/experiments/:id/executions?projectId=...`
+- `GET /api/v1/experiments/:id/executions/:executionId?projectId=...`
+- `POST /api/v1/experiments/:id/retry?projectId=...`
+
+A slug or business ID is never resolved globally.

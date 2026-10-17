@@ -6,6 +6,7 @@ import { Link, useLocation, Outlet, matchPath } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   Activity,
+  Atom,
   Plus,
   List,
   FlaskConical,
@@ -94,6 +95,7 @@ const navGroups: NavGroup[] = [
     label: "Activity",
     scoped: true,
     items: [
+      { to: "/experiments", label: "Experiments", icon: Atom },
       { to: "/runs", label: "Runs", icon: List },
       { to: "/statistics", label: "Statistics", icon: BarChart3 },
       { to: "/reports", label: "Reports", icon: FileText },
@@ -155,6 +157,7 @@ const FULL_BLEED_ROUTE_PATTERNS = [
   "/agents/:id",
   "/models",
   "/models/:id",
+  "/experiments",
   "/runs",
   "/runs/:id/preview",
   "/task-prompts",

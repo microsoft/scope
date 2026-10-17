@@ -1,0 +1,161 @@
+---
+title: Creating experiments
+description: Create named, reproducible benchmark compositions from the Portal, CLI, or REST API.
+---
+
+An **Experiment** is the canonical container for a benchmark
+composition. It records metadata, a fixed revision of member requests,
+the current processing execution, and prior execution history.
+
+Use an Experiment when you want more than one expanded run, durable
+metadata, or a processing lifecycle you can inspect and retry. A
+single request submitted with `scope run submit` remains a permanent,
+supported workflow.
+
+## Create from the Portal
+
+Open **Experiments**, then select **New Experiment**. Add the
+Experiment name and optional description first. With no
+scenario selected, the Portal creates an empty Experiment with zero
+runs. Enter or select a task to choose a scenario; the Portal then
+reveals the run-composition fields used by **New Run**:
+
+- task and criteria;
+- inline agent configuration or a saved profile;
+- profile variations and occurrences;
+- MCP servers, skills, extensions, resources, and `AGENTS.md`;
+- gates, observations, model, reasoning effort, and agent version.
+
+The primary action states the exact outcome: **Create empty
+experiment** while no scenario is selected, or **Create experiment
+with N runs** after the form can expand a complete run composition.
+The Experiments list provides the same searchable, filterable, sortable, and
+column-customizable table interaction used by Runs while preserving
+Experiment-specific status, revision, attempt, and run-count columns. After
+creation, the Portal opens Experiment Detail, where you can inspect one
+processing attempt at a time. The current attempt is selected by default; use
+the header selector to open a historical attempt, whose URL can be shared
+directly. Each selected attempt shows its blockers, handler progress, and a
+sortable, customizable, paginated table of exact linked runs. Empty Experiments
+remain useful as durable placeholders.
+
+## Create from the CLI
+
+`scope experiment create` accepts the run configuration flags from
+`scope run submit`, plus Experiment metadata:
+
+```bash
+scope experiment create \
+  --project "$SCOPE_PROJECT" \
+  --name "Profile comparison" \
+  --description "Compare two pinned agent profiles" \
+  --message "Add authentication to the API." \
+  --criteria auth-works auth-tests \
+  --profile copilot-profile@3 \
+  --profile-variations-file variations.json \
+  --count 5
+```
+
+Preview the request and expanded run count without creating anything:
+
+```bash
+scope experiment create \
+  --project "$SCOPE_PROJECT" \
+  --name "Profile comparison" \
+  --message "Add authentication to the API." \
+  --profile copilot-profile@3 \
+  --profile-variations-file variations.json \
+  --count 5 \
+  --preview --output json
+```
+
+Create an explicit empty Experiment:
+
+```bash
+scope experiment create \
+  --project "$SCOPE_PROJECT" \
+  --name "Reserved nightly benchmark" \
+  --empty
+```
+
+Inspect and retry processing:
+
+```bash
+scope experiment list --project "$SCOPE_PROJECT"
+scope experiment get <experiment-id> --project "$SCOPE_PROJECT"
+scope experiment executions <experiment-id> --project "$SCOPE_PROJECT"
+scope experiment retry <experiment-id> \
+  --execution <current-experiment-execution-id> \
+  --project "$SCOPE_PROJECT"
+```
+
+## Create through the REST API
+
+Experiment calls are project-scoped. Include `projectId` on create,
+list, get, execution, and retry calls. Inline worker selection uses
+the same `worker` query parameter as request creation.
+
+```http
+POST /api/v1/experiments?projectId=project-123&worker=coder-acp-copilot
+Content-Type: application/json
+
+{
+  "mode": "compose",
+  "metadata": {
+    "name": "Copilot authentication benchmark",
+    "description": "Five independent occurrences"
+  },
+  "requests": [{
+    "scenario": {
+      "task": "Add authentication to the API.",
+      "criteria": ["auth-works", "auth-tests"]
+    },
+    "model": "gpt-5.4",
+    "maxIterations": 10,
+    "count": 5
+  }]
+}
+```
+
+The response contains the public Experiment view in `experiment` and
+the created request identifiers in `requestIds`.
+
+Create an empty Experiment with the explicit `empty` mode and an empty
+request vector:
+
+```http
+POST /api/v1/experiments?projectId=project-123
+Content-Type: application/json
+
+{
+  "mode": "empty",
+  "metadata": {
+    "name": "Reserved nightly benchmark"
+  },
+  "requests": []
+}
+```
+
+## Composition field mapping
+
+Each entry in `requests` uses the existing request-creation fields.
+Composition controls move with that configuration; they are not
+Experiment metadata.
+
+| Run configuration | Experiment create location |
+| --- | --- |
+| `scenario` | `requests[].scenario` |
+| `model`, `reasoningEffort`, `maxIterations` | Same names under `requests[]` |
+| `profileId` | `requests[].profileId` |
+| `profileVariations` | `requests[].profileVariations` |
+| `count` | `requests[].count` |
+| `mcpServers`, `skills`, `extensions` | Same names under `requests[]` |
+| `resources`, `codebase` | Same names under `requests[]` |
+| `agentVersion`, `agentsMd` | Same names under `requests[]` |
+| `gates`, `observations`, `priority` | Same names under `requests[]` |
+| `worker` query parameter | `worker` query parameter on `POST /experiments` |
+| — | `metadata.name` (required) |
+| — | `metadata.description` (optional) |
+
+For before-and-after examples and compatibility behavior, see
+[Migrate request composition to Experiments](/guides/migrating-to-experiments/).

@@ -126,7 +126,7 @@ export interface OsInfo {
 
 /**
  * Per-handler post-processing status in the DAG (issue #1147). Keys in
- * `RunState.handlerStatus` are handler IDs (e.g. "pp-atif", "pp-taxonomy").
+ * `RunState.handlerStatus` are handler IDs (e.g. "pp-atif", "pp-observations").
  */
 export interface HandlerRunStatus {
   status: "queued" | "processing" | "done" | "failed";
@@ -173,7 +173,7 @@ export interface RunState {
   postProcessorStatus?: "queued" | "processing" | "done" | "failed";
   /**
    * Per-handler post-processing status keyed by handler ID (e.g. "pp-atif",
-   * "pp-taxonomy"). Drives the aggregate "Enriched" badge so it only flips to
+   * "pp-observations"). Drives the aggregate "Enriched" badge so it only flips to
    * done once every handler in the DAG is terminal — not after the first
    * handler (pp-atif) completes. The legacy `postProcessorStatus` scalar only
    * tracks pp-atif and is kept for backward compatibility.
@@ -213,6 +213,8 @@ export interface Run {
   resources?: ResourceBinding[];
   extensions?: string[];
   priority?: number;
+  experimentId?: string;
+  /** Legacy request-batch correlation retained for historical API responses. */
   submissionId?: string;
   profileId?: string;
   profileVersionId?: string;
@@ -1210,7 +1212,7 @@ export interface ProfileWithVersion extends ProfileDocument {
 
 // --- Runs grouping types (mirrored from shared) ---
 
-export type GroupByKey = "none" | "task" | "submissionId" | "profile";
+export type GroupByKey = "none" | "task" | "experimentId" | "profile";
 
 export interface AggregateStats {
   min: number;
@@ -1229,7 +1231,7 @@ export interface GroupUniformValues {
   skillRevisions?: string[];
   extensions?: string[];
   status?: RunStatus;
-  submissionId?: string;
+  experimentId?: string;
   task?: string;
 }
 

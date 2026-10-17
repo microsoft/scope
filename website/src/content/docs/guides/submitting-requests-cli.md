@@ -34,6 +34,14 @@ scope run submit \
 Logs stream in real time by default. Add `--no-stream` to submit
 silently and poll later.
 
+`scope run submit` is the permanent interface for one request,
+including one saved profile or an inline manual configuration. Use
+[`scope experiment create`](/guides/creating-experiments/) for a
+named multi-run composition. `--count` greater than `1` and a
+non-empty `--profile-variations-file` still expand through
+`run submit`, but emit the `legacy-request-composition` warning to
+stderr.
+
 ### Using a scenario file
 
 For repeatable benchmarks, define the task and criteria in a scenario
@@ -87,7 +95,7 @@ scope run status -i <request-id>
 ```bash
 scope run list
 scope run list -w coder-acp-copilot        # filter by worker
-scope run list --submission-id <id>         # filter by submission
+scope run list --experiment-id <id>         # filter by experiment
 scope run list -o json                      # machine-readable
 ```
 
@@ -123,7 +131,7 @@ scope run download -i <request-id> -e -d ./output  # extract
 For bulk downloads:
 
 ```bash
-scope run download-batch --submission-id <id> -e -d ./batch
+scope run download-batch --experiment-id <id> -e -d ./batch
 ```
 
 ## Retry a failed run
@@ -164,11 +172,16 @@ directory.
   standard Unix tools for quick filtering.
 - **Pin for CI.** Pass `--agent-version` and a fixed profile version
   in automated pipelines for reproducibility.
+- **Use Experiments for composition.** Preview and create a named
+  composition with `scope experiment create`; reserve `run submit`
+  for a single request.
 
 ## Next steps
 
 - [Defining evaluation criteria](/guides/defining-criteria/) — build
   the criteria DAG that judges your runs.
+- [Creating Experiments](/guides/creating-experiments/) — compose,
+  preview, inspect, and retry multi-run benchmarks.
 - [Defining profiles](/guides/defining-profiles/) — save reusable
   agent configurations.
 - [Choosing a coding agent](/guides/choosing-a-coding-agent/) —

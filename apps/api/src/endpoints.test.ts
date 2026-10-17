@@ -766,19 +766,49 @@ describe("API Endpoints", () => {
       expect(res.body.data[0]).toHaveProperty("uniform");
     });
 
-    it("returns grouped results when groupBy=submissionId", async () => {
+    it("returns grouped results when groupBy=experimentId", async () => {
       const groupedDocs = [
-        { key: "sub-1", label: "sub-1", aggregates: { count: 2, turns: null, duration: null, promptTokens: null, completionTokens: null }, uniform: {} },
+        { key: "experiment-1", label: "experiment-1", aggregates: { count: 2, turns: null, duration: null, promptTokens: null, completionTokens: null }, uniform: {} },
       ];
       (mocks.collection.aggregate as any)
-        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([{ _id: "sub-1" }]) })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([{ _id: "experiment-1" }]) })
         .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue(groupedDocs) })
         .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([]) })
         .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([]) });
 
-      const res = await request(testServer()).get(`/api/v1/requests?groupBy=submissionId&projectId=${TEST_PROJECT_ID}`);
+      const res = await request(testServer()).get(`/api/v1/requests?groupBy=experimentId&projectId=${TEST_PROJECT_ID}`);
       expect(res.status).toBe(200);
-      expect(res.body.data[0]).toHaveProperty("key", "sub-1");
+      expect(res.body.data[0]).toHaveProperty("key", "experiment-1");
+    });
+
+    it("preserves grouped results when groupBy=submissionId", async () => {
+      const groupedDocs = [
+        {
+          key: "submission-1",
+          label: "submission-1",
+          aggregates: {
+            count: 2,
+            turns: null,
+            duration: null,
+            promptTokens: null,
+            completionTokens: null,
+          },
+          uniform: {},
+        },
+      ];
+      (mocks.collection.aggregate as any)
+        .mockReturnValueOnce({
+          toArray: vi.fn().mockResolvedValue([{ _id: "submission-1" }]),
+        })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue(groupedDocs) })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([]) })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([]) });
+
+      const res = await request(testServer()).get(
+        `/api/v1/requests?groupBy=submissionId&projectId=${TEST_PROJECT_ID}`,
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.data[0]).toHaveProperty("key", "submission-1");
     });
 
     it("calls aggregate pipeline when groupBy is provided", async () => {
@@ -1955,6 +1985,40 @@ describe("API Endpoints", () => {
       expect(res.status).toBe(201);
       const doc = (mocks.collection.insertOne as any).mock.calls[0][0];
       expect(doc).toHaveProperty("reasoningEffort", "high");
+      expect(doc).not.toHaveProperty("experimentId");
+      expect(doc).toHaveProperty("submissionId", res.body.submissionId);
+      expect(res.body.submissionId).toEqual(expect.any(String));
+      expect(mocks.experimentCollection.updateOne).not.toHaveBeenCalled();
+      expect(res.headers).not.toHaveProperty("deprecation");
+      expect(res.headers).not.toHaveProperty("link");
+      expect(res.headers).not.toHaveProperty("sunset");
+    });
+
+    it("keeps count fan-out independent from experiments", async () => {
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          count: 3,
+        });
+
+      expect(res.status).toBe(201);
+      const docs = (mocks.collection.insertMany as any).mock.calls[0][0];
+      expect(docs).toHaveLength(3);
+      expect(docs.every((doc: object) => !("experimentId" in doc))).toBe(true);
+      expect(res.body.submissionId).toEqual(expect.any(String));
+      expect(
+        docs.every(
+          (doc: { submissionId?: string }) =>
+            doc.submissionId === res.body.submissionId,
+        ),
+      ).toBe(true);
+      expect(mocks.experimentCollection.updateOne).not.toHaveBeenCalled();
+      expect(res.headers.deprecation).toBe("true");
+      expect(res.headers.link).toBe(
+        '</api/v1/experiments>; rel="successor-version"; title="POST /api/v1/experiments"',
+      );
+      expect(res.headers).not.toHaveProperty("sunset");
     });
 
     it("profile reasoningEffort takes precedence over client-provided effort", async () => {
@@ -2259,6 +2323,8 @@ describe("API Endpoints", () => {
         new Set(["base-profile", "var-profile"]),
       );
       for (const doc of docs) {
+        expect(doc.experimentId).toBeUndefined();
+        expect(doc.submissionId).toBe(res.body.submissionId);
         expect(Array.isArray(doc.gates)).toBe(true);
         const selectGate = doc.gates.find((g: { gate: string }) => g.gate === "select");
         const buildGate = doc.gates.find((g: { gate: string }) => g.gate === "build");
@@ -2269,6 +2335,11 @@ describe("API Endpoints", () => {
         expect(buildGate.promptId).toBe("tp-build");
         expect(buildGate.promptText).toBeUndefined();
       }
+      expect(mocks.experimentCollection.updateOne).not.toHaveBeenCalled();
+      expect(res.body.submissionId).toEqual(expect.any(String));
+      expect(res.headers.deprecation).toBe("true");
+      expect(res.headers.link).toContain("POST /api/v1/experiments");
+      expect(res.headers).not.toHaveProperty("sunset");
       // Response surfaces the configured gate count.
       expect(res.body.gates).toBe(2);
     });
@@ -2426,6 +2497,13 @@ describe("API Endpoints", () => {
       expect(insertCall[0]).toHaveProperty("taskPromptId", "tp-123");
       expect(insertCall[0]).toHaveProperty("model", "gpt-4o");
       expect(insertCall[0]).toHaveProperty("maxIterations", 5);
+      expect(insertCall[0]).not.toHaveProperty("experimentId");
+      expect(insertCall[0]).toHaveProperty(
+        "submissionId",
+        res.body.submissionId,
+      );
+      expect(res.body.submissionId).toEqual(expect.any(String));
+      expect(mocks.experimentCollection.updateOne).not.toHaveBeenCalled();
     });
 
     it("applies profile override: uses profile fields for worker, model, mcpServers, skillRevisions, extensions", async () => {
@@ -2802,11 +2880,13 @@ describe("API Endpoints", () => {
     it("retries eligible requests and skips non-terminal ones", async () => {
       const doc1 = {
         _id: "req-1",
+        experimentId: "experiment-1",
         workerType: "coder-acp-copilot",
         run: { _id: "run-1", attemptNumber: 1, status: "done", outcome: "failed" },
       };
       const doc2 = {
         _id: "req-2",
+        experimentId: "experiment-1",
         workerType: "coder-acp-copilot",
         run: { _id: "run-2", attemptNumber: 1, status: "processing" },
       };
@@ -2832,6 +2912,7 @@ describe("API Endpoints", () => {
           $set: expect.objectContaining({ agentVersion: "1.0.0" }),
         }),
       );
+      expect(mocks.experimentCollection.updateMany).not.toHaveBeenCalled();
     });
 
     it("returns 400 when ids array is empty", async () => {

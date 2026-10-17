@@ -21,6 +21,9 @@ import { apiFetch, getApiBasePath } from "../utils/api-client.js";
 import { parseGatesOption } from "../utils/gates.js";
 import { buildResourceBindingSpecs, collectRepeatable } from "../utils/resources.js";
 
+const LEGACY_REQUEST_COMPOSITION_DEPRECATION =
+  "legacy-request-composition" as const;
+
 /**
  * Resolve a CLI option that may be either a literal string or a `@path`
  * reference to a file whose contents should be read. Used for flags like
@@ -213,6 +216,17 @@ run
         body.profileVariations = parsed;
       }
 
+      if (
+        (typeof body.count === "number" && body.count > 1) ||
+        (Array.isArray(body.profileVariations) && body.profileVariations.length > 0)
+      ) {
+        console.warn(
+          `${label("Deprecation:")} [${LEGACY_REQUEST_COMPOSITION_DEPRECATION}] ` +
+            "Use `scope experiment create` for composed benchmarks. " +
+            "`scope run submit` remains permanent for a single request.",
+        );
+      }
+
       // In variation mode the API derives the worker per-variation from each
       // profile's workerType, and explicitly rejects `?worker=`. Skip the
       // query param so the request isn't 400'd, and warn if --worker was
@@ -250,13 +264,13 @@ run
       const result = await response.json();
 
       // A variation submit creates one request per profile and returns
-      // { ids, variations, submissionId, ... } with no `id` or `workerType`.
+      // { ids, variations, experimentId, ... } with no `id` or `workerType`.
       // Printing it through the single-request path rendered `undefined` and
-      // then crashed in chalk, so the whole submission looked like it failed
+      // then crashed in chalk, so the whole request expansion looked like it failed
       // when in fact every request had been created.
       if (Array.isArray(result.ids) && result.ids.length > 0 && !result.id) {
         console.log(`${successText('Submitted:')} ${value(String(result.count ?? result.ids.length))} request(s) across ${value(String(result.variationCount ?? result.ids.length))} profile(s)`);
-        if (result.submissionId) console.log(`${label('Submission:')} ${value(result.submissionId)}`);
+        if (result.experimentId) console.log(`${label('Experiment:')} ${value(result.experimentId)}`);
         for (const variation of (result.variations ?? [])) {
           const ids: string[] = variation.ids ?? (variation.id ? [variation.id] : []);
           const name = variation.label ?? variation.profileName ?? variation.profileId ?? 'variation';
@@ -266,13 +280,13 @@ run
         for (const warning of (Array.isArray(result.warnings) ? result.warnings : [])) {
           console.log(`${errorText('⚠ Warning:')} ${warning}`);
         }
-        // Streaming follows a single request; a submission has several.
+        // Streaming follows a single request; an expanded composition has several.
         printFollowUpCommands(result.ids[0]);
         return;
       }
 
       console.log(`${successText('Request submitted:')} ${value(result.id)}`);
-      if (result.submissionId) console.log(`${label('Submission:')} ${value(result.submissionId)}`);
+      if (result.experimentId) console.log(`${label('Experiment:')} ${value(result.experimentId)}`);
       console.log(`${label('Worker:')} ${value(result.workerType)}`);
       if (result.model) console.log(`${label('Model:')} ${value(result.model)}`);
       if (result.reasoningEffort) console.log(`${label('Reasoning Effort:')} ${value(result.reasoningEffort)}`);
@@ -509,7 +523,7 @@ run
   .option("--search <text>", "Free-text search over id, task, model, and worker")
   .option("--created-after <iso>", "Only runs created at/after this ISO-8601 datetime")
   .option("--created-before <iso>", "Only runs created at/before this ISO-8601 datetime")
-  .option("--submission-id <id>", "Filter by submission ID")
+  .option("--experiment-id <id>", "Filter by experiment ID")
   .option("--turns <expr>", "Filter by actual turns (e.g. '>=5', '<=10', '=3')")
   .option("--max-iterations <expr>", "Filter by configured maxIterations (e.g. '>=5', '<=10', '=3')")
   .option("--sort-by <field>", "Sort field: created, updated, priority, worker, status, id, duration")
@@ -550,8 +564,8 @@ run
       if (options.createdBefore) {
         params.set("createdBefore", options.createdBefore);
       }
-      if (options.submissionId) {
-        params.set("submissionId", options.submissionId);
+      if (options.experimentId) {
+        params.set("experimentId", options.experimentId);
       }
       const parseIterExpr = (raw: string, name: string): { op: "eq" | "gte" | "lte"; value: number } => {
         const m = /^(>=|<=|=)?\s*(\d+)$/.exec(String(raw).trim());
@@ -623,8 +637,8 @@ run
             return o === 'succeeded' ? successText(s) : o === 'failed' || o === 'finished' ? errorText(s) : value(s);
           },
         },
-        { key: 'submissionId', label: 'Submission',
-          formatter: (req: any) => req.submissionId ? req.submissionId.substring(0, 8) : '–',
+        { key: 'experimentId', label: 'Experiment',
+          formatter: (req: Record<string, unknown>) => typeof req.experimentId === "string" ? req.experimentId.substring(0, 8) : '–',
         },
         { key: 'createdAt', label: 'Created',
           formatter: (req: any) => formatDate(req.createdAt),
@@ -792,24 +806,24 @@ run
   .command("download-batch")
   .description("Download multiple runs at once into a single batch archive")
   .option("-i, --ids <ids...>", "One or more run IDs")
-  .option("--submission-id <id>", "Download all runs for a submission")
+  .option("--experiment-id <id>", "Download all runs for an experiment")
   .option("-o, --output <path>", "Output file path (default: batch-<timestamp>.tar.gz)")
   .option("-e, --extract", "Extract the archive after downloading")
   .option("-d, --dir <path>", "Extraction directory (implies --extract)")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
-  .option("--project <id>", "Project ID for scoped operations (required with --submission-id)")
+  .option("--project <id>", "Project ID for scoped operations (required with --experiment-id)")
   .action(async (options) => {
     const { url } = options;
     const shouldExtract = options.extract || !!options.dir;
 
     try {
-      // Resolve IDs: either from --ids or by querying --submission-id
+      // Resolve IDs: either from --ids or by querying --experiment-id
       let ids: string[] = options.ids || [];
 
-      if (options.submissionId) {
-        console.log(`${label('Fetching runs for submission')} ${value(options.submissionId)}...`);
+      if (options.experimentId) {
+        console.log(`${label('Fetching runs for experiment')} ${value(options.experimentId)}...`);
         const projectId = requireProjectId(options.project);
-        const listResp = await apiFetch(url, `/requests?submissionId=${encodeURIComponent(options.submissionId)}&limit=1000`, { projectId });
+        const listResp = await apiFetch(url, `/requests?experimentId=${encodeURIComponent(options.experimentId)}&limit=1000`, { projectId });
         if (!listResp.ok) {
           const error = await listResp.json();
           console.error(errorText("Error fetching runs:"), error);
@@ -818,7 +832,7 @@ run
         const listData = await listResp.json();
         const runs = listData.data || listData;
         if (!Array.isArray(runs) || runs.length === 0) {
-          console.error(errorText("No runs found for this submission"));
+          console.error(errorText("No runs found for this experiment"));
           process.exit(1);
         }
         ids = runs.map((r: { _id: string }) => r._id);
@@ -826,7 +840,7 @@ run
       }
 
       if (ids.length === 0) {
-        console.error(errorText("Error: provide --ids or --submission-id"));
+        console.error(errorText("Error: provide --ids or --experiment-id"));
         process.exit(1);
       }
 
