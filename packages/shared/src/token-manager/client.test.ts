@@ -201,3 +201,20 @@ describe("TokenManagerClient", () => {
     });
   });
 });
+
+describe("acquireTokenFull - env var keyType classification", () => {
+  const originalEnv = process.env;
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it("classifies the anthropic-api env fallback as anthropic-api-key", async () => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-env";
+    const client = new TokenManagerClient("http://localhost:3000");
+    const result = await client.acquireTokenFull("anthropic-api");
+    expect(result.keyType).toBe("anthropic-api-key");
+  });
+});
