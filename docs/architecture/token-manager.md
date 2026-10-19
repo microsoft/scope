@@ -60,6 +60,11 @@ The Token Manager uses a **capability-based model** where tokens are associated 
 | `anthropic-api-key` | `sk-ant-` | Anthropic API key for Claude |
 | `azure-ai-foundry` | `{` (JSON) | Endpoint + API key + optional model for an Azure AI Foundry chat-completions deployment |
 
+The list of types is defined once, as `KEY_TYPES` in
+`packages/shared/src/token-manager/types.ts`. The `KeyType` union, Token
+Manager validation and the CLI's `scope secret --type` (validation, help
+and error messages) all derive from it.
+
 The `azure-ai-foundry` secret stores a JSON blob:
 
 ```json

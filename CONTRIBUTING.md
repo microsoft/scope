@@ -385,8 +385,9 @@ Do not switch it to `pull_request_target` just to label fork PRs; that would vio
 security boundary above. `.github/workflows/community-contribution-labeler.yml` labels issues
 directly and follows completed PR labeler runs, using GitHub metadata only to apply
 `community-contribution` to human authors whose association is `NONE`, `FIRST_TIMER`,
-`FIRST_TIME_CONTRIBUTOR`, or `CONTRIBUTOR`. It must not check out pull request code, download
-artifacts, or receive repository secrets.
+`FIRST_TIME_CONTRIBUTOR`, or `CONTRIBUTOR`. It requires `issues: write` for issue labels and
+`pull-requests: write` for pull request labels, but it must not check out pull request code,
+download artifacts, or receive repository secrets.
 
 ## Third-party notices
 

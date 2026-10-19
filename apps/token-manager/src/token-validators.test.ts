@@ -60,15 +60,17 @@ describe("validateToken", () => {
       expect(result.error).toMatch(/500/);
     });
 
-    it("returns error on network failure", async () => {
+    it("does not expose the token when a network error echoes it", async () => {
+      const token = "fixture-secret\nbad";
       vi.spyOn(globalThis, "fetch").mockRejectedValue(
-        new Error("Network timeout")
+        new Error(`Headers.append: "${token}" is an invalid header value.`)
       );
 
-      const result = await validateToken("github-pat-classic", "ghp_test");
+      const result = await validateToken("github-pat-classic", token);
 
       expect(result.status).toBe("error");
-      expect(result.error).toMatch(/Network timeout/);
+      expect(result.error).toBe("GitHub token validation failed");
+      expect(result.error).not.toContain(token);
     });
   });
 
@@ -124,15 +126,17 @@ describe("validateToken", () => {
       expect(result.error).toMatch(/Authentication failed/);
     });
 
-    it("returns error on network failure", async () => {
+    it("does not expose the API key when a network error echoes it", async () => {
+      const key = "anthropic-secret\nbad";
       vi.spyOn(globalThis, "fetch").mockRejectedValue(
-        new Error("Connection refused")
+        new Error(`Headers.append: "${key}" is an invalid header value.`)
       );
 
-      const result = await validateToken("anthropic-api-key", "sk-ant-test");
+      const result = await validateToken("anthropic-api-key", key);
 
       expect(result.status).toBe("error");
-      expect(result.error).toMatch(/Connection refused/);
+      expect(result.error).toBe("Anthropic key validation failed");
+      expect(result.error).not.toContain(key);
     });
   });
 
@@ -234,12 +238,32 @@ describe("validateToken", () => {
       }));
 
       expect(result.status).toBe("invalid");
-      expect(result.error).toMatch(/model output limit was reached/);
+      expect(result.error).toBe("Foundry rejected the validation request (HTTP 400)");
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       const init = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(JSON.parse(init.body as string)).toMatchObject({
         max_completion_tokens: 16,
       });
+
+    });
+
+    it("does not expose API keys echoed in provider error bodies", async () => {
+      const apiKey = "foundry-secret-key";
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ error: { message: `Rejected key ${apiKey}` } }), {
+          status: 400,
+        }),
+      );
+
+      const result = await validateToken("azure-ai-foundry", JSON.stringify({
+        endpoint: "https://example.services.ai.azure.com/models",
+        apiKey,
+      }));
+
+      expect(result.status).toBe("invalid");
+      expect(result.error).toBe("Foundry rejected the validation request (HTTP 400)");
+      expect(result.error).not.toContain(apiKey);
+      expect(JSON.stringify({ lastValidationError: result.error })).not.toContain(apiKey);
     });
 
     it("negotiates from Model Inference 422 compatibility errors", async () => {

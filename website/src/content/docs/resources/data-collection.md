@@ -3,7 +3,7 @@ title: Data collection and privacy
 description: What data Scope handles, why it is needed, and where it may be sent.
 ---
 
-Last updated: October 7, 2026
+Last updated: October 16, 2026
 
 Scope is deployable software. The organization operating your Scope
 deployment controls its data, chooses its connected services, and sets its
@@ -22,11 +22,76 @@ documentation page does not load a YouTube player or thumbnail. Following
 an article, event, or video link takes you to an external site governed by
 that site's privacy practices.
 
+### Optional website analytics
+
+The published documentation website uses Microsoft One Observability
+(1DS) to understand website usage and reliability. Microsoft Web Cookie
+Policy (WCP) provides the consent banner and saves your cookie choices.
+The banner appears at the top of the page, above the site header.
+The WCP consent script loads when you visit the published site; the 1DS
+script loads only after you opt in to the **Analytics** category.
+The same opt-in requirement applies to visitors worldwide, without
+granting analytics consent based on location.
+
+When enabled, 1DS automatically captures page views, page-load and
+page-unload events, clicks, scrolling, resizing, JavaScript errors, and
+browser context. This information is sent to Microsoft's 1DS collector
+to understand how the documentation is used and identify problems.
+Your Analytics choice is also passed to 1DS as consent metadata.
+The SDK is configured not to use analytics cookies and not to collect
+query strings or fragments in page URLs. WCP's consent-preference cookie
+is separate from analytics.
+
+You can reject optional cookies and still read all documentation.
+Use **Manage cookies** in the footer to review or withdraw consent at
+any time. Withdrawal stops analytics collection and pauses transmission
+before the SDK unloads; it does not undo processing that occurred before
+withdrawal. Supported **Global Privacy Control** and **Do Not Track**
+signals also prevent 1DS initialization, even if analytics was previously
+accepted. If consent cannot be established, analytics remains disabled.
+
+This integration is limited to the published documentation website.
+By default, local development, local production previews, and sites on
+other hosts do not load WCP or 1DS. An explicit development-only consent
+preview can show the WCP banner without enabling 1DS, even after accepting
+analytics. This integration does not instrument the Scope Portal, CLI,
+API, or workers and does not give website analytics access to your
+Scope deployment's prompts, source code, credentials, or run results.
+
+### Privacy policies and regional rights
+
 Microsoft's [Privacy & Cookies](https://go.microsoft.com/fwlink/?LinkId=521839),
 [Your Privacy Choices](https://aka.ms/yourcaliforniaprivacychoices), and
 [Consumer Health Privacy](https://go.microsoft.com/fwlink/?linkid=2259814)
 links are available in the footer on every page. Your Privacy Choices
-includes information for California residents.
+includes information for California residents. The
+[Microsoft Privacy Statement](https://www.microsoft.com/en-us/privacy/privacystatement)
+describes Microsoft's data practices, retention considerations,
+international transfers, and how to contact Microsoft or make a privacy
+request about data it processes.
+
+Depending on your location and the applicable law, privacy rights may
+include access, correction, deletion, portability, objection, restriction
+of processing, or withdrawal of consent. The following official resources
+describe several regional frameworks; this is not an exhaustive list:
+
+| Region | Official privacy-law resource |
+| --- | --- |
+| European Union and European Economic Area | [General Data Protection Regulation (GDPR)](https://commission.europa.eu/law/law-topic/data-protection/legal-framework-eu-data-protection_en) |
+| United Kingdom | [UK GDPR privacy notices](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/individual-rights/right-to-be-informed/) and [PECR cookie rules](https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/) |
+| California, United States | [California Consumer Privacy Act (CCPA), as amended by the California Privacy Rights Act (CPRA)](https://cppa.ca.gov/regulations/) |
+| Brazil | [Lei Geral de Proteção de Dados (LGPD) and the ANPD](https://www.gov.br/anpd/pt-br/acesso-a-informacao/institucional/competencias) |
+| Canada | [Personal Information Protection and Electronic Documents Act (PIPEDA)](https://www.priv.gc.ca/en/privacy-topics/privacy-laws-in-canada/the-personal-information-protection-and-electronic-documents-act-pipeda/) |
+| Australia | [Privacy Act 1988 and Australian Privacy Principles](https://www.oaic.gov.au/privacy/privacy-legislation/the-privacy-act) |
+| Japan | [Act on the Protection of Personal Information (APPI)](https://www.ppc.go.jp/en/legal/) |
+
+Consent controls and these references are not a certification of GDPR or
+worldwide legal compliance. Applicable obligations depend on the
+operator, purposes, data flows, contracts, retention, and jurisdiction,
+and require an appropriate privacy and legal review. The Microsoft
+website privacy policies do not replace the policies of an organization
+operating its own Scope deployment. Direct requests about deployment
+data to that organization's administrator or privacy contact.
 
 ## Microsoft does not collect Scope deployment data
 

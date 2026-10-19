@@ -5,6 +5,8 @@ description: Set up Scope locally and run your first evaluation with the Portal 
 
 Use this guide to run your own local Scope stack. If your organization already
 provides a deployment, start with [Access](/getting-started/access/) instead.
+To host a shared deployment on Kubernetes, see
+[Kubernetes self-hosting](/self-hosting/overview/).
 The default local workflow uses the GitHub Copilot worker.
 
 ## Prerequisites
@@ -148,7 +150,6 @@ examples.
 | --- | --- | --- |
 | GitHub Copilot | Agent Client Protocol (ACP) | `pnpm docker:dev:copilot` |
 | Claude Code | ACP | `pnpm docker:dev:claude-code` |
-| GitHub Copilot on Windows | Windows ACP worker | Deployment-specific; see [system architecture](https://github.com/microsoft/scope/blob/main/docs/architecture/system-architecture.md). |
 
 The `pnpm docker:dev:all` command enables both local ACP workers, not every
 deployment-specific integration. Each provider requires its own credentials
@@ -159,4 +160,5 @@ and access to the selected models.
 Read [Concepts](/introduction/concepts/) for the evaluation building blocks,
 [Development guide](/resources/development/) for repository layout and
 commands, and [Contributing](/resources/contributing/) for how to propose
-changes.
+changes. When you're ready to share Scope with a team, follow
+[Kubernetes self-hosting](/self-hosting/overview/).
