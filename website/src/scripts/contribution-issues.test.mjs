@@ -92,9 +92,13 @@ test('pluralizes the count label', () => {
 
 test('counts rotation pages', () => {
 	assert.equal(pageCount(0, 4), 0);
+	assert.equal(pageCount(1, 4), 1);
 	assert.equal(pageCount(3, 4), 1);
 	assert.equal(pageCount(4, 4), 1);
+	assert.equal(pageCount(5, 4), 2);
 	assert.equal(pageCount(9, 4), 3);
+	assert.equal(pageCount(60, 4), 15);
+	assert.equal(pageCount(300, 4), 75);
 	assert.equal(pageCount(9, 0), 0);
 });
 
@@ -105,6 +109,18 @@ test('fills every rotation page, wrapping the last one', () => {
 	assert.deepEqual(pageItems(items, 2, 4), [9, 1, 2, 3]);
 	assert.deepEqual(pageItems([1, 2], 0, 4), [1, 2]);
 	assert.deepEqual(pageItems([], 0, 4), []);
+});
+
+test('keeps boundary and high-volume rotation pages full', () => {
+	for (const total of [5, 9, 60, 300]) {
+		const items = Array.from({ length: total }, (_, index) => index + 1);
+		const pages = pageCount(total, 4);
+		const rendered = Array.from({ length: pages }, (_, page) => pageItems(items, page, 4));
+		assert.ok(rendered.every((page) => page.length === 4), `${total} issues has a short page`);
+		for (const item of items) {
+			assert.ok(rendered.some((page) => page.includes(item)), `${total} issues never renders item ${item}`);
+		}
+	}
 });
 
 test('the dev sample file is valid', () => {

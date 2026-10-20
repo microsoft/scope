@@ -237,7 +237,12 @@ build:
   of them every 7 seconds (`rotate` prop). The active page dot fills
   as a progress bar. Rotation pauses on hover, on keyboard focus, when
   off screen or the tab is hidden, and with the pause button. It never
-  autoplays under reduced motion; the dots still work.
+  autoplays under reduced motion; the dots still work. Page dots wrap
+  rather than widening narrow pages when there are many sets.
+- Check 0, 1, a partial page, exactly 4, 5 (the first wrapped page),
+  several pages, and enough pages to exceed the viewport, on desktop
+  and mobile. Also check reduced motion and long user-supplied titles
+  and chip values.
 - In `pnpm run dev`, if the fetch fails (no branch yet, offline), the
   list falls back to
   [`contribution-issues.sample.jsonl`](src/data/contribution-issues.sample.jsonl)
