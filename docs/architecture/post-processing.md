@@ -56,9 +56,9 @@ Two paths trigger post-processing:
 
 The `iteration` query parameter is mandatory for the ATIF endpoints. ATIF files are also included in archive exports as `iteration-{N}.atif.trajectory.json`.
 
-## Taxonomy Observations (`pp-taxonomy`)
+## Taxonomy Observations (`pp-observations`)
 
-The `pp-taxonomy` handler records **observation criteria** — boolean outcomes +
+The `pp-observations` handler records **observation criteria** — boolean outcomes +
 evidence about the codebase and the agent's trajectory, **without gating or steering**
 the coding agent (issue #1156). It is a DAG node `dependsOn: [pp-atif]`, because some
 observations are only derivable from the trajectory (ATIF), not the final snapshot.
@@ -89,8 +89,8 @@ Gate criteria are always `subject: "iteration"` (the API rejects `"run"` for gat
 4. **Run-subject:** evaluates **once** with `snapshotUrl` = final turn's snapshot, `atifUrls` = every turn's `atifUrl` (the judge downloads + merges them into one `AgentTrajectory`), and the full `conversationHistory`. Writes the verdicts to **`run.observationResults`** (run level).
    - In all judge calls there is no persona, no gate, no taxonomyElementId (the classifier lives on the criterion). ATIF supersedes per-turn `toolCallsUrl`, so only ATIF is sent.
    - Result shape/storage mirrors gate `criteriaResults`. No new blob, no `run.taxonomyUrl`.
-   - **Runs exactly once per run:** the scheduler dispatches `pp-taxonomy` a single time (it never sets `message.iteration`), so the run-subject branch needs no idempotency guard.
-5. Stamps `run.handlerStatus["pp-taxonomy"] = { status: "done", version: N }` and notifies the scheduler.
+   - **Runs exactly once per run:** the scheduler dispatches `pp-observations` a single time (it never sets `message.iteration`), so the run-subject branch needs no idempotency guard.
+5. Stamps `run.handlerStatus["pp-observations"] = { status: "done", version: N }` and notifies the scheduler.
 
 Dimension grouping is **derived at read time** by joining each result's `criterionId` → criterion `taxonomyElementId` (the three R&A Readout dimensions; unset = unclassified). It never feeds back to the agent and never affects pass/fail. (#1053 later extends this worker with a richer scorecard artifact.)
 
@@ -203,7 +203,34 @@ flowchart LR
 **Where it runs:**
 
 - **Docker Compose:** one `register-handler-<worker>` init service per handler (e.g. `pp-atif`) runs the generic script via `tsx`, gated on the scheduler being up. The worker waits for its registration service to complete.
-- **Kubernetes:** a `register-handler-post-processor` Job runs the compiled script (`node packages/shared/dist/scripts/register-handler.js`) on each deploy. `pp-atif` and `pp-taxonomy` are registered in K8s via their respective registration Jobs (`register-handler-taxonomy` points its `HANDLER_YAML_PATH` at `handler.taxonomy.yaml`). The scheduler exposes a `Service` (`scheduler.scoped.svc.cluster.local:8080`) so Jobs and workers can reach `/handlers/register` and the notify endpoints.
+- **Kubernetes:** a `register-handler-post-processor` Job runs the compiled script (`node packages/shared/dist/scripts/register-handler.js`) on each deploy. `pp-atif` and `pp-observations` are registered in K8s via their respective registration Jobs (`register-handler-taxonomy` points its `HANDLER_YAML_PATH` at `handler.taxonomy.yaml`). The scheduler exposes a `Service` (`scheduler.scoped.svc.cluster.local:8080`) so Jobs and workers can reach `/handlers/register` and the notify endpoints.
+
+## Submission handlers
+
+Submission handlers use the same `services` registration endpoint but declare
+`type: submission-handler` and `dependencyMode: all-runs`. Their dependencies
+name run-level DAG handlers, not other submission handlers. The scheduler
+reconciles each submission's exact request/run vector, projects those named
+dependencies, and enqueues only the current embedded submission attempt.
+
+The first consumer is `pp-readout`, which depends on `pp-observations` for every
+run in the vector. Its queue contract is:
+
+```json
+{
+  "type": "readout",
+  "submissionId": "…",
+  "submissionRunId": "…"
+}
+```
+
+Workers must use the shared `claimSubmissionHandler`,
+`isCurrentSubmissionRun`, and `completeSubmissionHandler` helpers. These helpers
+scope every mutation to both identifiers, providing stale-message discard,
+cooperative supersession checks, and stale completion rejection. Queue delivery
+remains at-least-once; the embedded current attempt is the only dispatchable
+state, and the scheduler poll repairs missed notifications, stale projections,
+request-vector drift, and interrupted rollover/finalization.
 
 To **add or change a handler**, edit its `handler.yaml` (bump `version`, adjust `dependsOn`, etc.) — no code or migration changes are needed for registration.
 

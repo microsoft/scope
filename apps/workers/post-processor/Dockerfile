@@ -24,7 +24,7 @@ COPY packages/telemetry/src ./packages/telemetry/src/
 COPY apps/workers/post-processor/tsconfig.json ./apps/workers/post-processor/
 COPY apps/workers/post-processor/src ./apps/workers/post-processor/src/
 # Copy every handler manifest (handler.yaml = pp-atif, handler.taxonomy.yaml =
-# pp-taxonomy, plus any future handlers). The registration jobs read these by
+# pp-observations, plus any future handlers). The registration jobs read these by
 # HANDLER_YAML_PATH, so all must be present in the image.
 COPY apps/workers/post-processor/handler*.yaml ./apps/workers/post-processor/
 

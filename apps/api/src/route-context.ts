@@ -52,6 +52,8 @@ import type {
   ReportTemplateResponseSchema,
   RequestResponseSchema,
   RunHistoryDocumentSchema,
+  SubmissionDocumentSchema,
+  SubmissionRunHistoryDocumentSchema,
 } from "shared";
 
 // ─── Document types (inferred from Zod schemas) ─────────────────────────────
@@ -74,6 +76,8 @@ export type ReportTrigger = z.infer<typeof ReportTriggerSchema>;
 export type ReportTemplateDocument = Omit<z.infer<typeof ReportTemplateResponseSchema>, "_id">;
 export type RequestDocument = z.infer<typeof RequestResponseSchema>;
 export type RunHistoryDocument = z.infer<typeof RunHistoryDocumentSchema>;
+export type SubmissionDocument = z.infer<typeof SubmissionDocumentSchema>;
+export type SubmissionRunHistoryDocument = z.infer<typeof SubmissionRunHistoryDocumentSchema>;
 
 export type WorkerType = string;
 
@@ -92,6 +96,8 @@ export interface RouteContext {
   db: Db;
   requestCollection: Collection<RequestDocument>;
   runsCollection: Collection<RunHistoryDocument>;
+  submissionCollection: Collection<SubmissionDocument>;
+  submissionRunsCollection: Collection<SubmissionRunHistoryDocument>;
   projectCollection: Collection<ProjectDocument>;
   criteriaCollection: Collection<CriteriaDocument>;
   promptFeatureCollection: Collection<PromptFeatureDocument>;

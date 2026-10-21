@@ -886,7 +886,7 @@ services:
     restart: "no"
     entrypoint: ["npx", "tsx", "packages/shared/src/scripts/register-handler.ts"]
 
-  # Registers the pp-taxonomy handler (observation evaluator) — shares the
+  # Registers the pp-observations handler (observation evaluator) — shares the
   # post-processor worker + post-processor-queue, depends on pp-atif. Issue #1156.
   register-handler-taxonomy:
     build:
@@ -918,7 +918,7 @@ services:
       AZURE_STORAGE_QUEUE_POSTPROCESSOR: post-processor-queue
       SCOPE_MT_API_URL: http://api:80
       SCHEDULER_URL: http://scheduler:8080
-      # pp-taxonomy (issue #1156) calls the judge service to evaluate
+      # pp-observations (issue #1156) calls the judge service to evaluate
       # observation criteria. Without this the JudgeClient falls back to
       # localhost:3002 and cannot reach the judge container.
       JUDGE_SERVICE_URL: http://judge:80

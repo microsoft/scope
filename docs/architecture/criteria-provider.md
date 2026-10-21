@@ -181,7 +181,7 @@ bypassed or drift between callers:
   default): `kind:"observation"` ⇒ `"run"`, `kind:"gate"`/legacy ⇒ `"iteration"`. Gate
   criteria are rejected if `subject:"run"` is supplied — `"iteration"` is their only legal
   value. The field is threaded through `create`/`update`/`find` and both provider backends
-  so the `pp-taxonomy` worker and the CLI/Portal can read it.
+  so the `pp-observations` worker and the CLI/Portal can read it.
 - **Referential integrity on delete** — deleting a criterion that still has
   dependents is rejected.
 
