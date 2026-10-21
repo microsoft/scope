@@ -500,6 +500,7 @@ apiRoute(ctx.app, ctx.registry, {
           storageAccountName: ctx.storageAccountName,
         });
         const result = await resolveCodebaseSpec(spec, {
+          projectId,
           codebaseStore: ctx.codebaseStore,
           codebaseRevisionStore: ctx.codebaseRevisionStore,
           codebaseResolver: ctx.codebaseResolver,
@@ -2465,6 +2466,11 @@ async function finalizePendingRun(
   blobServiceClient: BlobServiceClient,
   projectId: string,
 ): Promise<ImportSuccess> {
+  const existingRun = await ctx.requestCollection.findOne({ _id: prefix }, { timeoutMS: 5_000 });
+  if (existingRun) {
+    if (existingRun.projectId !== projectId) throw new ImportError(404, "Not found");
+    throw new ImportError(409, `Run with ID '${prefix}' already exists`, { existingStatus: existingRun.run?.status });
+  }
   if (run.uploadErrors.length > 0) {
     throw new ImportError(500, `Blob upload failures: ${run.uploadErrors.join("; ")}`);
   }
@@ -2514,15 +2520,6 @@ async function finalizePendingRun(
     );
   }
 
-  const existingRun = await ctx.requestCollection.findOne({ _id: runDoc._id });
-  if (existingRun) {
-    throw new ImportError(
-      409,
-      `Run with ID '${runDoc._id}' already exists`,
-      { existingStatus: existingRun.run?.status },
-    );
-  }
-
   // logs.jsonl was staged to a tmp file during the streaming pass because
   // its canonical blob path embeds the per-attempt `run._id` which only
   // becomes known after yaml parse. Upload it now to the right destination
@@ -2552,24 +2549,30 @@ async function finalizePendingRun(
   }
 
   // Resolve per-turn URLs from the artifacts we streamed.
-  const turns = (runState.turns ?? []).map(t => ({ ...t }));
-  for (const turn of turns) {
-    const N = turn.iteration;
-    const snap = run.artifacts.get(`iteration-${N}.tar.gz`);
-    if (snap) (turn as { snapshotUrl?: string }).snapshotUrl = snap;
-    const har = run.artifacts.get(`iteration-${N}.har`);
-    if (har) (turn as { harUrl?: string }).harUrl = har;
-    const chat = run.artifacts.get(`iteration-${N}.chat-export.json`);
-    if (chat) (turn as { rawChatUrl?: string }).rawChatUrl = chat;
-    const chatRes = run.artifacts.get(`iteration-${N}.chat-result.json`);
-    if (chatRes) (turn as { chatResultUrl?: string }).chatResultUrl = chatRes;
-    const tc = run.artifacts.get(`iteration-${N}.tool-calls.jsonl`);
-    if (tc) (turn as { toolCallsUrl?: string }).toolCallsUrl = tc;
-  }
+  // Serialized URLs are untrusted references, not imported artifacts. Only
+  // bytes uploaded by this import may back an authenticated artifact proxy.
+  const turns = (runState.turns ?? []).map(turn => {
+    const imported = { ...turn, snapshotUrl: run.artifacts.get(`iteration-${turn.iteration}.tar.gz`) ?? "" };
+    delete imported.videoUrls;
+    for (const [key, filename] of [
+      ["harUrl", `iteration-${turn.iteration}.har`],
+      ["rawChatUrl", `iteration-${turn.iteration}.chat-export.json`],
+      ["chatResultUrl", `iteration-${turn.iteration}.chat-result.json`],
+      ["toolCallsUrl", `iteration-${turn.iteration}.tool-calls.jsonl`],
+    ] as const) {
+      delete imported[key];
+      const url = run.artifacts.get(filename);
+      if (url) imported[key] = url;
+    }
+    return imported;
+  });
+  delete runState.logsUrl;
+  delete runState.harUrl;
+  delete runState.rawChatUrl;
+  delete runState.videoUrls;
+  delete runState.setupVideoUrls;
   const topHar = run.artifacts.get("run.har");
-  if (topHar) runState.harUrl = topHar;
   const topChat = run.artifacts.get("run.chat-export.json");
-  if (topChat) runState.rawChatUrl = topChat;
 
   // Materialize the task-prompt entity for this run. The submission flow
   // (POST /api/v1/requests) goes through `taskPromptStore.findOrCreate` so
@@ -2608,9 +2611,9 @@ async function finalizePendingRun(
       ...(runState as unknown as RunState),
       // Per-attempt `run._id` is preserved from the yaml (NOT clobbered
       // with the request `_id`) so retries / history demotion still work.
-      logsUrl: newLogsUrl ?? runState.logsUrl,
-      ...(runState.harUrl ? { harUrl: runState.harUrl } : {}),
-      ...(runState.rawChatUrl ? { rawChatUrl: runState.rawChatUrl } : {}),
+      ...(newLogsUrl ? { logsUrl: newLogsUrl } : {}),
+      ...(topHar ? { harUrl: topHar } : {}),
+      ...(topChat ? { rawChatUrl: topChat } : {}),
       turns,
       // Denormalize duration so imported finished runs are immediately
       // sortable by duration (before the backfill migration runs).
@@ -2671,6 +2674,13 @@ async function streamArchiveImport(
     }
     const prefix = header.name.slice(0, slash);
     const filename = header.name.slice(slash + 1);
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(prefix)) {
+      extractErrors.push("Invalid archive run identifier");
+      entryStream.on("end", next);
+      entryStream.on("error", next);
+      entryStream.resume();
+      return;
+    }
 
     let run = pending.get(prefix);
     if (!run) {
@@ -2725,8 +2735,10 @@ async function streamArchiveImport(
     const tags: Record<string, string> = { requestId: prefix };
     if (target.iteration !== undefined) tags.iteration = String(target.iteration);
 
-    blockBlobClient
-      .uploadStream(entryStream as Readable, undefined, undefined, {
+    ctx.requestCollection.findOne({ _id: prefix }, { timeoutMS: 5_000 })
+      .then(async existing => {
+        if (existing) return false;
+        await blockBlobClient.uploadStream(entryStream as Readable, undefined, undefined, {
         blobHTTPHeaders: { blobContentType: target.contentType },
         tags,
         // Refuse to clobber an existing blob. If a run with this `_id` was
@@ -2736,8 +2748,16 @@ async function streamArchiveImport(
         // and the per-run cleanup just deletes whatever fresh blobs we did
         // manage to write, leaving the existing run intact.
         conditions: { ifNoneMatch: "*" },
+        });
+        return true;
       })
-      .then(() => {
+      .then(uploaded => {
+        if (!uploaded) {
+          entryStream.on("end", next);
+          entryStream.on("error", next);
+          entryStream.resume();
+          return;
+        }
         run!.artifacts.set(filename, blockBlobClient.url);
         run!.uploadedBlobs.push(blockBlobClient);
         if (target.isIteration) run!.iterationCount++;
@@ -2990,7 +3010,7 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       const reports = await ctx.reportCollection
-        .find({ requestId: id })
+        .find({ requestId: id, projectId: run.projectId })
         .sort({ createdAt: -1 })
         .toArray();
 
@@ -3023,7 +3043,7 @@ apiRoute(ctx.app, ctx.registry, {
     const history = await listHistoricalRuns({ runsCollection: ctx.runsCollection }, id);
     const current = request.run ? [redactRunState(request.run)] : [];
     // Combine current + history; current is always the highest attemptNumber
-    res.json([...current, ...history]);
+    res.json([...current, ...history.filter(run => run.projectId === request.projectId)]);
   },
 });
 
@@ -3048,7 +3068,7 @@ apiRoute(ctx.app, ctx.registry, {
       return;
     }
     const historical = await getHistoricalRun({ runsCollection: ctx.runsCollection }, runId);
-    if (!historical || historical.requestId !== id) {
+    if (!historical || historical.requestId !== id || historical.projectId !== request.projectId) {
       res.status(404).json({ error: "Run not found for this request" });
       return;
     }

@@ -10,8 +10,13 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import supertest from "supertest";
 import { app, _injectTestDependencies } from "../../index.js";
 import { useTestServer } from "../../test-server.js";
-import { createAllMockDependencies } from "../../test-helpers.js";
+import { createAllMockDependencies, mockRouteAuthorization } from "../../test-helpers.js";
 import { readableFrom, rawParser, blobUrl, VARIANTS, rewireBlobMocks } from "./test-blob-helpers.js";
+
+vi.mock("../../auth/middleware.js", async importOriginal => ({
+  ...await importOriginal<typeof import("../../auth/middleware.js")>(),
+  createUserAccessMiddleware: (await import("../../test-helpers.js")).mockControllerUserAccessMiddleware,
+}));
 
 vi.mock("db-migrations/check-migrations", () => ({
   checkMigrations: vi.fn().mockResolvedValue({ ready: true, applied: ["001", "002"], pending: [] }),
@@ -49,6 +54,7 @@ describe("HAR endpoints", () => {
   beforeAll(() => {
     mocks = createAllMockDependencies();
     _injectTestDependencies(mocks);
+    mockRouteAuthorization(app);
   });
 
   beforeEach(() => {

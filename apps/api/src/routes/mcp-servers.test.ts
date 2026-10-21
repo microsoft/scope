@@ -26,6 +26,7 @@ function buildCtx(overrides: {
   insertOneSpy?: ReturnType<typeof vi.fn>;
 }): { app: ReturnType<typeof express>; ctx: RouteContext } {
   const app = express();
+  app.locals.authorization = () => ({ guard: vi.fn(async () => performance.now() + 20_000) });
   app.use(express.json());
 
   const registry = new OpenAPIRegistry();

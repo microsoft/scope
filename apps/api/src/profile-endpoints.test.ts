@@ -5,9 +5,14 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import request from "supertest";
 import { app, _injectTestDependencies } from "./index.js";
 import { useTestServer } from "./test-server.js";
-import { createAllMockDependencies, createMockCollection } from "./test-helpers.js";
+import { createAllMockDependencies, createMockCollection, mockRouteAuthorization } from "./test-helpers.js";
 
 const TEST_PROJECT_ID = "test-project";
+
+vi.mock("./auth/middleware.js", async importOriginal => ({
+  ...await importOriginal<typeof import("./auth/middleware.js")>(),
+  createUserAccessMiddleware: (await import("./test-helpers.js")).mockControllerUserAccessMiddleware,
+}));
 
 // Stub checkMigrations before it can be imported by index.ts
 vi.mock("db-migrations/check-migrations", () => ({
@@ -39,6 +44,7 @@ describe("Profile API Endpoints", () => {
   beforeAll(() => {
     mocks = createAllMockDependencies();
     _injectTestDependencies(mocks);
+    mockRouteAuthorization(app);
   });
 
   beforeEach(() => {

@@ -24,6 +24,7 @@ import { registerInsightCommands } from "./commands/insight.js";
 import { registerTaskPromptCommands } from "./commands/task-prompt.js";
 import { registerProfileCommands } from "./commands/profile.js";
 import { registerProjectCommands } from "./commands/project.js";
+import { registerAccessCommands } from "./commands/access.js";
 import { registerSecretCommands } from "./commands/secret.js";
 import { registerUpdateCommand } from "./commands/update.js";
 import { checkForUpdates } from "./utils/update-check.js";
@@ -69,6 +70,7 @@ configureHelp(program);
 // Register all command groups
 registerSecretCommands(program);
 registerProjectCommands(program);
+registerAccessCommands(program);
 registerRunCommands(program);
 registerCriteriaCommands(program);
 registerPromptFeatureCommands(program);

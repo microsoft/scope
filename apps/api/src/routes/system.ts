@@ -99,13 +99,16 @@ apiRoute(ctx.app, ctx.registry, {
     buildTime: z.string(),
     environment: z.string(),
     strictAgentCapabilities: z.boolean(),
+    authEnabled: z.boolean(),
   }),
   handler: async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     res.json({
       commit: (process.env.GIT_COMMIT || "development"),
       buildTime: (process.env.BUILD_TIME || new Date().toISOString()),
       environment: (process.env.SCOPE_ENVIRONMENT || "production"),
       strictAgentCapabilities: ctx.strictAgentCapabilities,
+      authEnabled: ctx.authEnabled !== false,
     });
   },
 });

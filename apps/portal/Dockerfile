@@ -10,7 +10,11 @@ RUN corepack enable && (corepack prepare pnpm@10.29.1 --activate || npm install 
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/portal/package.json apps/portal/
-RUN pnpm install --frozen-lockfile --filter portal --prod=false
+COPY packages/shared/package.json packages/shared/
+RUN pnpm install --frozen-lockfile --filter portal... --prod=false
+COPY tsconfig.base.json ./
+COPY packages/shared/ packages/shared/
+RUN pnpm --filter shared build
 
 # --- Dev stage: Vite dev server with HMR ---
 # Built from `deps` (not `builder`) so the dev image skips the production build.

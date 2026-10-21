@@ -812,24 +812,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
         "type": "object",
       },
-      "CreateProjectInput": {
-        "properties": {
-          "creator": {
-            "type": "string",
-          },
-          "description": {
-            "type": "string",
-          },
-          "name": {
-            "minLength": 1,
-            "type": "string",
-          },
-        },
-        "required": [
-          "name",
-        ],
-        "type": "object",
-      },
       "CreatePromptFeatureInput": {
         "properties": {
           "id": {
@@ -2173,6 +2155,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "_id": {
             "type": "string",
           },
+          "appliedOperationIds": {
+            "items": {
+              "type": "string",
+            },
+            "type": "array",
+          },
           "createdAt": {
             "format": "date-time",
             "type": [
@@ -2193,8 +2181,15 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "description": {
             "type": "string",
           },
+          "lastOperationId": {
+            "type": "string",
+          },
           "name": {
             "type": "string",
+          },
+          "revision": {
+            "minimum": 0,
+            "type": "integer",
           },
           "updatedAt": {
             "format": "date-time",
@@ -3849,18 +3844,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         },
         "type": "object",
       },
-      "UpdateProjectInput": {
-        "properties": {
-          "description": {
-            "type": "string",
-          },
-          "name": {
-            "minLength": 1,
-            "type": "string",
-          },
-        },
-        "type": "object",
-      },
       "UpdatePromptFeatureInput": {
         "properties": {
           "prompt": {
@@ -3926,6 +3909,70 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       },
       "UserMeResponse": {
         "properties": {
+          "capabilities": {
+            "additionalProperties": false,
+            "properties": {
+              "memberships": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "permissions": {
+                      "items": {
+                        "enum": [
+                          "content:read",
+                          "content:write",
+                          "content:delete",
+                          "settings:write",
+                          "members:write",
+                        ],
+                        "type": "string",
+                      },
+                      "type": "array",
+                    },
+                    "projectId": {
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "revision": {
+                      "exclusiveMinimum": 0,
+                      "type": "integer",
+                    },
+                    "role": {
+                      "enum": [
+                        "reader",
+                        "contributor",
+                        "admin",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "projectId",
+                    "role",
+                    "permissions",
+                    "revision",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
+              "platformAdmin": {
+                "type": "boolean",
+              },
+              "reportsEnabled": {
+                "enum": [
+                  false,
+                ],
+                "type": "boolean",
+              },
+            },
+            "required": [
+              "platformAdmin",
+              "reportsEnabled",
+              "memberships",
+            ],
+            "type": "object",
+          },
           "displayName": {
             "type": "string",
           },
@@ -3947,6 +3994,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         },
         "required": [
           "id",
+          "capabilities",
         ],
         "type": "object",
       },
@@ -4023,6 +4071,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [],
         "summary": "API metadata",
         "tags": [
           "System",
@@ -4046,6 +4095,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List accounts",
         "tags": [
           "Accounts",
@@ -4073,6 +4127,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Account created",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create account",
         "tags": [
           "Accounts",
@@ -4111,6 +4170,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Account deleted",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Delete account",
         "tags": [
           "Accounts",
@@ -4139,6 +4203,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get account",
         "tags": [
           "Accounts",
@@ -4176,9 +4245,426 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Account updated",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update account",
         "tags": [
           "Accounts",
+        ],
+      },
+    },
+    "/api/v1/admin/platform-admins": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "alias": {
+                            "type": "string",
+                          },
+                          "disabled": {
+                            "type": "boolean",
+                          },
+                          "displayName": {
+                            "type": "string",
+                          },
+                          "email": {
+                            "type": "string",
+                          },
+                          "id": {
+                            "type": "string",
+                          },
+                          "operationId": {
+                            "type": "string",
+                          },
+                          "pending": {
+                            "type": "boolean",
+                          },
+                          "revision": {
+                            "minimum": 0,
+                            "type": "integer",
+                          },
+                          "role": {
+                            "enum": [
+                              "admin",
+                            ],
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "id",
+                          "role",
+                          "disabled",
+                          "revision",
+                          "pending",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "items",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "List platform administrators, including disabled accounts and pending changes",
+        "tags": [
+          "Access",
+        ],
+      },
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "userId",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "idp",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "subject",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "properties": {
+                      "alias": {
+                        "type": "string",
+                      },
+                      "disabled": {
+                        "type": "boolean",
+                      },
+                      "displayName": {
+                        "type": "string",
+                      },
+                      "email": {
+                        "type": "string",
+                      },
+                      "id": {
+                        "type": "string",
+                      },
+                      "revision": {
+                        "minimum": 0,
+                        "type": "integer",
+                      },
+                      "role": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "id",
+                      "role",
+                      "disabled",
+                      "revision",
+                    ],
+                    "type": "object",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Look up an exactly identified enrolled user",
+        "tags": [
+          "Access",
+        ],
+      },
+    },
+    "/api/v1/admin/users/search": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "alias": {
+                            "type": "string",
+                          },
+                          "disabled": {
+                            "type": "boolean",
+                          },
+                          "displayName": {
+                            "type": "string",
+                          },
+                          "email": {
+                            "type": "string",
+                          },
+                          "id": {
+                            "type": "string",
+                          },
+                          "revision": {
+                            "minimum": 0,
+                            "type": "integer",
+                          },
+                          "role": {
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "id",
+                          "role",
+                          "disabled",
+                          "revision",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "items",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Search enrolled platform users (platform administration)",
+        "tags": [
+          "Access",
+        ],
+      },
+    },
+    "/api/v1/admin/users/{id}/disable": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                },
+                "required": [
+                  "revision",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {},
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Disable an ordinary user",
+        "tags": [
+          "Access",
+        ],
+      },
+    },
+    "/api/v1/admin/users/{id}/promote": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                },
+                "required": [
+                  "revision",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operationId": {
+                      "type": "string",
+                    },
+                    "revision": {
+                      "exclusiveMinimum": 0,
+                      "type": "integer",
+                    },
+                    "state": {
+                      "enum": [
+                        "completed",
+                        "pending",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "operationId",
+                    "state",
+                    "revision",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "202": {
+            "description": "Promotion is pending; retry identical input or ask an operator to inspect/repair the same operation ID before claiming completion",
+          },
+          "404": {
+            "description": "Enrolled user not found",
+          },
+          "409": {
+            "description": "Revision, role, enabled state or idempotency precondition conflict",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Promote an enabled enrolled user to platform administrator",
+        "tags": [
+          "Access",
         ],
       },
     },
@@ -4221,6 +4707,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List agents",
         "tags": [
           "Agents",
@@ -4254,6 +4745,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Restored agent versions conflict with an active queue owner",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create or update agent (upsert)",
         "tags": [
           "Agents",
@@ -4295,6 +4791,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Agent not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Delete agent",
         "tags": [
           "Agents",
@@ -4338,6 +4839,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Agent not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get agent",
         "tags": [
           "Agents",
@@ -4381,6 +4887,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Agent not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update agent",
         "tags": [
           "Agents",
@@ -4425,6 +4936,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Agent not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List agent versions",
         "tags": [
           "Agents",
@@ -4474,6 +4990,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Concurrent registration did not stabilize",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Register agent version (upsert)",
         "tags": [
           "Agents",
@@ -4533,6 +5054,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Concurrent activation did not stabilize",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Patch agent version",
         "tags": [
           "Agents",
@@ -4619,6 +5145,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Compute pass@k / success@T metrics",
         "tags": [
           "Requests",
@@ -4642,6 +5173,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Revision not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get codebase revision by id",
         "tags": [
           "Codebase Revisions",
@@ -4662,6 +5198,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Blob storage error",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download codebase revision archive",
         "tags": [
           "Codebase Revisions",
@@ -4700,6 +5241,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List all codebases",
         "tags": [
           "Codebases",
@@ -4728,6 +5274,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Invalid input or missing archive",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create a codebase (archive codebases require the archive file)",
         "tags": [
           "Codebases",
@@ -4744,6 +5295,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Codebase not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Delete a codebase",
         "tags": [
           "Codebases",
@@ -4765,6 +5321,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Codebase not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get a codebase",
         "tags": [
           "Codebases",
@@ -4795,6 +5356,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Codebase not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update a codebase",
         "tags": [
           "Codebases",
@@ -4831,6 +5397,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Codebase not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List codebase revisions",
         "tags": [
           "Codebases",
@@ -4867,6 +5438,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "GitHub resolution failed",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Resolve a new git codebase revision",
         "tags": [
           "Codebases",
@@ -4886,6 +5462,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Codebase not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Upload a codebase archive as a new revision",
         "tags": [
           "Codebases",
@@ -4955,6 +5536,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List criteria",
         "tags": [
           "Criteria",
@@ -5000,6 +5586,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Criterion already exists",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create criterion",
         "tags": [
           "Criteria",
@@ -5092,6 +5683,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "LLM not configured",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Generate criterion prompt from behavior",
         "tags": [
           "Criteria",
@@ -5126,6 +5722,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get criteria DAG",
         "tags": [
           "Criteria",
@@ -5202,6 +5803,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Compute MDP transitions",
         "tags": [
           "Criteria",
@@ -5274,6 +5880,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Seed batch would introduce a dependency cycle",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Seed criteria in bulk",
         "tags": [
           "Criteria",
@@ -5334,6 +5945,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Criterion has dependents",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Soft-delete criterion",
         "tags": [
           "Criteria",
@@ -5377,6 +5993,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Criterion not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get criterion",
         "tags": [
           "Criteria",
@@ -5433,6 +6054,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Criterion not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update criterion",
         "tags": [
           "Criteria",
@@ -5470,6 +6096,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List all extensions",
         "tags": [
           "Extensions",
@@ -5511,6 +6142,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create or import an extension",
         "tags": [
           "Extensions",
@@ -5567,6 +6203,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Missing query parameter",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Search extensions (internal + marketplace)",
         "tags": [
           "Extensions",
@@ -5617,6 +6258,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Delete extension",
         "tags": [
           "Extensions",
@@ -5657,6 +6303,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get extension by ID",
         "tags": [
           "Extensions",
@@ -5707,6 +6358,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update extension",
         "tags": [
           "Extensions",
@@ -5748,6 +6404,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List available versions for an extension",
         "tags": [
           "Extensions",
@@ -5771,6 +6432,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List feature flags",
         "tags": [
           "Feature Flags",
@@ -5810,6 +6476,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update feature flag",
         "tags": [
           "Feature Flags",
@@ -5863,6 +6534,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List insights",
         "tags": [
           "Insights",
@@ -5890,6 +6566,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create insight",
         "tags": [
           "Insights",
@@ -5943,6 +6624,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Search insights",
         "tags": [
           "Insights",
@@ -5984,6 +6670,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Insight not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Delete insight",
         "tags": [
           "Insights",
@@ -6015,6 +6706,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Insight not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get insight",
         "tags": [
           "Insights",
@@ -6055,6 +6751,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Insight not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update insight",
         "tags": [
           "Insights",
@@ -6088,6 +6789,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Insight not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Block insight",
         "tags": [
           "Insights",
@@ -6121,6 +6827,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Insight not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Downvote insight",
         "tags": [
           "Insights",
@@ -6157,6 +6868,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Insight not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get reports referencing insight",
         "tags": [
           "Insights",
@@ -6190,6 +6906,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Insight not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Unblock insight",
         "tags": [
           "Insights",
@@ -6223,6 +6944,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Insight not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Upvote insight",
         "tags": [
           "Insights",
@@ -6246,6 +6972,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List keys",
         "tags": [
           "Keys",
@@ -6273,6 +7004,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Key created",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create key",
         "tags": [
           "Keys",
@@ -6302,6 +7038,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Key preview",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Preview key",
         "tags": [
           "Keys",
@@ -6340,6 +7081,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Key deleted",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Delete key",
         "tags": [
           "Keys",
@@ -6368,6 +7114,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get key",
         "tags": [
           "Keys",
@@ -6405,6 +7156,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Key updated",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update key",
         "tags": [
           "Keys",
@@ -6447,6 +7203,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Validation result",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Validate key",
         "tags": [
           "Keys",
@@ -6484,6 +7245,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List MCP servers",
         "tags": [
           "MCP Servers",
@@ -6584,6 +7350,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create MCP server",
         "tags": [
           "MCP Servers",
@@ -6634,6 +7405,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Delete MCP server",
         "tags": [
           "MCP Servers",
@@ -6674,6 +7450,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get MCP server",
         "tags": [
           "MCP Servers",
@@ -6724,6 +7505,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update MCP server",
         "tags": [
           "MCP Servers",
@@ -6777,6 +7563,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List models",
         "tags": [
           "Models",
@@ -6898,6 +7689,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Sync models from provider",
         "tags": [
           "Models",
@@ -6928,6 +7724,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get model",
         "tags": [
           "Models",
@@ -6973,6 +7774,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List profiles",
         "tags": [
           "Profiles",
@@ -7014,6 +7820,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create a new profile",
         "tags": [
           "Profiles",
@@ -7052,6 +7863,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Delete profile",
         "tags": [
           "Profiles",
@@ -7080,6 +7896,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get profile with latest version",
         "tags": [
           "Profiles",
@@ -7159,6 +7980,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create new profile version",
         "tags": [
           "Profiles",
@@ -7196,6 +8022,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update profile identity",
         "tags": [
           "Profiles",
@@ -7229,6 +8060,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List profile versions",
         "tags": [
           "Profiles",
@@ -7270,6 +8106,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get profile version",
         "tags": [
           "Profiles",
@@ -7293,6 +8134,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "type": "string",
             },
           },
+          {
+            "in": "query",
+            "name": "controlPlane",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
         ],
         "responses": {
           "200": {
@@ -7309,6 +8162,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List all projects",
         "tags": [
           "Projects",
@@ -7319,7 +8177,23 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateProjectInput",
+                "additionalProperties": false,
+                "properties": {
+                  "creator": {
+                    "type": "string",
+                  },
+                  "description": {
+                    "type": "string",
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "name",
+                ],
+                "type": "object",
               },
             },
           },
@@ -7339,6 +8213,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Invalid input",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create a project",
         "tags": [
           "Projects",
@@ -7347,6 +8226,25 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
     },
     "/api/v1/projects/{id}": {
       "delete": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                },
+                "required": [
+                  "revision",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
         "responses": {
           "204": {
             "description": "Success",
@@ -7355,6 +8253,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Project not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Soft-delete a project",
         "tags": [
           "Projects",
@@ -7376,6 +8279,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Project not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get a project",
         "tags": [
           "Projects",
@@ -7386,7 +8294,24 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateProjectInput",
+                "additionalProperties": false,
+                "properties": {
+                  "description": {
+                    "type": "string",
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "revision": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                },
+                "required": [
+                  "revision",
+                ],
+                "type": "object",
               },
             },
           },
@@ -7406,14 +8331,416 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Project not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update a project",
         "tags": [
           "Projects",
         ],
       },
     },
+    "/api/v1/projects/{id}/members": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "properties": {
+                      "_id": {
+                        "type": "string",
+                      },
+                      "operationId": {
+                        "type": "string",
+                      },
+                      "pending": {
+                        "type": "boolean",
+                      },
+                      "projectId": {
+                        "type": "string",
+                      },
+                      "revision": {
+                        "exclusiveMinimum": 0,
+                        "type": "integer",
+                      },
+                      "revokedAt": {
+                        "type": "string",
+                      },
+                      "role": {
+                        "enum": [
+                          "reader",
+                          "contributor",
+                          "admin",
+                        ],
+                        "type": "string",
+                      },
+                      "user": {
+                        "properties": {
+                          "alias": {
+                            "type": "string",
+                          },
+                          "disabled": {
+                            "type": "boolean",
+                          },
+                          "displayName": {
+                            "type": "string",
+                          },
+                          "email": {
+                            "type": "string",
+                          },
+                          "id": {
+                            "type": "string",
+                          },
+                          "revision": {
+                            "minimum": 0,
+                            "type": "integer",
+                          },
+                          "role": {
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "id",
+                          "role",
+                          "disabled",
+                          "revision",
+                        ],
+                        "type": "object",
+                      },
+                      "userId": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "_id",
+                      "projectId",
+                      "userId",
+                      "role",
+                      "revision",
+                      "pending",
+                    ],
+                    "type": "object",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "List project memberships (project or platform administration)",
+        "tags": [
+          "Access",
+        ],
+      },
+    },
+    "/api/v1/projects/{id}/members/lookup/{userId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "alias": {
+                      "type": "string",
+                    },
+                    "disabled": {
+                      "type": "boolean",
+                    },
+                    "displayName": {
+                      "type": "string",
+                    },
+                    "email": {
+                      "type": "string",
+                    },
+                    "id": {
+                      "type": "string",
+                    },
+                    "revision": {
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "role": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "role",
+                    "disabled",
+                    "revision",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Look up one enrolled Scope UUID for project membership management",
+        "tags": [
+          "Access",
+        ],
+      },
+    },
+    "/api/v1/projects/{id}/members/search": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "alias": {
+                            "type": "string",
+                          },
+                          "disabled": {
+                            "type": "boolean",
+                          },
+                          "displayName": {
+                            "type": "string",
+                          },
+                          "email": {
+                            "type": "string",
+                          },
+                          "id": {
+                            "type": "string",
+                          },
+                          "revision": {
+                            "minimum": 0,
+                            "type": "integer",
+                          },
+                          "role": {
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "id",
+                          "role",
+                          "disabled",
+                          "revision",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "items",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Search enrolled users to add to this project (project or platform administration)",
+        "tags": [
+          "Access",
+        ],
+      },
+    },
+    "/api/v1/projects/{id}/members/{userId}": {
+      "delete": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                },
+                "required": [
+                  "revision",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {},
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Revoke a project membership",
+        "tags": [
+          "Access",
+        ],
+      },
+      "put": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                  "role": {
+                    "enum": [
+                      "reader",
+                      "contributor",
+                      "admin",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "role",
+                  "revision",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {},
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Explicitly grant or change a project membership",
+        "tags": [
+          "Access",
+        ],
+      },
+    },
     "/api/v1/projects/{id}/restore": {
       "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                },
+                "required": [
+                  "revision",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
         "responses": {
           "201": {
             "content": {
@@ -7429,6 +8756,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Project not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Restore a soft-deleted project",
         "tags": [
           "Projects",
@@ -7486,6 +8818,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List features",
         "tags": [
           "Prompt Features",
@@ -7533,6 +8870,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Feature already exists",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create feature",
         "tags": [
           "Prompt Features",
@@ -7621,6 +8963,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "LLM not configured",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Extract features from text",
         "tags": [
           "Prompt Features",
@@ -7689,6 +9036,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "LLM not configured",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Generate prompt feature from behavior",
         "tags": [
           "Prompt Features",
@@ -7758,6 +9110,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Seed prompt features in bulk",
         "tags": [
           "Prompt Features",
@@ -7815,6 +9172,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Feature not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Soft-delete feature",
         "tags": [
           "Prompt Features",
@@ -7858,6 +9220,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Feature not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get feature",
         "tags": [
           "Prompt Features",
@@ -7913,6 +9280,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Feature not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update feature",
         "tags": [
           "Prompt Features",
@@ -7958,6 +9330,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List report templates",
         "tags": [
           "Report Templates",
@@ -8002,6 +9379,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Report template already exists",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create report template",
         "tags": [
           "Report Templates",
@@ -8033,6 +9415,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List models available for report generation",
         "tags": [
           "Report Templates",
@@ -8061,6 +9448,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get default system prompt",
         "tags": [
           "Report Templates",
@@ -8114,6 +9506,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Report template not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Delete report template",
         "tags": [
           "Report Templates",
@@ -8157,6 +9554,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Report template not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get report template",
         "tags": [
           "Report Templates",
@@ -8209,6 +9611,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Report template not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update report template",
         "tags": [
           "Report Templates",
@@ -8250,6 +9657,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List reports",
         "tags": [
           "Reports",
@@ -8266,23 +9678,21 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReportResponse",
-                },
-              },
-            },
-            "description": "Success",
-          },
           "400": {
             "description": "Invalid input",
           },
           "404": {
             "description": "Run or template not found",
           },
+          "503": {
+            "description": "New report generation is disabled (report_generation_disabled); no work is enqueued",
+          },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create report",
         "tags": [
           "Reports",
@@ -8301,23 +9711,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ReportResponse",
-                  },
-                  "type": "array",
-                },
-              },
-            },
-            "description": "Success",
-          },
           "400": {
             "description": "Invalid input",
           },
+          "503": {
+            "description": "New report generation is disabled (report_generation_disabled); no work is enqueued",
+          },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Bulk create reports",
         "tags": [
           "Reports",
@@ -8353,6 +9758,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Invalid input",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Bulk get report statuses",
         "tags": [
           "Reports",
@@ -8386,6 +9796,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Invalid input",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Bulk get report summary per run",
         "tags": [
           "Reports",
@@ -8404,25 +9819,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "additionalProperties": {},
-                    "properties": {},
-                    "type": "object",
-                  },
-                  "type": "array",
-                },
-              },
-            },
-            "description": "Success",
-          },
           "400": {
             "description": "Invalid input",
           },
+          "503": {
+            "description": "New report generation is disabled (report_generation_disabled); no work is enqueued",
+          },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Bulk trigger reports",
         "tags": [
           "Reports",
@@ -8441,38 +9849,21 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "reports": {
-                      "items": {
-                        "$ref": "#/components/schemas/ReportResponse",
-                      },
-                      "type": "array",
-                    },
-                    "triggered": {
-                      "type": "number",
-                    },
-                  },
-                  "required": [
-                    "triggered",
-                    "reports",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Success",
-          },
           "400": {
             "description": "Invalid input",
           },
           "404": {
             "description": "Run not found",
           },
+          "503": {
+            "description": "New report generation is disabled (report_generation_disabled); no work is enqueued",
+          },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Trigger reports",
         "tags": [
           "Reports",
@@ -8506,6 +9897,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Report not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get report",
         "tags": [
           "Reports",
@@ -8562,6 +9958,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Report not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get insights for report",
         "tags": [
           "Reports",
@@ -8599,43 +10000,21 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "insightId": {
-                      "type": "string",
-                    },
-                    "isNew": {
-                      "type": "boolean",
-                    },
-                    "referencedAt": {
-                      "format": "date-time",
-                      "type": [
-                        "string",
-                        "null",
-                      ],
-                    },
-                  },
-                  "required": [
-                    "insightId",
-                    "referencedAt",
-                    "isNew",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Success",
-          },
           "404": {
             "description": "Report or insight not found",
           },
           "409": {
             "description": "Insight already referenced by this report",
           },
+          "503": {
+            "description": "New report generation is disabled (report_generation_disabled); no work is enqueued",
+          },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Link insight to report",
         "tags": [
           "Reports",
@@ -8662,6 +10041,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Report not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Stream report logs (SSE)",
         "tags": [
           "Reports",
@@ -9034,6 +10418,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List requests",
         "tags": [
           "Requests",
@@ -9113,6 +10502,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Submit request(s)",
         "tags": [
           "Requests",
@@ -9154,6 +10548,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "One or more runs not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download batch archive of multiple runs",
         "tags": [
           "Requests",
@@ -9202,6 +10601,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Bulk soft-delete requests",
         "tags": [
           "Requests",
@@ -9281,6 +10685,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Cancel multiple requests",
         "tags": [
           "Requests",
@@ -9335,6 +10744,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Pause multiple requests",
         "tags": [
           "Requests",
@@ -9393,6 +10807,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Set priority on multiple requests",
         "tags": [
           "Requests",
@@ -9425,6 +10844,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Bulk resubmit requests",
         "tags": [
           "Requests",
@@ -9479,6 +10903,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Resume multiple paused requests",
         "tags": [
           "Requests",
@@ -9559,6 +10988,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Bulk retry requests (start new attempts)",
         "tags": [
           "Requests",
@@ -9594,6 +11028,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List run filter facets",
         "tags": [
           "Requests",
@@ -9635,6 +11074,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Soft-delete request",
         "tags": [
           "Requests",
@@ -9666,6 +11110,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get request",
         "tags": [
           "Requests",
@@ -9692,6 +11141,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download full run archive",
         "tags": [
           "Requests",
@@ -9731,6 +11185,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download ATIF trajectory file for a specific iteration",
         "tags": [
           "Requests",
@@ -9771,6 +11230,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Cancel a request (marks as done/failed and signals worker to exit)",
         "tags": [
           "Requests",
@@ -9797,6 +11261,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download HAR file",
         "tags": [
           "Requests",
@@ -9823,6 +11292,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Stream request logs (SSE)",
         "tags": [
           "Requests",
@@ -9855,6 +11329,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Pause a single request",
         "tags": [
           "Requests",
@@ -9904,6 +11383,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Set priority on a single request",
         "tags": [
           "Requests",
@@ -9940,6 +11424,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Run not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get reports for request",
         "tags": [
           "Reports",
@@ -9972,6 +11461,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Resume a paused request",
         "tags": [
           "Requests",
@@ -10041,6 +11535,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Cannot retry — current run not yet terminal",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Retry a request (start a new attempt)",
         "tags": [
           "Requests",
@@ -10077,6 +11576,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Request not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List attempts for a request",
         "tags": [
           "Requests",
@@ -10118,6 +11622,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Request or run not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get a single attempt",
         "tags": [
           "Requests",
@@ -10152,6 +11661,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download full run archive for a specific attempt",
         "tags": [
           "Requests",
@@ -10199,6 +11713,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download ATIF trajectory file for a specific attempt and iteration",
         "tags": [
           "Requests",
@@ -10233,6 +11752,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download HAR file for a specific attempt",
         "tags": [
           "Requests",
@@ -10267,6 +11791,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Stream logs for a specific attempt (SSE)",
         "tags": [
           "Requests",
@@ -10309,6 +11838,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download iteration snapshot for a specific attempt",
         "tags": [
           "Requests",
@@ -10343,6 +11877,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download per-iteration tool-calls JSONL for a specific attempt",
         "tags": [
           "Requests",
@@ -10377,6 +11916,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download session recording for a specific attempt",
         "tags": [
           "Requests",
@@ -10411,6 +11955,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download iteration snapshot",
         "tags": [
           "Requests",
@@ -10437,6 +11986,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download per-iteration tool-calls JSONL",
         "tags": [
           "Requests",
@@ -10463,6 +12017,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download session recording",
         "tags": [
           "Requests",
@@ -10500,6 +12059,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List all resources",
         "tags": [
           "Resources",
@@ -10540,6 +12104,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Resource slug or revision ref already exists in this project",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create a resource and its first revision",
         "tags": [
           "Resources",
@@ -10585,6 +12154,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Revision not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get resource revision by id",
         "tags": [
           "Resource Revisions",
@@ -10624,6 +12198,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Resource not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Delete a resource",
         "tags": [
           "Resources",
@@ -10667,6 +12246,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Resource not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get a resource",
         "tags": [
           "Resources",
@@ -10720,6 +12304,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Resource not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Update a resource",
         "tags": [
           "Resources",
@@ -10776,6 +12365,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Resource not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List resource revisions",
         "tags": [
           "Resource Revisions",
@@ -10824,6 +12418,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Resource revision ref already exists in this project",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create a resource revision",
         "tags": [
           "Resource Revisions",
@@ -10869,6 +12468,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Revision not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get the latest resource revision",
         "tags": [
           "Resource Revisions",
@@ -10923,6 +12527,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Revision not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get a resource revision by resource and revision number",
         "tags": [
           "Resource Revisions",
@@ -10951,6 +12560,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Import run archive",
         "tags": [
           "Requests",
@@ -10981,6 +12595,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "No archive uploaded, empty archive, or all runs failed",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Import batch run archive",
         "tags": [
           "Requests",
@@ -11018,6 +12637,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Skill revision not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get skill revision by ref",
         "tags": [
           "Skill Revisions",
@@ -11052,6 +12676,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Blob storage error",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Download skill revision archive",
         "tags": [
           "Skill Revisions",
@@ -11076,6 +12705,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Skill revision not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get skill revision by ID",
         "tags": [
           "Skill Revisions",
@@ -11113,6 +12747,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List all skills",
         "tags": [
           "Skills",
@@ -11154,6 +12793,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create or import a skill",
         "tags": [
           "Skills",
@@ -11208,6 +12852,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "GitHub API error",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Discover skills in a GitHub repository",
         "tags": [
           "Skills",
@@ -11264,6 +12913,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Missing query parameter",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Search skills (internal + external)",
         "tags": [
           "Skills",
@@ -11319,6 +12973,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Missing query parameter",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Search external skills registry",
         "tags": [
           "Skills",
@@ -11349,6 +13008,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Skill not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Soft-delete a skill",
         "tags": [
           "Skills",
@@ -11384,6 +13048,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Skill not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get skill by slug",
         "tags": [
           "Skills",
@@ -11424,6 +13093,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Blob storage error",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Trigger skill resolution",
         "tags": [
           "Skills",
@@ -11472,6 +13146,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Skill not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List skill revisions",
         "tags": [
           "Skills",
@@ -11567,6 +13246,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "List task prompts",
         "tags": [
           "Task Prompts",
@@ -11611,6 +13295,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Empty text string",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Create or find task prompt",
         "tags": [
           "Task Prompts",
@@ -11662,6 +13351,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "LLM not configured",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Generate task prompts",
         "tags": [
           "Task Prompts",
@@ -11703,6 +13397,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Task prompt not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Soft-delete task prompt",
         "tags": [
           "Task Prompts",
@@ -11734,6 +13433,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Task prompt not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get task prompt",
         "tags": [
           "Task Prompts",
@@ -11780,6 +13484,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Task prompt not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Get resolved task prompt content",
         "tags": [
           "Task Prompts",
@@ -11871,6 +13580,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "LLM not configured",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Extract features from task prompt",
         "tags": [
           "Task Prompts",
@@ -11924,6 +13638,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Task prompt or feature not found",
           },
         },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
         "summary": "Toggle feature flag on task prompt",
         "tags": [
           "Task Prompts",
@@ -11965,7 +13684,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
       },
       "post": {
-        "description": "JIT-enroll the authenticated user, refresh their profile and lastLoginAt, apply bootstrap-admin rules, and warm the access cache. Use this only after an explicit IdP login; do not prefetch, poll, or automatically retry transient failures.",
+        "description": "JIT-enroll the authenticated user with the default user role, refresh their profile and lastLoginAt, and warm the access cache. Login never grants administrative privileges. Use this only after an explicit IdP login; do not prefetch, poll, or automatically retry transient failures.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object",
+              },
+            },
+          },
+        },
         "responses": {
           "200": {
             "content": {
@@ -12006,6 +13736,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "application/json": {
                 "schema": {
                   "properties": {
+                    "authEnabled": {
+                      "type": "boolean",
+                    },
                     "buildTime": {
                       "type": "string",
                     },
@@ -12024,6 +13757,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                     "buildTime",
                     "environment",
                     "strictAgentCapabilities",
+                    "authEnabled",
                   ],
                   "type": "object",
                 },
@@ -12032,6 +13766,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [],
         "summary": "Version info",
         "tags": [
           "System",
@@ -12064,6 +13799,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
         },
+        "security": [],
         "summary": "Liveness probe",
         "tags": [
           "Health",
@@ -12096,6 +13832,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Service is not ready",
           },
         },
+        "security": [],
         "summary": "Readiness probe",
         "tags": [
           "Health",

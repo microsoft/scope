@@ -19,6 +19,8 @@ import { useProjectContext } from "@/contexts/ProjectContext";
 import { useSelectProject } from "@/hooks/useSelectProject";
 import { api } from "@/lib/api";
 import type { Project } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
 
 /** Stable id accessor — the API mirrors `_id` onto `id`, but fall back defensively. */
 function projectId(project: Project): string {
@@ -117,6 +119,8 @@ export function ProjectFirstRunView({
  * gated page can fire its scoped requests.
  */
 export function ProjectFirstRunScreen() {
+  const { user, authEnabled } = useAuth();
+  const queryClient = useQueryClient();
   const selectProject = useSelectProject();
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
@@ -132,11 +136,11 @@ export function ProjectFirstRunScreen() {
       isLoading={isLoading}
       onSelect={selectProject}
       createSlot={
-        <ProjectCreateForm
+        !authEnabled || user?.capabilities?.platformAdmin ? <ProjectCreateForm
           showCancel={false}
-          submitLabel="Create & open"
-          onCreated={(project) => selectProject(projectId(project))}
-        />
+          submitLabel="Create project"
+          onCreated={() => { void queryClient.invalidateQueries({ queryKey: ["projects"] }); }}
+        /> : <p>Ask a platform administrator for project access.</p>
       }
     />
   );

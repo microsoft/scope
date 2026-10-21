@@ -146,6 +146,7 @@ export interface RouteContext {
   reportQueueClient: QueueClient;
 
   // Config
+  authEnabled?: boolean;
   strictAgentCapabilities: boolean;
   storageConnectionString: string;
   storageAccountName: string;

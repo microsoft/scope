@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, CircleCheck, FolderKanban, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,12 +31,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable, ListLayout, type DataTableColumn } from "@/components/list-layout";
 import { useProjectContext } from "@/contexts/ProjectContext";
 import { useSelectProject } from "@/hooks/useSelectProject";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatDate } from "@/lib/utils";
 import type { Project } from "@/types";
 
@@ -67,6 +67,7 @@ function EditProjectDialog({
       api.updateProject(projectId(project), {
         name: name.trim(),
         description: description.trim(),
+        revision: project.revision ?? 0,
       }),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -145,13 +146,18 @@ function EditProjectDialog({
  * not wrapped in `ProjectGate` and works with no project selected.
  */
 export function Projects() {
+  const { user, authEnabled } = useAuth();
+  const platformAdmin = Boolean(user?.capabilities?.platformAdmin);
+  const canManageProjects = !authEnabled || platformAdmin;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { selectedProjectId } = useProjectContext();
   const selectProject = useSelectProject();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
-  const [showDeleted, setShowDeleted] = useState(false);
+  const [includeDeleted, setIncludeDeleted] = useState(false);
+  const canReadProject = (project: Project) =>
+    !authEnabled || Boolean(user?.capabilities?.memberships.some(m => m.projectId === projectId(project) && m.permissions.includes("content:read")));
 
   /**
    * Select a project and open its dashboard. Selecting scopes the whole portal
@@ -161,23 +167,32 @@ export function Projects() {
    */
   const openProject = (project: Project) => {
     // Deleted projects are not selectable — they must be restored first.
-    if (project.deletedAt) return;
+    if (project.deletedAt || !canReadProject(project)) return;
     const id = projectId(project);
     if (id !== selectedProjectId) selectProject(id);
     navigate("/statistics");
   };
 
-  const { data: projects = [], isLoading } = useQuery({
-    queryKey: ["projects", { includeDeleted: showDeleted }],
-    queryFn: () => api.listProjects({ includeDeleted: showDeleted }),
+  const { data: projects = [], isLoading, error } = useQuery({
+    queryKey: includeDeleted ? ["projects", { includeDeleted: true }] : ["projects"],
+    queryFn: () => api.listProjects({ includeDeleted: !authEnabled && includeDeleted }),
   });
 
-  // The server already excludes soft-deleted projects unless includeDeleted is
-  // set, but filter defensively so toggling off never flashes a stale deleted row.
   const visibleProjects = useMemo(
-    () => (showDeleted ? projects : projects.filter((p) => !p.deletedAt)),
-    [projects, showDeleted],
+    () => projects.filter(p => (!p.deletedAt || (!authEnabled && includeDeleted)) && (!authEnabled || user?.capabilities?.memberships.some(
+      m => m.projectId === projectId(p) && m.permissions.includes("content:read"),
+    ))),
+    [projects, user?.capabilities?.memberships, authEnabled, includeDeleted],
   );
+
+  const restoreMutation = useMutation({
+    mutationFn: (project: Project) => api.restoreProject(projectId(project)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Project restored");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to restore project"),
+  });
 
   const deleteMutation = useMutation({
     mutationFn: (project: Project) => api.deleteProject(projectId(project)),
@@ -190,17 +205,6 @@ export function Projects() {
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Failed to delete project");
-    },
-  });
-
-  const restoreMutation = useMutation({
-    mutationFn: (project: Project) => api.restoreProject(projectId(project)),
-    onSuccess: (_data, project) => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success(`Project "${project.name}" restored`);
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to restore project");
     },
   });
 
@@ -256,26 +260,10 @@ export function Projects() {
       align: "right",
       cell: (p) => {
         const isActive = projectId(p) === selectedProjectId;
-        if (p.deletedAt) {
-          return (
-            <div
-              className="flex items-center justify-end gap-1"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 gap-1.5"
-                aria-label={`Restore ${p.name}`}
-                disabled={restoreMutation.isPending}
-                onClick={() => restoreMutation.mutate(p)}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Restore
-              </Button>
-            </div>
-          );
-        }
+        if (p.deletedAt) return <Button size="sm" variant="outline" disabled={restoreMutation.isPending}
+          onClick={event => { event.stopPropagation(); restoreMutation.mutate(p); }}>
+          <RotateCcw className="mr-1 h-4 w-4" />Restore
+        </Button>;
         return (
           <div
             className="flex items-center justify-end gap-1"
@@ -296,11 +284,15 @@ export function Projects() {
                 <ArrowRight className="h-4 w-4" />
               </Button>
             )}
+            {(platformAdmin || user?.capabilities.memberships.some(m => m.projectId === projectId(p) && m.role === "admin" && m.permissions.includes("members:write"))) && <Button size="sm" variant="outline" asChild>
+              <Link to={`/access?projectId=${encodeURIComponent(projectId(p))}`}>Manage access</Link>
+            </Button>}
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8"
               aria-label={`Edit ${p.name}`}
+              disabled={authEnabled && !platformAdmin && !user?.capabilities?.memberships.some(m => m.projectId === projectId(p) && m.role === "admin")}
               onClick={() => setEditing(p)}
             >
               <Pencil className="h-4 w-4" />
@@ -312,6 +304,7 @@ export function Projects() {
                   size="icon"
                   className="h-8 w-8 text-destructive"
                   aria-label={`Delete ${p.name}`}
+                  disabled={!canManageProjects}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -322,7 +315,7 @@ export function Projects() {
                   <AlertDialogDescription>
                     This soft-deletes the project and hides it (along with any runs and
                     resources it contains) from the default lists. You can bring it back
-                    anytime with the <span className="font-medium">Show deleted</span> toggle.
+                    {authEnabled ? "from Access administration." : "by selecting Show deleted on this page."}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -346,37 +339,24 @@ export function Projects() {
     <>
       <ListLayout
         title="Projects"
-        description="Organize runs, profiles, criteria, and more into isolated projects."
         filterRail={null}
         actions={
-          <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            New project
-          </Button>
+          <div className="flex items-center gap-2">
+            {!authEnabled && <Button size="sm" variant="outline" onClick={() => setIncludeDeleted(value => !value)}>
+              {includeDeleted ? "Hide deleted" : "Show deleted"}
+            </Button>}
+            {platformAdmin && <Button size="sm" variant="outline" asChild><Link to="/access">Access administration</Link></Button>}
+            <Button size="sm" className="gap-1.5" disabled={!canManageProjects} onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New project
+            </Button>
+          </div>
         }
       >
         <div className="p-4">
-          <div className="mb-4 flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-            <FolderKanban className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              Select a project to scope the whole portal &mdash; runs, profiles, criteria, MCP
-              servers, and more &mdash; to it. Selecting opens the project&rsquo;s{" "}
-              <span className="font-medium text-foreground">Statistics</span>, and your active
-              project stays switchable from the top bar.
-            </p>
-          </div>
-          <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
-            <Label htmlFor="show-deleted-projects" className="text-sm text-muted-foreground">
-              Show deleted
-            </Label>
-            <Switch
-              id="show-deleted-projects"
-              checked={showDeleted}
-              onCheckedChange={setShowDeleted}
-              aria-label="Show deleted projects"
-            />
-          </div>
-          <DataTable
+          {error ? <p role="alert" className="text-sm text-destructive">
+            Project inventory unavailable: {error.message}
+          </p> : <DataTable
             items={visibleProjects}
             columns={columns}
             getRowId={(p) => projectId(p)}
@@ -387,15 +367,15 @@ export function Projects() {
               <div className="flex flex-col items-center gap-2 py-10 text-center">
                 <FolderKanban className="h-8 w-8 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  No projects yet. Create one to get started.
+                  {!authEnabled ? "No projects yet. Create your first project." : platformAdmin ? "No accessible projects. Create one or manage memberships in Access administration." : "No accessible projects. Ask a project or platform administrator for membership."}
                 </p>
-                <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
+                <Button size="sm" className="gap-1.5" disabled={!canManageProjects} onClick={() => setCreateOpen(true)}>
                   <Plus className="h-4 w-4" />
                   New project
                 </Button>
               </div>
             }
-          />
+          />}
         </div>
       </ListLayout>
 

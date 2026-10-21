@@ -35,6 +35,9 @@ export default defineConfig({
     __GIT_COMMIT__: JSON.stringify(git.commit),
     __BUILD_TIME__: JSON.stringify(git.buildTime),
     __GIT_BRANCH__: JSON.stringify(git.branch),
+    ...(process.env.SCOPE_AUTH_ENABLED !== undefined ? {
+      "import.meta.env.VITE_AUTH_ENABLED_LOCAL": JSON.stringify(process.env.SCOPE_AUTH_ENABLED),
+    } : {}),
   },
   resolve: {
     alias: {

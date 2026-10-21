@@ -41,7 +41,7 @@ function fakeCollection(queue: (UserDocument | null)[]) {
   const findOneAndUpdate = vi.fn(async (
     _filter: unknown, _update: unknown, _options: unknown,
   ) => queue.shift() ?? null);
-  const findOne = vi.fn<(filter: unknown) => Promise<UserDocument | null>>(async () => null);
+  const findOne = vi.fn<(filter: unknown) => Promise<UserDocument | null>>(async () => queue.shift() ?? null);
   const collection = { findOneAndUpdate, findOne } as unknown as
     Collection<UserDocument>;
   return { collection, findOneAndUpdate, findOne };
@@ -91,6 +91,7 @@ describe("UserStore.upsertOnLogin", () => {
     expect(update.$set.displayName).toBe("Only Name");
     expect("email" in update.$set).toBe(false);
     expect("emailVerified" in update.$set).toBe(false);
+    expect("alias" in update.$set).toBe(false);
   });
 
   it("does not persist an email that is not verified", async () => {
@@ -99,6 +100,7 @@ describe("UserStore.upsertOnLogin", () => {
 
     await store.upsertOnLogin(IDENTITY, {
       email: "unverified@example.com",
+      alias: "login-alias@example.com",
       emailVerified: false,
     });
 
@@ -107,125 +109,23 @@ describe("UserStore.upsertOnLogin", () => {
     };
     expect("email" in update.$set).toBe(false);
     expect(update.$set.emailVerified).toBe(false);
+    expect(update.$set.alias).toBe("login-alias@example.com");
+    expect(update.$set.role).toBeUndefined();
   });
 
-  it("promotes a bootstrap admin (promote-only)", async () => {
-    const { collection, findOneAndUpdate } = fakeCollection([
-      baseDoc({ role: "user" }),
-      baseDoc({ role: "admin" }),
-    ]);
-    const store = new UserStore(collection, {
-      bootstrapAdmins: new Set(["entra:tenant-1/subject-1"]),
-      bootstrapTenants: new Set(["tenant-1"]),
-    });
-
-    const user = await store.upsertOnLogin(IDENTITY, PROFILE);
-
-    expect(user.role).toBe("admin");
-    expect(findOneAndUpdate).toHaveBeenCalledTimes(2);
-    const promote = findOneAndUpdate.mock.calls[1][1] as {
-      $set: Record<string, unknown>;
-    };
-    expect(promote.$set.role).toBe("admin");
-  });
-
-  it("does not re-promote an existing admin", async () => {
-    const { collection, findOneAndUpdate } = fakeCollection([
-      baseDoc({ role: "admin" }),
-    ]);
-    const store = new UserStore(collection, {
-      bootstrapAdmins: new Set(["entra:tenant-1/subject-1"]),
-      bootstrapTenants: new Set(["tenant-1"]),
-    });
-
-    const user = await store.upsertOnLogin(IDENTITY, PROFILE);
-
-    expect(user.role).toBe("admin");
+  it.each(["user", "admin"])("preserves the existing %s role without any privilege write on login", async role => {
+    const { collection, findOneAndUpdate, findOne } = fakeCollection([baseDoc({ role })]);
+    expect(await new UserStore(collection).upsertOnLogin(IDENTITY, PROFILE)).toMatchObject({ role });
     expect(findOneAndUpdate).toHaveBeenCalledOnce();
+    expect(findOneAndUpdate.mock.calls[0][1]).not.toHaveProperty("$set.role");
+    expect(findOne).not.toHaveBeenCalled();
   });
 
-  it("gates bootstrap by a non-empty tenant allowlist", async () => {
-    const { collection, findOneAndUpdate } = fakeCollection([
-      baseDoc({ role: "user" }),
-    ]);
-    const store = new UserStore(collection, {
-      bootstrapAdmins: new Set(["entra:tenant-1/subject-1"]),
-      bootstrapTenants: new Set(["other-tenant"]),
-    });
-
-    const user = await store.upsertOnLogin(IDENTITY, PROFILE);
-
-    expect(user.role).toBe("user");
-    expect(findOneAndUpdate).toHaveBeenCalledOnce();
-  });
-
-  it("promotes when the tenant is in the allowlist", async () => {
-    const { collection, findOneAndUpdate } = fakeCollection([
-      baseDoc({ role: "user" }),
-      baseDoc({ role: "admin" }),
-    ]);
-    const store = new UserStore(collection, {
-      bootstrapAdmins: new Set(["entra:tenant-1/subject-1"]),
-      bootstrapTenants: new Set(["tenant-1"]),
-    });
-
-    const user = await store.upsertOnLogin(IDENTITY, PROFILE);
-
-    expect(user.role).toBe("admin");
-    expect(findOneAndUpdate).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not promote when the tenant allowlist is empty", async () => {
-    const { collection, findOneAndUpdate } = fakeCollection([
-      baseDoc({ role: "user" }),
-    ]);
-    const store = new UserStore(collection, {
-      bootstrapAdmins: new Set(["entra:tenant-1/subject-1"]),
-    });
-
-    const user = await store.upsertOnLogin(IDENTITY, PROFILE);
-
-    expect(user.role).toBe("user");
-    expect(findOneAndUpdate).toHaveBeenCalledOnce();
-  });
-
-  it.each([false, undefined])("promotes an allowlisted identity with emailVerified=%s", async (emailVerified) => {
-    const { collection, findOneAndUpdate } = fakeCollection([
-      baseDoc({ role: "user" }),
-      baseDoc({ role: "admin" }),
-    ]);
-    const store = new UserStore(collection, {
-      bootstrapAdmins: new Set(["entra:tenant-1/subject-1"]),
-      bootstrapTenants: new Set(["tenant-1"]),
-    });
-
-    const user = await store.upsertOnLogin(
-      { ...IDENTITY, emailVerified },
-      { ...PROFILE, emailVerified },
-    );
-
-    expect(user.role).toBe("admin");
-    expect(findOneAndUpdate).toHaveBeenCalledTimes(2);
-    const update = findOneAndUpdate.mock.calls[0][1];
-    expect(update).not.toHaveProperty("$set.email");
-    expect(update).not.toHaveProperty("$set.emailVerified", true);
-  });
-
-  it.each([
-    "entra:tenant-1/other-subject",
-    "entra:other-tenant/subject-1",
-    "other-idp:tenant-1/subject-1",
-  ])("does not promote when only a different identity is allowlisted (%s)", async (bootstrapAdmin) => {
-    const { collection, findOneAndUpdate } = fakeCollection([baseDoc()]);
-    const store = new UserStore(collection, {
-      bootstrapAdmins: new Set([bootstrapAdmin]),
-      bootstrapTenants: new Set(["tenant-1"]),
-    });
-
-    const user = await store.upsertOnLogin(IDENTITY, PROFILE);
-
-    expect(user.role).toBe("user");
-    expect(findOneAndUpdate).toHaveBeenCalledOnce();
+  it("does not promote a demoted user or remove an account disable marker", async () => {
+    const { collection, findOneAndUpdate } = fakeCollection([baseDoc({ role: "user", disabledAt: new Date() })]);
+    expect(await new UserStore(collection).upsertOnLogin(IDENTITY, PROFILE)).toMatchObject({ role: "user", disabledAt: expect.any(Date) });
+    expect(findOneAndUpdate.mock.calls[0][1]).not.toHaveProperty("$set.role");
+    expect(findOneAndUpdate.mock.calls[0][1]).not.toHaveProperty("$unset");
   });
 
   it("throws when the upsert returns nothing", async () => {

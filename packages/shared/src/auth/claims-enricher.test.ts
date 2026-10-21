@@ -36,6 +36,14 @@ describe("ClaimsProfileEnricher", () => {
       displayName: undefined,
       emailVerified: undefined,
     });
+
+  });
+
+  it("keeps the sign-in alias distinct from an advisory email", async () => {
+    const profile = await new ClaimsProfileEnricher().enrich({
+      ...identity, email: "shared@example.com", alias: "ada.login@example.com", emailVerified: false,
+    }, "raw-token");
+    expect(profile).toMatchObject({ email: "shared@example.com", alias: "ada.login@example.com", emailVerified: false });
   });
 
   it("identifies itself as the claims enricher", () => {
