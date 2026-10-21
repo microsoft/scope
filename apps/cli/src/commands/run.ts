@@ -90,13 +90,14 @@ run
   .addOption(new Option("--base-profile <id>", "Deprecated alias for --profile.").hideHelp())
   .option("--profile-variations-file <path>", "Path to JSON file containing profile variation entries")
   .option("--agents-md <text|@file>", "AGENTS.md content delivered to the workspace (prefix with @ to read from a file)")
+  .option("--experiment-id <id>", "Group this request with others under a shared experiment ID")
   .option("--gates <jsonOrFile>", "GateConfig[] JSON or path/@path to a JSON file for gated runs")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
   .option("--project <id>", "Project ID for scoped operations (overrides SCOPE_PROJECT and the saved selection)")
   .option("--count <number>", "Submit this run N times (1-10). With --profile-variations-file, N runs per profile — repetition is how you separate a real difference between profiles from model variance", (v: string) => Number.parseInt(v, 10))
   .option("--no-stream", "Don't stream logs, just submit")
   .action(async (options, command) => {
-    const { scenario, persona, traits, worker, url, stream, count, maxIterations, model, reasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, codebase: codebaseRef, resources: resourceSpecs, resourceParam: resourceParamOverrides, extensions: extensionIds, agentVersion, profile, baseProfile, profileVariationsFile, gates: gatesOption, agentsMd: agentsMdInput } = options;
+    const { scenario, persona, traits, worker, url, stream, count, maxIterations, model, reasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, codebase: codebaseRef, resources: resourceSpecs, resourceParam: resourceParamOverrides, extensions: extensionIds, agentVersion, profile, baseProfile, profileVariationsFile, gates: gatesOption, agentsMd: agentsMdInput, experimentId } = options;
     // `--profile` is the documented flag; `--base-profile` is kept as a hidden
     // back-compat alias. Both resolve to the same request `profileId`.
     const profileId = profile ?? baseProfile;
@@ -180,6 +181,9 @@ run
       }
       if (profileId) {
         body.profileId = profileId;
+      }
+      if (experimentId) {
+        body.experimentId = experimentId;
       }
       if (agentsMdInput) {
         // `@path` reads the AGENTS.md body from a file; otherwise the value is
@@ -505,6 +509,11 @@ run
   .option("--created-after <iso>", "Only runs created at/after this ISO-8601 datetime")
   .option("--created-before <iso>", "Only runs created at/before this ISO-8601 datetime")
   .option("--submission-id <id>", "Filter by submission ID")
+  .option("--experiment-id <id>", "Filter by experiment ID")
+  .addOption(
+    new Option("--group-by <key>", "Group results by task, submissionId, profile, or experiment")
+      .choices(["task", "submissionId", "profile", "experiment"]),
+  )
   .option("--turns <expr>", "Filter by actual turns (e.g. '>=5', '<=10', '=3')")
   .option("--max-iterations <expr>", "Filter by configured maxIterations (e.g. '>=5', '<=10', '=3')")
   .option("--sort-by <field>", "Sort field: created, updated, priority, worker, status, id, duration")
@@ -547,6 +556,12 @@ run
       }
       if (options.submissionId) {
         params.set("submissionId", options.submissionId);
+      }
+      if (options.experimentId) {
+        params.set("experimentId", options.experimentId);
+      }
+      if (options.groupBy) {
+        params.set("groupBy", options.groupBy);
       }
       const parseIterExpr = (raw: string, name: string): { op: "eq" | "gte" | "lte"; value: number } => {
         const m = /^(>=|<=|=)?\s*(\d+)$/.exec(String(raw).trim());
@@ -598,11 +613,23 @@ run
         if (!isMachineReadable(format)) console.log(warnBanner('No requests found.'));
         return;
       }
+      const grouped = Boolean(options.groupBy);
       if (!isMachineReadable(format)) {
-        console.log(label(`Found ${requests.length} request(s):\n`));
+        console.log(label(`Found ${requests.length} ${grouped ? "group" : "request"}(s):\n`));
       }
 
-      const displayFields: DisplayField[] = [
+      const displayFields: DisplayField[] = grouped
+        ? [
+            { key: "key", label: "Key" },
+            { key: "label", label: "Label" },
+            {
+              key: "count",
+              label: "Runs",
+              formatter: (group: { aggregates?: { count?: number } }) =>
+                String(group.aggregates?.count ?? 0),
+            },
+          ]
+        : [
         { key: 'id', label: 'ID',
           formatter: (req: any) => req.id ?? '(no id)',
           tableFormatter: (req: any) => value(req.id ?? '(no id)'),

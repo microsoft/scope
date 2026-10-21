@@ -721,6 +721,50 @@ describe("API Endpoints", () => {
       expect(res.body.data[0]).toHaveProperty("key", "sub-1");
     });
 
+    it("returns grouped results when groupBy=experiment", async () => {
+      const groupedDocs = [
+        { key: "exp-1", label: "exp-1", runIds: ["r1"], aggregates: { count: 1, turns: null, duration: null, promptTokens: null, completionTokens: null, llmCalls: null, statusCounts: {}, outcomeCounts: {} }, uniform: {} },
+      ];
+      (mocks.collection.aggregate as any)
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([{ _id: "exp-1" }]) })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue(groupedDocs) })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([]) })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([]) });
+
+      const res = await request(testServer()).get(`/api/v1/requests?groupBy=experiment&projectId=${TEST_PROJECT_ID}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data[0]).toHaveProperty("key", "exp-1");
+    });
+
+    it("fetches members with missing experiment ids for the no-experiment group", async () => {
+      (mocks.collection.aggregate as any)
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([{ _id: "no-experiment" }]) })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([]) })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([]) })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([]) });
+
+      const res = await request(testServer()).get(
+        `/api/v1/requests?groupBy=experiment&projectId=${TEST_PROJECT_ID}`,
+      );
+
+      expect(res.status).toBe(200);
+      const phase2Pipeline = (mocks.collection.aggregate as any).mock.calls[1][0];
+      expect(phase2Pipeline[0]).toEqual({
+        $match: {
+          $and: [
+            expect.any(Object),
+            {
+              $or: [
+                { experimentId: { $exists: false } },
+                { experimentId: null },
+              ],
+            },
+          ],
+        },
+      });
+    });
+
     it("calls aggregate pipeline when groupBy is provided", async () => {
       (mocks.collection.aggregate as any)
         .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([]) }); // keys (empty)
@@ -758,6 +802,22 @@ describe("API Endpoints", () => {
       await request(testServer()).get(`/api/v1/requests?status=done&projectId=${TEST_PROJECT_ID}`);
       expect(mocks.collection.find).toHaveBeenCalledWith(
         expect.objectContaining({ "run.status": "done" }),
+      );
+    });
+
+    it("passes experimentId filter to the find query", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        sort: vi.fn().mockReturnValue({
+          limit: vi.fn().mockReturnValue({
+            toArray: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+      await request(testServer()).get(`/api/v1/requests?experimentId=exp-42&projectId=${TEST_PROJECT_ID}`);
+
+      expect(mocks.collection.find).toHaveBeenCalledWith(
+        expect.objectContaining({ experimentId: "exp-42" }),
       );
     });
 
@@ -2028,6 +2088,23 @@ describe("API Endpoints", () => {
       expect(doc).toHaveProperty("agentsMdParentIds", ["agents-p1", "agents-p2"]);
     });
 
+    it("persists experimentId on the request", async () => {
+      setupCopilotAgent();
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          model: "claude-haiku-4.5",
+          experimentId: "exp-42",
+        });
+
+      expect(res.status).toBe(201);
+      const doc = (mocks.collection.insertOne as any).mock.calls[0][0];
+      expect(doc).toHaveProperty("experimentId", "exp-42");
+      expect(res.body).toHaveProperty("experimentId", "exp-42");
+    });
+
     it("omits AGENTS.md fields when not provided", async () => {
       setupCopilotAgent();
 
@@ -2320,7 +2397,7 @@ describe("API Endpoints", () => {
   // ===================================================================
 
   describe("POST /api/v1/requests/bulk-resubmit", () => {
-    it("preserves agentVersion and taskPromptId from original run", async () => {
+    it("preserves agentVersion, taskPromptId, and experimentId from original run", async () => {
       const originalRun = {
         _id: "run-original",
         scenario: { task: "Build a form", criteria: ["has_react"] },
@@ -2329,6 +2406,7 @@ describe("API Endpoints", () => {
         model: "gpt-4o",
         agentVersion: "copilot-0.0.415",
         taskPromptId: "tp-123",
+        experimentId: "exp-42",
         personaInstructions: "Be helpful",
         createdAt: new Date(),
         maxIterations: 5,
@@ -2364,6 +2442,7 @@ describe("API Endpoints", () => {
       expect(insertCall).toHaveLength(1);
       expect(insertCall[0]).toHaveProperty("agentVersion", "copilot-0.0.420");
       expect(insertCall[0]).toHaveProperty("taskPromptId", "tp-123");
+      expect(insertCall[0]).toHaveProperty("experimentId", "exp-42");
       expect(insertCall[0]).toHaveProperty("model", "gpt-4o");
       expect(insertCall[0]).toHaveProperty("maxIterations", 5);
     });

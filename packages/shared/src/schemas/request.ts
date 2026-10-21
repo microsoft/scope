@@ -142,6 +142,8 @@ export const CreateRequestInputSchema = z
     profileId: z.string().optional(),
     profileVariations: z.array(z.string()).optional(),
     priority: z.number().int().optional(),
+    // Correlates related runs belonging to one experiment.
+    experimentId: z.string().min(1).optional(),
     // Raw AGENTS.md body to deliver to the worker workspace. When present, the
     // API findOrCreates an `agents.md`-typed prompt and stores its id on the
     // request (see `agentsMdPromptId`).
@@ -179,6 +181,7 @@ export const RequestResponseSchema = z
     profileId: z.string().optional(),
     profileVersionId: z.string().optional(),
     submissionId: z.string().optional(),
+    experimentId: z.string().optional(),
     priority: z.number().int().default(0),
     gates: z.array(GateConfigSchema).optional(),
     gateSummaries: z.array(GateRunSummarySchema).optional(),
@@ -277,6 +280,7 @@ export const ListRequestsQuerySchema = z
     taskPromptId: z.string().optional(),
     criteria: z.string().optional(),
     submissionId: z.string().optional(),
+    experimentId: MultiValueParam,
     profileId: MultiValueParam,
     status: MultiValueParam,
     outcome: MultiValueParam,
@@ -286,7 +290,7 @@ export const ListRequestsQuerySchema = z
     agentVersion: MultiValueParam,
     // Free-text, case-insensitive search across run id, scenario task, model, worker.
     search: z.string().optional(),
-    groupBy: z.enum(["task", "submissionId", "profile"]).optional(),
+    groupBy: z.enum(["task", "submissionId", "profile", "experiment"]).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
     after: z.string().optional(),
     before: z.string().optional(),

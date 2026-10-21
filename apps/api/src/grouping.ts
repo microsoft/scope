@@ -12,18 +12,28 @@ import type { GroupByKey, RunGroup, AggregateStats, GroupUniformValues } from "s
  * The pipeline is appended after a $match stage with the caller's filter.
  */
 export function buildGroupingPipeline(
-  groupBy: "task" | "submissionId" | "profile",
+  groupBy: "task" | "submissionId" | "profile" | "experiment",
 ): Document[] {
   const groupField =
-    groupBy === "task" ? "$taskPromptId" : groupBy === "profile" ? "$profileId" : "$submissionId";
+    groupBy === "task"
+      ? "$taskPromptId"
+      : groupBy === "profile"
+        ? "$profileId"
+        : groupBy === "experiment"
+          ? "$experimentId"
+          : "$submissionId";
   const fallbackGroupField =
-    groupBy === "profile" ? { $literal: "no-profile" } : { $literal: "no-submission" };
+    groupBy === "profile"
+      ? { $literal: "no-profile" }
+      : groupBy === "experiment"
+        ? { $literal: "no-experiment" }
+        : { $literal: "no-submission" };
   // `task` groups purely by the always-present `taskPromptId` — it is
   // materialized on every run-creation path (findOrCreate → taskPrompt._id) and
   // backfilled onto legacy docs by migration 001, so the group key is always a
   // real id the member-fetch filter (`{ taskPromptId: key }`) can match. Only
-  // `profile`/`submission` fall back to a fixed literal sentinel for runs that
-  // genuinely lack the field.
+  // `profile`/`experiment`/`submission` fall back to a fixed literal sentinel
+  // for runs that genuinely lack the field.
   const groupKeyExpr =
     groupBy === "task" ? groupField : { $ifNull: [groupField, fallbackGroupField] };
 
@@ -162,6 +172,7 @@ export function buildGroupingPipeline(
             branches: [
               { case: { $eq: ["$_id", "no-submission"] }, then: "No submission ID" },
               { case: { $eq: ["$_id", "no-profile"] }, then: "No profile" },
+              { case: { $eq: ["$_id", "no-experiment"] }, then: "No experiment ID" },
             ],
             default: { $ifNull: ["$_firstTask", "$_id"] },
           },

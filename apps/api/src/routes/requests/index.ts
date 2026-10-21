@@ -459,8 +459,13 @@ apiRoute(ctx.app, ctx.registry, {
   successStatus: 201,
   handler: async (req, res) => {
     const projectId = getQueryProjectId(req);
-    const { scenario: scenarioObj, persona: personaObj, maxIterations, personaInstructions, count = 1, model: requestedModel, reasoningEffort: requestedReasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, extensions: extensionIds, agentVersion: requestedAgentVersion, profileId: requestedProfileSpec, profileVariations, priority: requestedPriority, agentsMd: requestedAgentsMd, agentsMdParentIds: requestedAgentsMdParentIds, gates: requestedGates, codebase: codebaseSpec, codebaseRevisionId: requestedCodebaseRevisionId, resources: resourceSpecs } = req.body;
+    const { scenario: scenarioObj, persona: personaObj, maxIterations, personaInstructions, count = 1, model: requestedModel, reasoningEffort: requestedReasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, extensions: extensionIds, agentVersion: requestedAgentVersion, profileId: requestedProfileSpec, profileVariations, priority: requestedPriority, experimentId: requestedExperimentId, agentsMd: requestedAgentsMd, agentsMdParentIds: requestedAgentsMdParentIds, gates: requestedGates, codebase: codebaseSpec, codebaseRevisionId: requestedCodebaseRevisionId, resources: resourceSpecs } = req.body;
     let worker = req.query.worker as string | undefined;
+
+    const experimentId =
+      typeof requestedExperimentId === "string" && requestedExperimentId.trim()
+        ? requestedExperimentId.trim()
+        : undefined;
 
     // AGENTS.md body + lineage (for any caller that wants to attach an
     // AGENTS.md instruction file to a run).
@@ -480,8 +485,9 @@ apiRoute(ctx.app, ctx.registry, {
       return p._id;
     };
 
-    // Common request fields for AGENTS.md delivery + lineage.
-    const buildAgentsMdFields = (agentsMdPromptId?: string) => ({
+    // Common request fields for experiment grouping + AGENTS.md delivery.
+    const buildExperimentFields = (agentsMdPromptId?: string) => ({
+      ...(experimentId ? { experimentId } : {}),
       ...(agentsMdPromptId ? { agentsMdPromptId } : {}),
       ...(agentsMdParentIds && agentsMdParentIds.length ? { agentsMdParentIds } : {}),
     });
@@ -814,7 +820,7 @@ apiRoute(ctx.app, ctx.registry, {
       const newDocs: RequestDocument[] = [];
       const variationResults: Array<{ profileId: string; label?: string; ids: string[] }> = [];
       const agentsMdPromptId = await resolveAgentsMdPromptId();
-      const agentsMdFields = buildAgentsMdFields(agentsMdPromptId);
+      const experimentFields = buildExperimentFields(agentsMdPromptId);
 
       for (const r of resolved) {
         const newIds: string[] = [];
@@ -849,7 +855,7 @@ apiRoute(ctx.app, ctx.registry, {
             profileVersionId: r.profileVersion.ref ?? r.profileVersion._id,
             ...(persistedVariationGates ? { gates: persistedVariationGates } : {}),
             submissionId,
-            ...agentsMdFields,
+            ...experimentFields,
             run: { _id: runId, attemptNumber: 1, status: "pending", logsUrl: ctx.blobStorage.getLogsBlobUrl(`${requestId}/runs/${runId}/run.jsonl`) },
           };
           newDocs.push(requestDoc);
@@ -867,6 +873,7 @@ apiRoute(ctx.app, ctx.registry, {
         ids: allNewIds,
         count: allNewIds.length,
         submissionId,
+        ...(experimentId ? { experimentId } : {}),
         variations: variationResults,
         variationCount: variationEntries.length,
         status: "pending",
@@ -1223,7 +1230,7 @@ apiRoute(ctx.app, ctx.registry, {
 
     // Resolve AGENTS.md lineage once for this submission (shared across count>1).
     const agentsMdPromptId = await resolveAgentsMdPromptId();
-    const agentsMdFields = buildAgentsMdFields(agentsMdPromptId);
+    const experimentFields = buildExperimentFields(agentsMdPromptId);
 
     // Build the persisted gate configs: order canonically and point the Select
     // gate's prompt at the resolved task prompt (docs/design/gates.md §4.3).
@@ -1269,7 +1276,7 @@ apiRoute(ctx.app, ctx.registry, {
           ...(profileVersionId ? { profileVersionId } : {}),
           ...(persistedGates ? { gates: persistedGates } : {}),
           submissionId,
-          ...agentsMdFields,
+          ...experimentFields,
           // Mint a distinct run id for the first attempt. Blob artifacts
           // are scoped under `{requestId}/runs/{runId}/...` so retries
           // never overwrite a previous attempt's blobs.
@@ -1287,6 +1294,7 @@ apiRoute(ctx.app, ctx.registry, {
         ids: newIds,
         count,
         submissionId,
+        ...(experimentId ? { experimentId } : {}),
         workerType,
         taskPromptId,
         ...(model ? { model } : {}),
@@ -1331,7 +1339,7 @@ apiRoute(ctx.app, ctx.registry, {
       ...(profileVersionId ? { profileVersionId } : {}),
       ...(persistedGates ? { gates: persistedGates } : {}),
       submissionId,
-      ...agentsMdFields,
+      ...experimentFields,
       // Mint a distinct run id for the first attempt. Blob artifacts
       // are scoped under `{requestId}/runs/{runId}/...` so retries
       // never overwrite a previous attempt's blobs.
@@ -1346,6 +1354,7 @@ apiRoute(ctx.app, ctx.registry, {
     res.status(201).json({
       id: requestId,
       submissionId,
+      ...(experimentId ? { experimentId } : {}),
       workerType,
       ...(model ? { model } : {}),
       ...(effectiveReasoningEffort ? { reasoningEffort: effectiveReasoningEffort } : {}),
@@ -1435,7 +1444,7 @@ apiRoute(ctx.app, ctx.registry, {
     const maxIterationsFilterRaw = req.query.maxIterations as string | undefined;
     const maxIterationsOpFilter = (req.query.maxIterationsOp as string | undefined) ?? "eq";
     const includeDeleted = req.query.includeDeleted === "true";
-    const groupByParam = req.query.groupBy as "task" | "submissionId" | "profile" | undefined;
+    const groupByParam = req.query.groupBy as "task" | "submissionId" | "profile" | "experiment" | undefined;
     const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 100);
     const afterParam = req.query.after as string | undefined;
     const beforeParam = req.query.before as string | undefined;
@@ -1447,6 +1456,7 @@ apiRoute(ctx.app, ctx.registry, {
     const statusValues = parseMulti(req.query.status);
     const outcomeValues = parseMulti(req.query.outcome);
     const profileIdValues = parseMulti(req.query.profileId);
+    const experimentIdValues = parseMulti(req.query.experimentId);
     const modelValues = parseMulti(req.query.model);
     const osValues = parseMulti(req.query.os);
     const priorityValues = parseMulti(req.query.priority);
@@ -1497,6 +1507,7 @@ apiRoute(ctx.app, ctx.registry, {
     pushClause(buildMultiClause("run.status", statusValues));
     pushClause(buildMultiClause("run.outcome", outcomeValues));
     pushClause(buildMultiClause("profileId", profileIdValues));
+    pushClause(buildMultiClause("experimentId", experimentIdValues));
     pushClause(buildMultiClause("model", modelValues));
     pushClause(buildMultiClause("run.os.platform", osValues));
     pushClause(buildMultiClause("priority", priorityValues, { coerceNumber: true }));
@@ -1601,8 +1612,25 @@ apiRoute(ctx.app, ctx.registry, {
 
     // Grouped mode: paginated RunGroup[] via two-phase aggregation
     if (groupByParam) {
-      const groupByField = groupByParam === "task" ? "taskPromptId" : groupByParam === "profile" ? "profileId" : "submissionId";
-      const groupByAggField = `$${groupByField}`;
+      const groupByField =
+        groupByParam === "task"
+          ? "taskPromptId"
+          : groupByParam === "profile"
+            ? "profileId"
+            : groupByParam === "experiment"
+              ? "experimentId"
+              : "submissionId";
+      const missingGroupKey =
+        groupByParam === "profile"
+          ? "no-profile"
+          : groupByParam === "experiment"
+            ? "no-experiment"
+            : groupByParam === "submissionId"
+              ? "no-submission"
+              : undefined;
+      const groupByAggField = missingGroupKey
+        ? { $ifNull: [`$${groupByField}`, missingGroupKey] }
+        : `$${groupByField}`;
 
       // Decode group cursor
       let afterKey: string | undefined;
@@ -1654,8 +1682,21 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       // Phase 2: Full aggregation scoped to current page's groups only
+      const concretePageKeys = missingGroupKey
+        ? pageKeys.filter((key) => key !== missingGroupKey)
+        : pageKeys;
+      const pageGroupClause =
+        missingGroupKey && pageKeys.includes(missingGroupKey)
+          ? {
+              $or: [
+                ...(concretePageKeys.length > 0 ? [{ [groupByField]: { $in: concretePageKeys } }] : []),
+                { [groupByField]: { $exists: false } },
+                { [groupByField]: null },
+              ],
+            }
+          : { [groupByField]: { $in: concretePageKeys } };
       const phase2Pipeline = [
-        { $match: { ...filter, [groupByField]: { $in: pageKeys } } },
+        { $match: { $and: [filter, pageGroupClause] } },
         ...buildGroupingPipeline(groupByParam),
       ];
       const groups = await ctx.requestCollection.aggregate(phase2Pipeline).toArray();
@@ -2154,7 +2195,8 @@ apiRoute(ctx.app, ctx.registry, {
           ...(original.taskPromptId ? { taskPromptId: original.taskPromptId } : {}),
           ...(effectiveProfileId ? { profileId: effectiveProfileId } : {}),
           ...(effectiveProfileVersionId ? { profileVersionId: effectiveProfileVersionId } : {}),
-          // Preserve AGENTS.md lineage across re-submits.
+          // Preserve experiment grouping and AGENTS.md lineage across re-submits.
+          ...(original.experimentId ? { experimentId: original.experimentId } : {}),
           ...(original.agentsMdPromptId ? { agentsMdPromptId: original.agentsMdPromptId } : {}),
           ...(original.agentsMdParentIds && original.agentsMdParentIds.length > 0 ? { agentsMdParentIds: original.agentsMdParentIds } : {}),
           submissionId,
