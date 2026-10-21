@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { useIsCompactViewport } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
+import { getListSectionIcon } from "@/components/navigation-icons";
 
 export interface ListLayoutProps {
   /** Page title (rendered above the table). */
@@ -97,6 +98,7 @@ export function ListLayout({
   const detailVisible = detail !== null && detail !== undefined && detail !== false;
   const secondaryVisible = secondaryPanel !== null && secondaryPanel !== undefined && secondaryPanel !== false;
   const hasRail = filterRail !== null;
+  const SectionIcon = getListSectionIcon(railStorageKey) ?? SlidersHorizontal;
 
   return (
     <div className={cn("flex h-full min-h-0 w-full overflow-hidden", className)}>
@@ -150,9 +152,9 @@ export function ListLayout({
                   className="h-8 w-8 shrink-0 lg:hidden"
                   onClick={() => setMobileRailOpen(true)}
                   aria-label="Open filters"
-                  title="Filters"
+                  title="Open filters"
                 >
-                  <SlidersHorizontal className="h-4 w-4" />
+                  <SectionIcon className="h-4 w-4" />
                 </Button>
               </>
             )}
