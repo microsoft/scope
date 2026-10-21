@@ -76,6 +76,7 @@ export class UserAccessResolver implements UserAccessService {
       ? await this.options.enricher.enrich(identity, rawToken)
       : {
         email: identity.email,
+        ...(identity.alias !== undefined ? { alias: identity.alias } : {}),
         displayName: identity.displayName,
         emailVerified: identity.emailVerified,
       };

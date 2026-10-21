@@ -40,10 +40,11 @@ export class CodebaseRevisionStore {
   }
 
   /** Get a revision by its canonical `{slug}@r{N}` ref. */
-  async getByRef(ref: string): Promise<CodebaseRevisionDocument | null> {
+  async getByRef(projectId: string, ref: string): Promise<CodebaseRevisionDocument | null> {
     const parsed = parseCodebaseRevisionRef(ref);
     if (!parsed || parsed.revisionNumber === undefined) return null;
     return this.collection.findOne({
+      projectId,
       slug: parsed.slug,
       revisionNumber: parsed.revisionNumber,
     });

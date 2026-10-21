@@ -6,9 +6,14 @@ import request from "supertest";
 import { app, _injectTestDependencies } from "./index.js";
 import { useTestServer } from "./test-server.js";
 import { _resetRunFacetsCacheForTests } from "./routes/requests/index.js";
-import { createAllMockDependencies, createMockCollection } from "./test-helpers.js";
+import { createAllMockDependencies, createMockCollection, mockRouteAuthorization } from "./test-helpers.js";
 
 const TEST_PROJECT_ID = "test-project";
+
+vi.mock("./auth/middleware.js", async importOriginal => ({
+  ...await importOriginal<typeof import("./auth/middleware.js")>(),
+  createUserAccessMiddleware: (await import("./test-helpers.js")).mockControllerUserAccessMiddleware,
+}));
 
 // Stub checkMigrations before it can be imported by index.ts
 vi.mock("db-migrations/check-migrations", () => ({
@@ -44,6 +49,7 @@ describe("API Endpoints", () => {
   beforeAll(() => {
     mocks = createAllMockDependencies();
     _injectTestDependencies(mocks);
+    mockRouteAuthorization(app);
   });
 
   beforeEach(() => {
@@ -1095,7 +1101,7 @@ describe("API Endpoints", () => {
   });
 
   describe("POST /api/v1/reports", () => {
-    it("returns 201 when creating a report", async () => {
+    it("blocks report creation before any write or enqueue", async () => {
       // Run exists
       (mocks.collection.findOne as any).mockResolvedValue({
         _id: "r1",
@@ -1106,27 +1112,30 @@ describe("API Endpoints", () => {
         .post("/api/v1/reports")
         .send({ requestId: "r1" });
 
-      expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty("requestId", "r1");
-      expect(res.body).toHaveProperty("status", "pending");
+      expect(res.status).toBe(503);
+      expect(res.body.code).toBe("report_generation_disabled");
+      expect(mocks.reportCollection.insertOne).not.toHaveBeenCalled();
+      expect(mocks.reportQueueClient.sendMessage).not.toHaveBeenCalled();
     });
 
-    it("returns 400 when requestId missing", async () => {
+    it("keeps report generation disabled even when requestId is missing", async () => {
       const res = await request(testServer())
         .post("/api/v1/reports")
         .send({});
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(503);
+      expect(res.body.code).toBe("report_generation_disabled");
     });
 
-    it("returns 404 when referenced run not found", async () => {
+    it("does not disclose whether the disabled generation target exists", async () => {
       (mocks.collection.findOne as any).mockResolvedValue(null);
 
       const res = await request(testServer())
         .post("/api/v1/reports")
         .send({ requestId: "no-such-run" });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(503);
+      expect(mocks.collection.findOne).not.toHaveBeenCalled();
     });
   });
 

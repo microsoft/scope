@@ -18,6 +18,7 @@ registry.registerPath({
   path: "/api/v1/keys/preview",
   tags: ["Keys"],
   summary: "Preview key",
+  security: [{ bearerAuth: [] }],
   request: {
     body: {
       content: {
@@ -41,6 +42,7 @@ registry.registerPath({
   path: "/api/v1/keys",
   tags: ["Keys"],
   summary: "Create key",
+  security: [{ bearerAuth: [] }],
   request: {
     body: {
       content: {
@@ -64,6 +66,7 @@ registry.registerPath({
   path: "/api/v1/keys",
   tags: ["Keys"],
   summary: "List keys",
+  security: [{ bearerAuth: [] }],
   responses: {
     200: {
       description: "Success",
@@ -80,6 +83,7 @@ registry.registerPath({
   path: "/api/v1/keys/{id}",
   tags: ["Keys"],
   summary: "Get key",
+  security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.string() }),
   },
@@ -99,6 +103,7 @@ registry.registerPath({
   path: "/api/v1/keys/{id}",
   tags: ["Keys"],
   summary: "Update key",
+  security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.string() }),
     body: {
@@ -123,6 +128,7 @@ registry.registerPath({
   path: "/api/v1/keys/{id}",
   tags: ["Keys"],
   summary: "Delete key",
+  security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.string() }),
   },
@@ -144,6 +150,7 @@ registry.registerPath({
   path: "/api/v1/keys/{id}/validate",
   tags: ["Keys"],
   summary: "Validate key",
+  security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.string() }),
     body: {

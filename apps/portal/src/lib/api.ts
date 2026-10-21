@@ -10,6 +10,11 @@ import { apiClient } from "./api-client";
 import { downloadBatchArtifacts } from "./artifact-delivery";
 import { getSelectedProjectId, ProjectRequiredError } from "./project-scope";
 import { MAX_ARCHIVE_UPLOAD_LABEL } from "./codebaseUpload";
+import {
+  AccessCapabilitiesSchema, AccessUserSearchResultSchema, AccessUserSummarySchema, ProjectMembershipSummarySchema,
+  ApiAuthModeSchema, PlatformAdminListSchema,
+  type AccessCapabilities, type AccessUserSearchResult, type AccessUserSummary, type PlatformAdminList, type ProjectMembershipSummary,
+} from "shared/rbac";
 
 const BASE = "/api/v1";
 
@@ -21,6 +26,7 @@ export interface CurrentUserResponse {
   displayName?: string;
   idp?: string;
   idpTenant?: string;
+  capabilities: AccessCapabilities;
 }
 
 export class ApiError extends Error {
@@ -42,7 +48,9 @@ function validateCurrentUser(value: unknown): CurrentUserResponse {
   ) {
     throw new Error("Invalid user response from Scope");
   }
-  return value as CurrentUserResponse;
+  const capabilities = AccessCapabilitiesSchema.safeParse("capabilities" in value ? value.capabilities : undefined);
+  if (!capabilities.success) throw new Error("Invalid access capabilities from Scope");
+  return { ...value, capabilities: capabilities.data } as CurrentUserResponse;
 }
 
 /**
@@ -127,10 +135,9 @@ async function request<T>(path: string, init?: RequestInit, opts?: RequestOpts):
     if (!projectId) throw new ProjectRequiredError();
     finalPath = withProjectId(path, projectId);
   }
-  const res = await apiClient(`${BASE}${finalPath}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const res = await apiClient(`${BASE}${finalPath}`, { ...init, headers });
   // Sample the server's wall-clock from the standard HTTP `Date` header so
   // relative-time displays survive a misconfigured local clock.
   recordServerDate(res.headers.get("Date"));
@@ -144,6 +151,10 @@ async function request<T>(path: string, init?: RequestInit, opts?: RequestOpts):
     throw new ApiError(message, res.status, body.code);
   }
   if (res.status === 204) return undefined as T;
+  if (res.status === 202) {
+    const pending: { operationId?: string } = await res.json();
+    throw new ApiError(`Operation ${pending.operationId ?? "unknown"} is pending operator repair; retry the identical change or contact an operator`, 202, "operation_pending");
+  }
   return res.json();
 }
 
@@ -160,6 +171,24 @@ async function requestCurrentUser(
 }
 
 export const api = {
+  accessRequest: <T>(path: string, method = "GET", body?: unknown, operationId?: string): Promise<T> =>
+    request(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers: method === "GET" ? undefined : { "Idempotency-Key": operationId ?? crypto.randomUUID() } }),
+  searchAccessUsers: (options: { q?: string; cursor?: string; signal?: AbortSignal } = {}): Promise<AccessUserSearchResult> =>
+    request<unknown>(`/admin/users/search${qs({ q: options.q, cursor: options.cursor })}`, { signal: options.signal })
+      .then(data => AccessUserSearchResultSchema.parse(data)),
+  listPlatformAdmins: (options: { cursor?: string; signal?: AbortSignal } = {}): Promise<PlatformAdminList> =>
+    request<unknown>(`/admin/platform-admins${qs({ cursor: options.cursor })}`, { signal: options.signal, cache: "no-store" })
+      .then(data => PlatformAdminListSchema.parse(data)),
+  listProjectMembers: (projectId: string, signal?: AbortSignal): Promise<ProjectMembershipSummary[]> =>
+    request<unknown>(`/projects/${encodeURIComponent(projectId)}/members`, { signal, cache: "no-store" })
+      .then(data => ProjectMembershipSummarySchema.array().parse(data)),
+  lookupProjectMember: (projectId: string, userId: string, signal?: AbortSignal): Promise<AccessUserSummary> =>
+    request<unknown>(`/projects/${encodeURIComponent(projectId)}/members/lookup/${encodeURIComponent(userId)}`, { signal, cache: "no-store" })
+      .then(data => AccessUserSummarySchema.parse(data)),
+  searchProjectMembers: (projectId: string, options: { q?: string; cursor?: string; signal?: AbortSignal } = {}): Promise<AccessUserSearchResult> =>
+    request<unknown>(`/projects/${encodeURIComponent(projectId)}/members/search${qs({ q: options.q, cursor: options.cursor })}`, { signal: options.signal, cache: "no-store" })
+      .then(data => AccessUserSearchResultSchema.parse(data)),
   /** Only AuthProvider calls these; enrollment must never be prefetched. */
   getCurrentUser: (opts: { signal?: AbortSignal } = {}): Promise<CurrentUserResponse> =>
     requestCurrentUser("GET", opts),
@@ -834,12 +863,23 @@ export const api = {
 
   // ─── Version ───────────────────────────────────────────────────────────────
 
+  /** Public bootstrap probe: never acquire a token or inherit an account's cancellation. */
+  getAuthMode: async ({ signal }: { signal?: AbortSignal } = {}): Promise<{ authEnabled: boolean }> => {
+    const response = await fetch(new Request(new URL(`${BASE}/version`, window.location.origin), {
+      signal, cache: "no-store", credentials: "omit",
+    }));
+    if (!response.ok) throw new ApiError("Unable to read API authentication mode", response.status);
+    const value: unknown = await response.json();
+    return ApiAuthModeSchema.parse(value);
+  },
+
   /** Get API version information (commit hash and build time) */
   getVersion: (): Promise<{
     commit: string;
     buildTime: string;
     environment?: string;
     strictAgentCapabilities?: boolean;
+    authEnabled?: boolean;
   }> => {
     return request("/version");
   },
@@ -1391,9 +1431,8 @@ export const api = {
   // project (see `request(..., { scoped: true })`).
 
   /** List all projects (newest first). Pass `includeDeleted` to also return soft-deleted ones. */
-  listProjects: (opts?: { includeDeleted?: boolean }): Promise<Project[]> => {
-    const qs = opts?.includeDeleted ? "?includeDeleted=true" : "";
-    return request(`/projects${qs}`);
+  listProjects: (opts?: { includeDeleted?: boolean; controlPlane?: boolean }): Promise<Project[]> => {
+    return request(`/projects${qs({ includeDeleted: opts?.includeDeleted ? "true" : undefined, controlPlane: opts?.controlPlane ? "true" : undefined })}`);
   },
 
   /** Get a single project by id (404 if missing). */
@@ -1402,31 +1441,33 @@ export const api = {
   },
 
   /** Create a new project. */
-  createProject: (body: CreateProjectRequest): Promise<Project> => {
+  createProject: (body: CreateProjectRequest, operationId?: string): Promise<Project> => {
     return request("/projects", {
       method: "POST",
+      ...(operationId ? { headers: { "Idempotency-Key": operationId } } : {}),
       body: JSON.stringify(body),
     });
   },
 
   /** Rename / re-describe a project (projectId is immutable). */
   updateProject: (id: string, body: UpdateProjectRequest): Promise<Project> => {
-    return request(`/projects/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    });
+    return api.accessRequest(`/projects/${encodeURIComponent(id)}`, "PATCH", body);
   },
 
   /**
    * Soft-delete a project. Always succeeds with **204** when the project exists
    * (even if it still owns scoped data); reversible via {@link restoreProject}.
    */
-  deleteProject: (id: string): Promise<void> => {
-    return request(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
+  deleteProject: async (id: string): Promise<void> => {
+    const project = await api.getProject(id);
+    return api.accessRequest(`/projects/${encodeURIComponent(id)}`, "DELETE", { revision: project.revision ?? 0 });
   },
 
   /** Restore a soft-deleted project (clears its `deletedAt`). Returns the restored project. */
-  restoreProject: (id: string): Promise<Project> => {
-    return request(`/projects/${encodeURIComponent(id)}/restore`, { method: "POST" });
+  restoreProject: async (id: string): Promise<Project> => {
+    const projects = await api.listProjects({ controlPlane: true, includeDeleted: true });
+    const project = projects.find(p => p._id === id);
+    if (!project) throw new Error("Project not found");
+    return api.accessRequest(`/projects/${encodeURIComponent(id)}/restore`, "POST", { revision: project.revision ?? 0 });
   },
 };

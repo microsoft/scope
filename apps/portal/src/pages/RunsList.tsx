@@ -2152,9 +2152,9 @@ export function RunsList() {
             variant="outline"
             size="sm"
             className="gap-1.5"
-            disabled={isBusy || selectedIds.size === 0}
+            disabled
             onClick={() => setReportDialogOpen(true)}
-            title="Generate reports for selected runs"
+            title="New report generation is unavailable during the RBAC MVP"
           >
             <FileText className="h-3.5 w-3.5" /> Reports
           </Button>

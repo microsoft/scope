@@ -8,8 +8,8 @@ but sacrifice progressive loading and seeking.
 A narrowly routed, same-origin service worker bridges native media requests to
 the originating page. The page fetches each range through `fetchArtifact` and
 the existing `apiClient`. It does not acquire its own tokens or introduce signed
-URLs, cookie sessions, public blobs or an authentication exception. It works with
-the existing explicit-login IdP bearer flow; full RBAC is not a dependency.
+URLs, cookie sessions, public blobs or an authentication exception. The bridge
+uses the API's current authentication and project-membership policy.
 
 ## Request and trust boundaries
 
@@ -23,7 +23,7 @@ sequenceDiagram
     Worker->>Worker: Check originating WindowClient.id
     Worker->>Page: Per-request MessagePort, Range only
     Page->>API: Fixed request/attempt/project URL, bearer, Range
-    API->>API: Existing identity and scoped resource resolution
+    API->>API: Verify identity, current membership and scoped resource
     API-->>Page: 200/206, exact byte headers, streaming body
     Page-->>Worker: Status and allowlisted headers
     Worker-->>Video: Streaming response, no-store
@@ -43,9 +43,11 @@ Other tabs, frames and clientless navigations fail closed.
 Tokens remain in the existing page transport. The worker receives no token,
 user profile or protected URL. Neither bridge writes protected bytes or handles
 to CacheStorage, IndexedDB or local storage. Every new range goes through the
-normal API authentication and project-scoped resource lookup. This layer does
-not add membership checks, revocation leases or change anonymous rollout rules.
-Bytes already buffered in the browser cannot be clawed back.
+normal API authentication and project-scoped resource lookup. With authentication
+enabled, removing membership prevents the next authorized range. An already
+authorized range may finish until its session is canceled; bytes already buffered
+in the browser cannot be clawed back. See [Authentication & RBAC](auth-rbac.md)
+for the canonical authority and explicit authentication opt-out contract.
 
 ## Byte delivery and failures
 
@@ -160,9 +162,9 @@ Historical acceptance on a combined branch does not establish this extracted
 layer's browser acceptance, other browser engines, prefix deployments or
 worker-side recording/upload.
 
-### Extracted-layer acceptance
+### Delivery-only extracted-layer acceptance
 
-The extracted implementation was exercised in Chromium 156.0.8078.12 against
+The delivery-only implementation was exercised in Chromium 156.0.8078.12 against
 the actual Vite Portal and built API, with separate MongoDB, Redis, Azurite and
 Entra Local fixtures. Login used the real MSAL redirect and existing Scope-user
 enrollment, without RBAC changes or mocked authentication. Recordings were
@@ -190,5 +192,6 @@ This does not establish production-nginx, prefix-hosted, Safari or Firefox
 acceptance, worker restart/idle-expiry recovery, real-worker capture/upload or
 every interrupted-body and delayed-history browser case. Protocol, component
 and API tests cover additional failure/lifecycle cases; they are not substitutes
-for those remaining native-browser/deployment checks. Existing no-token rollout
-behavior is unchanged, not converted into RBAC by these delivery checks.
+for those remaining native-browser/deployment checks. The delivery-only checks
+retained the previous no-token rollout; they do not establish cumulative RBAC
+acceptance or weaken the authentication-enabled policy described above.
