@@ -41,11 +41,12 @@ export function blobNameFromLogsUrl(url: string): string | null {
 
 /**
  * Deep-clone a run resource and rewrite `harUrl`, `rawChatUrl`,
- * `chatResultUrl`, and `toolCallsUrl` fields to relative archive paths.
+ * `taxonomyUrl`, `chatResultUrl`, and `toolCallsUrl` fields to relative archive paths.
  *
  * - `run.harUrl`              → `"run.har"`
  * - Per-turn `harUrl`          → `"iteration-{N}.har"`
  * - `run.rawChatUrl`           → `"run.chat-export.json"`
+ * - `run.taxonomyUrl`          → `"taxonomy.json"`
  * - Per-turn `rawChatUrl`      → `"iteration-{N}.chat-export.json"`
  * - Per-turn `chatResultUrl`   → `"iteration-{N}.chat-result.json"`
  * - Per-turn `toolCallsUrl`    → `"iteration-{N}.tool-calls.jsonl"`
@@ -54,6 +55,7 @@ export function rewriteHarUrlsForArchive<T extends {
   run?: {
     harUrl?: string;
     rawChatUrl?: string;
+    taxonomyUrl?: string;
     turns?: Array<{ iteration: number; harUrl?: string; rawChatUrl?: string; chatResultUrl?: string; toolCallsUrl?: string; atifUrl?: string; [key: string]: unknown }>;
     [key: string]: unknown;
   };
@@ -65,6 +67,9 @@ export function rewriteHarUrlsForArchive<T extends {
     }
     if (copy.run.rawChatUrl) {
       copy.run.rawChatUrl = "run.chat-export.json";
+    }
+    if (copy.run.taxonomyUrl) {
+      copy.run.taxonomyUrl = "taxonomy.json";
     }
     if (copy.run.turns) {
       for (const turn of copy.run.turns) {
@@ -383,6 +388,7 @@ export interface ArchivableRun {
     logsUrl?: string;
     harUrl?: string;
     rawChatUrl?: string;
+    taxonomyUrl?: string;
     turns?: Array<{
       iteration: number;
       snapshotUrl?: string;
@@ -441,6 +447,7 @@ export async function packRunIntoTar(
   const turns = resource.run?.turns ?? [];
   const topHarUrl = resource.run?.harUrl;
   const topRawChatUrl = resource.run?.rawChatUrl;
+  const topTaxonomyUrl = resource.run?.taxonomyUrl;
 
   // Entries 2..N: iteration snapshots as-is (.tar.gz blobs)
   for (const turn of turns) {
@@ -591,6 +598,26 @@ export async function packRunIntoTar(
     } catch (blobError) {
       if (isBlobNotFound(blobError)) continue;
       throw blobError;
+    }
+  }
+
+  // Bundle run-level taxonomy JSON into the archive.
+  if (topTaxonomyUrl) {
+    try {
+      const blobName = blobNameFromSnapshotsUrl(topTaxonomyUrl);
+      if (blobName) {
+        const blobClient = container.getBlockBlobClient(blobName);
+        const downloadResponse = await blobClient.download();
+        if (downloadResponse.readableStreamBody && downloadResponse.contentLength) {
+          const entry = pack.entry({
+            name: `${id}/taxonomy.json`,
+            size: downloadResponse.contentLength,
+          });
+          await pipeline(downloadResponse.readableStreamBody, entry);
+        }
+      }
+    } catch (blobError) {
+      if (!isBlobNotFound(blobError)) throw blobError;
     }
   }
 

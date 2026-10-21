@@ -6,11 +6,11 @@ import { parseHandlerDocument } from "./register-handler.js";
 
 describe("parseHandlerDocument", () => {
   const valid = {
-    _id: "pp-example",
+    _id: "pp-taxonomy",
     type: "post-process-handler",
     version: 1,
-    queue: "pp-example-queue",
-    selector: "example",
+    queue: "pp-taxonomy-queue",
+    selector: "taxonomy",
     autoBackfill: false,
     dependsOn: ["pp-atif"],
   };
