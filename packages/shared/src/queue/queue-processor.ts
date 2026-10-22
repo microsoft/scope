@@ -95,7 +95,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
       );
     }
 
-    // Create post-processor queue client if configured (event-driven dispatch)
+    // Create post-processor queue client if configured (legacy event-driven dispatch)
     if (config.postProcessorQueueName) {
       if (config.storageConnectionString) {
         this.postProcessorQueueClient = new QueueClient(
@@ -114,10 +114,40 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
   }
 
   /**
-   * Enqueue a post-processing message (non-fatal on failure — polling dispatcher
-   * will catch up within 2s if this fails).
+   * Notify the scheduler that a run reached a terminal state.
+   * The scheduler evaluates the handler DAG and dispatches eligible handlers.
+   * Falls back to legacy queue enqueue if SCHEDULER_URL is not configured.
    */
-  private async enqueuePostProcessing(requestId: string, runId: string): Promise<void> {
+  private async notifyRunTerminal(requestId: string, runId: string): Promise<void> {
+    const schedulerUrl = process.env.SCHEDULER_URL;
+    if (schedulerUrl) {
+      try {
+        const response = await fetch(`${schedulerUrl}/notify/run-terminal`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId, runId }),
+        });
+        if (response.ok) {
+          console.log(`[${this.workerName}] Notified scheduler: run-terminal for ${requestId}`);
+        } else {
+          console.warn(`[${this.workerName}] Scheduler notify failed: ${response.status} — poll will catch up`);
+        }
+        return;
+      } catch (err) {
+        console.warn(`[${this.workerName}] Scheduler notify error for ${requestId} — poll will catch up:`, err);
+        return;
+      }
+    }
+
+    // Legacy fallback: direct queue enqueue
+    await this.enqueuePostProcessingLegacy(requestId, runId);
+  }
+
+  /**
+   * @deprecated Legacy direct queue enqueue. Use notifyRunTerminal instead.
+   * Kept as fallback when SCHEDULER_URL is not configured.
+   */
+  private async enqueuePostProcessingLegacy(requestId: string, runId: string): Promise<void> {
     if (!this.postProcessorQueueClient) return;
     try {
       const message = Buffer.from(
@@ -130,9 +160,9 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
     }
   }
 
-  /** Override base hook to enqueue post-processing when a run completes via the error path. */
+  /** Override base hook to notify scheduler when a run completes via the error path. */
   protected override async onRunTerminal(requestId: string, runId: string): Promise<void> {
-    await this.enqueuePostProcessing(requestId, runId);
+    await this.notifyRunTerminal(requestId, runId);
   }
 
   /** Build workerVersion and OS fields for stamping on request documents.
@@ -357,8 +387,8 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
         // Run is terminal — drop the heartbeat key so the API stops
         // surfacing it (TTL would expire it eventually anyway).
         await this.heartbeatStore.delete(requestDoc.run!._id);
-        // Enqueue post-processing even for failed runs (partial trajectory is useful)
-        await this.enqueuePostProcessing(requestDoc._id, requestDoc.run!._id);
+        // Notify scheduler even for failed runs (partial trajectory is useful)
+        await this.notifyRunTerminal(requestDoc._id, requestDoc.run!._id);
       } else {
         // Either the original worker resumed beating between our read and
         // write, or a concurrent retry already demoted this run, or the
@@ -544,32 +574,6 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
     // Seed liveness immediately so a fast redelivery observes this claim.
     await this.heartbeatStore.set(runId, startedAt);
     return startedAt;
-  }
-
-  /**
-   * Fire-and-forget report generation trigger via REST API.
-   * Calls the trigger endpoint which evaluates all report templates' triggers
-   * and creates a report for each matching template.
-   */
-  private async triggerReportGeneration(requestId: string): Promise<void> {
-    const apiBaseUrl = (this.config as QueueProcessorConfig).apiBaseUrl;
-    if (!apiBaseUrl) return;
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/reports/trigger`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId }),
-      });
-      if (response.ok) {
-        const result = await response.json() as { triggered: number };
-        console.log(`[${this.workerName}] Triggered report generation for request ${requestId}: ${result.triggered} report(s) created`);
-      } else {
-        console.warn(`[${this.workerName}] Failed to trigger report generation: ${response.status} ${response.statusText}`);
-      }
-    } catch (error) {
-      console.warn(`[${this.workerName}] Failed to trigger report generation: ${error}`);
-    }
   }
 
   /**
@@ -971,8 +975,8 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
         `[${this.workerName}] Multi-turn ${finalStatus} for request ${requestId} (${result.turns.length} iterations)`
       );
 
-      // Event-driven post-processor dispatch — enqueue immediately on completion
-      await this.enqueuePostProcessing(requestId, runId);
+      // Notify scheduler — it evaluates the handler DAG and dispatches eligible handlers
+      await this.notifyRunTerminal(requestId, runId);
     }
 
     // Drop the Redis liveness heartbeat now that the run is terminal so it

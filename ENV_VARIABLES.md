@@ -926,11 +926,36 @@ conflicts closed.
 
 How often the post-processor dispatcher polls for completed runs needing post-processing. This is a **backfill/catch-up** mechanism — the primary dispatch path is event-driven (coder workers enqueue directly on run completion). The 30s default keeps idle RU consumption low while still catching missed events or version-upgrade backfills within a reasonable window. Reduce temporarily for large backfills.
 
+### SCHEDULER_HANDLER_CACHE_TTL_MS
+**Default:** `300000`
+**Type:** integer (milliseconds)
+
+TTL for the DAG dispatcher's in-memory cache of handler topology (the `services` collection, `type: "post-process-handler"`). `loadHandlers()` runs on the notify/poll hot path (2–3 reads per notify plus every poll cycle) but topology only changes on deploys, so caching it eliminates nearly all of those reads (meaningful on CosmosDB where each query costs RUs). Cache coherence comes primarily from `HandlerDispatcher.registerHandler` invalidating the cache the moment topology changes — the scheduler is a singleton (`replicas: 1`, `Recreate`) and the sole writer of the collection — so this TTL is only a coarse backstop for out-of-band writes or a future scale-out to more than one replica. Kept well above `SCHEDULER_PP_POLL_INTERVAL_MS` so the poll loop doesn't force a fresh read every cycle.
+
 ### QUEUE_NAME_POST_PROCESSOR
 **Default:** `post-processor-queue`
 **Type:** string
 
 Azure Storage Queue name used by both the scheduler (to enqueue post-processing work) and the post-processor worker (to dequeue). Must match between the two services.
+
+### SCHEDULER_URL
+**Default:** (not set)
+**Type:** URL string
+
+Optional base URL for the scheduler's HTTP notification endpoints. When set, coder workers call `POST /notify/run-terminal` after a run reaches a terminal state, and post-processing handlers call `POST /notify/handler-complete` after a handler finishes. If unset, workers fall back to the legacy direct post-processor queue enqueue path and the scheduler's polling loop catches up.
+
+- **Docker Compose:** `http://scheduler:8080`
+- **Kubernetes:** `http://scheduler-service.scoped.svc.cluster.local:8080`
+- **Local dev:** Leave unset to rely on legacy queue fallback unless you are also running the scheduler locally
+
+### API_URL
+**Default:** `http://api:80`
+**Type:** URL string
+
+Base URL the **scheduler** uses to reach the API's `POST /api/v1/reports/trigger` endpoint. When a run's post-processing handler DAG drains (every registered handler reaches a terminal state), the scheduler calls this endpoint so the API can evaluate each report template's trigger and create the templated report job(s). Reports are deliberately not DAG handlers — see [docs/architecture/post-processing.md](docs/architecture/post-processing.md#report-triggering-on-dag-drain).
+
+- **Docker Compose:** `http://api:80`
+- **Kubernetes:** `http://api.scoped.svc.cluster.local:80`
 
 ### SCOPE_REAPER_ENABLED
 **Default:** `false`
