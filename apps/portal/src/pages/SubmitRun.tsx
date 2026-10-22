@@ -1141,14 +1141,14 @@ export function SubmitRun() {
                   onClick={() => setCreateObservationOpen(true)}
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  New…
+                  New Observation
                 </Button>
               )}
             />
             <CreateCriterionDialog
               open={createObservationOpen}
               onOpenChange={setCreateObservationOpen}
-              defaultKind="observation"
+              mode="observation"
               onCreated={(id) => setPickedObservations((prev) => [...prev, id])}
             />
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
