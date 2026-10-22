@@ -3,7 +3,7 @@
 
 import { useEffect } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { delay, http, HttpResponse } from "msw";
+import { http, HttpResponse } from "msw";
 import { expect, userEvent, type within } from "storybook/test";
 import { Toaster } from "sonner";
 import { useProjectContext } from "@/contexts/ProjectContext";
@@ -24,20 +24,23 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Ready: Story = {
+export const Ready = {
   parameters: { msw: { handlers: [
     http.get("*/api/v1/requests/demo/runs/attempt-1/archive", () => new HttpResponse(
       new Uint8Array([0x1f, 0x8b, 0x08, 0]),
       { headers: { "content-type": "application/gzip", "content-disposition": 'attachment; filename="demo.tar.gz"' } },
     )),
   ] } },
-};
+} satisfies Story;
 
 export const PendingAndCancel = {
   parameters: { msw: { handlers: [
-    http.get("*/api/v1/requests/demo/runs/attempt-1/archive", async () => {
-      await delay(500);
-      return new HttpResponse(new Uint8Array([1]), { headers: { "content-type": "application/gzip" } });
+    http.get("*/api/v1/requests/demo/runs/attempt-1/archive", async ({ request }) => {
+      await new Promise<void>(resolve => {
+        if (request.signal.aborted) resolve();
+        else request.signal.addEventListener("abort", () => resolve(), { once: true });
+      });
+      return HttpResponse.error();
     }),
   ] } },
   play: async ({ canvas }: { canvas: ReturnType<typeof within> }) => {

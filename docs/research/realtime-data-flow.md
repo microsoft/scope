@@ -108,6 +108,8 @@ Downloads retain the existing complete-file buffering behavior, sanitize
 filenames and release their temporary object URLs on cancellation, page exit
 or expiry. Batch archive POSTs are not retried after network/5xx failures.
 HTTP failures are displayed rather than saved as successful artifact files.
+GET establishment retries recognize ky's wrapped network errors, not arbitrary
+`TypeError`s. An accepted response body's failures never replay the transfer.
 
 `useArtifactSession` binds operations to the account-session abort signal,
 Scope user, project and selected resource/attempt. It cancels on identity

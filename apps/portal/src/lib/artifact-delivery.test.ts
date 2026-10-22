@@ -249,24 +249,58 @@ describe("authenticated artifact delivery", () => {
   });
 
   it("never retries a batch POST after an uncertain network failure", async () => {
-    fetchMock.mockRejectedValue(new TypeError("Network unavailable"));
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
     await expect(downloadBatchArtifacts(["r1"], "p", controller().signal)).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("retries a transient GET establishment, but never restarts a failed accepted body", async () => {
+  it("retries a browser network failure wrapped by the real apiClient", async () => {
     vi.useFakeTimers();
-    fetchMock.mockRejectedValueOnce(new TypeError("Network unavailable")).mockResolvedValueOnce(archive());
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValueOnce(archive());
     const result = downloadArtifact(path, "p", controller().signal);
-    await vi.runAllTimersAsync();
-    await result;
+    const assertion = expect(result).resolves.toBeUndefined();
+    await Promise.all([assertion, vi.runAllTimersAsync()]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    fetchMock.mockReset();
-    create.mockClear();
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("caps browser network retries at three establishment attempts", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const assertion = expect(downloadArtifact(path, "p", controller().signal))
+      .rejects.toMatchObject({ name: "NetworkError" });
+    await Promise.all([assertion, vi.runAllTimersAsync()]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("cancels network backoff without establishing another request", async () => {
+    vi.useFakeTimers();
+    const owner = controller();
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const assertion = expect(downloadArtifact(path, "p", owner.signal))
+      .rejects.toMatchObject({ name: "AbortError" });
+    await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
+    owner.abort();
+    await assertion;
+    await vi.runAllTimersAsync();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("does not retry non-network transport errors", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Invalid request configuration"));
+    await expect(downloadArtifact(path, "p", controller().signal))
+      .rejects.toThrow("Invalid request configuration");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("never restarts a failed accepted body", async () => {
     fetchMock.mockResolvedValue(archive(new ReadableStream({
-      start(c) { c.enqueue(new Uint8Array([1])); c.error(new Error("Transfer interrupted")); },
+      start(c) { c.enqueue(new Uint8Array([1])); c.error(new TypeError("Failed to fetch")); },
     })));
-    await expect(downloadArtifact(path, "p", controller().signal)).rejects.toThrow("Transfer interrupted");
+    await expect(downloadArtifact(path, "p", controller().signal)).rejects.toThrow("Failed to fetch");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(create).not.toHaveBeenCalled();
   });

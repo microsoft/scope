@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { apiClient } from "./api-client";
+import { isNetworkError } from "ky";
 
 const requestArtifact = /^\/api\/v1\/requests\/[a-zA-Z0-9_-]+(?:\/runs\/[a-zA-Z0-9_-]+)?\/(?:archive|har|atif|tool-calls|video|snapshots\/[1-9]\d*)$/;
 const codebaseArchive = /^\/api\/v1\/codebase-revisions\/[a-zA-Z0-9_-]+\/archive$/;
@@ -81,7 +82,7 @@ export async function fetchArtifact(
         headers: range ? { Range: range } : undefined,
       });
     } catch (error) {
-      if (signal.aborted || attempt >= 2 || !(error instanceof TypeError)) throw error;
+      if (signal.aborted || attempt >= 2 || !isNetworkError(error)) throw error;
       await delay(250 * 2 ** attempt, signal);
       continue;
     }

@@ -139,6 +139,12 @@ blob range. Player tests cover lifecycle, stale identities and StrictMode;
 composed stories cover conflict/retry and no-project states. These are
 protocol/component checks, not native browser playback evidence.
 
+Artifact cancellation stories keep responses pending until their request is
+aborted, rather than racing a fixed response delay. Their Vitest harness checks
+the request abort and absence of download dispatch, stubs native anchor
+navigation and restores the document URL between cases so authorization stories
+cannot inherit a blob URL from an earlier download.
+
 Real-browser acceptance must run on this implementation with isolated fixtures
 and the existing login flow, not use a combined RBAC branch as proof. Verify
 actual archive bytes; advancing playback before a throttled upstream transfer
