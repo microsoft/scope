@@ -682,6 +682,11 @@ A sibling affordance, `components/ShortId.tsx`, applies the same hoverable-toolt
 trigger stays an inline `<span>` (not a link) so the row click still navigates to the run; the
 copy button calls `e.stopPropagation()` so copying never triggers row navigation.
 
+Run detail's **Generate matching reports** action evaluates active report
+template triggers for that run. A zero-match response is shown as an informational
+message explaining that nothing was queued; positive counts use singular or
+plural success text.
+
 ## Criteria System
 
 Criteria are reusable evaluation rules stored in the database and optionally defined in `config/criteria/*.yaml`. They support:
