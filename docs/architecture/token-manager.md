@@ -158,7 +158,8 @@ stateDiagram-v2
 | `GET` | `/api/v1/keys` | List all keys (optionally filter by capability) |
 | `POST` | `/api/v1/keys` | Register a new key |
 | `POST` | `/api/v1/keys/preview` | Preview capabilities without registering |
-| `GET` | `/api/v1/keys/:id` | Get key details (excludes secret) |
+| `GET` | `/api/v1/keys/:id` | Get key details (excludes secrets; includes the non-secret Foundry model name) |
+| `PUT` | `/api/v1/keys/:id` | Update metadata and the optional Azure AI Foundry model override |
 | `DELETE` | `/api/v1/keys/:id` | Delete a key |
 | `POST` | `/api/v1/keys/:id/validate` | Trigger manual validation |
 
@@ -169,6 +170,34 @@ stateDiagram-v2
 | `GET` | `/api/v1/keys/acquire?capability=X` | Acquire a key for given capability |
 
 The acquire endpoint uses round-robin selection among valid, enabled keys that provide the requested capability.
+
+Updating the model override rewrites only the `model` property of the Foundry
+credential stored in Key Vault; the endpoint and API key are preserved. The
+key is persisted as `unknown` before the Key Vault write, so a partial update
+cannot leave an unvalidated deployment available for acquisition. The Token
+Manager validates the new deployment in the background and applies the result
+only if its UUID `validationRevision` still matches. Only a model change rotates
+that revision; metadata edits do not cancel in-flight validation. UUIDs also
+avoid collisions between edits within the same millisecond. The Portal polls
+the detail endpoint until validation finishes.
+
+The Portal includes `model` in an update only when the normalized input differs
+from the loaded value. The server independently treats an unchanged model as a
+no-op: it preserves validation and skips the Key Vault write and revalidation.
+Reading the non-secret model projection is best-effort: a transient Key Vault
+failure omits the model without making the rest of the metadata unavailable.
+Saving metadata with that empty, unchanged input does not clear a stored model;
+clearing a loaded override explicitly sends `model: null`.
+
+Background validation bypasses the local cache to read back the stored credential
+after the write instead of validating the request's captured value. MongoDB and
+Key Vault do not share a transaction: concurrent model edits can still complete their secret writes out
+of order, including after a readback. The revision guard prevents an older
+validation job from publishing over a newer edit, but it does not serialize
+secret writes. If edits overlap, refresh the detail view to confirm the stored
+model and manually revalidate it after the writes finish. Clearing an override
+uses the validator's `gpt-4.1` default; runtime inference uses `LLM_MODEL` when
+configured, otherwise `gpt-4.1`.
 
 ## Usage Tracking
 
