@@ -470,6 +470,15 @@ Profile fan-out mode is also supported for comparative runs:
 3. Each expanded request resolves configuration from its variation profile; unpinned specs resolve to `latestVersion`
 4. Expanded requests persist `profileId` and `profileVersionId` on each `RequestDocument` for indexing and traceability
 
+The Portal uses the same `ProfilePicker` for the base profile and each variation.
+Both filter by profile name, ID, agent ID/display name, and model, with the same
+keyboard selection behavior. Variation choices exclude the base profile, profiles
+already used by other variations, and unavailable latest targets. Each row keeps
+its selected profile visible outside the search results (including an unavailable
+marker when appropriate); changing profiles resets its version to the latest,
+while the adjacent version selector still permits available historical versions.
+This is a Portal-only selection affordance; CLI profile fan-out specs are unchanged.
+
 ## Runs List Query API
 
 `GET /api/v1/requests` powers the Portal **Runs** list and `scope run list`. All

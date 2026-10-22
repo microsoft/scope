@@ -57,7 +57,10 @@ You can either select a saved profile or configure the request inline.
 
 ### Use a profile
 
-Pick a profile from the dropdown. The Portal locks the configuration
+Search for a **Base Profile** in **Profile Variations**. You can filter
+by profile name or ID, agent name or ID, or model. Use the arrow keys
+and Enter to select a result, or Escape to close the results.
+The Portal locks the configuration
 fields (worker, model, agent version, MCP servers, skills, extensions)
 to the profile's latest version. To use an older version explicitly,
 expand the version selector beneath the profile picker.
@@ -65,6 +68,16 @@ expand the version selector beneath the profile picker.
 Selecting a profile is the only way to guarantee that another user
 re-running this same combination later will get the *exact* same
 configuration — see [Defining profiles](/guides/defining-profiles/).
+
+To compare setups, click **Add** under **Variations**. Each variation
+uses the same searchable profile picker as the base profile. The base
+profile, profiles already used by other variations, and profiles with
+unavailable latest agent configurations are excluded from its results.
+The selected profile's name remains visible even while filtering.
+Choose a version beside each variation; switching its profile resets
+that version to the latest. If a selected configuration becomes
+unavailable, the row marks it as unavailable and submission is blocked
+until you choose an available configuration or remove the variation.
 
 ### Configure inline
 
