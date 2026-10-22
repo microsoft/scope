@@ -138,6 +138,12 @@ Deletion is soft and cascading: `DELETE /api/v1/codebases/:id` sets `deletedAt` 
 
 ### 4. Delivery (Worker)
 
+The Portal's codebase-revision download controls use the shared authenticated
+artifact transport, not raw links or the stored blob origin. They pin the
+revision UUID and selected project, carry the existing IdP bearer and cancel on
+account/project changes. See [artifact delivery](../research/realtime-data-flow.md#authenticated-artifact-delivery).
+Worker seeding is unchanged.
+
 When a worker dequeues a request, `QueueProcessor` runs setup first so the worker-specific `workspacePath` is available. If `RequestDocument.codebaseRevisionId` is set, it then:
 
 1. Creates a `CodebaseClient` using `SCOPE_MT_API_URL`

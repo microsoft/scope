@@ -7,6 +7,7 @@ import type { Project, CreateProjectRequest, UpdateProjectRequest } from "@/type
 import { qs } from "./url";
 import { recordServerDate } from "./serverClock";
 import { apiClient } from "./api-client";
+import { downloadBatchArtifacts } from "./artifact-delivery";
 import { getSelectedProjectId, ProjectRequiredError } from "./project-scope";
 import { MAX_ARCHIVE_UPLOAD_LABEL } from "./codebaseUpload";
 
@@ -356,27 +357,8 @@ export const api = {
   },
 
   /** Download a batch archive of multiple runs as a single .tar.gz */
-  batchArchive: async (ids: string[]): Promise<void> => {
-    const resp = await apiClient(`${BASE}/requests/archive`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids }),
-    });
-    recordServerDate(resp.headers.get("Date"));
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ error: resp.statusText })) as { error?: string };
-      throw new Error(err.error ?? "Failed to download batch archive");
-    }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    a.download = `batch-${timestamp}.tar.gz`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  batchArchive: async (ids: string[], context: { projectId: string; signal: AbortSignal }): Promise<void> => {
+    await downloadBatchArtifacts(ids, context.projectId, context.signal);
   },
 
   /** Get video stream URL for a request (optionally per-iteration, per-index, or setup phase) */
@@ -405,6 +387,10 @@ export const api = {
   runHarUrl: (requestId: string, runId: string, iteration?: number): string => {
     const qs = iteration ? `?iteration=${iteration}` : "";
     return `${BASE}/requests/${requestId}/runs/${runId}/har${qs}`;
+  },
+
+  runAtifUrl: (requestId: string, runId: string, iteration: number): string => {
+    return `${BASE}/requests/${requestId}/runs/${runId}/atif?iteration=${iteration}`;
   },
 
   /** Video stream URL for a specific attempt */
