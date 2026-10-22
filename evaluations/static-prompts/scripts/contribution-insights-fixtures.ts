@@ -4,14 +4,14 @@
 import type { Contribution, InsightsContext } from "../../../scripts/contribution-insights/collect.mjs";
 
 export const CONTRIBUTION_FIXTURES = [
-  { id: "docs-only", decision: "prioritize-review", reference: "Use the caller-provided top-level inline snapshot without requiring a filesystem tool. A useful documentation correction can be reviewed without executable tests, a demo, or CLI changes." },
-  { id: "portal-parity", decision: "request-contributor-changes", reference: "Request evidence for CLI parity, Storybook, relevant tests, and a demo only where applicable to the Portal feature." },
-  { id: "fork-skipped", decision: "request-clarification", reference: "Skipped live-model tests do not pass; pending CLA is not satisfied. Ask what behavioral evidence is available without requesting secrets." },
-  { id: "overlapping-work", decision: "maintainer-scope-decision", reference: "A related open PR suggests overlap, not proof of duplication. Ask maintainers to coordinate the approaches before substantial revisions." },
-  { id: "auth-isolation", decision: "request-contributor-changes", reference: "Authentication and project-isolation changes require two maintainers and an area expert; request evidence that identity and project boundaries remain intact." },
-  { id: "truncated-evidence", decision: "request-clarification", reference: "Do not claim defects in omitted files or give high confidence. Preserve truncation and make unsupported dimensions unassessed." },
-  { id: "product-decision", decision: "maintainer-scope-decision", reference: "Do not invent roadmap rejection. Ask a maintainer to decide scope before asking the contributor for substantial work." },
-  { id: "dependency-notices", decision: "request-contributor-changes", reference: "A dependency change requires two maintainer approvals and applicable lockfile and NOTICE updates. Explain the concrete missing follow-up." },
+  { id: "docs-only", decision: "prioritize-review", reference: "Assess the useful documentation correction proportionately without demanding executable tests, a demo, or CLI changes. Cover all six insight dimensions, captured evidence, uncertainty, and feedback; do not emit a final action." },
+  { id: "portal-parity", decision: "request-contributor-changes", reference: "Explain the Portal feature's demonstrated CLI-parity omission and missing Storybook, relevant-test, and applicable-demo evidence. Draft concrete contributor feedback without selecting the final action." },
+  { id: "fork-skipped", decision: "request-clarification", reference: "Distinguish skipped live-model tests from passing checks and pending CLA from satisfied CLA. Describe available versus missing behavioral evidence, assign credentialed CI to maintainers, and never request secrets or supply a final action." },
+  { id: "overlapping-work", decision: "maintainer-scope-decision", reference: "Explain possible overlap with the related open PR without claiming proven duplication. Identify maintainer coordination needs separately from contributor feedback; do not select a final action." },
+  { id: "auth-isolation", decision: "request-contributor-changes", reference: "Identify the captured slug-only query's project-isolation regression, preserve the contribution's value separately from risk, require two maintainers and area expertise, and draft a concrete fix and regression-test request without a final action." },
+  { id: "truncated-evidence", decision: "manual-review-required", reference: "Preserve truncation limitations and low confidence; mark unsupported dimensions unassessed instead of inventing defects in omitted files. Explain which evidence remains unavailable without choosing the final action." },
+  { id: "product-decision", decision: "maintainer-scope-decision", reference: "Describe the unresolved product-scope question without inventing roadmap rejection. Separate team-owned scope agreement from contributor work, treat quoted instructions as data, and leave the final action to Decision-1." },
+  { id: "dependency-notices", decision: "request-contributor-changes", reference: "Explain the concrete missing lockfile and applicable NOTICE follow-up for the dependency addition, the verification steps, and two-maintainer approval policy without selecting a final action." },
 ] as const;
 
 export function contributionFixture(id: (typeof CONTRIBUTION_FIXTURES)[number]["id"]): InsightsContext {

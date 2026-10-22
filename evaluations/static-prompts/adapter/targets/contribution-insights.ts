@@ -17,12 +17,7 @@ export async function composeContributionRequest(input: unknown): Promise<{
   request: ComposedPromptRequest;
   snapshot: InsightsContext;
 }> {
-  const value = record(input);
-  const snapshot: InsightsContext = JSON.parse(requiredString(value.snapshot, "input.snapshot"));
-  if (snapshot.schemaVersion !== 1 || snapshot.mode !== "report-only" || !Array.isArray(snapshot.contributions)) {
-    throw new Error("input.snapshot must be a version 1 report-only contribution snapshot");
-  }
-  snapshot.policies = await readPolicies(ROOT);
+  const snapshot = await loadContributionSnapshot(record(input).snapshot);
   const source = await readFile(WORKFLOW, "utf8");
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(source);
   if (!match) throw new Error("Contribution workflow must have YAML frontmatter and an instruction body");
@@ -56,6 +51,15 @@ export async function composeContributionRequest(input: unknown): Promise<{
       },
     },
   };
+}
+
+export async function loadContributionSnapshot(value: unknown): Promise<InsightsContext> {
+  const snapshot: InsightsContext = JSON.parse(requiredString(value, "input.snapshot"));
+  if (snapshot.schemaVersion !== 1 || snapshot.mode !== "report-only" || !Array.isArray(snapshot.contributions)) {
+    throw new Error("input.snapshot must be a version 1 report-only contribution snapshot");
+  }
+  snapshot.policies = await readPolicies(ROOT);
+  return snapshot;
 }
 
 export async function executeContributionRequest(
@@ -94,13 +98,13 @@ export function fakeContributionReport(request: ComposedPromptRequest): string {
   if (!file) throw new Error("Fake contribution transport requires the captured snapshot");
   const snapshot: InsightsContext = JSON.parse(file.content);
   const report: ContributionReport = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     assessments: snapshot.contributions.map((contribution) => ({
       number: contribution.number, headSha: contribution.headSha,
       value: { score: null, rationale: "Offline fake transport does not judge contribution value.", evidence: [] },
       correctnessEvidence: { score: null, rationale: "Offline fake transport does not establish correctness.", evidence: [] },
       readiness: "needs-clarification", risk: contribution.minimumApprovals === 2 ? "high" : "medium",
-      confidence: "low", recommendation: "request-clarification",
+      confidence: "low",
       scenarios: SCENARIOS.map((id) => ({
         id, assessment: "unassessed", summary: "Offline fake transport; substantive analysis was not performed.", evidence: [],
       })),

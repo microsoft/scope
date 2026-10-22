@@ -62,7 +62,7 @@ vi.mock("@github/copilot-sdk", async (importOriginal) => {
             }
             const tool = config.tools?.[0];
             if (!tool?.handler) throw new Error("Missing report tool");
-            await tool.handler({ report: '{"schemaVersion":1,"assessments":[]}' }, {
+            await tool.handler({ report: '{"schemaVersion":2,"assessments":[]}' }, {
               sessionId: "local-test-session", toolCallId: "report", toolName: "contribution_report", arguments: {},
             });
           },
@@ -92,6 +92,7 @@ describe("local Copilot isolation", () => {
   it("uses an empty one-shot runtime with sanitized environment and no ambient authentication", () => {
     const options = localClientOptions("test-token", "/isolated/runtime", "/bin/copilot", {
       PATH: "/bin", HOME: "/original", GH_TOKEN: "not-inherited", OPENAI_API_KEY: "not-inherited",
+      CONTRIBUTION_DECISION_API_KEY: "not-inherited", CONTRIBUTION_DECISION_ENTRA_TOKEN: "not-inherited",
       COPILOT_ALLOW_ALL: "true", NODE_OPTIONS: "--require=untrusted",
     });
     expect(options).toMatchObject({
@@ -99,7 +100,7 @@ describe("local Copilot isolation", () => {
       gitHubToken: "test-token", useLoggedInUser: false,
       env: { PATH: "/bin", HOME: "/isolated/runtime" },
     });
-    for (const key of ["GH_TOKEN", "OPENAI_API_KEY", "COPILOT_ALLOW_ALL", "NODE_OPTIONS"]) {
+    for (const key of ["GH_TOKEN", "OPENAI_API_KEY", "CONTRIBUTION_DECISION_API_KEY", "CONTRIBUTION_DECISION_ENTRA_TOKEN", "COPILOT_ALLOW_ALL", "NODE_OPTIONS"]) {
       expect(options.env).not.toHaveProperty(key);
     }
     expect(options.connection).toMatchObject({
@@ -125,7 +126,7 @@ describe("local Copilot isolation", () => {
     const result = await createLocalCopilotContext({
       token: "test-token", cliPath: "/bin/copilot", model: "auto", timeoutMs: 30_000,
     }).complete(request, { executeTool });
-    expect(result.content).toBe('{"schemaVersion":1,"assessments":[]}');
+    expect(result.content).toBe('{"schemaVersion":2,"assessments":[]}');
     expect(executeTool).toHaveBeenCalledWith("contribution_report", { report: result.content });
     expect(harness.deleted).toEqual(["local-test-session"]);
     expect(harness.stops).toBe(1);

@@ -1,5 +1,5 @@
-# gh-aw-metadata: {"schema_version":"v4","frontmatter_hash":"29b8df2793e82b35eb2a5969e22b9462df74b85875308726f2d8364b4d06e96c","body_hash":"e6b62e816d860f7bb91e353f59cfc8222481ce1ad9bda29fddf9723de34526f0","compiler_version":"v0.89.21","strict":true,"agent_id":"copilot","engine_versions":{"copilot":"1.0.87"}}
-# gh-aw-manifest: {"version":1,"secrets":["COPILOT_GITHUB_TOKEN","GH_AW_DEFAULT_OTLP_ENDPOINT","GH_AW_DEFAULT_OTLP_HEADERS","GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN"],"actions":[{"repo":"actions/checkout","sha":"3d3c42e5aac5ba805825da76410c181273ba90b1","version":"v7.0.1"},{"repo":"actions/checkout","sha":"de0fac2e4500dabe0009e67214ff5f5447ce83dd","version":"de0fac2e4500dabe0009e67214ff5f5447ce83dd"},{"repo":"actions/download-artifact","sha":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","version":"v8.0.1"},{"repo":"actions/download-artifact","sha":"d3f86a106a0bac45b974a628896c90dbdf5c8093","version":"d3f86a106a0bac45b974a628896c90dbdf5c8093"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"v9.0.0"},{"repo":"actions/github-script","sha":"ed597411d8f924073f98dfc5c65a23a2325f34cd","version":"ed597411d8f924073f98dfc5c65a23a2325f34cd"},{"repo":"actions/setup-node","sha":"820762786026740c76f36085b0efc47a31fe5020","version":"v7.0.0"},{"repo":"actions/upload-artifact","sha":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","version":"v7.0.1"},{"repo":"actions/upload-artifact","sha":"ea165f8d65b6e75b540449e92b4886f43607fa02","version":"ea165f8d65b6e75b540449e92b4886f43607fa02"},{"repo":"github/gh-aw-actions/setup","sha":"924af5fdc64061cfbf66fb584c8b07e2ac230c60","version":"v0.89.21"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.28.23","digest":"sha256:2c78aaba1c108e130e2d6d01e4f2cca334ea04c53e6f258913ac34173fe7e3b2","pinned_image":"ghcr.io/github/gh-aw-firewall/agent:0.28.23@sha256:2c78aaba1c108e130e2d6d01e4f2cca334ea04c53e6f258913ac34173fe7e3b2"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.23","digest":"sha256:c15c3d1208df10c5b588a3657be53742aa982ae0909d1eb1812525268794ca64","pinned_image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.23@sha256:c15c3d1208df10c5b588a3657be53742aa982ae0909d1eb1812525268794ca64"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.28.23","digest":"sha256:02ffc56dd40158223064ef03a78c2d9717473c93723b4e403d455ea6f0b09ae0","pinned_image":"ghcr.io/github/gh-aw-firewall/squid:0.28.23@sha256:02ffc56dd40158223064ef03a78c2d9717473c93723b4e403d455ea6f0b09ae0"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.4.25","digest":"sha256:9be0a86220e807a0ecc89e53d7453468f7a53fbc6b3d1efd2299025ffe01d086","pinned_image":"ghcr.io/github/gh-aw-mcpg:v0.4.25@sha256:9be0a86220e807a0ecc89e53d7453468f7a53fbc6b3d1efd2299025ffe01d086"},{"image":"ghcr.io/github/gh-aw-node","digest":"sha256:11c2c544876cdbaffefe0f7f1283b74838c209654b4934a78e23ed11f750490f","pinned_image":"ghcr.io/github/gh-aw-node@sha256:11c2c544876cdbaffefe0f7f1283b74838c209654b4934a78e23ed11f750490f"}],"mcp_servers":[{"name":"safeoutputs","tools":["contribution_report","missing_data","missing_tool","noop"]}]}
+# gh-aw-metadata: {"schema_version":"v4","frontmatter_hash":"fd4a664c23e0baf37836567ee6264b1e0ef15917db0a34e249c9a4417cf91b13","body_hash":"9c03167633457554b0625213d3076a58327b903cf0793db1070ac0c1eab1305c","compiler_version":"v0.89.21","strict":true,"agent_id":"copilot","engine_versions":{"copilot":"1.0.87"}}
+# gh-aw-manifest: {"version":1,"secrets":["CONTRIBUTION_DECISION_API_KEY","COPILOT_GITHUB_TOKEN","GH_AW_DEFAULT_OTLP_ENDPOINT","GH_AW_DEFAULT_OTLP_HEADERS","GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN"],"actions":[{"repo":"actions/checkout","sha":"3d3c42e5aac5ba805825da76410c181273ba90b1","version":"v7.0.1"},{"repo":"actions/checkout","sha":"de0fac2e4500dabe0009e67214ff5f5447ce83dd","version":"de0fac2e4500dabe0009e67214ff5f5447ce83dd"},{"repo":"actions/download-artifact","sha":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","version":"v8.0.1"},{"repo":"actions/download-artifact","sha":"d3f86a106a0bac45b974a628896c90dbdf5c8093","version":"d3f86a106a0bac45b974a628896c90dbdf5c8093"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"v9.0.0"},{"repo":"actions/github-script","sha":"ed597411d8f924073f98dfc5c65a23a2325f34cd","version":"ed597411d8f924073f98dfc5c65a23a2325f34cd"},{"repo":"actions/setup-node","sha":"820762786026740c76f36085b0efc47a31fe5020","version":"v7.0.0"},{"repo":"actions/upload-artifact","sha":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","version":"v7.0.1"},{"repo":"actions/upload-artifact","sha":"ea165f8d65b6e75b540449e92b4886f43607fa02","version":"ea165f8d65b6e75b540449e92b4886f43607fa02"},{"repo":"github/gh-aw-actions/setup","sha":"924af5fdc64061cfbf66fb584c8b07e2ac230c60","version":"v0.89.21"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.28.23","digest":"sha256:2c78aaba1c108e130e2d6d01e4f2cca334ea04c53e6f258913ac34173fe7e3b2","pinned_image":"ghcr.io/github/gh-aw-firewall/agent:0.28.23@sha256:2c78aaba1c108e130e2d6d01e4f2cca334ea04c53e6f258913ac34173fe7e3b2"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.23","digest":"sha256:c15c3d1208df10c5b588a3657be53742aa982ae0909d1eb1812525268794ca64","pinned_image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.28.23@sha256:c15c3d1208df10c5b588a3657be53742aa982ae0909d1eb1812525268794ca64"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.28.23","digest":"sha256:02ffc56dd40158223064ef03a78c2d9717473c93723b4e403d455ea6f0b09ae0","pinned_image":"ghcr.io/github/gh-aw-firewall/squid:0.28.23@sha256:02ffc56dd40158223064ef03a78c2d9717473c93723b4e403d455ea6f0b09ae0"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.4.25","digest":"sha256:9be0a86220e807a0ecc89e53d7453468f7a53fbc6b3d1efd2299025ffe01d086","pinned_image":"ghcr.io/github/gh-aw-mcpg:v0.4.25@sha256:9be0a86220e807a0ecc89e53d7453468f7a53fbc6b3d1efd2299025ffe01d086"},{"image":"ghcr.io/github/gh-aw-node","digest":"sha256:11c2c544876cdbaffefe0f7f1283b74838c209654b4934a78e23ed11f750490f","pinned_image":"ghcr.io/github/gh-aw-node@sha256:11c2c544876cdbaffefe0f7f1283b74838c209654b4934a78e23ed11f750490f"}],"mcp_servers":[{"name":"safeoutputs","tools":["contribution_report","missing_data","missing_tool","noop"]}]}
 # This file was automatically generated by gh-aw (v0.89.21). DO NOT EDIT. To debug this workflow, load the skill at https://github.com/github/gh-aw/blob/main/debug.md
 #
 #    ___                   _   _
@@ -26,6 +26,7 @@
 # Evidence-backed P0 community contribution triage, producing workflow artifacts only.
 #
 # Secrets used:
+#   - CONTRIBUTION_DECISION_API_KEY
 #   - COPILOT_GITHUB_TOKEN
 #   - GH_AW_DEFAULT_OTLP_ENDPOINT
 #   - GH_AW_DEFAULT_OTLP_HEADERS
@@ -524,7 +525,7 @@ jobs:
         env:
           GH_AW_FILE_ROOT: "${{ runner.temp }}/gh-aw"
           GH_AW_FILE_CONFIG: "{\"files\":[{\"path\":\"safeoutputs/config.json\",\"content_env\":\"GH_AW_SAFE_OUTPUTS_CONFIG\"}]}"
-          GH_AW_SAFE_OUTPUTS_CONFIG: "{\"contribution-report\":{\"description\":\"Save one report-only contribution assessment as validated JSON and Markdown workflow artifacts. Does not post feedback or mutate GitHub entities.\",\"inputs\":{\"report\":{\"default\":null,\"description\":\"JSON string with schemaVersion 1 and an assessments array matching every captured PR and head SHA. Follow the report contract in the workflow instructions.\",\"required\":true,\"type\":\"string\"}},\"max\":1},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"false\"},\"report_incomplete\":{}}"
+          GH_AW_SAFE_OUTPUTS_CONFIG: "{\"contribution-report\":{\"description\":\"Save one report-only contribution assessment as validated JSON and Markdown workflow artifacts. Does not post feedback or mutate GitHub entities.\",\"inputs\":{\"report\":{\"default\":null,\"description\":\"JSON string with schemaVersion 2 and Copilot insights matching every captured PR and head SHA. Do not supply a recommendation or final decision; Microsoft-Decision-1 owns the final decision.\",\"required\":true,\"type\":\"string\"}},\"max\":1},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"false\"},\"report_incomplete\":{}}"
         with:
           script: |
             const path = require('path');
@@ -546,7 +547,7 @@ jobs:
                     "additionalProperties": false,
                     "properties": {
                       "report": {
-                        "description": "JSON string with schemaVersion 1 and an assessments array matching every captured PR and head SHA. Follow the report contract in the workflow instructions.",
+                        "description": "JSON string with schemaVersion 2 and Copilot insights matching every captured PR and head SHA. Do not supply a recommendation or final decision; Microsoft-Decision-1 owns the final decision.",
                         "type": "string"
                       }
                     },
@@ -1352,8 +1353,13 @@ jobs:
           name: contribution-insights-context
           path: ${{ runner.temp }}/contribution-insights
       - name: Validate and render the report
+        id: render
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # ed597411d8f924073f98dfc5c65a23a2325f34cd
         env:
+          CONTRIBUTION_DECISION_API_KEY: ${{ secrets.CONTRIBUTION_DECISION_API_KEY }}
+          CONTRIBUTION_DECISION_DEPLOYMENT: ${{ vars.CONTRIBUTION_DECISION_DEPLOYMENT }}
+          CONTRIBUTION_DECISION_ENABLED: ${{ vars.CONTRIBUTION_DECISION_ENABLED || 'false' }}
+          CONTRIBUTION_DECISION_ENDPOINT: ${{ vars.CONTRIBUTION_DECISION_ENDPOINT }}
           GH_AW_AGENT_OUTPUT: ${{ runner.temp }}/gh-aw/safe-jobs/agent_output.json
           REPORT_DIRECTORY: ${{ runner.temp }}/contribution-insights
         with:
@@ -1363,6 +1369,9 @@ jobs:
             const { parseReport, renderReport } = await import(
               `${process.env.GITHUB_WORKSPACE}/scripts/contribution-insights/report.mts`
             );
+            const { addFinalDecisions, readDecisionConfig, DecisionError } = await import(
+              `${process.env.GITHUB_WORKSPACE}/scripts/contribution-insights/decision.mts`
+            );
             const output = JSON.parse(await readFile(process.env.GH_AW_AGENT_OUTPUT, "utf8"));
             const reports = output.items.filter((item) => item.type === "contribution_report");
             if (reports.length !== 1 || typeof reports[0].report !== "string") {
@@ -1370,12 +1379,34 @@ jobs:
             }
             const directory = process.env.REPORT_DIRECTORY;
             const snapshot = JSON.parse(await readFile(join(directory, "context.json"), "utf8"));
-            const report = parseReport(reports[0].report, snapshot);
+            const insights = parseReport(reports[0].report, snapshot);
+            let config;
+            let configurationError;
+            try {
+              config = readDecisionConfig(process.env);
+            } catch (error) {
+              if (!(error instanceof DecisionError)) throw error;
+              configurationError = error;
+            }
+            const final = configurationError ? {
+              failed: true,
+              report: {
+                schemaVersion: 2,
+                assessments: insights.assessments.map((assessment) => ({
+                  ...assessment,
+                  decision: { status: "failed", provider: "Microsoft-Decision-1", error: configurationError.message },
+                })),
+              },
+            } : await addFinalDecisions(insights, snapshot, config);
+            const report = final.report;
             const markdown = renderReport(report, snapshot);
             await writeFile(join(directory, "report.json"), JSON.stringify(report, null, 2));
             await writeFile(join(directory, "report.md"), markdown);
             await core.summary.addRaw(markdown).write();
+            core.setOutput("report_written", "true");
+            if (final.failed) core.setFailed("Microsoft-Decision-1 failed; Copilot insights are preserved but no final decision is available.");
       - name: Upload validated contribution insights
+        if: always() && steps.render.outputs.report_written == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ea165f8d65b6e75b540449e92b4886f43607fa02
         env:
           GH_AW_AGENT_OUTPUT: ${{ runner.temp }}/gh-aw/safe-jobs/agent_output.json

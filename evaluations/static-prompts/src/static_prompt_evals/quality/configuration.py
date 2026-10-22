@@ -202,9 +202,9 @@ def load_quality_configuration(
             raise QualityConfigurationError(
                 f"{path}: family {family!r} requires deterministic checks"
             )
-        if not isinstance(config.get("evaluators"), list) or not config["evaluators"]:
+        if not isinstance(config.get("evaluators"), list):
             raise QualityConfigurationError(
-                f"{path}: family {family!r} requires AI evaluators"
+                f"{path}: family {family!r} requires an evaluator list (empty for deterministic-only targets)"
             )
         if not isinstance(config.get("thresholds"), dict):
             raise QualityConfigurationError(

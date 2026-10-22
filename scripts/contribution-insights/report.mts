@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { Contribution, InsightsContext } from "./collect.mjs";
+import type { DecisionAction, FinalDecision } from "./decision.mjs";
 
 export const SCENARIOS = [
   "value-fit",
@@ -26,7 +27,7 @@ export interface ContributionAssessment {
   readiness: "blocked" | "needs-clarification" | "ready-for-review";
   risk: "low" | "medium" | "high";
   confidence: "low" | "medium" | "high";
-  recommendation: "prioritize-review" | "request-clarification" | "request-contributor-changes" | "maintainer-scope-decision";
+  decision?: FinalDecision;
   scenarios: Array<{
     id: (typeof SCENARIOS)[number];
     assessment: "clear" | "needs-attention" | "unassessed";
@@ -39,7 +40,7 @@ export interface ContributionAssessment {
 }
 
 export interface ContributionReport {
-  schemaVersion: 1;
+  schemaVersion: 2;
   assessments: ContributionAssessment[];
 }
 
@@ -88,13 +89,16 @@ export function evidenceLinks(context: InsightsContext, contribution: Contributi
 export function parseReport(raw: string, context: InsightsContext): ContributionReport {
   if (raw.length > 120_000) throw new Error("Contribution report exceeds 120000 characters");
   const root = object(JSON.parse(raw) as unknown, "report");
-  if (root.schemaVersion !== 1 || !Array.isArray(root.assessments) ||
+  if (root.schemaVersion !== 2 || !Array.isArray(root.assessments) ||
     root.assessments.length !== context.contributions.length) {
-    throw new Error("Report must have schemaVersion 1 and exactly one assessment for every captured contribution");
+    throw new Error("Report must have schemaVersion 2 and exactly one insight assessment for every captured contribution");
   }
   const seen = new Set<number>();
   const assessments = root.assessments.map((value): ContributionAssessment => {
     const item = object(value, "assessment");
+    if ("recommendation" in item || "decision" in item) {
+      throw new Error("Copilot must provide insights only; final decisions belong exclusively to Microsoft-Decision-1");
+    }
     const contribution = context.contributions.find((candidate) => candidate.number === item.number);
     if (!contribution || seen.has(contribution.number) || item.headSha !== contribution.headSha) {
       throw new Error("Assessment has a duplicate, unknown PR number, or stale head SHA");
@@ -149,9 +153,6 @@ export function parseReport(raw: string, context: InsightsContext): Contribution
       value: rating(item.value, "value"), correctnessEvidence: rating(item.correctnessEvidence, "correctness evidence"),
       readiness: oneOf(item.readiness, ["blocked", "needs-clarification", "ready-for-review"], "readiness"),
       risk, confidence,
-      recommendation: oneOf(item.recommendation, [
-        "prioritize-review", "request-clarification", "request-contributor-changes", "maintainer-scope-decision",
-      ], "recommendation"),
       scenarios,
       reviewerBrief: {
         summary: string(brief.summary, "reviewer summary"), reviewOrder: strings(brief.reviewOrder, "review order"),
@@ -164,7 +165,7 @@ export function parseReport(raw: string, context: InsightsContext): Contribution
       limitations: strings(item.limitations, "limitations"),
     };
   });
-  return { schemaVersion: 1, assessments };
+  return { schemaVersion: 2, assessments };
 }
 
 function escape(value: string): string {
@@ -179,56 +180,75 @@ function ratingLabel(rating: Rating): string {
   return rating.score === null ? "Unassessed" : `${rating.score}/5`;
 }
 
+function summaryExcerpt(value: string): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  const first = [...new Intl.Segmenter("en", { granularity: "sentence" }).segment(text)][0]?.segment.trim() ?? text;
+  if (first.length <= 240) return first;
+  const excerpt = first.slice(0, 237);
+  const boundary = excerpt.lastIndexOf(" ");
+  return `${excerpt.slice(0, boundary > 0 ? boundary : excerpt.length)}...`;
+}
+
 export function renderReport(report: ContributionReport, context: InsightsContext): string {
-  const recommendations: Record<ContributionAssessment["recommendation"], string> = {
+  const recommendations: Record<DecisionAction, string> = {
     "prioritize-review": "Prioritize review",
     "request-clarification": "Clarification needed",
     "request-contributor-changes": "Contributor changes needed",
     "maintainer-scope-decision": "Maintainer scope decision",
+    "manual-review-required": "Manual review required",
   };
   const sections = [
     "# Contribution Insights",
     "",
-    "## TL;DR",
+    "## Summary",
   ];
   if (!report.assessments.length) sections.push("", "No eligible community contributions were selected.");
   for (const assessment of report.assessments) {
     const contribution = context.contributions.find((candidate) => candidate.number === assessment.number);
     if (!contribution) throw new Error("Cannot summarize an assessment without its snapshot");
     if (report.assessments.length > 1) sections.push("", `### PR #${contribution.number}`);
-    const nextAction = assessment.feedback.required[0] ?? assessment.feedback.maintainerDecision[0] ??
-      assessment.reviewerBrief.reviewOrder[0] ?? assessment.reviewerBrief.summary;
+    const decision = assessment.decision;
+    const finalAction = decision?.status === "completed" ? recommendations[decision.action] : "Unavailable";
+    const nextAction = decision?.status === "completed"
+      ? assessment.feedback.maintainerDecision[0] ?? assessment.reviewerBrief.reviewOrder[0] ?? assessment.reviewerBrief.summary
+      : "Configure or restore Microsoft-Decision-1; Copilot insights remain available.";
+    const nextActionPreview = summaryExcerpt(nextAction);
     const caveat = contribution.checks.length === 1 && contribution.cla === "passed"
       ? "Only the CLA check passed in the captured evidence; behavioral tests were not verified."
       : contribution.limitations[0] ?? assessment.limitations[0] ??
         "Only captured evidence was considered; this assessment did not run tests.";
     sections.push(
+      "", `[#${contribution.number}](${contribution.url}): ${escape(contribution.title)}`,
+      "", escape(summaryExcerpt(assessment.value.rationale)),
+      "", "### TL;DR",
       "", "| Signal | Summary |", "| --- | --- |",
-      `| Contribution | [#${contribution.number}](${contribution.url}): ${escape(contribution.title)} |`,
-      `| Recommendation | **${recommendations[assessment.recommendation]}** |`,
+      `| Final decision | **${finalAction}** |`,
       `| Value | **${ratingLabel(assessment.value)}** |`,
       `| Correctness evidence | **${ratingLabel(assessment.correctnessEvidence)}** |`,
-      `| Risk | **${assessment.risk}** |`,
-      `| Confidence | **${assessment.confidence}** |`,
+      `| Risk / insight confidence | **${assessment.risk}** / **${assessment.confidence}** |`,
       `| Contributor action | ${assessment.feedback.required.length
-        ? `${assessment.feedback.required.length} required item(s); see contributor feedback`
+        ? `${assessment.feedback.required.length} required item(s); see Required below`
         : "No required changes identified"} |`,
-      `| Next action | ${escape(nextAction)} |`,
-      `| Evidence caveat | ${escape(caveat)} |`,
-      "| Merge readiness | **Not assessed**; this report is not a merge approval |",
+      `| ${decision?.status === "completed" && assessment.feedback.maintainerDecision.length ? "Maintainer action" : "Next action"} | ${escape(nextActionPreview)} |`,
+      `| Evidence caveat | ${escape(summaryExcerpt(caveat))} |`,
+      "| Merge readiness | **Not assessed** |",
+      "",
+      `Decision: **Microsoft-Decision-1 (${decision?.status ?? "not-configured"})**. Insights and feedback: **Copilot**.`,
     );
+    if (decision?.status === "failed") sections.push("", `**No final decision.** ${escape(decision.error)}`);
+    if (assessment.feedback.required.length) sections.push("", "#### Required", "", list(assessment.feedback.required));
+    const remainingMaintainerActions = assessment.feedback.maintainerDecision.filter((item, index) =>
+      index !== 0 || decision?.status !== "completed" || item !== nextActionPreview);
+    if (remainingMaintainerActions.length) {
+      sections.push("", "#### Needs maintainer decision", "", list(remainingMaintainerActions));
+    }
   }
   sections.push(
     "",
-    "**Report-only pilot. AI-generated advice, not approval or a merge recommendation. Contributor feedback below is a draft and was not posted.**",
-    "",
-    context.policySource === "working-tree"
-      ? `Collected: ${context.collectedAt}. Local working-tree policies are captured in context.json; checkout base: \`${context.trustedRevision}\`.`
-      : `Collected: ${context.collectedAt}. Trusted policy revision: \`${context.trustedRevision}\`.`,
-    "",
-    `Considered ${context.selection.considered} PRs; captured ${context.selection.selected}.`,
-    list(context.selection.limitations),
+    "**Report-only pilot.** No result approves a merge. Feedback is a draft and was not posted.",
   );
+  if (context.selection.limitations.length) sections.push("", "### Batch limitations", "", list(context.selection.limitations));
+  sections.push("", "<details>", "<summary>Full evidence and model details</summary>", "");
   for (const assessment of report.assessments) {
     const contribution = context.contributions.find((candidate) => candidate.number === assessment.number);
     if (!contribution) throw new Error("Cannot render an assessment without its snapshot");
@@ -237,15 +257,31 @@ export function renderReport(report: ContributionReport, context: InsightsContex
     sections.push(
       "", `## [PR #${contribution.number}](${contribution.url}): ${escape(contribution.title)}`,
       "", `Head: \`${contribution.headSha}\`. Base: \`${contribution.baseSha}\`. Draft: ${contribution.draft}.`,
-      "", "### Scorecard",
+      "", "### Copilot insight scorecard",
       "", "| Dimension | Assessment | Rationale |",
       "| --- | --- | --- |",
       `| Value | ${ratingLabel(assessment.value)} | ${escape(assessment.value.rationale)} ${citations(assessment.value.evidence)} |`,
       `| Correctness evidence | ${ratingLabel(assessment.correctnessEvidence)} | ${escape(assessment.correctnessEvidence.rationale)} ${citations(assessment.correctnessEvidence.evidence)} |`,
-      `| Review readiness | ${assessment.readiness} | Advisory; not merge readiness |`,
-      `| Risk | ${assessment.risk} | Does not subtract from contribution value |`,
-      `| Confidence | ${assessment.confidence} | Limited to captured evidence |`,
-      "", `**Suggested next action:** ${assessment.recommendation}.`,
+      `| Review readiness | ${assessment.readiness} | Copilot insight; not the final decision or merge readiness |`,
+      "", "### Final decision: Microsoft-Decision-1",
+      "",
+      assessment.decision?.status === "completed"
+        ? `**${recommendations[assessment.decision.action]}**. Model: \`${assessment.decision.model}\`.`
+        : assessment.decision?.status === "failed"
+          ? `**No final decision.** ${escape(assessment.decision.error)}`
+          : "**No final decision.** Microsoft-Decision-1 is not configured. Copilot is not used as a fallback decision-maker.",
+      ...(assessment.decision?.status === "completed" ? [
+        "",
+        "| Action | Model probability |", "| --- | --- |",
+        ...Object.entries(assessment.decision.probabilities).map(([action, value]) =>
+          `| ${recommendations[action as DecisionAction]} | ${(value * 100).toFixed(2)}% |`),
+        "",
+        `Model confidence: ${assessment.decision.confidence === null ? "not supplied" : `${(assessment.decision.confidence * 100).toFixed(2)}%`}. Probabilities are not calibrated proof of correctness.`,
+        "",
+        `Question version: \`${assessment.decision.questionVersion}\`. Input SHA-256: \`${assessment.decision.inputSha256}\`.`,
+      ] : []),
+      "",
+      "Decision-1 supplies no written rationale. Copilot insights do not explain its internal reasoning. Human approvals and required checks remain mandatory.",
       "", "### Captured CI and CLA facts",
       "", `CLA (exact \`license/cla\` context from the verified Microsoft policy publisher): **${contribution.cla}**. A matching name alone is not CLA proof.`,
       "", "| Check | Status | Conclusion | Publisher | Evidence |", "| --- | --- | --- | --- | --- |",
@@ -253,21 +289,28 @@ export function renderReport(report: ContributionReport, context: InsightsContex
         `| ${escape(check.name)} | ${escape(check.status)} | ${escape(check.conclusion ?? "pending")} | ${escape(check.publisher)} | ${citations([check.evidenceId])} |`),
       "", "Skipped, neutral, missing, pending, and inaccessible checks are not passing test evidence. Required-check policy and live-model access are not established by this report.",
       "", "### P0 scenarios",
-      ...SCENARIOS.flatMap((id) => {
+      "", "| Area | Status | Finding | Evidence |", "| --- | --- | --- | --- |",
+      ...SCENARIOS.map((id) => {
         const scenario = assessment.scenarios.find((candidate) => candidate.id === id);
         if (!scenario) throw new Error(`Missing ${id}`);
-        return ["", `#### ${id}: ${scenario.assessment}`, "", escape(scenario.summary), "", citations(scenario.evidence)];
+        return `| ${id} | ${scenario.assessment} | ${escape(scenario.summary)} | ${citations(scenario.evidence)} |`;
       }),
       "", "### Reviewer brief", "", escape(assessment.reviewerBrief.summary),
-      "", `Approval policy: **${assessment.reviewerBrief.requiredApprovals} team maintainer approval(s)**; sensitive changes also need an area expert. This workflow does not request reviewers or establish that approvals are satisfied.`,
+      "", `Required: **${assessment.reviewerBrief.requiredApprovals} team maintainer approval(s)**, including an area expert for sensitive changes. Approvals were not verified.`,
       "", `Suggested CODEOWNERS: ${assessment.reviewerBrief.suggestedOwners.map(escape).join(", ") || "Needs maintainer routing"}.`,
       "", list(assessment.reviewerBrief.reviewOrder),
-      "", "### Contributor feedback draft",
-      "", "#### Required", "", list(assessment.feedback.required),
-      "", "#### Optional", "", list(assessment.feedback.optional),
-      "", "#### Needs maintainer decision", "", list(assessment.feedback.maintainerDecision),
+      ...(assessment.feedback.optional.length ? ["", "#### Optional", "", list(assessment.feedback.optional)] : []),
       "", "### Limitations", "", list([...new Set([...contribution.limitations, ...assessment.limitations])]),
     );
   }
+  sections.push(
+    "", "### Snapshot",
+    "",
+    context.policySource === "working-tree"
+      ? `Collected: ${context.collectedAt}. Local working-tree policies are captured in context.json; checkout base: \`${context.trustedRevision}\`.`
+      : `Collected: ${context.collectedAt}. Trusted policy revision: \`${context.trustedRevision}\`.`,
+    "", `Considered ${context.selection.considered} PRs; captured ${context.selection.selected}.`,
+    "", "</details>",
+  );
   return `${sections.join("\n")}\n`;
 }

@@ -13,6 +13,7 @@ import {
 } from "./targets/criteria.js";
 import { feedbackAdapter } from "./targets/feedback.js";
 import { contributionInsightsAdapter } from "./targets/contribution-insights.js";
+import { contributionDecisionAdapter } from "./targets/contribution-decision.js";
 import { judgeAdapter } from "./targets/judge.js";
 import {
   promptFeatureAuthoringAdapter,
@@ -36,6 +37,7 @@ const adapters = [
   feedbackAdapter,
   reportAdapter,
   contributionInsightsAdapter,
+  contributionDecisionAdapter,
 ] satisfies PromptTargetAdapter[];
 
 const registry = new Map<QualityFamily, PromptTargetAdapter>(

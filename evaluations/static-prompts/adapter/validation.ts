@@ -8,6 +8,13 @@ export class AdapterValidationError extends Error {
   }
 }
 
+export class AdapterTransportError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "AdapterTransportError";
+  }
+}
+
 export function record(value: unknown, label = "input"): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new AdapterValidationError(`${label} must be an object`);

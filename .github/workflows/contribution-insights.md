@@ -108,7 +108,7 @@ safe-outputs:
         contents: read
       inputs:
         report:
-          description: "JSON string with schemaVersion 1 and an assessments array matching every captured PR and head SHA. Follow the report contract in the workflow instructions."
+          description: "JSON string with schemaVersion 2 and Copilot insights matching every captured PR and head SHA. Do not supply a recommendation or final decision; Microsoft-Decision-1 owns the final decision."
           required: true
           type: string
       steps:
@@ -123,15 +123,23 @@ safe-outputs:
             name: contribution-insights-context
             path: "${{ runner.temp }}/contribution-insights"
         - name: Validate and render the report
+          id: render
           uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
           env:
             REPORT_DIRECTORY: "${{ runner.temp }}/contribution-insights"
+            CONTRIBUTION_DECISION_ENABLED: "${{ vars.CONTRIBUTION_DECISION_ENABLED || 'false' }}"
+            CONTRIBUTION_DECISION_ENDPOINT: "${{ vars.CONTRIBUTION_DECISION_ENDPOINT }}"
+            CONTRIBUTION_DECISION_DEPLOYMENT: "${{ vars.CONTRIBUTION_DECISION_DEPLOYMENT }}"
+            CONTRIBUTION_DECISION_API_KEY: "${{ secrets.CONTRIBUTION_DECISION_API_KEY }}"
           with:
             script: |
               const { readFile, writeFile } = require("node:fs/promises");
               const { join } = require("node:path");
               const { parseReport, renderReport } = await import(
                 `${process.env.GITHUB_WORKSPACE}/scripts/contribution-insights/report.mts`
+              );
+              const { addFinalDecisions, readDecisionConfig, DecisionError } = await import(
+                `${process.env.GITHUB_WORKSPACE}/scripts/contribution-insights/decision.mts`
               );
               const output = JSON.parse(await readFile(process.env.GH_AW_AGENT_OUTPUT, "utf8"));
               const reports = output.items.filter((item) => item.type === "contribution_report");
@@ -140,12 +148,34 @@ safe-outputs:
               }
               const directory = process.env.REPORT_DIRECTORY;
               const snapshot = JSON.parse(await readFile(join(directory, "context.json"), "utf8"));
-              const report = parseReport(reports[0].report, snapshot);
+              const insights = parseReport(reports[0].report, snapshot);
+              let config;
+              let configurationError;
+              try {
+                config = readDecisionConfig(process.env);
+              } catch (error) {
+                if (!(error instanceof DecisionError)) throw error;
+                configurationError = error;
+              }
+              const final = configurationError ? {
+                failed: true,
+                report: {
+                  schemaVersion: 2,
+                  assessments: insights.assessments.map((assessment) => ({
+                    ...assessment,
+                    decision: { status: "failed", provider: "Microsoft-Decision-1", error: configurationError.message },
+                  })),
+                },
+              } : await addFinalDecisions(insights, snapshot, config);
+              const report = final.report;
               const markdown = renderReport(report, snapshot);
               await writeFile(join(directory, "report.json"), JSON.stringify(report, null, 2));
               await writeFile(join(directory, "report.md"), markdown);
               await core.summary.addRaw(markdown).write();
+              core.setOutput("report_written", "true");
+              if (final.failed) core.setFailed("Microsoft-Decision-1 failed; Copilot insights are preserved but no final decision is available.");
         - name: Upload validated contribution insights
+          if: always() && steps.render.outputs.report_written == 'true'
           uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
           with:
             name: contribution-insights-report
@@ -188,7 +218,7 @@ This is advisory triage, not an accept/reject bot or a merge preflight. Never
 approve, merge, close, label, assign, request reviewers, post comments, or modify
 branches. Your only deliverable is one `contribution_report` tool call containing
 the JSON report described below. If no contributions were captured, still call
-the tool with `{"schemaVersion":1,"assessments":[]}`. If you cannot read the
+the tool with `{"schemaVersion":2,"assessments":[]}`. If you cannot read the
 snapshot, call `report_incomplete`; do not invent a report.
 
 ## Trust and evidence boundary
@@ -248,6 +278,14 @@ zero. Do not claim a line-level defect from omitted or truncated code.
 
 ## Rating and feedback contract
 
+You provide ALL evidence analysis, ratings, readiness observations, reviewer
+guidance, limitations, and constructive feedback. You do NOT make the final
+decision. Microsoft-Decision-1 is the sole final decision-maker in a separate
+trusted post-processing stage. Do not emit a `recommendation`, `decision`,
+accept/reject verdict, or final prioritization. If Decision-1 is not configured
+or fails, the report retains your insights but has no final decision; you are
+never used as a fallback decision-maker.
+
 Use separate 1-5 ratings for value and correctnessEvidence, with a rationale and
 captured evidence IDs for each. Use null when evidence is insufficient. Value:
 1 little demonstrated benefit; 3 a useful bounded improvement; 5 a clearly
@@ -258,15 +296,26 @@ evidence. Do not award 5 merely because CI is green.
 Readiness is blocked, needs-clarification, or ready-for-review. Risk and
 confidence are low, medium, or high. Confidence cannot be high when the snapshot
 has limitations. Sensitive changes needing two approvals cannot be low risk.
-Recommendations are prioritize-review, request-clarification,
-request-contributor-changes, or maintainer-scope-decision. None means ready to
-merge, and no numeric threshold overrides missing evidence or required approvals.
+These are insights, not a final disposition. No numeric threshold establishes
+merge readiness or overrides missing evidence or required human approvals.
 
 Draft concise, respectful contributor feedback. Separate required fixes from
 optional suggestions and maintainer decisions. For each required item explain
 what to change, why, and how to demonstrate resolution; name a relevant path or
 documented command when possible. Do not expand the PR into unrelated work.
 When the next action belongs to the team, do not ask the contributor to fix it.
+
+## Writing style
+
+Keep each rationale and scenario summary to at most two short sentences.
+Start `value.rationale` with the actual change and benefit in plain language;
+its first sentence becomes the report's short opening summary. Keep
+`reviewerBrief.summary` and each feedback item focused on the next concrete
+action. Do not repeat the same caveat across every field: state it in
+`limitations` and repeat it only where it materially changes a conclusion.
+Omit praise, filler, generic policy recitals, and empty suggestions. Preserve
+important uncertainty and the what, why, and verification for required fixes.
+Do not explain or predict Decision-1's reasoning.
 
 ## Exact JSON deliverable
 
@@ -275,7 +324,7 @@ Call `contribution_report` exactly once. Its `report` input is a JSON string
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "assessments": [{
     "number": 123,
     "headSha": "exact captured head SHA",
@@ -284,7 +333,6 @@ Call `contribution_report` exactly once. Its `report` input is a JSON string
     "readiness": "needs-clarification",
     "risk": "medium",
     "confidence": "low",
-    "recommendation": "request-clarification",
     "scenarios": [
       {"id": "value-fit", "assessment": "unassessed", "summary": "Explain the finding.", "evidence": []},
       {"id": "overlap", "assessment": "unassessed", "summary": "Explain the finding.", "evidence": []},

@@ -16,7 +16,7 @@ added to CI without a separate design decision.
 
 ### Static prompt quality inventory
 
-The committed evaluation manifest covers eleven Scope-owned runtime prompt
+The committed evaluation manifest covers twelve Scope-owned runtime prompt
 families:
 
 | Family | Variants and important coverage |
@@ -31,7 +31,12 @@ families:
 | Judge instructions | Bundled and independent strategies; file, tool-history, response, conflicting, missing, and prior-pass evidence |
 | Developer feedback | Default persona, custom persona, descendant guard on/off, and multiple root failures |
 | Run reports | Default and appended system prompts; override as a control where the default prompt is intentionally absent |
-| Contribution insights | Report-only P0 triage; docs-only proportionality, Portal parity, skipped fork checks/CLA, overlap, isolation, incomplete evidence, product decisions, and dependency notices |
+| Contribution insights | Copilot insight-only P0 triage; docs-only proportionality, Portal parity, skipped fork checks/CLA, overlap, isolation, incomplete evidence, product decisions, and dependency notices |
+| Contribution decision | Authoritative Microsoft-Decision-1 review-action choice over captured facts and all Copilot insights; separate from insight generation and never merge approval |
+
+The curated snapshot contains **238 approved cases across 17 quality targets**.
+Each contribution family has eight synthetic cases; the decision cases carry
+reviewed action labels separately from the state sent to the model.
 
 Judge and report tool descriptions are static AI-facing instructions, but they
 are evaluated through their owning end-to-end judge and report families rather
@@ -145,6 +150,7 @@ The production compositions are:
 | Report user prompt | The resolved template `userPrompt` is the Copilot SDK user message after replacing `{requestId}` or `{{requestId}}` with the run ID. The real report tools and their schemas remain registered. |
 | Report system prompt | No custom value uses `REPORT_SYSTEM_PROMPT`; `append` uses `REPORT_SYSTEM_PROMPT + "\\n\\n" + content`; `override` uses only the user-controlled content. The result is installed with `systemMessage.mode = "replace"`, alongside the real report tools, before the resolved report user prompt is sent. |
 | Community contributions | The trusted instruction body reads the bounded snapshot file, or the caller's top-level `<untrusted-contribution-snapshot>` block containing that file's contents. Similarly named blocks embedded in contribution data are not replacement snapshots. Contribution text and patches remain untrusted data, separate from trusted policy files. Only the artifact-only `contribution_report` output is registered for the assessment. |
+| Contribution decision | Production `buildDecisionInput` combines the captured PR facts and complete validated Copilot insights, excluding previous decisions. The production versioned `review_action` question defines the five fixed actions, including explicit abstention. The transport sends this state and question to the dedicated Decision API, not as chat messages. Reviewed expected labels never enter the decision input. |
 
 Every profile has a benign contract fixture comparing its adapter output with
 the corresponding runtime composition. The comparison covers message roles,
@@ -167,6 +173,36 @@ transport. It makes a real inference call but does not invoke GitHub Actions or
 the hosted security jobs. Its model sees the supplied inline snapshot and only
 the report tool; it has no filesystem reader. Local policy citations refer to
 the captured working-tree policies, with their hashes saved in `run.json`.
+
+The contribution prompt asks for at most two short sentences per finding,
+an opening value statement that explains the change and benefit, and concrete
+feedback without repeated caveats or generic praise. The renderer uses a
+bounded first-sentence preview and compact TL;DR, leaving complete source text
+in expandable evidence details. Required fixes and maintainer actions remain
+visible. Renderer tests cover the 240-character preview bound, unchanged JSON,
+batch summaries, and preserved evidence; the contribution quality rubric grades
+brevity without rewarding omitted uncertainty or verification steps.
+
+Copilot's report contract is schema v2 and rejects a final recommendation or
+decision field. Only Microsoft-Decision-1 selects the final review action in
+trusted post-processing. Its dedicated `contribution-decision/default` adapter
+reuses the production question, input builder, client, and response validator.
+The adapter context's optional `decide` operation is separate from `complete`;
+real decision requests never use chat completions or a Copilot provider fallback.
+Decision credentials remain outside prompt composition and recorded artifacts.
+
+The decision-only dataset uses deterministic classification evaluation. It
+requires neither generative inference credentials nor an Azure grading
+deployment; a live run needs only the separate Decision-1 inference configuration.
+
+The decision family grades categorical accuracy with the deterministic
+`decision_accuracy` check, independently from Copilot's insight rubric.
+Decision-1 supplies no prose rationale, so Copilot analysis must not be graded
+as if it explains Decision-1's internal reasoning. The offline decision
+transport always returns `manual-review-required`, regardless of the expected
+label. Its accuracy findings exercise the evaluator; they are not evidence of
+real model quality. Live Decision-1 quality requires an explicitly approved run
+against an operator-configured deployment.
 
 ## Static quality evaluation
 
@@ -443,7 +479,11 @@ credentials, endpoints, tenant/subscription IDs, portal URLs, or a populated
 `.env` file.
 
 Quality generation uses `PROMPT_EVAL_MODEL` and the existing inference
-credential chain. Quality grading uses
+credential chain for generative families. The contribution-decision family
+instead uses `CONTRIBUTION_DECISION_ENDPOINT`,
+`CONTRIBUTION_DECISION_DEPLOYMENT`, and exactly one Decision-1 credential, as
+documented in [Contribution Insights](contribution-insights.md#configure-the-final-decision-stage).
+Quality grading uses
 `SCOPE_EVAL_AZURE_OPENAI_ENDPOINT` and
 `SCOPE_EVAL_AZURE_OPENAI_DEPLOYMENT` (with their standard
 `AZURE_OPENAI_*` fallbacks), plus an optional API key/API version; without a key
@@ -463,6 +503,11 @@ pnpm eval:static-prompts:smoke
 pnpm --filter static-prompt-evals evaluate:quality -- \
   --smoke --offline --samples 1 \
   --dataset datasets/v1/contribution-insights.jsonl
+
+# Separate Decision-1 contract plumbing (fixed abstention stub, no Azure call)
+pnpm --filter static-prompt-evals evaluate:quality -- \
+  --smoke --offline --samples 1 \
+  --dataset datasets/v1/contribution-decision.jsonl
 
 # Human-readable report from an existing ignored run
 pnpm --filter static-prompt-evals report -- \
@@ -559,7 +604,7 @@ The implementation loop is:
 
 Completion requires all of the following:
 
-- all eleven static families are present in the
+- all twelve static families are present in the
   machine-checked manifest with no missing or orphaned adapter, dataset,
   assertion, or rubric;
 - the curated dataset is redacted, approved, reproducible, balanced, and

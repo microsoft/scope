@@ -7,6 +7,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
+import { DECISION_QUESTIONS } from "../../../scripts/contribution-insights/decision.mjs";
 import {
   QUALITY_FAMILIES,
   type DatasetCase,
@@ -27,6 +28,7 @@ const FAMILY_MINIMUMS: Record<QualityFamily, number> = {
   "developer-feedback": 25,
   "run-report": 25,
   "contribution-insights": 8,
+  "contribution-decision": 8,
 };
 
 interface DatasetManifest {
@@ -192,7 +194,18 @@ function validateFamilyContract(row: DatasetCase, prefix: string, errors: string
     case "contribution-insights":
       assert(stringField(input, "snapshot"), `${prefix}: input.snapshot is required`, errors);
       assert(stringField(expected, "referenceReport"), `${prefix}: expected.referenceReport is required`, errors);
-      assert(stringField(expected, "contribution_decision"), `${prefix}: expected.contribution_decision is required`, errors);
+      assert(!("contribution_decision" in expected), `${prefix}: Copilot insights must not be graded as final decisions`, errors);
+      break;
+    case "contribution-decision":
+      assert(stringField(input, "snapshot"), `${prefix}: input.snapshot is required`, errors);
+      assert(isRecord(input.assessment), `${prefix}: input.assessment must contain fixed Copilot insights`, errors);
+      if (isRecord(input.assessment)) {
+        assert(!("recommendation" in input.assessment) && !("decision" in input.assessment), `${prefix}: Copilot input must not propose a final decision`, errors);
+      }
+      assert(!("action" in input) && !("decision" in input) && !("recommendation" in input) && !("questions" in input),
+        `${prefix}: expected actions and trusted questions must not be supplied as decision input`, errors);
+      assert(typeof expected.action === "string" && Object.hasOwn(DECISION_QUESTIONS.review_action.criteria, expected.action),
+        `${prefix}: expected.action must be a supported Decision-1 classification`, errors);
       break;
   }
 }
@@ -352,6 +365,7 @@ export async function validateDataset(
     syntheticCases.every((row) =>
       row.family === "judge-instructions"
       || row.family === "contribution-insights"
+      || row.family === "contribution-decision"
       || (row.family === "run-report" && (row.variant === "default" || row.variant === "override-control"))
       || (row.family === "developer-feedback" && row.variant === "persona")),
     "synthetic cases are only permitted for unavailable judge evidence, feedback persona, report controls, and contribution-workflow contracts",
@@ -371,6 +385,10 @@ export async function validateDataset(
   assert(hasTag("judge-instructions", "tool-evidence"), "judge-instructions: missing tool-history evidence case", errors);
   assert(hasTag("judge-instructions", "filesystem-evidence"), "judge-instructions: missing filesystem evidence case", errors);
   assert(hasTag("developer-feedback", "multi-turn"), "developer-feedback: missing multi-turn case", errors);
+  const decisionActions = new Set(cases.filter((row) => row.family === "contribution-decision").map((row) => row.expected.action));
+  for (const action of Object.keys(DECISION_QUESTIONS.review_action.criteria)) {
+    assert(decisionActions.has(action), `contribution-decision: missing expected class '${action}'`, errors);
+  }
   const reportTemplateTags = new Set(
     cases
       .filter((row) => row.family === "run-report" && row.provenance.kind === "integration")

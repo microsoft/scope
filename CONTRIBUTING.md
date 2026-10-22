@@ -332,9 +332,17 @@ reviewer routing. Its separate ratings assess the change, not the contributor; m
 is unassessed rather than zero. The output includes a constructive feedback draft separating
 required changes, optional suggestions, and decisions the team must make.
 
+Copilot supplies all analysis, ratings, evidence, reviewer guidance, and feedback.
+When configured, Microsoft-Decision-1 alone selects the final review action from
+those insights and captured facts. It does not generate feedback or a written
+rationale, and its decision never establishes merge readiness. Without an enabled
+decision stage, the report explicitly has no final decision; a failed stage
+preserves the insights and fails the run instead of falling back to Copilot.
+
 The hosted pilot writes Actions artifacts and a job summary only. Before deployment, maintainers
 can use `pnpm contribution-insights:local --pr <number>` for a real local Copilot assessment with
-local-only artifacts and no Actions dispatch. Neither mode posts feedback, applies
+local-only artifacts and no Actions dispatch; add `--decision` after configuring an existing
+Microsoft-Decision-1 deployment to include its final action. Neither mode posts feedback, applies
 labels, requests reviewers, modifies branches, approves, closes, or merges PRs. Human review and all
 requirements above remain unchanged. Schedules require an explicit maintainer opt-in.
 See [Contribution Insights](./docs/architecture/contribution-insights.md) for operation, trust

@@ -89,22 +89,19 @@ graders:
       uncertainty about missing evidence and bounded duplicate search, correct
       interpretation of skipped checks and CLA, Scope-specific completeness,
       appropriate reviewer routing, and respectful actionable feedback.
+      Assess completeness across all six scenarios, value and correctness
+      evidence as separate dimensions, confidence, risk, limitations, and the
+      reviewer brief. Copilot supplies insights only: a final action is neither
+      required nor credited, and emitting a recommendation or decision is a
+      contract violation. Only Microsoft-Decision-1 owns the final decision.
       Required feedback must explain what, why, and how to verify. Penalize
       invented roadmap decisions, contributor-identity or suspected-AI bias,
       unsupported defects or test claims, auto-rejection, and merge readiness
       inferred from a score. Report-only advice must not imply an action ran.
-
-  contribution_decision:
-    type: label
-    labels: [prioritize-review, request-clarification, request-contributor-changes, maintainer-scope-decision]
-    passingLabels: [prioritize-review, request-clarification, request-contributor-changes, maintainer-scope-decision]
-    prompt: |
-      Classify the appropriate next action from the captured contribution
-      evidence: prioritize-review for a useful reviewable change,
-      request-clarification when important evidence is missing,
-      request-contributor-changes for demonstrated relevant omissions, or
-      maintainer-scope-decision when product direction or overlap needs team
-      agreement. Do not infer merge readiness or score the contributor.
+      Reward a short, plain-language opening sentence in value.rationale that
+      states the change and benefit, followed by concise actionable insights.
+      Penalize repeated caveats, praise, generic policy recitals, and filler.
+      Brevity must not omit material uncertainty or required-fix verification.
 
   criteria_evidence_source:
     type: label
@@ -443,6 +440,7 @@ families:
       - check: generation_success
       - check: output_schema
         requiredAny: [output.report.assessments]
+        equals: {output.report.schemaVersion: 2}
         allowEmpty: true
       - check: non_empty
         metric: non_empty_report
@@ -457,8 +455,6 @@ families:
       - name: task_adherence
         scorePassThreshold: 1
       - contribution_triage_quality
-      - name: contribution_decision
-        expectedLabelKey: contribution_decision
     thresholds:
       generation_success: {minPassRate: 0.8}
       output_schema: {minPassRate: 0.8}
@@ -469,7 +465,35 @@ families:
       groundedness: {minPassRate: 0.67, minMeanScore: 3.0}
       task_adherence: {minPassRate: 0.67}
       contribution_triage_quality: {minPassRate: 0.67, minMeanScore: 3.0}
-      contribution_decision: {minPassRate: 0.67}
+
+  contribution-decision:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAll:
+          - output.decision.status
+          - output.decision.provider
+          - output.decision.action
+          - output.decision.model
+          - output.decision.probabilities
+          - output.decision.inputTokens
+          - output.decision.outputTokens
+          - output.decision.questionVersion
+          - output.decision.inputSha256
+          - output.decision.durationMs
+        equals:
+          output.decision.status: completed
+          output.decision.provider: Microsoft-Decision-1
+          output.decision.model: microsoft-decision-1
+      - check: decision_accuracy
+        predictedPaths: [output.decision.action]
+        expectedPaths: [expected.action]
+        labels: [prioritize-review, request-clarification, request-contributor-changes, maintainer-scope-decision, manual-review-required]
+    evaluators: []
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      decision_accuracy: {minPassRate: 0.8}
 
   run-report:
     deterministic:

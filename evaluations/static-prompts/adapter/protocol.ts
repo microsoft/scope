@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { DecisionCompletion, DecisionInput } from "../../../scripts/contribution-insights/decision.mjs";
+
 export const QUALITY_FAMILIES = [
   "criteria-authoring",
   "parent-dependency-suggestion",
@@ -13,6 +15,7 @@ export const QUALITY_FAMILIES = [
   "developer-feedback",
   "run-report",
   "contribution-insights",
+  "contribution-decision",
 ] as const;
 
 export type QualityFamily = (typeof QUALITY_FAMILIES)[number];
@@ -41,6 +44,7 @@ export interface ComposedPromptRequest {
   maxTokens?: number;
   tools?: PromptToolDefinition[];
   files?: PromptFile[];
+  decisionRequest?: DecisionInput;
   metadata: {
     adapterId: string;
     productionSources: string[];
@@ -65,6 +69,7 @@ export interface AdapterContext {
     request: ComposedPromptRequest,
     options?: CompletionOptions,
   ): Promise<CompletionResult>;
+  decide?(input: DecisionInput): Promise<DecisionCompletion>;
 }
 
 export interface AdapterExecution<Output = unknown> {

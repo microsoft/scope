@@ -14,6 +14,33 @@ and source-mode CLIs fail before making an API request when no URL is configured
 Help, version, and CLI updates do not require a Scope API URL. The CLI no longer
 derives a localhost URL from `SCOPE_API_PORT` or uses `SCOPE_DEFAULT_API_URL`.
 
+## Community Contribution Insights
+
+These settings belong to the local contribution runner and the report-only
+GitHub Actions pilot, not the Scope API's chat-completions credential chain.
+No `.env` file is loaded by the local runner.
+
+| Variable | Default / type | Purpose |
+| --- | --- | --- |
+| `CONTRIBUTION_INSIGHTS_ENABLED` | `false`; Actions variable | Opts into hosted daily collection. Not required for maintainer dispatch or local execution. |
+| `CONTRIBUTION_DECISION_ENABLED` | `false`; strict `true`/`false` | Enables Microsoft-Decision-1 as the sole final review-action selector. Local `--decision` also enables the stage explicitly. |
+| `CONTRIBUTION_DECISION_ENDPOINT` | Unset; HTTPS Azure resource-root URL | Resource containing the model deployment, with no project/API path, query, fragment, or userinfo. |
+| `CONTRIBUTION_DECISION_DEPLOYMENT` | Unset; deployment-name string | Request `model` value; not necessarily `Microsoft-Decision-1`. |
+| `CONTRIBUTION_DECISION_API_KEY` | Unset; secret | API-key authentication. Hosted workflow injects this only into trusted report rendering. |
+| `CONTRIBUTION_DECISION_ENTRA_TOKEN` | Unset; secret | Alternative injected Entra access token for local/direct-client execution; acquisition and refresh are external. |
+
+An enabled decision stage requires the endpoint, deployment, and exactly one
+credential. Hosted configuration uses Actions variables for the non-secrets
+and the API-key Actions secret; Entra/OIDC acquisition is not added to Actions.
+Azure credentials never enter the Copilot environment, prompt, or report.
+
+Copilot supplies insights, never a fallback final decision. Disabled
+Decision-1 means **insights only**; an enabled but failed decision preserves
+completed insights and fails the run. Azure inference is separately billed and
+not covered by Copilot AI-credit caps. This integration provisions no resources.
+See [Contribution Insights](docs/architecture/contribution-insights.md#configure-the-final-decision-stage)
+for local activation, transport limits, and rollout requirements.
+
 ## Docker Development
 
 ### API_DEBUG_PORT

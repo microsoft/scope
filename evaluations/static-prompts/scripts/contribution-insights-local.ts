@@ -15,6 +15,8 @@ import {
 } from "../../../scripts/contribution-insights/collect.mjs";
 import { composeContributionRequest, executeContributionRequest } from "../adapter/targets/contribution-insights.js";
 import { createLocalCopilotContext } from "./local-copilot.js";
+import { addFinalDecisions, readDecisionConfig } from "../../../scripts/contribution-insights/decision.mjs";
+import { renderReport } from "../../../scripts/contribution-insights/report.mjs";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const exec = promisify(execFile);
@@ -24,12 +26,16 @@ Run a real, report-only Copilot assessment locally. Does not dispatch Actions or
 
   --pr                 Open microsoft/scope community PR number or URL (required)
   --model              Copilot model (default: auto)
-  --timeout-seconds    Inference timeout, 1-1200 seconds (default: 300)
+  --timeout-seconds    Copilot timeout, 1-1200 seconds (default: 300)
   --output             New output directory (default: ignored evaluation results)
+  --decision           Require the configured Microsoft-Decision-1 final-decision stage
   --help               Show this help
 
 Requires gh authentication, an installed Copilot CLI, and a Copilot-entitled token.
 COPILOT_GITHUB_TOKEN overrides the gh token for inference only. No .env files are loaded.
+Decision-1 uses CONTRIBUTION_DECISION_ENDPOINT, CONTRIBUTION_DECISION_DEPLOYMENT,
+and exactly one of CONTRIBUTION_DECISION_API_KEY / CONTRIBUTION_DECISION_ENTRA_TOKEN.
+Without an enabled Decision-1 stage, only insights are produced; there is no Copilot fallback decision.
 `;
 
 export function parseLocalOptions(argv: string[]) {
@@ -39,6 +45,7 @@ export function parseLocalOptions(argv: string[]) {
       pr: { type: "string" }, model: { type: "string", default: "auto" },
       "timeout-seconds": { type: "string", default: "300" },
       output: { type: "string" }, help: { type: "boolean", default: false },
+      decision: { type: "boolean", default: false },
     },
     strict: true, allowPositionals: false,
   });
@@ -66,6 +73,7 @@ export function parseLocalOptions(argv: string[]) {
   return {
     help: false as const, prNumber: selection.prNumber, model: values.model,
     timeoutMs: seconds * 1_000,
+    decision: values.decision,
     output: values.output ? resolve(ROOT, values.output) :
       resolve(ROOT, "evaluations/static-prompts/results/contribution-insights-local", runId),
   };
@@ -152,12 +160,15 @@ export async function runLocal(argv: string[]): Promise<void> {
   const startedAt = new Date().toISOString();
   let tokens: string[] = [];
   try {
+    const decisionConfig = readDecisionConfig(process.env, options.decision);
+    if (decisionConfig) tokens.push(decisionConfig.auth.value);
+    else console.log("Microsoft-Decision-1 is not configured: this run will provide Copilot insights only, with no final decision.");
     const cliPath = await findLocalCopilot();
     const { stdout } = await exec("gh", ["auth", "token", "--hostname", "github.com"], { timeout: 15_000 });
     const githubToken = stdout.trim();
     if (!githubToken) throw new Error("gh returned no token; run gh auth login first");
     const modelToken = process.env.COPILOT_GITHUB_TOKEN?.trim() || githubToken;
-    tokens = [githubToken, modelToken];
+    tokens.push(githubToken, modelToken);
     const { stdout: revision } = await exec("git", ["rev-parse", "HEAD"], { cwd: ROOT, timeout: 15_000 });
     console.log(`Collecting microsoft/scope#${options.prNumber} without executing PR code...`);
     const captured = await collectContext(createLocalGitHubReader(githubToken), {
@@ -173,16 +184,19 @@ export async function runLocal(argv: string[]): Promise<void> {
     const result = await executeContributionRequest(composed, createLocalCopilotContext({
       token: modelToken, cliPath, model: options.model, timeoutMs: options.timeoutMs,
     }));
-    await writeFile(join(options.output, "report.json"), JSON.stringify(result.output.report, null, 2), { flag: "wx", mode: 0o600 });
-    await writeFile(join(options.output, "report.md"), result.output.markdown, { flag: "wx", mode: 0o600 });
+    const final = await addFinalDecisions(result.output.report, composed.snapshot, decisionConfig);
+    await writeFile(join(options.output, "report.json"), JSON.stringify(final.report, null, 2), { flag: "wx", mode: 0o600 });
+    await writeFile(join(options.output, "report.md"), renderReport(final.report, composed.snapshot), { flag: "wx", mode: 0o600 });
+    if (final.failed) throw new Error("Microsoft-Decision-1 failed; no final decision is available. Copilot insights are preserved in report.md.");
     await writeFile(join(options.output, "run.json"), JSON.stringify({
-      status: "completed", mode: "local-report-only", fidelity: "partial", startedAt, completedAt: new Date().toISOString(),
+      status: decisionConfig ? "completed" : "insights-only", mode: "local-report-only", fidelity: "partial", startedAt, completedAt: new Date().toISOString(),
       prNumber: options.prNumber, headSha: composed.snapshot.contributions[0]?.headSha,
       policySource: "working-tree",
       policyHashes: Object.fromEntries(composed.snapshot.policies.map((policy) => [
         policy.path, createHash("sha256").update(policy.content).digest("hex"),
       ])),
       inference: result.invocationMetadata,
+      decision: decisionConfig ? "Microsoft-Decision-1" : "not-configured",
       limitations: ["No GitHub Actions execution, gh-aw sandbox, or hosted threat-detection job was run."],
     }, null, 2), { flag: "wx", mode: 0o600 });
     console.log(`Saved report: ${join(options.output, "report.md")}`);

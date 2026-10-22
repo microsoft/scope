@@ -69,6 +69,7 @@ describe("static prompt adapter registry", () => {
         variants: ["default", "append", "override-control"],
       },
       { family: "contribution-insights", variants: ["default"] },
+      { family: "contribution-decision", variants: ["default"] },
     ]);
     expect(listPromptTargets().map(({ family }) => family)).toEqual([
       ...QUALITY_FAMILIES,
