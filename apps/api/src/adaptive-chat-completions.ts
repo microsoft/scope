@@ -150,8 +150,9 @@ async function negotiate<TResponse extends ChatCompletionHttpResponse>(
 }
 
 /**
- * Sends a chat completion using a process-local, model-independent compatibility
- * cache. Only structured unsupported-parameter responses trigger negotiation.
+ * Sends a chat completion using a process-local compatibility cache keyed by
+ * endpoint and model. Only structured unsupported-parameter responses trigger
+ * negotiation.
  */
 export async function postAdaptiveChatCompletion<
   TResponse extends ChatCompletionHttpResponse,
