@@ -107,6 +107,26 @@ scope run list --submission-id <id>         # filter by submission
 scope run list -o json                      # machine-readable
 ```
 
+## Share related results
+
+Profile variations and repetitions created by one submit call share a
+`submissionId`, printed by `scope run submit`. Generate one link to all of them:
+
+```bash
+scope run share \
+  --submission-id <submission-id> \
+  --project <project-id> \
+  --portal-url https://your-scope-portal.example.com
+```
+
+The command prints a Portal results link grouped by profile, including the
+project so recipients do not need to select it first. It does not contact the
+API. Supply the Portal origin, not the API URL. You can omit `--project` when
+`SCOPE_PROJECT` or a saved project selection already supplies it.
+
+The link does not grant access; recipients still need access to your Scope
+deployment.
+
 ## Get full run details
 
 ```bash

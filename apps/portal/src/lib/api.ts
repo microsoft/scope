@@ -230,7 +230,7 @@ export const api = {
     gates?: GateConfig[];
     codebase?: string;
     codebaseRevisionId?: string;
-  }): Promise<(Run & { message: string }) | { ids: string[]; count: number; message: string }> => {
+  }): Promise<(Run & { message: string }) | { ids: string[]; submissionId: string; count: number; message: string }> => {
     const { worker, ...payload } = body;
     const url = worker ? `/requests?worker=${encodeURIComponent(worker)}` : `/requests`;
     return request(url, {

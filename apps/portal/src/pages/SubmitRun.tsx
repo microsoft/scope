@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { submittedRunPath } from "@/lib/submission-links";
+import { useSelectedProjectId } from "@/contexts/ProjectContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -661,16 +663,14 @@ export function SubmitRun() {
     : [];
   const gateErrors = [...gateValidationErrors, ...promptValidationErrors];
 
+  const selectedProjectId = useSelectedProjectId();
   const submitMutation = useMutation({
-    mutationFn: api.submitRun,
-    onSuccess: (data) => {
-      if ("ids" in data && data.ids.length > 1) {
-        navigate("/runs");
-      } else if ("id" in data) {
-        navigate(`/runs/${data.id}`);
-      } else {
-        navigate("/runs");
-      }
+    mutationFn: async (body: Parameters<typeof api.submitRun>[0]) => ({
+      data: await api.submitRun(body),
+      projectId: selectedProjectId,
+    }),
+    onSuccess: ({ data, projectId }) => {
+      navigate(submittedRunPath(data, projectId));
     },
   });
 

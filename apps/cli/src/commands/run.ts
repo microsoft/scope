@@ -68,6 +68,30 @@ const run = program
 configureHelp(run);
 
 run
+  .command("share")
+  .description("Print a project-aware Portal link to all runs in a submission")
+  .requiredOption("--submission-id <id>", "Submission ID shared by the related runs")
+  .requiredOption("--portal-url <url>", "Portal base URL (not the API URL)")
+  .option("--project <id>", "Project ID (overrides SCOPE_PROJECT and the saved selection)")
+  .action((options: { submissionId: string; portalUrl: string; project?: string }) => {
+    const projectId = requireProjectId(options.project);
+    const portal = new URL(options.portalUrl);
+    if (!["http:", "https:"].includes(portal.protocol) || portal.username || portal.password) {
+      throw new Error("--portal-url must be an HTTP(S) URL without credentials.");
+    }
+    if (!options.submissionId.trim()) {
+      throw new Error("--submission-id must not be blank.");
+    }
+    const link = new URL("/runs", portal);
+    link.search = new URLSearchParams({
+      projectId,
+      submissionId: options.submissionId.trim(),
+      groupBy: "profile",
+    }).toString();
+    console.log(link.href);
+  });
+
+run
   .command("submit")
   .description("Submit a request to a worker and stream logs")
   .option("-s, --scenario <path>", "Path to scenario YAML file (provides task + criteria)")
