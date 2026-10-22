@@ -702,6 +702,11 @@ The Statistics page (`apps/portal/src/pages/Statistics.tsx`) is backed by `GET /
 | `criteria` | Success criteria (comma-separated `criterionId`s) | A run counts as a pass only if **all** selected criteria pass; runs lacking a selected criterion are excluded |
 | `features` | Task prompt features (comma-separated `featureId`s) | Keep a run iff its task prompt was **detected** to have **every** selected feature (AND) |
 
+The performance table labels each passed-run distribution with its mean and
+standard deviation. Iteration statistics describe iterations to pass; duration
+statistics sum the measured turn durations for each passed run. Missing values
+appear when no passed run has the required measurement.
+
 The response exposes the option lists and current selection for each filter so the Portal can render filter bars: `availableCriteria` / `selectedCriteria` and `availableFeatures` / `selectedFeatures`. Both `available*` lists are computed over the full valid-run set **before** filtering, so the bars stay populated even when a filter combination matches zero runs (the Portal then shows a "no runs match" empty state instead of the "no data yet" state).
 
 **Detected-based feature semantics (intentional divergence).** A task prompt's `features[]` stores a `{featureId, detected}` row for *every* evaluated feature, so presence is near-universal and meaningless as a filter. `availableFeatures` is therefore the sorted union of featureIds with `detected === true` across valid runs, and the feature filter matches on `detected === true`. This is deliberately stricter than the MDP route (`GET /api/v1/criteria/mdp`), whose feature filter is presence-based. Runs join to task prompts by effective id (`taskPromptId || computeTaskPromptId(scenario.task)`) so legacy runs without a stored `taskPromptId` still resolve their features.

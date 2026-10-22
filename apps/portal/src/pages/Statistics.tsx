@@ -428,7 +428,7 @@ function InsightsRow({ insights }: { insights: DerivedInsights }) {
 
 // ─── Performance breakdown (merged iteration + duration) ────────────────────
 
-function PerformanceTable({ data }: { data: AnalysisResponse }) {
+export function PerformanceTable({ data }: { data: AnalysisResponse }) {
   const { groups } = data;
 
   if (groups.length === 0) {
@@ -472,8 +472,9 @@ function PerformanceTable({ data }: { data: AnalysisResponse }) {
           Performance by task & worker
         </CardTitle>
         <CardDescription>
-          Pass rate, iteration distribution, and run duration — sorted by pass
-          rate.
+          Pass rate and run variation, sorted by pass rate. Mean and standard
+          deviation use passed runs only; standard deviation shows how much
+          individual runs vary from the mean.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -484,8 +485,8 @@ function PerformanceTable({ data }: { data: AnalysisResponse }) {
               <TableHead>Worker</TableHead>
               <TableHead className="text-center">Runs</TableHead>
               <TableHead className="w-[200px]">Pass rate</TableHead>
-              <TableHead className="text-center">Avg iter</TableHead>
-              <TableHead className="text-center">Avg duration</TableHead>
+              <TableHead className="text-center">Iterations to pass</TableHead>
+              <TableHead className="text-center">Run duration</TableHead>
               <TableHead className="w-[1%]" />
             </TableRow>
           </TableHeader>
@@ -551,22 +552,20 @@ function PerformanceTable({ data }: { data: AnalysisResponse }) {
                   </TableCell>
                   <TableCell className="text-center font-mono tabular-nums text-xs">
                     {group.iterationStats ? (
-                      <span
-                        title={`min ${group.iterationStats.min} · max ${group.iterationStats.max} · σ ${formatNumber(group.iterationStats.stdDev)}`}
-                      >
-                        {formatNumber(group.iterationStats.mean)}
-                      </span>
+                      <div title={`Minimum ${group.iterationStats.min} · Maximum ${group.iterationStats.max}`}>
+                        <span className="block">Mean {formatNumber(group.iterationStats.mean)}</span>
+                        <span className="block text-muted-foreground">Std dev {formatNumber(group.iterationStats.stdDev)}</span>
+                      </div>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
                   <TableCell className="text-center font-mono tabular-nums text-xs">
                     {group.durationStats ? (
-                      <span
-                        title={`min ${formatDuration(group.durationStats.min)} · max ${formatDuration(group.durationStats.max)} · σ ${formatDuration(group.durationStats.stdDev)}`}
-                      >
-                        {formatDuration(group.durationStats.mean)}
-                      </span>
+                      <div title={`Minimum ${formatDuration(group.durationStats.min)} · Maximum ${formatDuration(group.durationStats.max)}`}>
+                        <span className="block">Mean {formatDuration(group.durationStats.mean)}</span>
+                        <span className="block text-muted-foreground">Std dev {formatDuration(group.durationStats.stdDev)}</span>
+                      </div>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
