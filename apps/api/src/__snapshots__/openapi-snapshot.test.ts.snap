@@ -5598,12 +5598,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       "post": {
         "parameters": [
           {
-            "description": "Optional project scope. When provided, a slug/id is resolved within that project (slugs may repeat across projects); when omitted, resolution falls back to a legacy global lookup for backward compatibility.",
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
             "in": "query",
             "name": "projectId",
-            "required": false,
+            "required": true,
             "schema": {
-              "description": "Optional project scope. When provided, a slug/id is resolved within that project (slugs may repeat across projects); when omitted, resolution falls back to a legacy global lookup for backward compatibility.",
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
               "example": "00000000-0000-0000-0000-000000000000",
               "minLength": 1,
               "type": "string",
@@ -8879,12 +8879,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       "post": {
         "parameters": [
           {
-            "description": "Optional project scope. When provided, a slug/id is resolved within that project (slugs may repeat across projects); when omitted, resolution falls back to a legacy global lookup for backward compatibility.",
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
             "in": "query",
             "name": "projectId",
-            "required": false,
+            "required": true,
             "schema": {
-              "description": "Optional project scope. When provided, a slug/id is resolved within that project (slugs may repeat across projects); when omitted, resolution falls back to a legacy global lookup for backward compatibility.",
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
               "example": "00000000-0000-0000-0000-000000000000",
               "minLength": 1,
               "type": "string",
@@ -8972,12 +8972,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       "post": {
         "parameters": [
           {
-            "description": "Optional project scope. When provided, a slug/id is resolved within that project (slugs may repeat across projects); when omitted, resolution falls back to a legacy global lookup for backward compatibility.",
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
             "in": "query",
             "name": "projectId",
-            "required": false,
+            "required": true,
             "schema": {
-              "description": "Optional project scope. When provided, a slug/id is resolved within that project (slugs may repeat across projects); when omitted, resolution falls back to a legacy global lookup for backward compatibility.",
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
               "example": "00000000-0000-0000-0000-000000000000",
               "minLength": 1,
               "type": "string",
@@ -13296,6 +13296,20 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
     },
     "/api/v1/task-prompts/generate": {
       "post": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
         "requestBody": {
           "content": {
             "application/json": {
