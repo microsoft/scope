@@ -5,9 +5,10 @@ import {
   gatesSatisfyInvariant,
   type GateId,
 } from "shared";
-import { isUnexpected } from "@azure-rest/ai-inference";
-import { postAdaptiveChatCompletion } from "./adaptive-chat-completions.js";
-import { acquireInferenceClient, isLlmAvailable as inferenceAvailable } from "./llm-token.js";
+import {
+  completePortalLlm,
+  isLlmAvailable as inferenceAvailable,
+} from "./llm-token.js";
 
 export type SuggestDirection = "parents" | "children";
 
@@ -180,8 +181,6 @@ export function isLlmAvailable(): boolean {
   return inferenceAvailable();
 }
 
-type ChatClient = Awaited<ReturnType<typeof acquireInferenceClient>>["client"];
-
 function sanitizeId(suggestedId: unknown): string {
   if (typeof suggestedId !== "string") return "new_criterion";
   const sanitized = suggestedId
@@ -292,29 +291,10 @@ export function selectCriteriaDependencyPool(
 }
 
 async function chat(
-  llm: ChatClient,
-  endpoint: string,
   request: CriteriaPromptRequest,
+  explicitModel?: string,
 ): Promise<string> {
-  const response = await postAdaptiveChatCompletion({
-    endpoint,
-    model: request.model,
-    messages: request.messages,
-    temperature: request.temperature,
-    maxTokens: request.max_tokens,
-    send: (body) => llm.path("/chat/completions").post({ body }),
-  });
-
-  if (isUnexpected(response)) {
-    const errBody = response.body as any;
-    throw new Error(`LLM request failed: ${errBody?.error?.message || response.status}`);
-  }
-
-  const content = response.body.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("LLM returned empty response");
-  }
-  return content;
+  return completePortalLlm(request, explicitModel);
 }
 
 /**
@@ -322,16 +302,14 @@ async function chat(
  * is the one indispensable result of generation.
  */
 async function author(
-  llm: ChatClient,
-  endpoint: string,
   model: string,
   behavior: string,
   gates?: GateId[],
+  explicitModel?: string,
 ): Promise<{ prompt: string; suggestedId: string }> {
   const content = await chat(
-    llm,
-    endpoint,
     buildCriteriaAuthoringRequest(behavior, gates, model),
+    explicitModel,
   );
   return parseCriteriaAuthoringResponse(content);
 }
@@ -363,23 +341,21 @@ function buildSuggestMessage(
  */
 async function suggestDeps(
   direction: SuggestDirection,
-  llm: ChatClient,
-  endpoint: string,
   model: string,
   behavior: string,
   pool: ExistingCriterion[],
+  explicitModel?: string,
 ): Promise<string[]> {
   if (pool.length === 0) return [];
   try {
     const content = await chat(
-      llm,
-      endpoint,
       buildCriteriaDependencySuggestionRequest(
         direction,
         behavior,
         pool,
         model,
       ),
+      explicitModel,
     );
     return parseCriteriaDependencySuggestionResponse(content, pool);
   } catch (err) {
@@ -408,14 +384,7 @@ export async function generateCriteriaPrompt(
   newGates?: GateId[],
   model?: string,
 ): Promise<GenerateResult> {
-  const {
-    client: llm,
-    endpoint,
-    model: foundryModel,
-  } = await acquireInferenceClient();
-
-  // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
-  const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
+  const modelName = model || process.env.LLM_MODEL || "gpt-4.1";
 
   const parentPool = selectCriteriaDependencyPool(
     "parents",
@@ -429,22 +398,20 @@ export async function generateCriteriaPrompt(
   );
 
   const [authored, suggestedParents, suggestedChildrenRaw] = await Promise.all([
-    author(llm, endpoint, modelName, behavior, newGates),
+    author(modelName, behavior, newGates, model),
     suggestDeps(
       "parents",
-      llm,
-      endpoint,
       modelName,
       behavior,
       parentPool,
+      model,
     ),
     suggestDeps(
       "children",
-      llm,
-      endpoint,
       modelName,
       behavior,
       childPool,
+      model,
     ),
   ]);
 

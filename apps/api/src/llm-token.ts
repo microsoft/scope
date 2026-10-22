@@ -10,20 +10,30 @@
  *   2. Azure AI Foundry via the Token Manager — TOKEN_MANAGER_URL with at
  *      least one registered `azure-ai-foundry` key (preferred for prod;
  *      round-robins across registered keys).
- *   3. GitHub Models — https://models.inference.ai.azure.com via
+ *   3. GitHub Copilot SDK — a bounded pool of tool-less Copilot CLI runtimes
+ *      using the `copilot-sdk` Token Manager capability (or GITHUB_TOKEN).
+ *   4. GitHub Models — https://models.inference.ai.azure.com via
  *      GITHUB_MODELS_API_KEY → TokenManagerClient("github-models") → GITHUB_TOKEN
- *      (fallback; slow public endpoint, fine for local dev only).
+ *      (legacy compatibility fallback).
  *
- * All three portal LLM modules (llm.ts, prompt-feature-llm.ts,
- * task-prompt-llm.ts) call acquireInferenceClient() instead of constructing
- * a ModelClient inline so the endpoint can be swapped in one place.
+ * All portal LLM modules call completePortalLlm() so provider selection and
+ * lifecycle policy remain centralized.
  */
-import ModelClient, { type ModelClient as ModelClientType } from "@azure-rest/ai-inference";
+import ModelClient, {
+  isUnexpected,
+  type ModelClient as ModelClientType,
+} from "@azure-rest/ai-inference";
 import { AzureKeyCredential } from "@azure/core-auth";
 import {
+  type ChatCompletionMessage,
   TokenManagerClient,
   parseAzureAiFoundrySecret,
 } from "shared";
+import { postAdaptiveChatCompletion } from "./adaptive-chat-completions.js";
+import {
+  CopilotCredentialUnavailableError,
+  getPortalCopilotClientPool,
+} from "./copilot-client-pool.js";
 
 const GITHUB_MODELS_ENDPOINT = "https://models.inference.ai.azure.com";
 
@@ -84,6 +94,8 @@ export function isInferenceError(err: unknown): err is Error {
   return (
     err.message.includes("not configured") ||
     lower.includes("llm request failed") ||
+    lower.includes("copilot sdk") ||
+    lower.includes("copilot cli") ||
     lower.includes("resource not found") ||
     lower.includes("authentication failed")
   );
@@ -103,11 +115,19 @@ export function isGitHubModelsTokenAvailable(): boolean {
   );
 }
 
+export function isCopilotSdkTokenAvailable(): boolean {
+  return !!(process.env.GITHUB_TOKEN || process.env.TOKEN_MANAGER_URL);
+}
+
 /**
- * Returns true if any inference backend (Foundry or GitHub Models) is configured.
+ * Returns true if any inference backend is configured.
  */
 export function isLlmAvailable(): boolean {
-  return isFoundryConfigured() || isGitHubModelsTokenAvailable();
+  return (
+    isFoundryConfigured() ||
+    isCopilotSdkTokenAvailable() ||
+    isGitHubModelsTokenAvailable()
+  );
 }
 
 /**
@@ -150,7 +170,10 @@ export async function acquireGitHubModelsToken(): Promise<string> {
   );
 }
 
-export type InferenceSource = "azure-ai-foundry" | "github-models";
+export type InferenceSource =
+  | "azure-ai-foundry"
+  | "copilot-sdk"
+  | "github-models";
 
 /**
  * How the credential was actually resolved. Useful for log lines so an
@@ -160,6 +183,8 @@ export type InferenceSource = "azure-ai-foundry" | "github-models";
 export type InferenceVia =
   | "azure-ai-foundry-env"
   | "azure-ai-foundry-token-manager"
+  | "copilot-sdk-env"
+  | "copilot-sdk-token-manager"
   | "github-models-env"
   | "github-models-token-manager"
   | "github-token";
@@ -213,16 +238,7 @@ async function tryAcquireFoundryFromTokenManager(): Promise<{
   }
 }
 
-/**
- * Build a ModelClient for the configured inference backend.
- *
- * Tries Azure AI Foundry first (env vars, then Token Manager), then falls
- * back to GitHub Models. See module docstring for the full priority order.
- *
- * @throws Error if no inference backend is configured.
- */
-export async function acquireInferenceClient(): Promise<InferenceClientHandle> {
-  // 1. Azure AI Foundry via env vars — explicit override, preferred locally.
+async function tryAcquireFoundryClient(): Promise<InferenceClientHandle | null> {
   if (isFoundryConfigured()) {
     const endpoint = normalizeFoundryEndpoint(process.env.AZURE_AI_INFERENCE_ENDPOINT!);
     const apiKey = process.env.AZURE_AI_INFERENCE_API_KEY!;
@@ -238,38 +254,176 @@ export async function acquireInferenceClient(): Promise<InferenceClientHandle> {
     return handle;
   }
 
-  // 2. Azure AI Foundry via the Token Manager — preferred in production.
   const tmFoundry = await tryAcquireFoundryFromTokenManager();
-  if (tmFoundry) {
-    const model = tmFoundry.model || process.env.LLM_MODEL || "gpt-4.1";
-    const handle: InferenceClientHandle = {
-      client: ModelClient(tmFoundry.endpoint, new AzureKeyCredential(tmFoundry.apiKey)),
-      endpoint: tmFoundry.endpoint,
-      source: "azure-ai-foundry",
-      via: "azure-ai-foundry-token-manager",
-      model,
-    };
-    logInferenceAcquired(handle);
-    return handle;
+  if (!tmFoundry) return null;
+
+  const model = tmFoundry.model || process.env.LLM_MODEL || "gpt-4.1";
+  const handle: InferenceClientHandle = {
+    client: ModelClient(tmFoundry.endpoint, new AzureKeyCredential(tmFoundry.apiKey)),
+    endpoint: tmFoundry.endpoint,
+    source: "azure-ai-foundry",
+    via: "azure-ai-foundry-token-manager",
+    model,
+  };
+  logInferenceAcquired(handle);
+  return handle;
+}
+
+async function acquireGitHubModelsClient(): Promise<InferenceClientHandle> {
+  const token = await acquireGitHubModelsToken();
+  const via: InferenceVia = process.env.GITHUB_MODELS_API_KEY
+    ? "github-models-env"
+    : process.env.TOKEN_MANAGER_URL
+      ? "github-models-token-manager"
+      : "github-token";
+  const handle: InferenceClientHandle = {
+    client: ModelClient(GITHUB_MODELS_ENDPOINT, new AzureKeyCredential(token)),
+    endpoint: GITHUB_MODELS_ENDPOINT,
+    source: "github-models",
+    via,
+  };
+  logInferenceAcquired(handle);
+  return handle;
+}
+
+export interface PortalLlmCompletionRequest {
+  messages: [
+    { role: "system"; content: string },
+    { role: "user"; content: string },
+  ];
+  model: string;
+  temperature: number;
+  max_tokens: number;
+}
+
+function inferenceErrorMessage(body: unknown, status: string): string {
+  if (
+    body &&
+    typeof body === "object" &&
+    "error" in body &&
+    body.error &&
+    typeof body.error === "object" &&
+    "message" in body.error &&
+    typeof body.error.message === "string"
+  ) {
+    return body.error.message;
+  }
+  return status;
+}
+
+async function completeWithRestInference(
+  handle: InferenceClientHandle,
+  request: PortalLlmCompletionRequest,
+): Promise<string> {
+  const messages: ChatCompletionMessage[] = request.messages;
+  const response = await postAdaptiveChatCompletion({
+    endpoint: handle.endpoint,
+    model: request.model,
+    messages,
+    temperature: request.temperature,
+    maxTokens: request.max_tokens,
+    send: (body) => handle.client.path("/chat/completions").post({ body }),
+  });
+
+  if (isUnexpected(response)) {
+    throw new Error(
+      `LLM request failed: ${inferenceErrorMessage(response.body, response.status)}`,
+    );
   }
 
-  // 3. GitHub Models — public fallback (slow; fine for local dev).
+  const content = response.body.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error("LLM returned empty response");
+  }
+  return content;
+}
+
+/**
+ * Complete one Portal AI request using the configured provider chain:
+ * Foundry env, Foundry Token Manager, Copilot SDK, then legacy GitHub Models.
+ *
+ * Provider fallback only happens while resolving a credential. Once a provider
+ * begins inference, its errors are surfaced and never hidden by another backend.
+ */
+export async function completePortalLlm(
+  request: PortalLlmCompletionRequest,
+  explicitModel?: string,
+): Promise<string> {
+  const foundry = await tryAcquireFoundryClient();
+  if (foundry) {
+    const model =
+      explicitModel ||
+      foundry.model ||
+      process.env.LLM_MODEL ||
+      request.model ||
+      "gpt-4.1";
+    return completeWithRestInference(foundry, { ...request, model });
+  }
+
+  if (isCopilotSdkTokenAvailable()) {
+    try {
+      const via: InferenceVia = process.env.GITHUB_TOKEN
+        ? "copilot-sdk-env"
+        : "copilot-sdk-token-manager";
+      const copilotModel =
+        explicitModel ||
+        process.env.PORTAL_COPILOT_MODEL ||
+        process.env.LLM_MODEL;
+      console.log(
+        `[llm-token] inference provider: source=copilot-sdk via=${via} model=${copilotModel || "auto"}`,
+      );
+      return await getPortalCopilotClientPool().complete({
+        systemPrompt: request.messages[0].content,
+        userPrompt: request.messages[1].content,
+        model: copilotModel,
+      });
+    } catch (error) {
+      if (!(error instanceof CopilotCredentialUnavailableError)) {
+        throw error;
+      }
+    }
+  }
+
+  if (isGitHubModelsTokenAvailable()) {
+    let githubModels: InferenceClientHandle | null = null;
+    try {
+      githubModels = await acquireGitHubModelsClient();
+    } catch {
+      // Credential resolution failed; continue to the unified unavailable error.
+    }
+    if (githubModels) {
+      return completeWithRestInference(githubModels, {
+        ...request,
+        model:
+          explicitModel ||
+          process.env.LLM_MODEL ||
+          request.model ||
+          "gpt-4.1",
+      });
+    }
+  }
+
+  throw new Error(
+    "LLM not configured: no inference backend available. Register an Azure AI Foundry credential, a GitHub token with Copilot SDK capability, or a legacy GitHub Models key."
+  );
+}
+
+/**
+ * Build a ModelClient for the configured inference backend.
+ *
+ * Tries Azure AI Foundry first (env vars, then Token Manager), then falls
+ * back to GitHub Models. See module docstring for the full priority order.
+ *
+ * @throws Error if no inference backend is configured.
+ */
+export async function acquireInferenceClient(): Promise<InferenceClientHandle> {
+  const foundry = await tryAcquireFoundryClient();
+  if (foundry) return foundry;
+
+  // Legacy REST-only helper: Copilot SDK is exposed through completePortalLlm().
   if (isGitHubModelsTokenAvailable()) {
     try {
-      const token = await acquireGitHubModelsToken();
-      const via: InferenceVia = process.env.GITHUB_MODELS_API_KEY
-        ? "github-models-env"
-        : process.env.TOKEN_MANAGER_URL
-          ? "github-models-token-manager"
-          : "github-token";
-      const handle: InferenceClientHandle = {
-        client: ModelClient(GITHUB_MODELS_ENDPOINT, new AzureKeyCredential(token)),
-        endpoint: GITHUB_MODELS_ENDPOINT,
-        source: "github-models",
-        via,
-      };
-      logInferenceAcquired(handle);
-      return handle;
+      return await acquireGitHubModelsClient();
     } catch {
       // No usable GitHub Models token after all — drop through to the
       // unified "no backend configured" error below so the UI gets a
@@ -279,6 +433,6 @@ export async function acquireInferenceClient(): Promise<InferenceClientHandle> {
   }
 
   throw new Error(
-    "LLM not configured: no inference backend available. Please register a new secret key for GitHub Model or Azure Foundry."
+    "LLM not configured: no REST inference backend available. Register an Azure AI Foundry credential or a legacy GitHub Models key."
   );
 }

@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { isUnexpected } from "@azure-rest/ai-inference";
-import { postAdaptiveChatCompletion } from "./adaptive-chat-completions.js";
-import { acquireInferenceClient, isLlmAvailable as inferenceAvailable } from "./llm-token.js";
+import {
+  completePortalLlm,
+  isLlmAvailable as inferenceAvailable,
+} from "./llm-token.js";
 
 // ---------------------------------------------------------------------------
 // Generate task prompt from a short description or create a variation
@@ -149,15 +150,7 @@ export async function generateTaskPrompt(
   model?: string,
 ): Promise<GenerateTaskPromptResult> {
   const { description, existingPrompt } = opts;
-
-  const {
-    client: llm,
-    endpoint,
-    model: foundryModel,
-  } = await acquireInferenceClient();
-
-  // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
-  const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
+  const modelName = model || process.env.LLM_MODEL || "gpt-4.1";
 
   const request = buildTaskPromptRequest(
     { description, existingPrompt },
@@ -165,26 +158,7 @@ export async function generateTaskPrompt(
     modelName,
   );
 
-  const response = await postAdaptiveChatCompletion({
-    endpoint,
-    model: request.model,
-    messages: request.messages,
-    temperature: request.temperature,
-    maxTokens: request.max_tokens,
-    send: (body) => llm.path("/chat/completions").post({ body }),
-  });
-
-  if (isUnexpected(response)) {
-    const errBody = response.body as any;
-    throw new Error(
-      `LLM request failed: ${errBody?.error?.message || response.status}`,
-    );
-  }
-
-  const content = response.body.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("LLM returned empty response");
-  }
+  const content = await completePortalLlm(request, model);
 
   return parseTaskPromptResponse(content);
 }

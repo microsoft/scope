@@ -49,6 +49,7 @@ import { registerProfilesRoutes } from "./routes/profiles.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { ProjectScopeError } from "./utils/project-scope.js";
 import { registerUsersRoutes } from "./routes/users.js";
+import { shutdownPortalCopilotClientPool } from "./copilot-client-pool.js";
 import type { RouteContext } from "./route-context.js";
 import type {
   CriteriaDocument,
@@ -400,6 +401,7 @@ async function main(): Promise<void> {
         process.exitCode = 1;
       }
       void Promise.all([
+        shutdownPortalCopilotClientPool(),
         userAccessCache?.close(),
         heartbeatStore.close(),
         mongoClient.close(),

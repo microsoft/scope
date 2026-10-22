@@ -15,6 +15,7 @@ import type { RouteContext } from "../route-context.js";
 import { extractPromptFeatures, isLlmAvailable as isPromptFeatureLlmAvailable } from "../prompt-feature-llm.js";
 import { generateTaskPrompt, isTaskPromptLlmAvailable } from "../task-prompt-llm.js";
 import { isInferenceError } from "../llm-token.js";
+import { PORTAL_AI_NOT_CONFIGURED_ERROR } from "../portal-ai-copy.js";
 import { ProjectIdQuerySchema, getQueryProjectId } from "../utils/project-scope.js";
 
 export function registerTaskPromptsRoutes(ctx: RouteContext): void {
@@ -42,7 +43,7 @@ apiRoute(ctx.app, ctx.registry, {
     const { description, existingPrompt } = req.body;
 
     if (!isTaskPromptLlmAvailable()) {
-      res.status(503).json({ error: "LLM not configured: no inference backend available. Please register a new secret key for GitHub Model or Azure Foundry." });
+      res.status(503).json({ error: PORTAL_AI_NOT_CONFIGURED_ERROR });
       return;
     }
 
@@ -253,7 +254,7 @@ apiRoute(ctx.app, ctx.registry, {
     }
 
     if (!isPromptFeatureLlmAvailable()) {
-      res.status(503).json({ error: "LLM not configured: no inference backend available. Please register a new secret key for GitHub Model or Azure Foundry." });
+      res.status(503).json({ error: PORTAL_AI_NOT_CONFIGURED_ERROR });
       return;
     }
 
