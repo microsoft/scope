@@ -28,6 +28,7 @@ import { CodebasePicker } from "@/components/CodebasePicker";
 import { ResourcePicker } from "@/components/ResourcePicker";
 import { ExtensionPicker } from "@/components/ExtensionPicker";
 import { ProfileCreateForm } from "@/components/ProfileCreateForm";
+import { McpServerCreateDialog } from "@/components/McpServerCreateDialog";
 import { ProfilePicker } from "@/components/ProfilePicker";
 import { AgentBadge } from "@/components/AgentBadge";
 import { HelpTooltip } from "@/components/HelpTooltip";
@@ -236,6 +237,7 @@ export function SubmitRun() {
   const [createCriterionOpen, setCreateCriterionOpen] = useState(false);
   const [gateCriterionDialog, setGateCriterionDialog] = useState<Exclude<GateId, "select"> | null>(null);
   const [createProfileOpen, setCreateProfileOpen] = useState(false);
+  const [createMcpOpen, setCreateMcpOpen] = useState(false);
 
   // Save as Profile
   const [saveProfileName, setSaveProfileName] = useState("");
@@ -262,7 +264,7 @@ export function SubmitRun() {
     queryFn: () => api.listAgents({ includeDeleted: true }),
   });
 
-  const { data: mcpServers = [] } = useQuery({
+  const { data: mcpServers = [], isSuccess: mcpServersLoaded } = useQuery({
     queryKey: ["mcp-servers"],
     queryFn: () => api.listMcpServers(),
   });
@@ -286,6 +288,11 @@ export function SubmitRun() {
 
   // ─── Derived ────────────────────────────────────────────────────────────
   const activeMcpServers = mcpServers.filter((s: McpServerDocument) => !s.deletedAt);
+  // Selections carried in from a profile or resubmit whose server is gone from the
+  // active project; surfaced so they are visible and can be cleared.
+  const unavailableSelectedMcpServers = mcpServersLoaded
+    ? selectedMcpServers.filter((id) => !activeMcpServers.some((s: McpServerDocument) => s._id === id))
+    : [];
   const activeAgents = agents.filter((a: CodingAgent) => !a.deletedAt);
   const availableAgents = agents.filter(isAgentAvailable);
   const agentNameById = new Map(agents.map((agent) => [agent._id, agent.name]));
@@ -453,6 +460,12 @@ export function SubmitRun() {
     setVariationDrafts((prev) => prev.filter((variation) => variation.profileId !== profile._id));
     setGalleryOpen(false);
     applyVersionConfig(profile.version);
+  };
+
+  const handleMcpServerCreated = (server: McpServerDocument) => {
+    setSelectedMcpServers((prev) => (prev.includes(server._id) ? prev : [...prev, server._id]));
+    setMcpOpen(true);
+    setCreateMcpOpen(false);
   };
 
   const addVariationDraft = () => {
@@ -1813,7 +1826,7 @@ export function SubmitRun() {
       </Card>
 
       {/* ─── MCP Servers (collapsible) ─────────────────────────────────── */}
-      {showMcpServers && (activeMcpServers.length > 0 || selectedMcpServers.length > 0) && (
+      {showMcpServers && (
         <CollapsibleCard
           icon={Server}
           title="MCP Servers"
@@ -1833,31 +1846,77 @@ export function SubmitRun() {
           disabled={profileLocked}
         >
           <div className="space-y-2">
-            {activeMcpServers.map((s: McpServerDocument) => (
-              <label
-                key={s._id}
-                className={`flex items-center gap-3 rounded-md border p-3 transition-colors ${profileLocked ? "opacity-60" : "cursor-pointer hover:bg-accent/50"}`}
+            <div className="flex items-center justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={profileLocked}
+                onClick={() => setCreateMcpOpen(true)}
               >
-                <Checkbox
-                  checked={selectedMcpServers.includes(s._id)}
-                  disabled={profileLocked}
-                  onCheckedChange={(checked) => {
-                    setSelectedMcpServers((prev) =>
-                      checked ? [...prev, s._id] : prev.filter((id) => id !== s._id)
-                    );
-                  }}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm">{s._id}</span>
-                    <Badge variant="outline" className="text-xs uppercase">{s.type}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {s.name}{s.description ? ` — ${s.description}` : ""}
-                  </p>
-                </div>
-              </label>
-            ))}
+                <Plus className="h-4 w-4" />
+                New MCP server…
+              </Button>
+            </div>
+            {activeMcpServers.length === 0 && selectedMcpServers.length === 0 ? (
+              <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                {mcpServersLoaded
+                  ? "No MCP servers configured yet. Create one to attach it to this run."
+                  : "Loading MCP servers…"}
+              </p>
+            ) : (
+              <>
+                {activeMcpServers.map((s: McpServerDocument) => (
+                  <label
+                    key={s._id}
+                    className={`flex items-center gap-3 rounded-md border p-3 transition-colors ${profileLocked ? "opacity-60" : "cursor-pointer hover:bg-accent/50"}`}
+                  >
+                    <Checkbox
+                      checked={selectedMcpServers.includes(s._id)}
+                      disabled={profileLocked}
+                      onCheckedChange={(checked) => {
+                        setSelectedMcpServers((prev) =>
+                          checked ? [...prev, s._id] : prev.filter((id) => id !== s._id)
+                        );
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">{s._id}</span>
+                        <Badge variant="outline" className="text-xs uppercase">{s.type}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {s.name}{s.description ? ` — ${s.description}` : ""}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+                {unavailableSelectedMcpServers.map((id) => (
+                  <label
+                    key={id}
+                    className={`flex items-center gap-3 rounded-md border border-dashed p-3 transition-colors ${profileLocked ? "opacity-60" : "cursor-pointer hover:bg-accent/50"}`}
+                  >
+                    <Checkbox
+                      checked
+                      disabled={profileLocked}
+                      onCheckedChange={(checked) => {
+                        if (!checked) setSelectedMcpServers((prev) => prev.filter((x) => x !== id));
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">{id}</span>
+                        <Badge variant="outline" className="text-xs text-muted-foreground">unavailable</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        Not found in the active project.
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </>
+            )}
           </div>
         </CollapsibleCard>
       )}
@@ -1927,6 +1986,12 @@ export function SubmitRun() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <McpServerCreateDialog
+        open={createMcpOpen}
+        onOpenChange={setCreateMcpOpen}
+        onCreated={handleMcpServerCreated}
+      />
 
       {/* ─── Sticky action bar ─────────────────────────────────────────── */}
       <div className="sticky bottom-0 -mx-6 lg:-mx-8 -mb-6 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-6 lg:px-8 py-3">
