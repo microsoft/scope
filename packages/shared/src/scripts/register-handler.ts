@@ -21,7 +21,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
-import type { HandlerServiceDocument } from "../types/types.js";
+import type { ServiceHandlerDocument } from "../types/types.js";
 
 const HEALTH_RETRIES = 30;
 const HEALTH_DELAY_MS = 3_000;
@@ -33,7 +33,7 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 /** Validate the parsed YAML conforms to the HandlerServiceDocument shape. */
-export function parseHandlerDocument(raw: unknown): HandlerServiceDocument {
+export function parseHandlerDocument(raw: unknown): ServiceHandlerDocument {
   if (typeof raw !== "object" || raw === null) {
     throw new Error("handler.yaml must contain a mapping");
   }
@@ -42,8 +42,10 @@ export function parseHandlerDocument(raw: unknown): HandlerServiceDocument {
   if (!isNonEmptyString(doc._id)) {
     throw new Error("handler.yaml: '_id' is required");
   }
-  if (doc.type !== "post-process-handler") {
-    throw new Error("handler.yaml: 'type' must be 'post-process-handler'");
+  if (doc.type !== "post-process-handler" && doc.type !== "experiment-handler") {
+    throw new Error(
+      "handler.yaml: 'type' must be 'post-process-handler' or 'experiment-handler'",
+    );
   }
   if (typeof doc.version !== "number" || !Number.isFinite(doc.version)) {
     throw new Error("handler.yaml: 'version' must be a number");
@@ -62,15 +64,27 @@ export function parseHandlerDocument(raw: unknown): HandlerServiceDocument {
     throw new Error("handler.yaml: 'dependsOn' must be an array of strings");
   }
 
-  return {
+  const common = {
     _id: doc._id,
-    type: "post-process-handler",
     version: doc.version,
     queue: doc.queue,
     selector: doc.selector,
     autoBackfill: doc.autoBackfill,
     dependsOn: dependsOn as string[],
   };
+  if (doc.type === "experiment-handler") {
+    if (doc.dependencyMode !== "all-runs") {
+      throw new Error(
+        "handler.yaml: experiment handlers require dependencyMode: 'all-runs'",
+      );
+    }
+    return {
+      ...common,
+      type: "experiment-handler",
+      dependencyMode: "all-runs",
+    };
+  }
+  return { ...common, type: "post-process-handler" };
 }
 
 async function delay(ms: number): Promise<void> {
@@ -97,7 +111,7 @@ async function waitForScheduler(schedulerUrl: string): Promise<void> {
 
 async function postRegistration(
   schedulerUrl: string,
-  doc: HandlerServiceDocument,
+  doc: ServiceHandlerDocument,
 ): Promise<void> {
   for (let attempt = 1; attempt <= POST_RETRIES; attempt++) {
     try {
@@ -128,7 +142,7 @@ async function postRegistration(
 export async function registerHandlerFromYaml(
   yamlPath: string,
   schedulerUrl: string,
-): Promise<HandlerServiceDocument> {
+): Promise<ServiceHandlerDocument> {
   const content = await readFile(yamlPath, "utf-8");
   const doc = parseHandlerDocument(parseYaml(content));
 

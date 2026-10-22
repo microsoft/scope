@@ -26,7 +26,7 @@ const MOCK_RESPONSES: Record<string, unknown> = {
         id: "req-test-001",
         workerType: "coder-acp-copilot",
         run: { status: "done", outcome: "succeeded" },
-        submissionId: "sub-abc123",
+        experimentId: "experiment-abc123",
       },
     ],
     pageInfo: { hasNextPage: false, hasPreviousPage: false },

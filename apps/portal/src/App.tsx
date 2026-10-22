@@ -6,6 +6,8 @@ import { Layout } from "@/components/Layout";
 import { RunsList } from "@/pages/RunsList";
 import { RunDetail } from "@/pages/RunDetail";
 import { SubmitRun } from "@/pages/SubmitRun";
+import { ExperimentDetail } from "@/pages/ExperimentDetail";
+import { ExperimentsList } from "@/pages/ExperimentsList";
 import { CriteriaList } from "@/pages/CriteriaList";
 import { CriterionDetail } from "@/pages/CriterionDetail";
 import { CriterionPreviewPanel } from "@/pages/CriterionPreviewPanel";
@@ -85,6 +87,9 @@ export function App() {
         </Route>
         <Route path="/runs/new" element={<ProjectGate><SubmitRun /></ProjectGate>} />
         <Route path="/runs/:id/:tab?" element={<RunDetail />} />
+        <Route path="/experiments" element={<ProjectGate><ExperimentsList /></ProjectGate>} />
+        <Route path="/experiments/new" element={<ProjectGate><SubmitRun mode="experiment" /></ProjectGate>} />
+        <Route path="/experiments/:id" element={<ProjectGate><ExperimentDetail /></ProjectGate>} />
         <Route path="/reports" element={<ProjectGate><ReportsList /></ProjectGate>}>
           <Route path=":id/preview" element={<ReportPreviewPanel />} />
         </Route>

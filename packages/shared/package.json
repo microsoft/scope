@@ -45,6 +45,11 @@
       "types": "./dist/criteria/criteria-provider-factory.d.ts",
       "import": "./dist/criteria/criteria-provider-factory.js"
     },
+    "./experiments": {
+      "source": "./src/experiments/index.ts",
+      "types": "./dist/experiments/index.d.ts",
+      "import": "./dist/experiments/index.js"
+    },
     "./observation-taxonomy": {
       "source": "./src/criteria/observation-taxonomy.ts",
       "types": "./dist/criteria/observation-taxonomy.d.ts",

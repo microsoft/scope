@@ -37,7 +37,9 @@ import {
   isCriterionCompatibleWithGate,
   orderGates,
   computeTaskPromptId,
+  LEGACY_REQUEST_COMPOSITION_DEPRECATION_ID,
 } from "shared";
+import { trackMetric } from "telemetry";
 import type {
   ProfileDocument,
   ProfileVersionDocument,
@@ -235,6 +237,25 @@ const validatePersistedRequestTarget = (request: RequestDocument) =>
 
 /** Maximum number of profile variations (including the base profile) allowed in one submit. */
 const MAX_PROFILE_VARIATIONS = 25;
+function emitLegacyCompositionHeaders(
+  res: { setHeader(name: string, value: string): void },
+  properties: readonly string[],
+): void {
+  if (properties.length === 0) return;
+  res.setHeader("Deprecation", "true");
+  res.setHeader(
+    "Link",
+    '</api/v1/experiments>; rel="successor-version"; title="POST /api/v1/experiments"',
+  );
+  trackMetric({
+    name: "api.deprecated_input_used",
+    value: 1,
+    properties: {
+      identifier: LEGACY_REQUEST_COMPOSITION_DEPRECATION_ID,
+      properties: [...properties].sort().join(","),
+    },
+  });
+}
 
 /**
  * Server-side validation of a request's gate configuration (docs/design/gates.md
@@ -478,7 +499,16 @@ apiRoute(ctx.app, ctx.registry, {
   tags: ["Requests"],
   summary: "Submit request(s)",
   body: CreateRequestInputSchema.extend({
-    count: z.number().min(1).max(10).default(1),
+    count: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(1)
+      .openapi({
+        deprecated: true,
+        description:
+          "Deprecated for composition. Use POST /api/v1/experiments and its requests array.",
+      }),
     skills: z.array(z.string()).optional(),
     agentVersion: z.string().optional(),
     codebase: z.string().optional(),
@@ -553,6 +583,10 @@ apiRoute(ctx.app, ctx.registry, {
       ? profileVariations.filter((v: unknown): v is string => typeof v === "string")
       : [];
     const isVariationSubmit = typedProfileVariations.length > 0;
+    emitLegacyCompositionHeaders(res, [
+      ...(count > 1 ? ["count"] : []),
+      ...(isVariationSubmit ? ["profileVariations"] : []),
+    ]);
 
     if (isVariationSubmit) {
       if (!requestedProfileSpec) {
@@ -638,7 +672,7 @@ apiRoute(ctx.app, ctx.registry, {
       const taskPromptId = taskPrompt._id;
 
       // Gates are the shared evaluation harness for the whole comparative
-      // submission, not a per-variation controlled field: every variation
+      // request batch, not a per-variation controlled field: every variation
       // (including the base) runs the same gate configuration. Resolve, validate
       // and canonicalize them up front so an invalid config fails the whole
       // submit before any inserts (docs/design/gates.md §4.3), mirroring the
@@ -835,9 +869,8 @@ apiRoute(ctx.app, ctx.registry, {
         });
       }
 
-      // Pass 2: build documents and insert them under a single shared submissionId.
-      // All variations belong to the same comparative submission so consumers can
-      // group them via `submissionId` (matches docs/architecture/app-design.md).
+      // Preserve the legacy request-batch correlation value. Experiments remain
+      // explicit resources created only by POST /experiments.
       const submissionId = uuidv4();
       const allNewIds: string[] = [];
       const newDocs: RequestDocument[] = [];
@@ -1261,7 +1294,7 @@ apiRoute(ctx.app, ctx.registry, {
     const taskPrompt = await ctx.taskPromptStore.findOrCreate(projectId, scenario.task);
     const taskPromptId = taskPrompt._id;
 
-    // Resolve AGENTS.md lineage once for this submission (shared across count>1).
+    // Resolve AGENTS.md lineage once for this request batch (shared across count>1).
     const agentsMdPromptId = await resolveAgentsMdPromptId();
     const agentsMdFields = buildAgentsMdFields(agentsMdPromptId);
 
@@ -1274,12 +1307,10 @@ apiRoute(ctx.app, ctx.registry, {
       : undefined;
 
     // Persisted observation-criteria selection (issue #1156); deduped, evaluated
-    // by the pp-taxonomy post-processor. Absent/empty = no observations evaluated.
+    // by the pp-observations post-processor. Absent/empty = no observations evaluated.
     const persistedObservations: string[] | undefined = observationsProvided
       ? [...new Set(resolvedObservations)]
       : undefined;
-
-    // Generate a submission ID to group all runs from this request
     const submissionId = uuidv4();
 
     // Handle multiple runs (count > 1)
@@ -1477,13 +1508,19 @@ apiRoute(ctx.app, ctx.registry, {
     const taskPromptIdFilter = req.query.taskPromptId as string;
     const criteriaFilter = req.query.criteria as string;
     const submissionIdFilter = req.query.submissionId as string;
+    const experimentIdFilter = req.query.experimentId as string;
     const searchFilter = req.query.search as string | undefined;
     const turnsFilterRaw = req.query.turns as string | undefined;
     const turnsOpFilter = (req.query.turnsOp as string | undefined) ?? "eq";
     const maxIterationsFilterRaw = req.query.maxIterations as string | undefined;
     const maxIterationsOpFilter = (req.query.maxIterationsOp as string | undefined) ?? "eq";
     const includeDeleted = req.query.includeDeleted === "true";
-    const groupByParam = req.query.groupBy as "task" | "submissionId" | "profile" | undefined;
+    const groupByParam = req.query.groupBy as
+      | "task"
+      | "submissionId"
+      | "experimentId"
+      | "profile"
+      | undefined;
     const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 100);
     const afterParam = req.query.after as string | undefined;
     const beforeParam = req.query.before as string | undefined;
@@ -1551,8 +1588,13 @@ apiRoute(ctx.app, ctx.registry, {
     pushClause(buildMultiClause("agentVersion", agentVersionValues));
 
     if (submissionIdFilter) {
-      // Prefix-based matching: allow filtering by partial submission ID.
-      flat.submissionId = { $regex: `^${submissionIdFilter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` };
+      flat.submissionId = {
+        $regex: `^${submissionIdFilter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+      };
+    }
+    if (experimentIdFilter) {
+      // Prefix-based matching: allow filtering by partial experiment ID.
+      flat.experimentId = { $regex: `^${experimentIdFilter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` };
     }
     if (!includeDeleted) {
       flat.deletedAt = { $exists: false };
@@ -1649,7 +1691,12 @@ apiRoute(ctx.app, ctx.registry, {
 
     // Grouped mode: paginated RunGroup[] via two-phase aggregation
     if (groupByParam) {
-      const groupByField = groupByParam === "task" ? "taskPromptId" : groupByParam === "profile" ? "profileId" : "submissionId";
+      const groupByField =
+        groupByParam === "task"
+          ? "taskPromptId"
+          : groupByParam === "profile"
+            ? "profileId"
+            : groupByParam;
       const groupByAggField = `$${groupByField}`;
 
       // Decode group cursor
@@ -1883,6 +1930,7 @@ apiRoute(ctx.app, ctx.registry, {
     criteria: z.string().optional(),
     features: z.string().optional(),
     submissionId: z.string().optional(),
+    experimentId: z.string().optional(),
     k: z.string().optional(),
   }).merge(ProjectIdQuerySchema),
   response: z.object({}).passthrough().describe("Analysis metrics"),
@@ -2618,7 +2666,7 @@ async function finalizePendingRun(
   const topChat = run.artifacts.get("run.chat-export.json");
   if (topChat) runState.rawChatUrl = topChat;
 
-  // Materialize the task-prompt entity for this run. The submission flow
+  // Materialize the task-prompt entity for this run. The request creation flow
   // (POST /api/v1/requests) goes through `taskPromptStore.findOrCreate` so
   // every run has a row in the `task-prompts` collection that backs
   // features, report triggers, group-by-task, the runs-list task filter and
