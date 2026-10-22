@@ -15,6 +15,7 @@ import {
 } from "shared";
 import type { RouteContext } from "../route-context.js";
 import { registerResourcesRoutes } from "./resources.js";
+import { mockRouteAuthorization } from "../test-helpers.js";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -133,6 +134,7 @@ function fakeCollection<T extends { _id: string }>(seed: T[] = []) {
 
 function buildApp() {
   const app = express();
+  mockRouteAuthorization(app);
   app.use(express.json());
   const resourceCollection = fakeCollection<ResourceDocument>();
   const revisionCollection = fakeCollection<ResourceRevisionDocument>();

@@ -1,14 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
 import { app, _injectTestDependencies } from "./index.js";
 import { useTestServer } from "./test-server.js";
 import { _resetRunFacetsCacheForTests } from "./routes/requests/index.js";
-import { createAllMockDependencies, createMockCollection } from "./test-helpers.js";
+import { createAllMockDependencies, createMockCollection, mockRouteAuthorization } from "./test-helpers.js";
 
 const TEST_PROJECT_ID = "test-project";
+
+vi.mock("./auth/middleware.js", async importOriginal => ({
+  ...await importOriginal<typeof import("./auth/middleware.js")>(),
+  createUserAccessMiddleware: (await import("./test-helpers.js")).mockControllerUserAccessMiddleware,
+}));
 
 // Stub checkMigrations before it can be imported by index.ts
 vi.mock("db-migrations/check-migrations", () => ({
@@ -44,6 +49,7 @@ describe("API Endpoints", () => {
   beforeAll(() => {
     mocks = createAllMockDependencies();
     _injectTestDependencies(mocks);
+    mockRouteAuthorization(app);
   });
 
   beforeEach(() => {
@@ -1095,7 +1101,7 @@ describe("API Endpoints", () => {
   });
 
   describe("POST /api/v1/reports", () => {
-    it("returns 201 when creating a report", async () => {
+    it("blocks report creation before any write or enqueue", async () => {
       // Run exists
       (mocks.collection.findOne as any).mockResolvedValue({
         _id: "r1",
@@ -1106,27 +1112,30 @@ describe("API Endpoints", () => {
         .post("/api/v1/reports")
         .send({ requestId: "r1" });
 
-      expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty("requestId", "r1");
-      expect(res.body).toHaveProperty("status", "pending");
+      expect(res.status).toBe(503);
+      expect(res.body.code).toBe("report_generation_disabled");
+      expect(mocks.reportCollection.insertOne).not.toHaveBeenCalled();
+      expect(mocks.reportQueueClient.sendMessage).not.toHaveBeenCalled();
     });
 
-    it("returns 400 when requestId missing", async () => {
+    it("keeps report generation disabled even when requestId is missing", async () => {
       const res = await request(testServer())
         .post("/api/v1/reports")
         .send({});
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(503);
+      expect(res.body.code).toBe("report_generation_disabled");
     });
 
-    it("returns 404 when referenced run not found", async () => {
+    it("does not disclose whether the disabled generation target exists", async () => {
       (mocks.collection.findOne as any).mockResolvedValue(null);
 
       const res = await request(testServer())
         .post("/api/v1/reports")
         .send({ requestId: "no-such-run" });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(503);
+      expect(mocks.collection.findOne).not.toHaveBeenCalled();
     });
   });
 
@@ -1569,6 +1578,93 @@ describe("API Endpoints", () => {
 
       const res = await request(testServer()).get("/api/v1/task-prompts/missing/content");
       expect(res.status).toBe(404);
+    });
+  });
+
+  // ===================================================================
+  // AI context lookups are project-scoped (no cross-project LLM input)
+  // ===================================================================
+
+  describe("AI endpoints scope LLM context to the project", () => {
+    afterEach(async () => {
+      (((await import("./task-prompt-llm.js")).isTaskPromptLlmAvailable) as any).mockReturnValue(false);
+      (((await import("./prompt-feature-llm.js")).isLlmAvailable) as any).mockReturnValue(false);
+      (((await import("./llm.js")).isLlmAvailable) as any).mockReturnValue(false);
+    });
+
+    it("POST /task-prompts/generate only reads the requested project's prompts", async () => {
+      const { isTaskPromptLlmAvailable, generateTaskPrompt } = await import("./task-prompt-llm.js");
+      (isTaskPromptLlmAvailable as any).mockReturnValue(true);
+      (generateTaskPrompt as any).mockResolvedValue({ tasks: ["t"] });
+
+      const res = await request(testServer())
+        .post(`/api/v1/task-prompts/generate?projectId=${TEST_PROJECT_ID}`)
+        .send({ description: "x" });
+
+      expect(res.status).toBe(200);
+      expect((mocks.taskPromptCollection.find as any).mock.calls[0][0]).toMatchObject({ projectId: TEST_PROJECT_ID });
+    });
+
+    it("POST /task-prompts/generate rejects a missing projectId", async () => {
+      const { isTaskPromptLlmAvailable } = await import("./task-prompt-llm.js");
+      (isTaskPromptLlmAvailable as any).mockReturnValue(true);
+
+      const res = await request(testServer()).post("/api/v1/task-prompts/generate").send({ description: "x" });
+
+      expect(res.status).toBe(400);
+      expect(mocks.taskPromptCollection.find).not.toHaveBeenCalled();
+    });
+
+    it("POST /task-prompts/:id/extract-features only reads the prompt's project features", async () => {
+      const { isLlmAvailable, extractPromptFeatures } = await import("./prompt-feature-llm.js");
+      (isLlmAvailable as any).mockReturnValue(true);
+      (extractPromptFeatures as any).mockResolvedValue({ results: [], suggestedFeatures: [] });
+      (mocks.taskPromptStore as any).get.mockResolvedValue({ _id: "tp-a", projectId: "project-a", text: "t", createdAt: new Date() });
+      (mocks.taskPromptStore as any).resolvePromptText.mockResolvedValue("t");
+
+      const res = await request(testServer()).post("/api/v1/task-prompts/tp-a/extract-features?force=true").send({});
+
+      expect(res.status).toBe(200);
+      expect((mocks.promptFeatureCollection.find as any).mock.calls[0][0]).toMatchObject({ projectId: "project-a" });
+    });
+
+    it("POST /prompt-features/generate-prompt and /extract-from-text filter by projectId", async () => {
+      const llm = await import("./prompt-feature-llm.js");
+      (llm.isLlmAvailable as any).mockReturnValue(true);
+      (llm.generatePromptFeaturePrompt as any).mockResolvedValue({ prompt: "p" });
+      (llm.extractPromptFeatures as any).mockResolvedValue({ results: [], suggestedFeatures: [] });
+
+      expect((await request(testServer()).post("/api/v1/prompt-features/generate-prompt").send({ behavior: "b" })).status).toBe(400);
+      expect((await request(testServer()).post("/api/v1/prompt-features/extract-from-text").send({ text: "t" })).status).toBe(400);
+      expect(mocks.promptFeatureCollection.find).not.toHaveBeenCalled();
+
+      await request(testServer()).post(`/api/v1/prompt-features/generate-prompt?projectId=${TEST_PROJECT_ID}`).send({ behavior: "b" });
+      await request(testServer()).post(`/api/v1/prompt-features/extract-from-text?projectId=${TEST_PROJECT_ID}`).send({ text: "t" });
+      const filters = (mocks.promptFeatureCollection.find as any).mock.calls.map((c: any[]) => c[0]);
+      expect(filters).toHaveLength(2);
+      for (const f of filters) expect(f).toMatchObject({ projectId: TEST_PROJECT_ID });
+    });
+
+    it("POST /criteria/generate-prompt filters by projectId and requires it", async () => {
+      const llm = await import("./llm.js");
+      (llm.isLlmAvailable as any).mockReturnValue(true);
+      (llm.generateCriteriaPrompt as any).mockResolvedValue({ prompt: "p", suggestedId: "s", suggestedParents: [], suggestedChildren: [] });
+
+      expect((await request(testServer()).post("/api/v1/criteria/generate-prompt").send({ behavior: "b" })).status).toBe(400);
+      const res = await request(testServer()).post(`/api/v1/criteria/generate-prompt?projectId=${TEST_PROJECT_ID}`).send({ behavior: "b" });
+      expect(res.status).toBe(200);
+      expect((mocks.criteriaCollection.find as any).mock.calls.at(-1)[0]).toMatchObject({ projectId: TEST_PROJECT_ID });
+    });
+
+    it("GET /criteria/mdp scopes the task-prompt feature lookup to the project", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([{ _id: "r1", scenario: {}, run: { status: "done" }, taskPromptId: "tp-1" }]),
+      });
+
+      const res = await request(testServer()).get(`/api/v1/criteria/mdp?projectId=${TEST_PROJECT_ID}`);
+      expect(res.status).toBe(200);
+      expect((mocks.taskPromptCollection.find as any).mock.calls[0][0]).toMatchObject({ projectId: TEST_PROJECT_ID });
     });
   });
 

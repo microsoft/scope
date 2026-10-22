@@ -7,6 +7,7 @@
  *   - POST /api/v1/requests/bulk-cancel
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { mockRouteAuthorization } from "../../test-helpers.js";
 import express, { type Express } from "express";
 import request from "supertest";
 import { OpenAPIRegistry, extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
@@ -78,6 +79,7 @@ function buildApp(
   heartbeatStore: ReturnType<typeof makeHeartbeatStore>,
 ): Express {
   const app = express();
+  mockRouteAuthorization(app);
   app.use(express.json());
 
   const ctx: any = {

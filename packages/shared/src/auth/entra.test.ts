@@ -104,6 +104,7 @@ describe("EntraIdAuthProvider.verifyAccessToken", () => {
       idpTenant: TENANT,
       idpSubject: SUBJECT,
       email: "ada@example.com",
+      alias: "ada@example.com",
       displayName: "Ada Lovelace",
       emailVerified: true,
     });
@@ -159,6 +160,13 @@ describe("EntraIdAuthProvider.verifyAccessToken", () => {
     });
     const identity = await makeProvider().verifyAccessToken(token);
     expect(identity.email).toBe("ada.primary@example.com");
+    expect(identity.alias).toBe("ada@example.com");
+  });
+
+  it("uses signed given/family names when the name claim is absent", async () => {
+    const payload = { ...basePayload(), name: undefined, given_name: "Ada", family_name: "Lovelace" };
+    const identity = await makeProvider().verifyAccessToken(await sign(payload));
+    expect(identity.displayName).toBe("Ada Lovelace");
   });
 
   it("rejects a token signed by a different key (bad signature)", async () => {

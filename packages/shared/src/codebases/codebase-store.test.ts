@@ -77,10 +77,21 @@ function makeCodebaseCollection(seed: CodebaseDocument[] = []) {
 }
 
 type CodebaseStorePrivate = {
-  ensureUniqueSlug(base: string): Promise<string>;
+  ensureUniqueSlug(projectId: string, base: string): Promise<string>;
 };
 
 describe("CodebaseStore", () => {
+  it("reserves and resolves colliding slugs independently in each project", async () => {
+    const collection = makeCodebaseCollection();
+    const store = new CodebaseStore(collection as unknown as Collection<CodebaseDocument>);
+    const first = await store.create({ projectId: "project-a", name: "Same", sourceType: "archive" });
+    const second = await store.create({ projectId: "project-b", name: "Same", sourceType: "archive" });
+    expect(first.slug).toBe("same");
+    expect(second.slug).toBe("same");
+    expect(await store.getBySlug("project-a", "same")).toEqual(first);
+    expect(await store.getBySlug("project-b", "same")).toEqual(second);
+    expect(await store.getBySlug("project-c", "same")).toBeNull();
+  });
   it("creates a codebase with generated metadata and persisted fields", async () => {
     const collection = makeCodebaseCollection();
     const store = new CodebaseStore(collection as unknown as Collection<CodebaseDocument>);
@@ -113,9 +124,9 @@ describe("CodebaseStore", () => {
     const first = await store.create({ projectId: "proj-test", name: "First", sourceType: "archive" });
     const second = await store.create({ projectId: "proj-test", name: "Second", sourceType: "archive" });
 
-    expect(await store.getBySlug(first.slug)).toEqual(first);
+    expect(await store.getBySlug("proj-test", first.slug)).toEqual(first);
     expect(await store.softDelete(first._id)).toBe(true);
-    expect(await store.getBySlug(first.slug)).toBeNull();
+    expect(await store.getBySlug("proj-test", first.slug)).toBeNull();
     expect(await store.list()).toEqual([second]);
     expect((await store.get(first._id, { includeDeleted: true }))?.deletedAt).toBeInstanceOf(Date);
   });

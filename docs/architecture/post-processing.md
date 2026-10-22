@@ -33,7 +33,12 @@ Two paths trigger post-processing:
     - Updates `run.turns.$.atifUrl` in the request document
 
 4. On success, stamps `run.postProcessorVersion` and sets `run.postProcessorStatus: "done"`
-5. Triggers report generation via the API (best-effort, with retry)
+5. Does **not** trigger report generation while the project-membership RBAC MVP's
+   `REPORT_GENERATION_ENABLED` constant is false. Coder completion and
+   post-processing make no report-trigger HTTP call; the API also rejects every
+   new generation path without enqueueing. Existing ATIF/stored reports remain
+   project-readable. Safe service/OBO issuance is deferred, not an anonymous API
+   exemption; see [Authentication & RBAC](auth-rbac.md#reports-internal-callers-and-cutover).
 
 ### Blob Storage Layout
 

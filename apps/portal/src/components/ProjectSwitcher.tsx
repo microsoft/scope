@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Check, ChevronsUpDown, FolderKanban, Plus, Settings2 } from "lucide-react";
 
 import { ProjectCreateForm } from "@/components/ProjectCreateForm";
@@ -130,6 +130,7 @@ export function ProjectSwitcherView({
  * `/projects` management page.
  */
 export function ProjectSwitcher({ className }: { className?: string }) {
+  const navigate = useNavigate();
   const { selectedProjectId } = useProjectContext();
   const selectProject = useSelectProject();
   const [createOpen, setCreateOpen] = useState(false);
@@ -177,10 +178,9 @@ export function ProjectSwitcher({ className }: { className?: string }) {
           </DialogHeader>
           <ProjectCreateForm
             onCancel={() => setCreateOpen(false)}
-            onCreated={(project) => {
+            onCreated={() => {
               setCreateOpen(false);
-              // Select the new project and refresh scoped data + the list.
-              selectProject(projectId(project));
+              navigate("/projects");
             }}
           />
         </DialogContent>

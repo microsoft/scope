@@ -76,6 +76,7 @@ export async function downloadCodebaseArchive(
 }
 
 export interface CodebaseSpecResolveContext {
+  projectId: string;
   codebaseStore: CodebaseStore;
   codebaseRevisionStore: CodebaseRevisionStore;
   codebaseResolver: CodebaseResolver;
@@ -103,18 +104,21 @@ export async function resolveCodebaseSpec(
   // 1) `{slug}@r{N}` ref.
   const parsed = parseCodebaseRevisionRef(trimmed);
   if (parsed && parsed.revisionNumber !== undefined) {
-    const revision = await ctx.codebaseRevisionStore.getByRef(trimmed);
-    if (!revision) return { error: `Codebase revision not found: ${trimmed}` };
+    const revision = await ctx.codebaseRevisionStore.getByRef(ctx.projectId, trimmed);
+    if (!revision || revision.projectId !== ctx.projectId) return { error: `Codebase revision not found: ${trimmed}` };
     return { revisionId: revision._id, ref: revision.ref };
   }
 
   // 2) Raw revision id (UUID).
   const byId = await ctx.codebaseRevisionStore.get(trimmed);
-  if (byId) return { revisionId: byId._id, ref: byId.ref };
+  if (byId) {
+    if (byId.projectId !== ctx.projectId) return { error: "Codebase revision not found" };
+    return { revisionId: byId._id, ref: byId.ref };
+  }
 
   // 3) Bare slug → latest (archive) or resolve-at-submit (git).
-  const codebase = await ctx.codebaseStore.getBySlug(trimmed);
-  if (!codebase) return { error: `Codebase not found: ${trimmed}` };
+  const codebase = await ctx.codebaseStore.getBySlug(ctx.projectId, trimmed);
+  if (!codebase || codebase.projectId !== ctx.projectId) return { error: `Codebase not found: ${trimmed}` };
 
   if (codebase.sourceType === "git") {
     try {
@@ -135,7 +139,7 @@ export async function resolveCodebaseSpec(
 
   // Archive codebase — must have an existing revision.
   const latest = await ctx.codebaseRevisionStore.getLatest(codebase._id);
-  if (!latest) {
+  if (!latest || latest.projectId !== ctx.projectId || latest.codebaseId !== codebase._id) {
     return { error: `Codebase "${codebase.slug}" has no revisions — upload an archive first` };
   }
   return { revisionId: latest._id, ref: latest.ref };

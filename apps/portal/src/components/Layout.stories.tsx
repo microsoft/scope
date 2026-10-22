@@ -19,7 +19,10 @@ const meta = {
   tags: ["ai-generated", "needs-work"],
   decorators: [
     (Story) => (
-      <AuthContext.Provider value={signedInAuth}>
+      <AuthContext.Provider value={{
+        ...signedInAuth, user: signedInAuth.user && { ...signedInAuth.user, role: "admin",
+          capabilities: { ...signedInAuth.user.capabilities, platformAdmin: true } },
+      }}>
         <Story />
       </AuthContext.Provider>
     ),
@@ -69,6 +72,28 @@ export const NoProjectSelected: Story = {
     // Scoped nav and the New Run CTA are gone until a project is selected.
     await expect(canvas.queryByRole("link", { name: "Runs" })).toBeNull();
     await expect(canvas.queryByRole("link", { name: "New Run" })).toBeNull();
+  },
+};
+
+export const MemberNavigation: Story = {
+  render: () => <AuthContext.Provider value={signedInAuth}><Layout /></AuthContext.Provider>,
+  play: async ({ canvas }) => {
+    for (const name of ["Agents", "Models", "Secrets", "Admin"]) {
+      await expect(canvas.queryByRole("link", { name })).not.toBeInTheDocument();
+    }
+  },
+};
+
+export const AdminWithoutMembership: Story = {
+  beforeEach: () => localStorage.removeItem(PROJECT_STORAGE_KEY),
+  render: () => <AuthContext.Provider value={{
+    ...signedInAuth, user: signedInAuth.user && { ...signedInAuth.user, role: "admin",
+      capabilities: { platformAdmin: true, reportsEnabled: false, memberships: [] } },
+  }}><Layout /></AuthContext.Provider>,
+  play: async ({ canvas }) => {
+    for (const name of ["Agents", "Models", "Secrets", "Admin"]) {
+      await expect(canvas.getByRole("link", { name })).toBeVisible();
+    }
   },
 };
 

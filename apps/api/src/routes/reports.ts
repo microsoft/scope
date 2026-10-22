@@ -659,7 +659,7 @@ apiRoute(ctx.app, ctx.registry, {
 
       const insightIds = report.insightReferences.map((ref: InsightReference) => ref.insightId);
       const insights = await ctx.insightsCollection
-        .find({ _id: { $in: insightIds }, deletedAt: { $exists: false } })
+        .find({ _id: { $in: insightIds }, projectId: report.projectId, deletedAt: { $exists: false } })
         .toArray();
 
       // Enrich with reference metadata

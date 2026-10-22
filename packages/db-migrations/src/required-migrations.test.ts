@@ -20,6 +20,12 @@ describe("REQUIRED_MIGRATIONS", () => {
     }
   });
 
+  it("requires identity and membership authority, not the deferred codebase index migration", () => {
+    expect(REQUIRED_MIGRATIONS).toContain("029-create-users-collection.ts");
+    expect(REQUIRED_MIGRATIONS).toContain("031-create-project-memberships.ts");
+    expect(REQUIRED_MIGRATIONS).not.toContain("032-scope-codebase-uniqueness.ts");
+  });
+
   it("matches actual migration files on disk", () => {
     const migrationsDir = join(__dirname, "migrations");
     const filesOnDisk = readdirSync(migrationsDir).filter((f) =>

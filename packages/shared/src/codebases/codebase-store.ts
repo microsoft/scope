@@ -56,9 +56,9 @@ export class CodebaseStore {
     return this.collection.findOne(filter as object) as Promise<CodebaseDocument | null>;
   }
 
-  /** Get a codebase by its unique slug (excludes soft-deleted by default). */
-  async getBySlug(slug: string, opts?: { includeDeleted?: boolean }): Promise<CodebaseDocument | null> {
-    const filter: Record<string, unknown> = { slug };
+  /** Get a codebase by its project-local slug (excludes soft-deleted by default). */
+  async getBySlug(projectId: string, slug: string, opts?: { includeDeleted?: boolean }): Promise<CodebaseDocument | null> {
+    const filter: Record<string, unknown> = { projectId, slug };
     if (!opts?.includeDeleted) filter.deletedAt = { $exists: false };
     return this.collection.findOne(filter as object) as Promise<CodebaseDocument | null>;
   }
@@ -96,7 +96,7 @@ export class CodebaseStore {
     const maxAttempts = 5;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       // eslint-disable-next-line no-await-in-loop
-      const slug = await this.ensureUniqueSlug(baseSlug);
+      const slug = await this.ensureUniqueSlug(input.projectId, baseSlug);
       const doc: CodebaseDocument = {
         _id: randomUUID(),
         projectId: input.projectId,
@@ -216,11 +216,11 @@ export class CodebaseStore {
    * Find a slug not already taken, appending `-2`, `-3`, … as needed.
    * (Soft-deleted codebases still reserve their slug to keep refs stable.)
    */
-  private async ensureUniqueSlug(base: string): Promise<string> {
+  private async ensureUniqueSlug(projectId: string, base: string): Promise<string> {
     let candidate = base;
     let n = 1;
     // eslint-disable-next-line no-await-in-loop
-    while (await this.collection.findOne({ slug: candidate } as object)) {
+    while (await this.collection.findOne({ projectId, slug: candidate } as object)) {
       n += 1;
       candidate = `${base}-${n}`;
     }

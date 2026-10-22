@@ -14,6 +14,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProjectProvider } from "@/contexts/ProjectContext";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/auth/RequireAuth";
+import { AccessShell } from "@/components/AccessShell";
+import { AuthModeGate } from "@/components/auth/AuthModeGate";
 import { msalInstance, initializeAuth } from "@/lib/auth/msalInstance";
 import { wireApiAuth } from "@/lib/auth/wireApiAuth";
 import "./index.css";
@@ -34,6 +36,7 @@ wireApiAuth();
 initializeAuth().finally(() => {
   createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
+      <AuthModeGate>
       <MsalProvider instance={msalInstance}>
         <AuthProvider>
           <ThemeProvider>
@@ -42,7 +45,7 @@ initializeAuth().finally(() => {
               <FeatureFlagProvider>
                 <ProjectProvider>
                   <BrowserRouter>
-                    <App />
+                    <AccessShell><App /></AccessShell>
                     <Toaster />
                   </BrowserRouter>
                 </ProjectProvider>
@@ -51,6 +54,7 @@ initializeAuth().finally(() => {
           </ThemeProvider>
         </AuthProvider>
       </MsalProvider>
+      </AuthModeGate>
     </QueryClientProvider>
   );
 });

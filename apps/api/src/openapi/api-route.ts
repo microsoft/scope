@@ -5,6 +5,8 @@ import { z, type ZodType, type ZodObject } from "zod";
 import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
 import type { OpenAPIRegistry, RouteConfig } from "@asteasolutions/zod-to-openapi";
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
+import { routePolicy, protectStream, type Authorization, type RoutePolicy } from "../auth/authorization.js";
+import { AccessError } from "../auth/admin-operations.js";
 
 extendZodWithOpenApi(z);
 
@@ -36,6 +38,7 @@ export interface ApiRouteConfig<
 
   /** OpenAPI-only security requirements; enforcement remains in auth middleware/handlers. */
   security?: RouteConfig["security"];
+  policy?: RoutePolicy;
 
   // Schemas (all optional)
   body?: TBody;
@@ -152,6 +155,7 @@ export function apiRoute<
 
   const openApiPath = toOpenApiPath(path);
   const status = successStatus ?? (method === "post" ? 201 : 200);
+  const policy = config.policy ?? routePolicy(method, path);
 
   // ── OpenAPI registration ────────────────────────────────────────────────
 
@@ -169,7 +173,9 @@ export function apiRoute<
   }
 
   const responses: Record<string, unknown> = {};
-  if (rawResponse) {
+  if (policy === "disabled") {
+    responses["503"] = { description: "New report generation is disabled (report_generation_disabled); no work is enqueued" };
+  } else if (rawResponse) {
     responses[String(status)] = {
       description: responseDescription ?? "Success",
     };
@@ -194,7 +200,7 @@ export function apiRoute<
     tags,
     summary,
     ...(description ? { description } : {}),
-    ...(security !== undefined ? { security } : {}),
+    security: security ?? (policy === "public" ? [] : [{ bearerAuth: [] }]),
     ...(Object.keys(request).length > 0 ? { request } : {}),
     responses,
   } as Parameters<typeof registry.registerPath>[0]);
@@ -240,9 +246,25 @@ export function apiRoute<
     }
   };
 
+  const authorizationHandler: RequestHandler = async (req, res, next) => {
+    try {
+      if (policy === "disabled") throw new AccessError(503, "report_generation_disabled", "New report generation is disabled");
+      const getAuthorization: (() => Authorization | null) | undefined = app.locals.authorization;
+      const authorization = getAuthorization?.();
+      if (policy !== "public") {
+        if (!authorization) throw new AccessError(503, "authority_unavailable", "Authorization authority unavailable");
+        const deadline = await authorization.guard(req, method, path, policy);
+        if (authorization.enabled !== false && rawResponse && path.endsWith("/logs")) {
+          protectStream(res, () => authorization.guard(req, method, path, policy), deadline);
+        }
+      }
+      next();
+    } catch (error) { next(error); }
+  };
+
   if (middleware && middleware.length > 0) {
-    app[method](path, ...middleware, validationHandler);
+    app[method](path, authorizationHandler, ...middleware, validationHandler);
   } else {
-    app[method](path, validationHandler);
+    app[method](path, authorizationHandler, validationHandler);
   }
 }

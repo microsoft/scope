@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import type { Project } from "@/types";
+import { AuthContext } from "@/contexts/AuthContext";
 
 const NAME_MAX = 128;
 const DESCRIPTION_MAX = 512;
@@ -43,34 +44,28 @@ export function ProjectCreateForm({
   className,
 }: ProjectCreateFormProps) {
   const queryClient = useQueryClient();
+  const authEnabled = useContext(AuthContext)?.authEnabled !== false;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [operationId, setOperationId] = useState(() => crypto.randomUUID());
 
   const createMutation = useMutation({
     mutationFn: () =>
       api.createProject({
         name: name.trim(),
         ...(description.trim() ? { description: description.trim() } : {}),
-      }),
+      }, operationId),
     onSuccess: (project) => {
-      // Merge the new project into the shared ["projects"] cache before handing
-      // off to `onCreated`. Callers that select it right away (the switcher
-      // dialog, the first-run gate) go through `useSelectProject`, which
-      // deliberately *preserves* the projects list on switch — so without this
-      // upsert the freshly-selected id isn't in the list yet and the header
-      // switcher renders "Unknown project". Invalidate afterwards to reconcile
-      // with the server (ordering, server-only fields, etc.).
-      const newId = project.id ?? project._id;
-      queryClient.setQueryData<Project[]>(["projects"], (old) => {
-        if (!old) return [project];
-        return old.some((p) => (p.id ?? p._id) === newId) ? old : [...old, project];
-      });
+      setOperationId(crypto.randomUUID());
+      // Refresh canonical inventories instead of treating the mutation response
+      // as a membership grant (an idempotent retry may follow a revocation).
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success(`Project "${project.name}" created`);
+      void queryClient.invalidateQueries({ queryKey: ["access-projects"] });
+      toast.success(`Project "${project.name}" created.${authEnabled ? " Creator access refreshes automatically." : ""}`);
       onCreated(project);
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to create project");
+      toast.error(`${error instanceof Error ? error.message : "Failed to create project"} (operation ${operationId})`);
     },
   });
 
@@ -90,6 +85,7 @@ export function ProjectCreateForm({
         submit();
       }}
     >
+      {authEnabled && <p className="text-sm text-muted-foreground">New projects grant their creator an audited project-admin membership.</p>}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="project-name">Name *</Label>

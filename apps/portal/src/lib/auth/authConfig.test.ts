@@ -4,12 +4,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveAuthEnabled } from "./authConfig";
 
-// The auth feature is ON by default (secure by default) with three independent
-// per-environment controls:
-//  - local dev      -> VITE_AUTH_ENABLED_LOCAL (build-time)
-//  - integration    -> SCOPE_AUTH_ENABLED (runtime, __SCOPE_CONFIG__.authEnabled)
-//  - production      -> SCOPE_AUTH_ENABLED (runtime, __SCOPE_CONFIG__.authEnabled)
-// Resolution: runtime (int/prod) wins; else local vite flag (dev); else default.
+// Runtime mode wins; local Vite maps SCOPE_AUTH_ENABLED to the legacy local flag.
 function env(overrides: Record<string, string | undefined>): ImportMetaEnv {
   return overrides as unknown as ImportMetaEnv;
 }

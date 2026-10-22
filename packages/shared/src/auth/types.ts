@@ -20,6 +20,8 @@ export interface VerifiedIdentity {
   idpSubject: string;
   /** Advisory email (Entra `email` / `preferred_username`). Never an authz input. */
   email?: string;
+  /** Advisory sign-in alias (`preferred_username` / `upn`), never an authz input. */
+  alias?: string;
   /** Display name (Entra `name`). */
   displayName?: string;
   /** Whether the IdP asserted the email as verified. */
@@ -70,6 +72,7 @@ export class AuthError extends Error {
 /** Profile fields resolved for a user (from token claims today; Graph later). */
 export interface UserProfile {
   email?: string;
+  alias?: string;
   displayName?: string;
   emailVerified?: boolean;
 }

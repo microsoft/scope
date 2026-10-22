@@ -495,67 +495,69 @@ set `VITE_AUTH_PROTOCOL_MODE=AAD` and `VITE_AUTH_KNOWN_AUTHORITIES=` to override
 the emulator-specific defaults.
 
 > The API verifies the IdP token on every non-public authenticated request, then
-> resolves an active Scope user. Full route RBAC/ownership enforcement is still
-> deferred. After a redirect callback, the Portal's first Scope API request is
+> resolves an active Scope user. Project-membership RBAC protects application
+> routes when authentication is enabled. After a public deployment-mode check,
+> the Portal's first identity request after a redirect callback is
 > `POST /api/v1/users/me`; after a cached-account reload it is
 > `GET /users/me`. `AuthContext` takes the Scope UUID and role from that response, not
 > MSAL account claims. All eager queries, including feature flags, wait for it.
 
-### ⚠️ IMPORTANT — Feature toggle (3 per-environment controls)
+### SCOPE_AUTH_ENABLED — combined authentication and RBAC toggle
 
-Portal auth is a **feature-flagged capability** with **three independent,
-per-environment controls** — one each for **local dev**, **integration**, and
-**production**. It is **ON by default (secure by default)** in every environment;
-a control must **explicitly** opt out.
+**Default:** `true`. Set the **same value on the API and Portal** and restart or
+recreate both services. This is deployment configuration, not a per-user switch.
+Only `false`/`0`/`no`/`off` disable protection, ignoring case and surrounding
+whitespace; missing, empty or invalid values stay enabled. Enabled mode requires
+valid IdP configuration and preserves verified enrollment and project membership.
 
-> **Coordinate API and Portal rollout per environment.** The API in this branch
-> verifies bearer tokens and implements the explicit-login handshake. Do not infer
-> a deployed environment's version or flag state from the source tree. Enable
-> Portal auth after deploying/configuring the compatible API and verifying
-> POST `/users/me` followed by GET `/me`. These controls are independent
-> across environments and do not turn on global API lockdown.
+> **Security warning:** explicit off mode makes normal application APIs and
+> project content accessible to every network caller. Use it only in trusted
+> local/test environments with appropriate network isolation. It is not an
+> authority-outage fallback or an operator lockout-recovery procedure.
 
-When auth is disabled the Portal behaves **exactly as it did before auth
-existed**: no sign-in gate, no account menu, and no `Authorization` header on API
-calls. MSAL is never initialized.
+With `SCOPE_AUTH_ENABLED=false`, the API starts without IdP configuration, and the
+Portal skips MSAL/sign-in, enrollment and bearer attachment. Ordinary application
+workflows, catalogs and project create/edit/delete/restore work anonymously.
+There is no fabricated admin user or membership; durable project operations use
+the existing anonymous actor. Project scoping, project existence and parent/
+reference checks still apply. `/users/me` is unavailable (`401`), and user/
+membership administration returns `503 authentication_disabled`; `/access` is
+unavailable. Report generation remains independently disabled in both modes.
 
-**Why local is build-time but int/prod are runtime.** The production Portal image
-is **built once and promoted** integration→production (the overlay `images.yaml`
-files pin the same tag; see `.github/workflows/promote.yml`). A build-time
-`VITE_*` flag is baked into that single image and therefore **cannot differ**
-between integration and production. So int/prod are governed at **runtime** (an
-env var read at container start), while local dev — which runs `vite dev`, not the
-promoted image — uses a build-time flag.
+Existing users, roles, memberships and audit records are preserved. Re-enabling
+auth restores membership enforcement; anonymously created projects require
+explicit membership assignment. Use the audited operator procedure for lockout
+recovery instead of switching protection off.
 
-| Environment | Control | Kind | Where to set | Default |
-| --- | --- | --- | --- | --- |
-| **Local dev** | `VITE_AUTH_ENABLED_LOCAL` | build-time (`import.meta.env.DEV`) | `docker-compose.dev.yml` or your shell | `true` |
-| **Integration** | `SCOPE_AUTH_ENABLED` | runtime (container env) | integration portal deployment env | `true`; verify deployed override |
-| **Production** | `SCOPE_AUTH_ENABLED` | runtime (container env) | production portal deployment env | `true`; verify deployed override |
+Compose passes `SCOPE_AUTH_ENABLED` to both services. The older
+`VITE_AUTH_ENABLED_LOCAL` remains a Compose fallback **only when the canonical
+variable is unset**. Even an explicitly empty canonical value takes precedence
+and stays enabled. Native `vite dev` also honors a shell `SCOPE_AUTH_ENABLED`
+before the legacy local flag. Production Portal images read the setting at
+container startup into `/config.js`, so the same image can be promoted between
+environments; built bundles do not use the local-only flag.
 
-**Type:** boolean-ish string. `true`/`1`/`yes`/`on` enable; `false`/`0`/`no`/`off`
-disable (case-insensitive). Any other/unset value falls back to the secure
-default (**enabled**).
+Before mounting the application, the Portal checks the public, no-store
+`GET /api/v1/version` response's `authEnabled` boolean. It polls every 10 seconds
+with bounded requests; unavailable, missing or mismatched configuration blocks
+the app rather than silently choosing anonymous mode. Changing browser settings
+cannot disable API protection. CLI project selection also discovers this mode:
+auth-on requires membership, while explicit off permits anonymous selection.
 
-**How it works at runtime (int/prod).** `SCOPE_AUTH_ENABLED` is read by
-`apps/portal/docker-entrypoint.sh`, which writes `authEnabled` into `/config.js`
-(→ `window.__SCOPE_CONFIG__.authEnabled`) when the container starts. The app reads
-that value at load. This is the same mechanism already used for
-`SCOPE_DOCS_BASE_URL`.
+For an already configured worktree, start only core services without workers or
+the emulator (the wrapper enables the native Mongo profile):
 
-**Resolution precedence** (in `apps/portal/src/lib/auth/authConfig.ts`): the
-runtime `window.__SCOPE_CONFIG__.authEnabled` (int/prod) wins whenever present;
-otherwise, in local dev, `VITE_AUTH_ENABLED_LOCAL` applies; otherwise it defaults
-to **enabled**. The dev `public/config.js` intentionally ships **no** `authEnabled`
-so local always falls through to the Vite flag.
+```bash
+SCOPE_AUTH_ENABLED=false NODE_EXTRA_CA_CERTS= scripts/dev-compose.sh \
+  -f docker-compose.yml -f docker-compose.dev.yml --profile portal \
+  up -d --build mongodb redis azurite db-migrate api portal
+```
 
-- **Local dev:** set `VITE_AUTH_ENABLED_LOCAL=false` in `docker-compose.dev.yml`
-  (or your shell) to skip sign-in while iterating on UI, without standing up
-  `entra-local`.
-- **Integration / production:** set `SCOPE_AUTH_ENABLED=false` on the portal
-  Deployment in that environment's overlay when an anonymous rollout is intended.
-  No image rebuild is needed — it takes effect on the next
-  pod start.
+Do not include `--profile auth` for this mode. Keep published ports restricted to
+trusted interfaces; use your isolated project's existing loopback override and
+`-p` name where applicable. To restore authenticated mode, set
+`SCOPE_AUTH_ENABLED=true`, supply the IdP settings below and recreate API/Portal
+with the auth profile when using the emulator.
 
 ### Local dev setup (entra-local)
 
@@ -589,6 +591,12 @@ that starts the Portal (e.g. `pnpm docker:dev:copilot`, `pnpm docker:dev:portal`
    become healthy and idempotently registers `http://localhost:${PORTAL_PORT}` as
    a `spa` redirect URI on the seeded Sample SPA app (the seed ships only
    `https://localhost:3000`, and each worktree gets its own `PORTAL_PORT`).
+   It also enables `given_name`, `family_name`, `email` and `preferred_username`
+   optional access-token claims on the seeded Sample Full-stack API registration,
+   preserving existing optional claims. This supplies recognizable names and
+   sign-in aliases to Scope at explicit enrollment without weakening signature,
+   TLS, identity matching or email-verification requirements. Existing users
+   refresh their profile labels on their next explicit sign-in, not on GET.
 
 **Prerequisites:** [mkcert](https://github.com/FiloSottile/mkcert) and `openssl`
 must be installed (`brew install mkcert nss` on macOS, with `openssl` available
@@ -910,7 +918,8 @@ bearer; there is no `/auth/login`, token exchange, Scope JWT, or signing secret.
 `req.user` contains the resolved Scope UUID and database role, not an IdP role.
 
 Only **`POST /api/v1/users/me`** creates missing users or refreshes
-profile, `lastLoginAt`, and bootstrap-admin promotion. The upsert still precedes
+profile and `lastLoginAt`, always inserting new identities as ordinary users.
+Login never changes role or disabled state. The upsert still precedes
 the disabled-user check: an explicit login can update those fields before returning
 `403`. `lastLoginAt` is the explicit upsert timestamp, not general activity or
 trustworthy proof of an interactive sign-in. Every GET `/me` and other
@@ -923,18 +932,21 @@ Clients also use no-store; the enrollment POST has side effects and must never b
 prefetched or polled. New CLI/raw-bearer identities must deliberately enroll through
 it; already-enrolled callers remain compatible without any token change.
 
-With auth unconfigured, the API still boots and uses the existing anonymous rollout,
-so unauthenticated workers keep working. Partial auth configuration fails startup.
-With auth configured, missing tokens remain anonymous except where a route requires
-identity (`/users/me`); existing public exclusions remain unchanged. A verified
+Auth and RBAC default to enabled: missing or partial IdP configuration fails
+startup, and missing tokens on protected routes return `401`. Only explicit
+`SCOPE_AUTH_ENABLED=false` permits anonymous application access as described
+above; this deliberately disables bearer verification and membership enforcement,
+not merely the Portal sign-in screen. Existing public exclusions remain unchanged. A verified
 identity is never silently downgraded to anonymous: missing users are
 `403 user_not_enrolled`, disabled users `403 user_disabled`, and the reserved `system`
 principal `401`. Invalid/expired tokens on non-public routes are rejected with `401`
 before cache access. Required Mongo/JWKS unavailability returns `503`; unexpected
 implementation/database errors use the logged `500` path.
 
-Full route RBAC/ownership enforcement is **not** part of this milestone. See
-[the auth flow and method walkthrough](docs/architecture/auth-rbac.md#3-api-authentication-middleware).
+Project-membership authorization independently checks canonical users,
+memberships/projects and durable operation markers after identity resolution.
+See [Authentication & RBAC](docs/architecture/auth-rbac.md#project-membership-mvp)
+for the local implementation and production release gates.
 
 ### AUTH_USER_CACHE_TTL_SECONDS
 **Default:** `300` (only when unset)
@@ -942,10 +954,9 @@ Full route RBAC/ownership enforcement is **not** part of this milestone. See
 **Scope:** API
 
 Fixed, **non-sliding** lifetime of an existing active user's Redis snapshot.
-Blank, zero, negative, fractional, nonnumeric, or unsafe values fail startup,
-even when IdP auth is disabled.
-This variable alone does **not** enable IdP authentication or count as partial
-IdP configuration. Explicit login or successful Mongo fallback writes using
+Blank, zero, negative, fractional, nonnumeric, or unsafe values fail startup when
+authentication is enabled. Explicit off mode ignores unused IdP/cache settings.
+This variable alone does not configure an IdP. Explicit login or successful Mongo fallback writes using
 atomic `SET ... EX <ttl>`; hits only `GET` and never extend expiry.
 
 Redis uses existing `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, and `REDIS_TLS`.
@@ -972,18 +983,20 @@ caching. Connection/command waits are bounded, with no offline command queuing/r
 or process-local authorization cache. Cache-write failure does not discard a
 successful Mongo result; required Mongo failure still fails the request.
 
-Database-only role/disable edits can stay stale until TTL expiry. Future mutation
-endpoints must evict this key; logout is not cache invalidation. No deployment-wide
-immediate revocation guarantee is implied by this cache.
+Identity snapshot metadata can remain stale until expiry, but it is not the
+authorization authority. Protected requests/capabilities recheck canonical access
+within a 20-second decision budget, and streams expire/revalidate their leases.
+Do not tune this identity TTL to claim authorization freshness; the <=60-second
+total production guarantee still requires Cosmos topology/visibility proof.
 
 ### AUTH_PROVIDER
 **Default:** (not set)
 **Type:** string (`entra`)
 
-Selects the identity-provider implementation. Set to `entra` with the required
-authority/audience settings to enable verification. When all IdP auth settings
-are unset, auth is disabled and callers remain anonymous; setting other IdP
-settings without `AUTH_PROVIDER` fails startup rather than disabling verification.
+Selects the identity-provider implementation. With auth enabled (the default),
+set to `entra` with the required authority/audience settings; missing or partial
+configuration fails startup rather than disabling verification. Explicit
+`SCOPE_AUTH_ENABLED=false` ignores these settings.
 
 ### AUTH_AUTHORITY
 **Type:** URL string — **Required when `AUTH_PROVIDER` is set**
@@ -1064,31 +1077,28 @@ Scopes intended for clients acquiring an API access token
 (e.g. `api://<AUTH_API_CLIENT_ID>/access`). Not consumed by API verification or
 served by a config endpoint; configure the current Portal through `VITE_AUTH_SCOPES`.
 
-### AUTH_BOOTSTRAP_ADMINS
-**Default:** (empty)
-**Type:** comma-separated list of identity keys
+### AUTH_BOOTSTRAP_ADMINS / AUTH_BOOTSTRAP_TENANTS (retired)
 
-Identities to promote to the `admin` role on explicit POST `/users/me`
-enrollment or subsequent login refresh, formatted as
-`${idp}:${idpTenant}/${idpSubject}` (e.g.
-`entra:00000000-0000-0000-0000-000000000000/11111111-1111-1111-1111-111111111111`).
-Promotion requires an exact match for the verified identity and an explicit tenant
-match in `AUTH_BOOTSTRAP_TENANTS`. It is **promote-only**: an existing admin is never
-demoted, and users not listed here are never auto-promoted.
+Remove both settings from deployment configuration before upgrading an
+authenticated API. A nonempty value now fails startup with an actionable error;
+empty/unset values are accepted. Neither setting can grant or restore admin.
+New users must genuinely sign in first, then an operator promotes an exact
+existing identity using `bootstrap-admin`. There is no first-user-wins,
+startup seeding, email matching or synthetic-principal mode.
 
-Bootstrap does not depend on `email` or `email_verified`. Ordinary Entra workforce
-and seeded entra-local identities can therefore bootstrap without custom email
-claims when both allowlists match. Token verification remains required; this is
-not a local authentication bypass. Email storage is unchanged: only an explicitly
-verified profile email is persisted.
+### AUTH_OPERATOR_MONGO_URI
+**Default:** (not set)
+**Type:** MongoDB connection URI
+**Scope:** Operator bootstrap/repair and reviewed legacy-membership commands only
 
-### AUTH_BOOTSTRAP_TENANTS
-**Default:** (empty)
-**Type:** comma-separated list of tenant IDs
-
-Tenant allowlist that gates admin bootstrap. This setting is required when
-`AUTH_BOOTSTRAP_ADMINS` is non-empty; otherwise the API fails startup. An
-identity is promoted only when its tenant is explicitly listed here.
+Provide through secure operator configuration, never tracked files or shell
+history. The commands additionally require an explicit database and exact
+identity/Scope UUID or reviewed manifest. This does not configure the API's
+normal connection, enable a dev principal, turn auth off or grant content access.
+The operator utility exposes `bootstrap-admin`, `set-user-access`,
+`inspect-operation` and `repair-operation`; mutations default to dry run and
+require `--apply`. Recovery is not exposed in the Portal, REST API or Scope CLI.
+See the [operator runbooks](docs/architecture/auth-rbac.md#durable-changes-and-operator-runbooks).
 
 > **Future — Graph profile enrichment.** `email`/`displayName` are read directly
 > from the verified token claims during explicit login today (no Microsoft Graph call, no client

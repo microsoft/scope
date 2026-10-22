@@ -34,5 +34,8 @@ export const ProjectResponseSchema = z
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date().optional(),
     deletedAt: z.coerce.date().optional(),
+    revision: z.number().int().nonnegative().optional(),
+    lastOperationId: z.string().optional(),
+    appliedOperationIds: z.array(z.string()).optional(),
   })
   .openapi("ProjectResponse");

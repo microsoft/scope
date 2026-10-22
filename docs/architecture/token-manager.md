@@ -45,6 +45,35 @@ graph TB
     RoundRobin --> Store
 ```
 
+## Administration and availability
+
+Provider keys and service accounts in Portal **Secrets** are platform-global,
+not project settings. With authentication enabled, the Scope API requires a
+platform administrator for every `/api/v1/keys` and `/api/v1/accounts`
+management operation, including reads, previews and validation. The Portal
+applies the same restriction to direct routes and navigation. No project
+selection or membership is required for an administrator, and a project-admin
+role does not grant global credential administration. The CLI's `scope secret`
+commands use this same API without a project argument.
+
+The API registers these protected routes even when `TOKEN_MANAGER_URL` is
+missing. After authorization, missing configuration or a failed upstream
+connection/body/30-second deadline or upstream `5xx` returns `503` with code
+`token_manager_unavailable` and an actionable message. Responses are no-store;
+transport errors and request bodies are not echoed or logged. Upstream HTTP
+validation errors retain their status. The proxy does not replay credential
+mutations: after an uncertain timeout, check existing metadata before retrying
+a create. Read retry policy remains with the caller.
+
+Local Secrets functionality requires the supported `token-manager` and
+`lowkey-vault` Compose services, not only API/Portal/Mongo. Use the isolated
+local database and a persistent emulator volume. Keep Token Manager on the
+trusted service network (any local diagnostic port must be loopback-only).
+Trust the local CA in the client and provide a matching Lowkey server
+certificate rather than disabling TLS verification. Authentication and API
+project isolation must remain enabled during RBAC acceptance. MCP server
+secrets below remain a separate project-scoped subsystem.
+
 ## Capability-Based Model
 
 The Token Manager uses a **capability-based model** where tokens are associated with the features they enable, rather than being tied to specific worker types. This allows flexible token reuse across services.

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { DequeuedMessageItem } from "@azure/storage-queue";
+import { REPORT_GENERATION_ENABLED } from "shared/rbac";
 import { BaseQueueProcessor, BlobStorage, Retry, type BaseQueueProcessorConfig, type LogEvent, type VisibilityHeartbeat } from "shared";
 import { trackMetric, trackEvent } from "telemetry";
 import { POST_PROCESSOR_VERSION } from "./version.js";
@@ -140,6 +141,10 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
    */
   @Retry({ maxRetries: 3, baseDelayMs: 1000, isRetryable: () => true })
   private async triggerReportGeneration(requestId: string, log: (level: LogEvent["level"], message: string) => Promise<void>): Promise<void> {
+    if (!REPORT_GENERATION_ENABLED) {
+      await log("info", "Report generation disabled for the project RBAC MVP");
+      return;
+    }
     if (!this.apiBaseUrl) return;
 
     const response = await fetch(`${this.apiBaseUrl}/api/v1/reports/trigger`, {

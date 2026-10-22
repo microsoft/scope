@@ -9,6 +9,11 @@ import express from "express";
 import request from "supertest";
 import { apiRoute, toOpenApiPath } from "./api-route.js";
 
+vi.mock("../auth/authorization.js", async importOriginal => ({
+  ...await importOriginal<typeof import("../auth/authorization.js")>(),
+  routePolicy: vi.fn(() => "public"),
+}));
+
 extendZodWithOpenApi(z);
 
 // ─── toOpenApiPath ───────────────────────────────────────────────────────────
@@ -63,7 +68,7 @@ describe("apiRoute — OpenAPI registration", () => {
     expect(doc.paths?.["/api/v1/items"]?.get).toBeDefined();
     expect(doc.paths?.["/api/v1/items"]?.get?.tags).toEqual(["Items"]);
     expect(doc.paths?.["/api/v1/items"]?.get?.summary).toBe("List items");
-    expect(doc.paths?.["/api/v1/items"]?.get).not.toHaveProperty("security");
+    expect(doc.paths?.["/api/v1/items"]?.get?.security).toEqual([]);
     expect(doc).not.toHaveProperty("security");
   });
 
