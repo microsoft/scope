@@ -171,6 +171,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       "import": {
         "options": [
           "--dry-run",
+          "--project",
           "--url",
         ],
       },
@@ -533,6 +534,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       "import": {
         "options": [
           "--dry-run",
+          "--project",
           "--url",
         ],
       },
