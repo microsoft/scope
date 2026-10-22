@@ -159,6 +159,7 @@ apiRoute(ctx.app, ctx.registry, {
     experimentId: z.string().optional(),
     experimentExecutionId: z.string().optional(),
     projectId: z.string().optional(),
+    includeDeleted: z.enum(["true", "false"]).optional(),
   }).superRefine((value, ctx) => {
     if (value.experimentExecutionId && !value.experimentId) {
       ctx.addIssue({
@@ -176,6 +177,9 @@ apiRoute(ctx.app, ctx.registry, {
       const experimentExecutionIdFilter =
         req.query.experimentExecutionId as string;
       const filter: Record<string, unknown> = {};
+      if (req.query.includeDeleted !== "true") {
+        filter.deletedAt = { $exists: false };
+      }
       if (requestIdFilter) {
         // Parent-scoped: the run id already pins the project.
         filter.requestId = requestIdFilter;

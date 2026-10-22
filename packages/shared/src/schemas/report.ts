@@ -63,6 +63,15 @@ export const ReportResponseSchema = z
     insightReferences: z.array(InsightReferenceSchema).optional(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date().optional(),
+    deletedAt: z.coerce.date().optional(),
+    deletionProvenance: z
+      .object({
+        kind: z.literal("experiment"),
+        experimentId: z.string().min(1),
+        operationId: z.string().min(1),
+      })
+      .strict()
+      .optional(),
     projectId: z.string(),
   })
   .refine(

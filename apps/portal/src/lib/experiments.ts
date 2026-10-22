@@ -79,6 +79,104 @@ export interface ExperimentExecutionView {
   archivedAt?: string;
 }
 
+export interface ExperimentLifecycleView {
+  operationId: string;
+  phase: "deleting" | "deleted" | "restoring" | "restored";
+  stateVersion: number;
+  progress: {
+    expectedRequests: number;
+    completedRequests: number;
+    expectedReports: number;
+    completedReports: number;
+  };
+  blocking: Array<{
+    kind: "request" | "report" | "experiment";
+    id: string;
+    reason: string;
+    error?: string;
+  }>;
+  deleteRequestedAt?: string;
+  deleteCompletedAt?: string;
+  restoreRequestedAt?: string;
+  restoreCompletedAt?: string;
+}
+
+export function parseExperimentLifecycle(
+  value: unknown,
+): ExperimentLifecycleView {
+  const item = record(value, "experiment lifecycle");
+  const progress = record(item.progress, "experiment lifecycle progress");
+  const phase = requiredString(item, "phase", "experiment lifecycle");
+  if (
+    phase !== "deleting" &&
+    phase !== "deleted" &&
+    phase !== "restoring" &&
+    phase !== "restored"
+  ) {
+    throw new Error("Invalid experiment lifecycle phase");
+  }
+  const blocking = Array.isArray(item.blocking)
+    ? item.blocking.map((value) => {
+        const blocker = record(value, "experiment lifecycle blocker");
+        const kind = requiredString(
+          blocker,
+          "kind",
+          "experiment lifecycle blocker",
+        );
+        if (
+          kind !== "request" &&
+          kind !== "report" &&
+          kind !== "experiment"
+        ) {
+          throw new Error("Invalid experiment lifecycle blocker kind");
+        }
+        const blockerKind: "request" | "report" | "experiment" = kind;
+        return {
+          kind: blockerKind,
+          id: requiredString(blocker, "id", "experiment lifecycle blocker"),
+          reason: requiredString(
+            blocker,
+            "reason",
+            "experiment lifecycle blocker",
+          ),
+          error: optionalString(blocker, "error"),
+        };
+      })
+    : [];
+  return {
+    operationId: requiredString(item, "operationId", "experiment lifecycle"),
+    phase,
+    stateVersion: requiredNumber(item, "stateVersion", "experiment lifecycle"),
+    progress: {
+      expectedRequests: requiredNumber(
+        progress,
+        "expectedRequests",
+        "experiment lifecycle progress",
+      ),
+      completedRequests: requiredNumber(
+        progress,
+        "completedRequests",
+        "experiment lifecycle progress",
+      ),
+      expectedReports: requiredNumber(
+        progress,
+        "expectedReports",
+        "experiment lifecycle progress",
+      ),
+      completedReports: requiredNumber(
+        progress,
+        "completedReports",
+        "experiment lifecycle progress",
+      ),
+    },
+    blocking,
+    deleteRequestedAt: optionalString(item, "deleteRequestedAt"),
+    deleteCompletedAt: optionalString(item, "deleteCompletedAt"),
+    restoreRequestedAt: optionalString(item, "restoreRequestedAt"),
+    restoreCompletedAt: optionalString(item, "restoreCompletedAt"),
+  };
+}
+
 export interface ExperimentView {
   experimentId: string;
   projectId: string;
@@ -91,6 +189,8 @@ export interface ExperimentView {
   createdAt: string;
   updatedAt?: string;
   finalizedAt?: string;
+  deletedAt?: string;
+  lifecycle?: ExperimentLifecycleView;
 }
 
 export interface ExperimentPageView {
@@ -279,6 +379,10 @@ export function parseExperiment(value: unknown): ExperimentView {
         return id;
       })
     : [];
+  const lifecycleValue = experiment.lifecycle;
+  const lifecycle = lifecycleValue === undefined
+    ? undefined
+    : parseExperimentLifecycle(lifecycleValue);
 
   return {
     experimentId: requiredString(experiment, "experimentId", "experiment"),
@@ -320,6 +424,8 @@ export function parseExperiment(value: unknown): ExperimentView {
     createdAt: requiredString(experiment, "createdAt", "experiment"),
     updatedAt: optionalString(experiment, "updatedAt"),
     finalizedAt: optionalString(experiment, "finalizedAt"),
+    deletedAt: optionalString(experiment, "deletedAt"),
+    lifecycle,
   };
 }
 

@@ -436,7 +436,10 @@ describe("BaseQueueProcessor error-path failure write", () => {
     await (proc as any).processMessage(msg);
 
     const [filter, update] = updateOne.mock.calls[0];
-    expect(filter).toEqual({ _id: "doc-1" });
+    expect(filter).toEqual({
+      _id: "doc-1",
+      deletedAt: { $exists: false },
+    });
     expect(update.$set.status).toBe("done");
     expect(update.$set.outcome).toBe("failed");
   });

@@ -3,7 +3,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Clock, RotateCcw, Unlink } from "lucide-react";
+import {
+  ArchiveRestore,
+  ArrowLeft,
+  Clock,
+  RotateCcw,
+  Trash2,
+  Unlink,
+} from "lucide-react";
 import {
   Link,
   useNavigate,
@@ -274,6 +281,7 @@ export function ExperimentDetail() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(
     new Set(),
   );
@@ -299,10 +307,12 @@ export function ExperimentDetail() {
   });
   const experimentQuery = useQuery({
     queryKey: ["experiment", id],
-    queryFn: () => api.getExperiment(id!),
+    queryFn: () => api.getExperiment(id!, { includeDeleted: true }),
     enabled: Boolean(id),
     refetchInterval: (query) => {
       const readiness = query.state.data?.readiness;
+      const phase = query.state.data?.lifecycle?.phase;
+      if (phase === "deleting" || phase === "restoring") return 1_000;
       return readiness === "done" ||
         readiness === "failed" ||
         readiness === "blocked"
@@ -312,7 +322,11 @@ export function ExperimentDetail() {
   });
   const executionsQuery = useQuery({
     queryKey: ["experiment-executions", id],
-    queryFn: () => api.listExperimentExecutions(id!, { limit: 100 }),
+    queryFn: () =>
+      api.listExperimentExecutions(id!, {
+        limit: 100,
+        includeDeleted: Boolean(experimentQuery.data?.lifecycle),
+      }),
     enabled: Boolean(id) && experimentQuery.isSuccess,
   });
   const templatesQuery = useQuery({
@@ -331,12 +345,18 @@ export function ExperimentDetail() {
     selectedExecutionId !== currentExecutionId;
   const selectedExecutionQuery = useQuery({
     queryKey: ["experiment-execution", id, selectedExecutionId],
-    queryFn: () => api.getExperimentExecution(id!, selectedExecutionId!),
+    queryFn: () =>
+      api.getExperimentExecution(id!, selectedExecutionId!, {
+        includeDeleted: Boolean(experimentQuery.data?.lifecycle),
+      }),
     enabled: Boolean(id && selectedExecutionId && isViewingHistorical),
   });
   const reportsQuery = useQuery({
     queryKey: ["experiment-reports", id, reportExecutionId],
-    queryFn: () => api.listExperimentReports(id!, reportExecutionId!),
+    queryFn: () =>
+      api.listExperimentReports(id!, reportExecutionId!, {
+        includeDeleted: Boolean(experimentQuery.data?.lifecycle),
+      }),
     enabled: Boolean(id && reportExecutionId),
     refetchInterval: (query) => {
       const reports = query.state.data;
@@ -371,6 +391,29 @@ export function ExperimentDetail() {
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Retry failed");
+    },
+  });
+  const deleteExperiment = useMutation({
+    mutationFn: () => api.deleteExperiment(experimentQuery.data!.experimentId),
+    onSuccess: () => {
+      setDeleteDialogOpen(false);
+      toast.success("Experiment deletion started");
+      void queryClient.invalidateQueries({ queryKey: ["experiment", id] });
+      void queryClient.invalidateQueries({ queryKey: ["experiments"] });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Delete failed");
+    },
+  });
+  const restoreExperiment = useMutation({
+    mutationFn: () => api.restoreExperiment(experimentQuery.data!.experimentId),
+    onSuccess: () => {
+      toast.success("Experiment restore started");
+      void queryClient.invalidateQueries({ queryKey: ["experiment", id] });
+      void queryClient.invalidateQueries({ queryKey: ["experiments"] });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Restore failed");
     },
   });
   const retryReport = useMutation({
@@ -849,9 +892,13 @@ export function ExperimentDetail() {
   }
 
   const experiment = experimentQuery.data;
-  const canRetry = !["waiting", "processing"].includes(
-    experiment.readiness ?? "",
-  );
+  const lifecycleActive =
+    experiment.lifecycle?.phase === "deleting" ||
+    experiment.lifecycle?.phase === "deleted" ||
+    experiment.lifecycle?.phase === "restoring";
+  const canRetry =
+    !lifecycleActive &&
+    !["waiting", "processing"].includes(experiment.readiness ?? "");
   const selectedValue =
     activeExecution?.experimentExecutionId ??
     selectedExecutionId ??
@@ -888,6 +935,17 @@ export function ExperimentDetail() {
             {isViewingHistorical && (
               <Badge variant="outline">Historical attempt</Badge>
             )}
+            {experiment.lifecycle && (
+              <Badge
+                variant={
+                  experiment.lifecycle.phase === "deleted"
+                    ? "destructive"
+                    : "outline"
+                }
+              >
+                {experiment.lifecycle.phase}
+              </Badge>
+            )}
           </div>
           {experiment.metadata.description && (
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
@@ -896,6 +954,23 @@ export function ExperimentDetail() {
           )}
         </div>
         <div className="flex flex-wrap items-end gap-2">
+          {experiment.lifecycle?.phase === "deleted" ? (
+            <Button
+              onClick={() => restoreExperiment.mutate()}
+              disabled={restoreExperiment.isPending}
+            >
+              <ArchiveRestore className="mr-2 h-4 w-4" />
+              {restoreExperiment.isPending ? "Restoring…" : "Restore"}
+            </Button>
+          ) : !experiment.lifecycle ? (
+            <Button
+              variant="destructive"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
+          ) : null}
           <div className="space-y-1">
             <label
               htmlFor="experiment-attempt"
@@ -931,6 +1006,43 @@ export function ExperimentDetail() {
           </div>
         </div>
       </header>
+
+      {experiment.lifecycle && (
+        <Card
+          className={
+            experiment.lifecycle.blocking.length > 0
+              ? "border-destructive/40"
+              : undefined
+          }
+        >
+          <CardHeader>
+            <CardTitle className="text-base">
+              Lifecycle operation · {experiment.lifecycle.phase}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Requests {experiment.lifecycle.progress.completedRequests}/
+              {experiment.lifecycle.progress.expectedRequests} · Reports{" "}
+              {experiment.lifecycle.progress.completedReports}/
+              {experiment.lifecycle.progress.expectedReports}
+            </p>
+            <p className="font-mono text-xs text-muted-foreground">
+              {experiment.lifecycle.operationId}
+            </p>
+            {experiment.lifecycle.blocking.length > 0 && (
+              <div className="space-y-1 text-destructive">
+                {experiment.lifecycle.blocking.map((blocker) => (
+                  <p key={`${blocker.kind}:${blocker.id}:${blocker.reason}`}>
+                    {blocker.kind} {blocker.id}: {blocker.reason}
+                    {blocker.error ? ` · ${blocker.error}` : ""}
+                  </p>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {selectedExecutionQuery.isLoading && isViewingHistorical && (
         <p className="text-sm text-muted-foreground">
@@ -973,7 +1085,8 @@ export function ExperimentDetail() {
                           size="sm"
                           disabled={
                             selectedRequestIds.size === 0 ||
-                            removeMembers.isPending
+                            removeMembers.isPending ||
+                            lifecycleActive
                           }
                           onClick={() => setRemoveDialogOpen(true)}
                         >
@@ -1311,6 +1424,35 @@ export function ExperimentDetail() {
               }
             >
               {removeMembers.isPending ? "Removing…" : "Remove runs"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this Experiment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This starts an asynchronous recoverable cascade. The Experiment
+              becomes non-dispatchable immediately, and its current member
+              requests and generated reports are soft-deleted. Report artifacts
+              are retained and independently deleted records are not changed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteExperiment.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                deleteExperiment.mutate();
+              }}
+              disabled={deleteExperiment.isPending}
+            >
+              {deleteExperiment.isPending
+                ? "Starting deletion…"
+                : "Delete Experiment"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1841,6 +1841,124 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
         "type": "object",
       },
+      "ExperimentLifecycleResponse": {
+        "properties": {
+          "blocking": {
+            "items": {
+              "properties": {
+                "error": {
+                  "type": "string",
+                },
+                "id": {
+                  "type": "string",
+                },
+                "kind": {
+                  "enum": [
+                    "request",
+                    "report",
+                    "experiment",
+                  ],
+                  "type": "string",
+                },
+                "reason": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "kind",
+                "id",
+                "reason",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "deleteCompletedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "deleteRequestedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "experimentId": {
+            "type": "string",
+          },
+          "operationId": {
+            "type": "string",
+          },
+          "phase": {
+            "enum": [
+              "deleting",
+              "deleted",
+              "restoring",
+              "restored",
+            ],
+            "type": "string",
+          },
+          "progress": {
+            "properties": {
+              "completedReports": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "completedRequests": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "expectedReports": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "expectedRequests": {
+                "minimum": 0,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "expectedRequests",
+              "completedRequests",
+              "expectedReports",
+              "completedReports",
+            ],
+            "type": "object",
+          },
+          "restoreCompletedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "restoreRequestedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "stateVersion": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+          },
+        },
+        "required": [
+          "experimentId",
+          "operationId",
+          "phase",
+          "stateVersion",
+          "progress",
+          "blocking",
+          "deleteRequestedAt",
+        ],
+        "type": "object",
+      },
       "ExperimentListResponse": {
         "properties": {
           "data": {
@@ -2207,8 +2325,134 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             ],
             "type": "object",
           },
+          "deletedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
           "experimentId": {
             "type": "string",
+          },
+          "lifecycle": {
+            "properties": {
+              "blocking": {
+                "items": {
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "id": {
+                      "type": "string",
+                    },
+                    "kind": {
+                      "enum": [
+                        "request",
+                        "report",
+                        "experiment",
+                      ],
+                      "type": "string",
+                    },
+                    "reason": {
+                      "enum": [
+                        "target-missing",
+                        "target-conflict",
+                        "reconciliation-failed",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "kind",
+                    "id",
+                    "reason",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
+              "deleteCompletedAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "deleteRequestedAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "operationId": {
+                "type": "string",
+              },
+              "phase": {
+                "enum": [
+                  "deleting",
+                  "deleted",
+                  "restoring",
+                  "restored",
+                ],
+                "type": "string",
+              },
+              "progress": {
+                "properties": {
+                  "completedReports": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                  "completedRequests": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                  "expectedReports": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                  "expectedRequests": {
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                },
+                "required": [
+                  "expectedRequests",
+                  "completedRequests",
+                  "expectedReports",
+                  "completedReports",
+                ],
+                "type": "object",
+              },
+              "restoreCompletedAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "restoreRequestedAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "stateVersion": {
+                "exclusiveMinimum": 0,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "operationId",
+              "phase",
+              "stateVersion",
+              "progress",
+              "blocking",
+              "deleteRequestedAt",
+            ],
+            "type": "object",
           },
           "metadata": {
             "additionalProperties": false,
@@ -3364,6 +3608,38 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "null",
             ],
           },
+          "deletedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "deletionProvenance": {
+            "additionalProperties": false,
+            "properties": {
+              "experimentId": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "kind": {
+                "enum": [
+                  "experiment",
+                ],
+                "type": "string",
+              },
+              "operationId": {
+                "minLength": 1,
+                "type": "string",
+              },
+            },
+            "required": [
+              "kind",
+              "experimentId",
+              "operationId",
+            ],
+            "type": "object",
+          },
           "error": {
             "type": "string",
           },
@@ -3813,6 +4089,31 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "string",
               "null",
             ],
+          },
+          "deletionProvenance": {
+            "additionalProperties": false,
+            "properties": {
+              "experimentId": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "kind": {
+                "enum": [
+                  "experiment",
+                ],
+                "type": "string",
+              },
+              "operationId": {
+                "minLength": 1,
+                "type": "string",
+              },
+            },
+            "required": [
+              "kind",
+              "experimentId",
+              "operationId",
+            ],
+            "type": "object",
           },
           "experimentExpectedRequestCount": {
             "minimum": 0,
@@ -6801,6 +7102,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "type": "string",
             },
           },
+          {
+            "in": "query",
+            "name": "includeDeleted",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
         ],
         "responses": {
           "200": {
@@ -6872,6 +7185,54 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       },
     },
     "/api/v1/experiments/{id}": {
+      "delete": {
+        "description": "Returns 202 with a stable lifecycle operation ID. Poll the lifecycle endpoint until phase is deleted or blockers require intervention.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentLifecycleResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment not found",
+          },
+          "409": {
+            "description": "An incompatible Experiment mutation is active",
+          },
+        },
+        "summary": "Start or resume cascading Experiment deletion",
+        "tags": [
+          "Experiments",
+        ],
+      },
       "get": {
         "parameters": [
           {
@@ -6892,6 +7253,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
               "example": "00000000-0000-0000-0000-000000000000",
               "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "includeDeleted",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
               "type": "string",
             },
           },
@@ -6961,6 +7334,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "type": "string",
             },
           },
+          {
+            "in": "query",
+            "name": "includeDeleted",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
         ],
         "responses": {
           "200": {
@@ -7013,6 +7398,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
               "example": "00000000-0000-0000-0000-000000000000",
               "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "includeDeleted",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
               "type": "string",
             },
           },
@@ -7128,6 +7525,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
               "example": "00000000-0000-0000-0000-000000000000",
               "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "includeDeleted",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
               "type": "string",
             },
           },
@@ -7278,6 +7687,55 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Retry one current Experiment template report",
         "tags": [
           "Reports",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/lifecycle": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentLifecycleResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment not found",
+          },
+          "409": {
+            "description": "Experiment has no lifecycle operation",
+          },
+        },
+        "summary": "Get and repair Experiment lifecycle progress",
+        "tags": [
+          "Experiments",
         ],
       },
     },
@@ -7452,6 +7910,55 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "summary": "Move standalone requests into an Experiment",
+        "tags": [
+          "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/restore": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentLifecycleResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment not found",
+          },
+          "409": {
+            "description": "Experiment is not deleted or another intent is active",
+          },
+        },
+        "summary": "Start or resume cascading Experiment restore",
         "tags": [
           "Experiments",
         ],
@@ -10461,6 +10968,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "name": "projectId",
             "required": false,
             "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "includeDeleted",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
               "type": "string",
             },
           },

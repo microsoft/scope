@@ -25,6 +25,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       listReportTemplates: vi.fn(),
       listReportTemplateVersions: vi.fn(),
       updateExperimentReportTemplates: vi.fn(),
+      restoreExperiment: vi.fn(),
     },
   };
 });
@@ -32,6 +33,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
 import { api } from "@/lib/api";
 import experimentDetailMeta, {
   AttemptSelectionAndRunsTable,
+  DeletedLifecycleAndRestore,
   ReportTemplateConfiguration,
 } from "./ExperimentDetail.stories";
 
@@ -233,6 +235,69 @@ describe("ExperimentDetail stories", () => {
       | undefined;
     if (!play) throw new Error("Report template story is missing play");
     await play({
+      canvas: within(container),
+      canvasElement: container,
+    });
+  });
+
+  it("runs the deleted lifecycle restore interaction", async () => {
+    vi.mocked(api.getExperiment).mockResolvedValue({
+      experimentId: "experiment-demo",
+      projectId: "demo-project",
+      metadata: { name: "Profile comparison" },
+      revision: {
+        experimentRevisionId: "revision-demo",
+        revisionNumber: 1,
+        memberCount: 1,
+      },
+      execution: {
+        experimentExecutionId: "execution-current",
+        attemptNumber: 2,
+        requestCount: 1,
+        requests: [],
+        handlerProgress: {},
+        blocking: [],
+        createdAt: "2026-10-16T10:00:00.000Z",
+      },
+      readiness: "done",
+      blocking: [],
+      createdRequestIds: ["request-current"],
+      createdAt: "2026-10-16T09:00:00.000Z",
+      deletedAt: "2026-10-16T12:00:00.000Z",
+      lifecycle: {
+        operationId: "operation-delete",
+        phase: "deleted",
+        stateVersion: 3,
+        progress: {
+          expectedRequests: 1,
+          completedRequests: 1,
+          expectedReports: 3,
+          completedReports: 3,
+        },
+        blocking: [],
+      },
+    });
+    vi.mocked(api.restoreExperiment).mockResolvedValue({
+      operationId: "operation-restore",
+      phase: "restoring",
+      stateVersion: 4,
+      progress: {
+        expectedRequests: 1,
+        completedRequests: 1,
+        expectedReports: 3,
+        completedReports: 3,
+      },
+      blocking: [],
+    });
+    const StoryRender = experimentDetailMeta.render;
+    const { container } = render(<StoryRender />);
+    const play = DeletedLifecycleAndRestore.play as unknown as
+      | ((context: {
+          canvas: ReturnType<typeof within>;
+          canvasElement: HTMLElement;
+        }) => Promise<void>)
+      | undefined;
+    await play?.({
       canvas: within(container),
       canvasElement: container,
     });
