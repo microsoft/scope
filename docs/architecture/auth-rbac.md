@@ -622,8 +622,10 @@ These checks exercise signed-bearer verification, canonical roles/memberships,
 freshness leases, creator grants, project-admin search and self-removal, pending
 CAS/idempotency recovery, operator-only bootstrap/repair, legacy mappings and
 the actual migration CLI/readiness through 031. Portal component/story tests
-cover capability changes, account reset, fixed-project navigation, pending retries
-and platform promotion. They do not establish cumulative real-browser/MSAL,
+cover capability changes, account reset, fixed-project navigation (including a
+deferred return to the all-project selector), pending retries and platform
+promotion. Story helpers wait for navigation and selector readiness before
+selecting a project. They do not establish cumulative real-browser/MSAL,
 worker execution, mixed-version rollout or production acceptance.
 
 Standalone native Mongo is **not** a replica set. Cosmos partition/index

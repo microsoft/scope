@@ -219,7 +219,10 @@ export const ProjectAdminPendingRetry: Story = {
 };
 
 async function chooseProject() {
-  await userEvent.selectOptions(screen.getByLabelText("Project"), await screen.findByRole("option", { name: /Scope benchmarks/ }));
+  const selector = await screen.findByRole("combobox", { name: "Project" });
+  const option = await screen.findByRole("option", { name: /Scope benchmarks/ });
+  await waitFor(() => expect(selector).toBeEnabled());
+  await userEvent.selectOptions(selector, option);
   await expect(await within(await screen.findByRole("list", { name: "Project members" })).findByText("Alice Example")).toBeVisible();
 }
 async function selectBob() {
