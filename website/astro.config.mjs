@@ -127,6 +127,7 @@ export default defineConfig({
 								{ label: 'Submit from the CLI', slug: 'guides/submitting-requests-cli' },
 								{ label: 'Submit through the API', slug: 'guides/submitting-requests-api' },
 								{ label: 'Prioritize & pause', slug: 'guides/prioritizing-requests' },
+								{ label: 'Share run results', slug: 'guides/sharing-runs' },
 							],
 						},
 						{

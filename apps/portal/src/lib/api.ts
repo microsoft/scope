@@ -4,6 +4,7 @@
 import type { Run, RunState, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ResourceDocument, ResourceRevisionDocument, ResourceBindingSpec, CreateResourceBody, CreateResourceRevisionBody, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir } from "@/types";
 
 import type { Project, CreateProjectRequest, UpdateProjectRequest } from "@/types";
+import type { CreateRunShare, UpdateRunShare, RunShare, RunShareLink, RunShareList } from "shared/run-sharing";
 import { qs } from "./url";
 import { recordServerDate } from "./serverClock";
 import { apiClient } from "./api-client";
@@ -159,6 +160,20 @@ async function requestCurrentUser(
 }
 
 export const api = {
+  createRunShare: (id: string, runId: string, body: CreateRunShare): Promise<RunShareLink> =>
+    request(`/requests/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/shares`, {
+      method: "POST", body: JSON.stringify(body),
+    }),
+  listRunShares: (id: string, runId: string, after?: string): Promise<RunShareList> =>
+    request(`/requests/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/shares${qs({ after })}`),
+  updateRunShare: (id: string, runId: string, shareId: string, body: UpdateRunShare): Promise<RunShare> =>
+    request(`/requests/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/shares/${encodeURIComponent(shareId)}`, {
+      method: "PATCH", body: JSON.stringify(body),
+    }),
+  revokeRunShare: (id: string, runId: string, shareId: string): Promise<RunShare> =>
+    request(`/requests/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/shares/${encodeURIComponent(shareId)}`, { method: "DELETE" }),
+  rotateRunShare: (id: string, runId: string, shareId: string): Promise<RunShareLink> =>
+    request(`/requests/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/shares/${encodeURIComponent(shareId)}/rotate`, { method: "POST" }),
   /** Only AuthProvider calls these; enrollment must never be prefetched. */
   getCurrentUser: (opts: { signal?: AbortSignal } = {}): Promise<CurrentUserResponse> =>
     requestCurrentUser("GET", opts),
@@ -854,6 +869,7 @@ export const api = {
     buildTime: string;
     environment?: string;
     strictAgentCapabilities?: boolean;
+    runSharingEnabled?: boolean;
   }> => {
     return request("/version");
   },

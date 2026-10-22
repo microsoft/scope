@@ -709,6 +709,8 @@ export interface Reporter {
 export interface ReportDocument {
   _id: string;           // UUID
   requestId: string;     // FK → RequestDocument._id
+  runId?: string;        // Execution attempt selected when the job was created
+  sourceRunId?: string;  // Stamped only by workers that pin their source to that attempt
   projectId: string;     // FK → ProjectDocument._id (denormalized from request)
   templateId?: string;   // FK → ReportTemplateDocument.id (slug of template that generated this report)
   reporter?: Reporter;   // Set by the worker when it picks up the job
