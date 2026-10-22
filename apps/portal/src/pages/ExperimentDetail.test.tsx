@@ -3,8 +3,17 @@
 
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   MemoryRouter,
   Route,
@@ -15,6 +24,7 @@ import type {
   ExperimentExecutionView,
   ExperimentView,
 } from "@/lib/experiments";
+import type { Report } from "@/types";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/api")>();
@@ -25,12 +35,17 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getExperiment: vi.fn(),
       listExperimentExecutions: vi.fn(),
       getExperimentExecution: vi.fn(),
+      listExperimentReports: vi.fn(),
       retryExperiment: vi.fn(),
+      experimentReportStructuredUrl: vi.fn(
+        (_experimentId: string, executionId: string, reportId: string) =>
+          `/api/v1/experiments/experiment-1/executions/${executionId}/reports/${reportId}/structured?projectId=project-1`,
+      ),
     },
   };
 });
 
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { ExperimentDetail } from "./ExperimentDetail";
 
 class ResizeObserverMock {
@@ -104,13 +119,71 @@ const experiment: ExperimentView = {
   createdAt: "2026-10-16T09:00:00.000Z",
 };
 
+const historicalReport: Report = {
+  _id: "report-1",
+  id: "report-1",
+  experimentId: "experiment-1",
+  experimentExecutionId: "execution-history",
+  status: "completed",
+  content: "# Historical readout\n\nExact attempt evidence.",
+  reporter: {
+    id: "pp-readout",
+    name: "Experiment Readout",
+    gitHash: "abc",
+    model: "gpt-5.4",
+    agentId: "copilot-sdk",
+    agentVersion: "1.0.0",
+  },
+  structuredArtifact: {
+    schemaId: "scope.experiment-readout",
+    schemaVersion: "1.0",
+    contentType: "application/json",
+    url: "reports/report-1/structured.json",
+  },
+  createdAt: "2026-10-16T10:30:00.000Z",
+};
+
+const currentReport: Report = {
+  ...historicalReport,
+  _id: "report-current",
+  id: "report-current",
+  experimentExecutionId: "execution-current",
+  content: "# Current readout\n\nLatest exact-attempt evidence.",
+  createdAt: "2026-10-16T11:30:00.000Z",
+};
+
+const previousCurrentReport: Report = {
+  ...currentReport,
+  _id: "report-previous",
+  id: "report-previous",
+  content: "# Previous readout\n\nEarlier retry output.",
+  createdAt: "2026-10-16T11:00:00.000Z",
+};
+
+const qualityReport: Report = {
+  ...currentReport,
+  _id: "report-quality",
+  id: "report-quality",
+  templateId: "quality-summary",
+  content: "# Quality summary\n\nAn additional report type.",
+  reporter: {
+    ...currentReport.reporter!,
+    id: "quality-summary",
+    name: "Quality Summary",
+  },
+  createdAt: "2026-10-16T11:15:00.000Z",
+};
+
 function LocationProbe() {
   const location = useLocation();
   return <div data-testid="location">{location.pathname}{location.search}</div>;
 }
 
-function renderDetail(initialEntry = "/experiments/experiment-1") {
-  vi.mocked(api.getExperiment).mockResolvedValue(experiment);
+function renderDetail(
+  initialEntry = "/experiments/experiment-1",
+  experimentValue = experiment,
+) {
+  vi.mocked(api.getExperiment).mockResolvedValue(experimentValue);
   vi.mocked(api.listExperimentExecutions).mockResolvedValue({
     items: [currentExecution, historicalExecution],
   });
@@ -130,7 +203,15 @@ function renderDetail(initialEntry = "/experiments/experiment-1") {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
-          <Route path="/experiments/:id" element={<ExperimentDetail />} />
+          <Route
+            path="/experiments/:id"
+            element={
+              <>
+                <ExperimentDetail />
+                <LocationProbe />
+              </>
+            }
+          />
           <Route path="/runs/:id" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>
@@ -147,6 +228,11 @@ beforeAll(() => {
     configurable: true,
     value: IntersectionObserverMock,
   });
+});
+
+beforeEach(() => {
+  vi.mocked(api.listExperimentReports).mockReset();
+  vi.mocked(api.listExperimentReports).mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -169,6 +255,14 @@ describe("ExperimentDetail", () => {
     if (!embeddedTable) throw new Error("Embedded runs table block is missing");
     expect(embeddedTable.className).toContain("space-y-3");
     expect(embeddedTable.parentElement?.className).toContain("p-6");
+    const header = document.querySelector(
+      '[data-slot="experiment-detail-header"]',
+    );
+    const tabList = screen.getByRole("tablist", {
+      name: "Experiment detail sections",
+    });
+    expect(header?.nextElementSibling).toBe(tabList.parentElement);
+    expect(screen.queryByText("Execution attempt 2")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
     expect((await screen.findAllByText("Current task 11")).length).toBeGreaterThan(0);
@@ -188,36 +282,302 @@ describe("ExperimentDetail", () => {
     );
 
     expect(
-      await screen.findByText(/Viewing processing attempt #1 \(historical\)/),
+      await screen.findByText("Historical attempt"),
     ).toBeTruthy();
     expect(screen.getByText("Runs in attempt 1")).toBeTruthy();
     expect(screen.getAllByText("Historical task").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Current task 1")).toHaveLength(0);
     expect(
-      screen.getByRole("button", { name: "Retry processing" }).hasAttribute(
-        "disabled",
-      ),
-    ).toBe(true);
-
+      screen.queryByRole("button", { name: "Retry processing" }),
+    ).toBeNull();
     fireEvent.click(screen.getAllByText("Historical task")[0]);
     expect((await screen.findByTestId("location")).textContent).toBe(
       "/runs/request-history?runId=run-history",
     );
+
+  });
+
+  it("keeps processing retry disabled for a historical attempt", async () => {
+    renderDetail(
+      "/experiments/experiment-1?executionId=execution-history&tab=processing",
+    );
+
+    expect(
+      (
+        await screen.findByRole("button", { name: "Retry processing" })
+      ).hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("returns from a historical attempt to the current attempt", async () => {
+    const user = userEvent.setup();
     renderDetail(
       "/experiments/experiment-1?executionId=execution-history",
     );
 
-    fireEvent.click(await screen.findByRole("button", {
-      name: "View current attempt",
-    }));
+    await user.click(
+      await screen.findByRole("combobox", { name: "Experiment attempt" }),
+    );
+    await user.click(
+      screen.getByRole("option", { name: "Attempt 2 · current" }),
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Runs in attempt 2")).toBeTruthy();
     });
     expect(screen.getAllByText("Current task 1").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Historical task")).toHaveLength(0);
+  });
+
+  it("loads the report and structured artifact for the exact selected attempt", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listExperimentReports).mockImplementation(
+      async (_experimentId, executionId) =>
+        executionId === historicalExecution.experimentExecutionId
+          ? [historicalReport]
+          : [],
+    );
+
+    renderDetail(
+      "/experiments/experiment-1?executionId=execution-history",
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Historical readout" }),
+    ).toBeTruthy();
+    expect(api.listExperimentReports).toHaveBeenCalledWith(
+      "experiment-1",
+      "execution-history",
+    );
+    expect(
+      screen.getByRole("link", { name: "Structured JSON" }).getAttribute("href"),
+    ).toContain("/executions/execution-history/reports/report-1/structured");
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Experiment attempt" }),
+    );
+    await user.click(
+      screen.getByRole("option", { name: "Attempt 2 · current" }),
+    );
+    await waitFor(() => {
+      expect(api.listExperimentReports).toHaveBeenCalledWith(
+        "experiment-1",
+        "execution-current",
+      );
+    });
+  });
+
+  it("retries report loading for the same exact attempt", async () => {
+    vi.mocked(api.listExperimentReports)
+      .mockRejectedValueOnce(new Error("Report service unavailable"))
+      .mockResolvedValueOnce([]);
+
+    renderDetail();
+
+    expect(await screen.findByText("Report service unavailable")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Retry$/ }));
+    await waitFor(() => {
+      expect(api.listExperimentReports).toHaveBeenCalledTimes(2);
+    });
+    expect(api.listExperimentReports).toHaveBeenLastCalledWith(
+      "experiment-1",
+      "execution-current",
+    );
+    expect(
+      await screen.findByText("Runs in attempt 2"),
+    ).toBeTruthy();
+  });
+
+  it("defaults to Reports for one report without showing unnecessary selectors", async () => {
+    vi.mocked(api.listExperimentReports).mockResolvedValue([currentReport]);
+
+    renderDetail();
+
+    expect(
+      await screen.findByRole("heading", { name: "Current readout" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("tab", { name: "Reports" }).getAttribute(
+        "data-state",
+      ),
+    ).toBe("active");
+    expect(screen.queryByRole("combobox", { name: "Report type" })).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Report version" }),
+    ).toBeNull();
+  });
+
+  it("defaults to the latest retry version and selects historical versions", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listExperimentReports).mockResolvedValue([
+      previousCurrentReport,
+      currentReport,
+    ]);
+
+    renderDetail();
+
+    expect(
+      await screen.findByRole("heading", { name: "Current readout" }),
+    ).toBeTruthy();
+    await user.click(
+      screen.getByRole("combobox", { name: "Report version" }),
+    );
+    await user.click(
+      screen.getByRole("option", { name: /Version 1 · Historical/ }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Previous readout" }),
+    ).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toContain(
+      "reportType=reporter%3App-readout",
+    );
+    expect(screen.getByTestId("location").textContent).toContain(
+      "reportId=report-previous",
+    );
+    expect(
+      screen.getByRole("link", { name: "Direct link" }).getAttribute("href"),
+    ).toContain("/reports/report-previous?");
+  });
+
+  it("selects one report type at a time and honors direct query selection", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listExperimentReports).mockResolvedValue([
+      previousCurrentReport,
+      currentReport,
+      qualityReport,
+    ]);
+
+    renderDetail(
+      "/experiments/experiment-1?tab=reports&reportType=reporter%3App-readout&reportId=report-previous",
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Previous readout" }),
+    ).toBeTruthy();
+    await user.click(screen.getByRole("combobox", { name: "Report type" }));
+    await user.click(
+      screen.getByRole("option", { name: /Quality Summary/ }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Quality summary" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Current readout" })).toBeNull();
+    expect(screen.getByTestId("location").textContent).toContain(
+      "reportType=template%3Aquality-summary",
+    );
+    expect(screen.getByTestId("location").textContent).toContain(
+      "reportId=report-quality",
+    );
+  });
+
+  it("falls back safely from stale tab, report type, and report version links", async () => {
+    vi.mocked(api.listExperimentReports).mockResolvedValue([
+      currentReport,
+      qualityReport,
+    ]);
+
+    renderDetail(
+      "/experiments/experiment-1?tab=missing&reportType=missing&reportId=missing",
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Current readout" }),
+    ).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/experiments/experiment-1",
+      );
+    });
+  });
+
+  it("falls back safely from a stale attempt while preserving a valid tab", async () => {
+    vi.mocked(api.getExperimentExecution).mockRejectedValueOnce(
+      new ApiError("Experiment execution not found", 404),
+    );
+
+    renderDetail(
+      "/experiments/experiment-1?executionId=execution-missing&tab=runs&reportId=report-missing",
+    );
+
+    expect(await screen.findByText("Runs in attempt 2")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/experiments/experiment-1?tab=runs",
+      );
+    });
+  });
+
+  it("defaults to Processing while blocked and keeps retry recovery scoped there", async () => {
+    vi.mocked(api.retryExperiment).mockResolvedValue({
+      experimentId: "experiment-1",
+      experimentExecutionId: "execution-retry",
+      attemptNumber: 3,
+    });
+    const processingExperiment: ExperimentView = {
+      ...experiment,
+      readiness: "blocked",
+      execution: {
+        ...currentExecution,
+        readiness: "blocked",
+        handlerProgress: {
+          "pp-observations": { status: "done" },
+          "pp-readout": {
+            status: "failed",
+            error: "A dependency must be retried.",
+          },
+        },
+      },
+    };
+
+    renderDetail("/experiments/experiment-1", processingExperiment);
+
+    expect(
+      (
+        await screen.findByRole("tab", { name: "Processing" })
+      ).getAttribute("data-state"),
+    ).toBe("active");
+    expect(screen.getByText("pp-observations")).toBeTruthy();
+    expect(screen.getByText("pp-readout")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry processing" }));
+    await waitFor(() => {
+      expect(api.retryExperiment).toHaveBeenCalledWith(
+        "experiment-1",
+        "execution-current",
+      );
+    });
+  });
+
+  it("preserves the selected tab across attempts and clears report history state", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listExperimentReports).mockImplementation(
+      async (_experimentId, executionId) =>
+        executionId === "execution-current"
+          ? [previousCurrentReport, currentReport]
+          : [historicalReport],
+    );
+
+    renderDetail(
+      "/experiments/experiment-1?tab=reports&reportType=reporter%3App-readout&reportId=report-previous",
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Previous readout" }),
+    ).toBeTruthy();
+    await user.click(
+      screen.getByRole("combobox", { name: "Experiment attempt" }),
+    );
+    await user.click(
+      screen.getByRole("option", { name: "Attempt 1 · historical" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Historical readout" }),
+    ).toBeTruthy();
+    const location = screen.getByTestId("location").textContent ?? "";
+    expect(location).toContain("executionId=execution-history");
+    expect(location).toContain("tab=reports");
+    expect(location).not.toContain("report-previous");
   });
 });

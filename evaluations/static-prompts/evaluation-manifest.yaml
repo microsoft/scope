@@ -19,4 +19,4 @@ qualityFamilies:
   - id: developer-feedback
     variants: [default, persona, descendant-guard]
   - id: run-report
-    variants: [default, append, override-control]
+    variants: [default, append, override-control, experiment-readout]

@@ -57,11 +57,21 @@ export function ReportPreviewPanel() {
       onClose={closePanel}
       headerActions={
         <div className="flex flex-wrap justify-end gap-2">
-          <Link to={`/runs/${report.requestId}`}>
-            <Button variant="outline" size="sm" className="gap-1.5">
-              <ExternalLink className="h-3.5 w-3.5" /> Open run
-            </Button>
-          </Link>
+          {report.experimentId && report.experimentExecutionId ? (
+            <Link
+              to={`/experiments/${report.experimentId}?execution=${encodeURIComponent(report.experimentExecutionId)}&report=${encodeURIComponent(report._id)}`}
+            >
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <ExternalLink className="h-3.5 w-3.5" /> Open experiment
+              </Button>
+            </Link>
+          ) : report.requestId ? (
+            <Link to={`/runs/${report.requestId}`}>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <ExternalLink className="h-3.5 w-3.5" /> Open run
+              </Button>
+            </Link>
+          ) : null}
           <Link to={`/reports/${report._id}`}>
             <Button variant="outline" size="sm" className="gap-1.5">
               <ExternalLink className="h-3.5 w-3.5" /> Open full view
@@ -83,7 +93,9 @@ export function ReportPreviewPanel() {
                   {report.templateId}
                 </Badge>
               ) : (
-                <Badge variant="secondary" className="text-xs">default template</Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {report.experimentId ? "built-in" : "default template"}
+                </Badge>
               )}
             </div>
           </CardContent>

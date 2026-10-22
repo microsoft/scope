@@ -18,6 +18,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getExperiment: vi.fn(),
       listExperimentExecutions: vi.fn(),
       getExperimentExecution: vi.fn(),
+      listExperimentReports: vi.fn(),
+      experimentReportStructuredUrl: vi.fn(() => "/structured.json"),
       retryExperiment: vi.fn(),
     },
   };
@@ -108,6 +110,30 @@ beforeAll(() => {
   });
   vi.mocked(api.getExperimentExecution).mockResolvedValue(
     historicalExecution,
+  );
+  vi.mocked(api.listExperimentReports).mockImplementation(
+    async (_experimentId, executionId) =>
+      executionId === "execution-current"
+        ? [
+            {
+              _id: "report-current",
+              id: "report-current",
+              experimentId: "experiment-demo",
+              experimentExecutionId: "execution-current",
+              status: "completed",
+              content: "# Current readout\n\nThe latest exact-vector analysis.",
+              reporter: {
+                id: "pp-readout",
+                name: "Experiment Readout",
+                gitHash: "abc",
+                model: "gpt-5.4",
+                agentId: "copilot-sdk",
+                agentVersion: "1.0.0",
+              },
+              createdAt: "2026-10-16T10:30:00.000Z",
+            },
+          ]
+        : [],
   );
 });
 
