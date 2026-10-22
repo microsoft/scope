@@ -13,6 +13,15 @@ Features are managed in a shared **catalog**. Each feature has an ID,
 a description, and a detection prompt the LLM uses to decide whether
 the feature applies to a given task prompt.
 
+:::note[Features are analysis metadata only]
+A prompt feature **categorizes** a task prompt. It is never sent to
+the agent and never changes what the agent is asked to do, how a run
+executes, or how results are scored. Features are only used to filter
+and group existing runs while you analyze them, and to trigger report
+templates. If you want to change what an agent receives, edit the task
+prompt itself — not its features.
+:::
+
 ## Extracting features from a task prompt
 
 Feature extraction is **on-demand**, not automatic on run submission.
