@@ -154,22 +154,14 @@ taskPrompt
 
       if (tp.features && tp.features.length > 0) {
         const detected = tp.features.filter(f => f.detected);
-        const notDetected = tp.features.filter(f => !f.detected && f.evaluated);
-        const skipped = tp.features.filter(f => !f.evaluated);
 
-        console.log(`\n${label('Features:')} ${value(String(detected.length))} detected, ${dimTimestamp(String(notDetected.length))} not detected, ${dimTimestamp(String(skipped.length))} skipped`);
+        console.log(`\n${label('Features:')} ${value(String(detected.length))} detected`);
         if (tp.featuresExtractedAt) console.log(`${label('Extracted:')} ${value(tp.featuresExtractedAt)}`);
 
         if (detected.length > 0) {
           console.log(`  ${successText('Detected:')}`);
           for (const r of detected) {
             console.log(`    ${criterionIcon(true, true)} ${value(r.featureId)}`);
-          }
-        }
-        if (notDetected.length > 0) {
-          console.log(`  ${dimTimestamp('Not detected:')}`);
-          for (const r of notDetected) {
-            console.log(`    ${criterionIcon(true, false)} ${dimTimestamp(r.featureId)}`);
           }
         }
       } else {
@@ -302,8 +294,6 @@ taskPrompt
       }
 
       const detected = extraction.features.filter(r => r.detected);
-      const notDetected = extraction.features.filter(r => !r.detected && r.evaluated);
-      const skipped = extraction.features.filter(r => !r.evaluated);
 
       if (extraction.cached) {
         console.log(dimTimestamp('(cached — use --force to re-extract)'));
@@ -315,21 +305,11 @@ taskPrompt
         for (const r of detected) {
           console.log(`    ${criterionIcon(true, true)} ${value(r.featureId)}`);
         }
-      }
-      if (notDetected.length > 0) {
-        console.log(`  ${dimTimestamp('Not detected:')}`);
-        for (const r of notDetected) {
-          console.log(`    ${criterionIcon(true, false)} ${dimTimestamp(r.featureId)}`);
-        }
-      }
-      if (skipped.length > 0) {
-        console.log(`  ${warnBanner('Skipped (not evaluated):')}`);
-        for (const r of skipped) {
-          console.log(`    ○ ${dimTimestamp(r.featureId)}`);
-        }
+      } else {
+        console.log(`  ${dimTimestamp('No features detected')}`);
       }
 
-      console.log(`\n${label('Summary:')} ${value(String(detected.length))} detected, ${dimTimestamp(String(notDetected.length))} not detected, ${dimTimestamp(String(skipped.length))} skipped`);
+      console.log(`\n${label('Summary:')} ${value(String(detected.length))} detected`);
     } catch (error) {
       console.error(errorText("Error:"), error instanceof Error ? error.message : error);
       process.exit(1);
