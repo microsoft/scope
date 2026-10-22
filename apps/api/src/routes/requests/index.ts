@@ -270,6 +270,9 @@ async function validateGatesForSubmit(
       if (!doc) {
         return `Gate '${gc.gate}' references unknown criterion '${cid}'.`;
       }
+      if ((doc.kind ?? "gate") !== "gate") {
+        return `Criterion '${cid}' is an observation and cannot be used as a gate criterion.`;
+      }
       if (!isCriterionCompatibleWithGate(doc.gates as GateId[] | undefined, gc.gate)) {
         return `Criterion '${cid}' is not compatible with the '${gc.gate}' gate.`;
       }
@@ -297,7 +300,33 @@ async function validateGatesForSubmit(
 }
 
 /**
- * Materialize free-text gate prompts into typed prompt entities (docs/design/
+ * Validate the submit payload's observation-criteria ids: each must be an
+ * active kind:"observation" criterion. Gate ids are rejected. Empty/absent is
+ * valid (no observations evaluated). See issue #1156.
+ */
+async function validateObservationsForSubmit(
+  ctx: RouteContext,
+  observations: string[],
+  projectId: string,
+): Promise<string | null> {
+  if (observations.length === 0) return null;
+  const ids = [...new Set(observations)];
+  const docs = await ctx.criteriaCollection
+    .find({ projectId, id: { $in: ids }, deletedAt: { $exists: false } })
+    .toArray();
+  const byId = new Map(docs.map((c) => [c.id, c]));
+  for (const id of ids) {
+    const doc = byId.get(id);
+    if (!doc) return `Observation references unknown criterion '${id}'.`;
+    if ((doc.kind ?? "gate") !== "observation") {
+      return `Criterion '${id}' is a gate and cannot be used as an observation.`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolve free-text gate prompts into typed prompt entities before validation (see
  * gates.md §4.3/§4.4). For every non-Select gate that supplies `promptText`, the
  * text is content-addressed via `taskPromptStore.findOrCreate(text, gate)` —
  * idempotent and parallel to how the request task prompt is materialized — and
@@ -459,7 +488,7 @@ apiRoute(ctx.app, ctx.registry, {
   successStatus: 201,
   handler: async (req, res) => {
     const projectId = getQueryProjectId(req);
-    const { scenario: scenarioObj, persona: personaObj, maxIterations, personaInstructions, count = 1, model: requestedModel, reasoningEffort: requestedReasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, extensions: extensionIds, agentVersion: requestedAgentVersion, profileId: requestedProfileSpec, profileVariations, priority: requestedPriority, agentsMd: requestedAgentsMd, agentsMdParentIds: requestedAgentsMdParentIds, gates: requestedGates, codebase: codebaseSpec, codebaseRevisionId: requestedCodebaseRevisionId, resources: resourceSpecs } = req.body;
+    const { scenario: scenarioObj, persona: personaObj, maxIterations, personaInstructions, count = 1, model: requestedModel, reasoningEffort: requestedReasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, extensions: extensionIds, agentVersion: requestedAgentVersion, profileId: requestedProfileSpec, profileVariations, priority: requestedPriority, agentsMd: requestedAgentsMd, agentsMdParentIds: requestedAgentsMdParentIds, gates: requestedGates, observations: requestedObservations, codebase: codebaseSpec, codebaseRevisionId: requestedCodebaseRevisionId, resources: resourceSpecs } = req.body;
     let worker = req.query.worker as string | undefined;
 
     // AGENTS.md body + lineage (for any caller that wants to attach an
@@ -1035,6 +1064,17 @@ apiRoute(ctx.app, ctx.registry, {
       }
     }
 
+    // Validate the optional observation-criteria selection (issue #1156).
+    const observationsProvided = Array.isArray(requestedObservations) && requestedObservations.length > 0;
+    const resolvedObservations: string[] = observationsProvided ? (requestedObservations as string[]) : [];
+    if (observationsProvided) {
+      const obsError = await validateObservationsForSubmit(ctx, resolvedObservations, projectId);
+      if (obsError) {
+        res.status(400).json({ error: obsError });
+        return;
+      }
+    }
+
     // Validate count if provided
     if (typeof count !== "number" || count < 1 || count > 10) {
       res.status(400).json({ error: "count must be a number between 1 and 10" });
@@ -1233,6 +1273,12 @@ apiRoute(ctx.app, ctx.registry, {
         )
       : undefined;
 
+    // Persisted observation-criteria selection (issue #1156); deduped, evaluated
+    // by the pp-taxonomy post-processor. Absent/empty = no observations evaluated.
+    const persistedObservations: string[] | undefined = observationsProvided
+      ? [...new Set(resolvedObservations)]
+      : undefined;
+
     // Generate a submission ID to group all runs from this request
     const submissionId = uuidv4();
 
@@ -1268,6 +1314,7 @@ apiRoute(ctx.app, ctx.registry, {
           ...(profileId ? { profileId } : {}),
           ...(profileVersionId ? { profileVersionId } : {}),
           ...(persistedGates ? { gates: persistedGates } : {}),
+          ...(persistedObservations ? { observations: persistedObservations } : {}),
           submissionId,
           ...agentsMdFields,
           // Mint a distinct run id for the first attempt. Blob artifacts
@@ -1330,6 +1377,7 @@ apiRoute(ctx.app, ctx.registry, {
       ...(profileId ? { profileId } : {}),
       ...(profileVersionId ? { profileVersionId } : {}),
       ...(persistedGates ? { gates: persistedGates } : {}),
+      ...(persistedObservations ? { observations: persistedObservations } : {}),
       submissionId,
       ...agentsMdFields,
       // Mint a distinct run id for the first attempt. Blob artifacts

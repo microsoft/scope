@@ -27,6 +27,50 @@ export interface ToolCall {
   timestamp?: string;
 }
 
+export type CriterionKind = "gate" | "observation";
+
+/**
+ * Evaluation granularity for a criterion (#1156).
+ * - `iteration` — evaluated on each iteration in isolation (gates are always this).
+ * - `run` — evaluated once against the whole run (final snapshot + merged
+ *   trajectory). The default for observations; rejected for gates.
+ */
+export type CriterionSubject = "run" | "iteration";
+
+export const CRITERION_SUBJECTS: readonly CriterionSubject[] = ["run", "iteration"];
+
+export const TAXONOMY_ELEMENT_IDS = [
+  "dimension:idiomatic-use",
+  "dimension:dependency-currency",
+  "dimension:configuration-correctness",
+] as const;
+
+export type TaxonomyElementId = (typeof TAXONOMY_ELEMENT_IDS)[number];
+
+export interface TaxonomyElementMetadata {
+  id: TaxonomyElementId;
+  label: string;
+  description: string;
+}
+
+export const TAXONOMY_ELEMENT_METADATA: Record<TaxonomyElementId, TaxonomyElementMetadata> = {
+  "dimension:idiomatic-use": {
+    id: "dimension:idiomatic-use",
+    label: "Idiomatic use",
+    description: "Did the agent follow recommended patterns and best practices?",
+  },
+  "dimension:dependency-currency": {
+    id: "dimension:dependency-currency",
+    label: "Dependency currency",
+    description: "Did the agent use current versions, packages, and namespaces?",
+  },
+  "dimension:configuration-correctness": {
+    id: "dimension:configuration-correctness",
+    label: "Configuration correctness",
+    description: "Are auth, connection, environment, and deployment settings configured properly?",
+  },
+};
+
 export interface ConversationTurn {
   iteration: number;
   gate?: GateId;
@@ -36,6 +80,7 @@ export interface ConversationTurn {
   passed: boolean;
   timestamp: string;
   criteriaResults?: CriterionResult[];
+  observationResults?: CriterionResult[];
   harUrl?: string;
   videoUrls?: string[];
   tokenUsage?: TokenUsage;
@@ -80,6 +125,17 @@ export interface OsInfo {
 }
 
 /**
+ * Per-handler post-processing status in the DAG (issue #1147). Keys in
+ * `RunState.handlerStatus` are handler IDs (e.g. "pp-atif", "pp-taxonomy").
+ */
+export interface HandlerRunStatus {
+  status: "queued" | "processing" | "done" | "failed";
+  version?: number;
+  updatedAt?: string;
+  error?: string;
+}
+
+/**
  * Per-attempt mutable state (nested under `Run.run` in API responses since
  * migration 014). Fields here change as a single attempt progresses; fields
  * on the parent `Run` are immutable across attempts.
@@ -115,6 +171,22 @@ export interface RunState {
   resumedAt?: string;
   postProcessorVersion?: number;
   postProcessorStatus?: "queued" | "processing" | "done" | "failed";
+  /**
+   * Per-handler post-processing status keyed by handler ID (e.g. "pp-atif",
+   * "pp-taxonomy"). Drives the aggregate "Enriched" badge so it only flips to
+   * done once every handler in the DAG is terminal — not after the first
+   * handler (pp-atif) completes. The legacy `postProcessorStatus` scalar only
+   * tracks pp-atif and is kept for backward compatibility.
+   */
+  handlerStatus?: Record<string, HandlerRunStatus>;
+  /**
+   * Whole-run observation results — one entry per selected `subject:"run"`
+   * observation criterion, evaluated once against the final snapshot + the
+   * merged trajectory across all iterations (#1156). Per-iteration
+   * (`subject:"iteration"`) observations live on `turn.observationResults`
+   * instead. Empty/absent when no run-subject observations were selected.
+   */
+  observationResults?: CriterionResult[];
 }
 
 export interface Run {
@@ -149,6 +221,7 @@ export interface Run {
   /** Parent AGENTS.md prompt ids forming the AGENTS.md lineage (mutation/merge edges). */
   agentsMdParentIds?: string[];
   gates?: GateConfig[];
+  observations?: string[];
   gateSummaries?: GateRunSummary[];
 }
 
@@ -208,6 +281,9 @@ export interface CriteriaConfig {
   prompt: string;
   dependsOn?: string[];
   gates?: GateId[];
+  kind?: CriterionKind;
+  taxonomyElementId?: TaxonomyElementId;
+  subject?: CriterionSubject;
 }
 
 export interface CriteriaDocument extends CriteriaConfig {
@@ -217,7 +293,7 @@ export interface CriteriaDocument extends CriteriaConfig {
 }
 
 export interface CriteriaGraphData {
-  nodes: Array<{ id: string; prompt: string; dependsOn: string[]; gates?: GateId[] }>;
+  nodes: Array<{ id: string; prompt: string; dependsOn: string[]; gates?: GateId[]; kind?: CriterionKind; taxonomyElementId?: TaxonomyElementId; subject?: CriterionSubject }>;
   edges: Array<{ source: string; target: string }>;
 }
 
@@ -226,6 +302,7 @@ export interface GeneratePromptResponse {
   suggestedId: string;
   suggestedParents: string[];
   suggestedChildren: string[];
+  suggestedSubject?: CriterionSubject;
 }
 
 // Prompt Feature types

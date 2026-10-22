@@ -68,6 +68,27 @@ export class FileSystemCriteriaProvider implements CriteriaProvider {
           criteria.gates = gates.map((g: any) => String(g).trim()) as CriteriaConfig["gates"];
         }
 
+        const kind = data.kind;
+        if (kind !== undefined) {
+          if (kind !== "gate" && kind !== "observation") {
+            throw new Error(`'kind' must be 'gate' or 'observation' in ${file}`);
+          }
+          criteria.kind = kind;
+        }
+
+        const taxonomyElementId = data.taxonomy_element_id || data.taxonomyElementId;
+        if (taxonomyElementId !== undefined) {
+          criteria.taxonomyElementId = String(taxonomyElementId).trim() as CriteriaConfig["taxonomyElementId"];
+        }
+
+        const subject = data.subject;
+        if (subject !== undefined) {
+          if (subject !== "run" && subject !== "iteration") {
+            throw new Error(`'subject' must be 'run' or 'iteration' in ${file}`);
+          }
+          criteria.subject = subject;
+        }
+
         if (this.registry.has(criteria.id)) {
           throw new Error(`Duplicate criteria id '${criteria.id}' found in ${file}`);
         }

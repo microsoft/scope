@@ -1,0 +1,8 @@
+id: idiomatic_api_usage
+prompt: |
+  The agent used the product's recommended patterns and best practices when
+  calling its APIs (idiomatic usage), rather than working around them or using
+  deprecated/low-level approaches. Judge the quality of HOW the product is used,
+  not whether it is used at all.
+kind: observation
+taxonomy_element_id: dimension:idiomatic-use

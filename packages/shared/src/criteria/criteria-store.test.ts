@@ -335,6 +335,95 @@ describe("CriteriaStore per-project isolation (migration 026)", () => {
     );
   });
 
+  describe("CriteriaStore kind + taxonomy (issue #1156)", () => {
+    it("defaults kind to gate and subject to iteration", async () => {
+      const store = new CriteriaStore(fakeCollection());
+      const created = await store.create({ projectId: "proj-test", id: "g1", prompt: "p" });
+      expect(created.kind).toBe("gate");
+      expect(created.subject).toBe("iteration");
+      expect(created.taxonomyElementId).toBeUndefined();
+    });
+
+    it("persists observation taxonomy and defaults subject to run", async () => {
+      const store = new CriteriaStore(fakeCollection());
+      const created = await store.create({
+        projectId: "proj-test",
+        id: "obs1",
+        prompt: "p",
+        kind: "observation",
+        taxonomyElementId: "dimension:idiomatic-use",
+      });
+      expect(created.kind).toBe("observation");
+      expect(created.taxonomyElementId).toBe("dimension:idiomatic-use");
+      expect(created.subject).toBe("run");
+    });
+
+    it("rejects taxonomy and run subject on gate criteria", async () => {
+      const store = new CriteriaStore(fakeCollection());
+      await expect(
+        store.create({
+          projectId: "proj-test",
+          id: "g2",
+          prompt: "p",
+          kind: "gate",
+          taxonomyElementId: "dimension:idiomatic-use",
+        }),
+      ).rejects.toThrow(CriteriaValidationError);
+      await expect(
+        store.create({
+          projectId: "proj-test",
+          id: "g3",
+          prompt: "p",
+          kind: "gate",
+          subject: "run",
+        }),
+      ).rejects.toThrow(CriteriaValidationError);
+    });
+
+    it("enforces same-kind dependencies and resolves observations", async () => {
+      const col = fakeCollection([
+        { projectId: "proj-test", id: "obs", prompt: "o", dependsOn: [], kind: "observation", createdAt: new Date() },
+        { projectId: "proj-test", id: "gate", prompt: "g", dependsOn: [], kind: "gate", createdAt: new Date() },
+      ]);
+      const store = new CriteriaStore(col, "proj-test");
+      await expect(
+        store.create({
+          projectId: "proj-test",
+          id: "gate_child",
+          prompt: "p",
+          kind: "gate",
+          dependsOn: ["obs"],
+        }),
+      ).rejects.toThrow(CriteriaValidationError);
+      await expect(store.resolveObservations(["obs"])).resolves.toHaveLength(1);
+      await expect(store.resolveObservations(["gate"])).rejects.toThrow(CriteriaValidationError);
+    });
+
+    it("supports an explicit per-iteration observation and rejects an invalid kind flip", async () => {
+      const col = fakeCollection();
+      const store = new CriteriaStore(col, "proj-test");
+      const created = await store.create({
+        projectId: "proj-test",
+        id: "obs_iter",
+        prompt: "p",
+        kind: "observation",
+        subject: "iteration",
+      });
+      expect(created.subject).toBe("iteration");
+
+      const runObservation = await store.create({
+        projectId: "proj-test",
+        id: "obs_run",
+        prompt: "p",
+        kind: "observation",
+      });
+      expect(runObservation.subject).toBe("run");
+      await expect(store.update("obs_run", { kind: "gate" })).rejects.toThrow(
+        CriteriaValidationError,
+      );
+    });
+  });
+
   it("still rejects a same-id duplicate WITHIN a project", async () => {
     const col = fakeCollection();
     const storeA = new CriteriaStore(col, "proj-a");
@@ -405,4 +494,3 @@ describe("CriteriaStore per-project isolation (migration 026)", () => {
     expect(col._docs()).toEqual([expect.objectContaining({ id: "y", projectId: "proj-a" })]);
   });
 });
-
