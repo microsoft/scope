@@ -3,12 +3,13 @@
 
 // @vitest-environment happy-dom
 import { afterAll, afterEach, beforeAll, describe, it, vi } from "vitest";
+import { Suspense } from "react";
 import { cleanup, render, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { composeStories } from "@storybook/react-vite";
 import { setupServer } from "msw/node";
 import { http, HttpResponse, type RequestHandler } from "msw";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { ProjectProvider } from "@/contexts/ProjectContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { mswHandlers } from "../../.storybook/msw-handlers";
@@ -58,7 +59,20 @@ describe("Access story interactions", () => {
       server.use(...(parameters.msw?.handlers ?? []));
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       clients.push(client);
-      const { container } = render(<QueryClientProvider client={client}><ThemeProvider><ProjectProvider><MemoryRouter><Story /></MemoryRouter></ProjectProvider></ThemeProvider></QueryClientProvider>);
+      let navigationReady = name !== "SpecificProjectPendingOperatorGuidance";
+      let navigation: Promise<void> | undefined;
+      function DeferredNavigationStory() {
+        const { pathname, search } = useLocation();
+        // Keep the scoped view visible while the all-project navigation is pending.
+        if (!navigationReady && pathname === "/access" && !search) {
+          navigation ??= new Promise<void>(resolve => {
+            setTimeout(() => { navigationReady = true; resolve(); }, 50);
+          });
+          throw navigation;
+        }
+        return <Story />;
+      }
+      const { container } = render(<QueryClientProvider client={client}><ThemeProvider><ProjectProvider><MemoryRouter><Suspense fallback={null}><DeferredNavigationStory /></Suspense></MemoryRouter></ProjectProvider></ThemeProvider></QueryClientProvider>);
       if (!Story.play) throw new Error(`${name} is missing its required interaction test`);
       await Story.play({ canvas: within(container), canvasElement: container });
     });
