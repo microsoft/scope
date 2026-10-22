@@ -72,8 +72,6 @@ type VariationDraft = {
   color?: string;
 };
 
-type GraphSelection = { kind: "base" } | { kind: "variation"; index: number };
-
 type GateDraft = {
   enabled: boolean;
   promptText: string;
@@ -250,7 +248,6 @@ export function SubmitRun() {
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const [agentsMdOpen, setAgentsMdOpen] = useState(false);
   const [extensionsOpen, setExtensionsOpen] = useState(false);
-  const [graphSelection, setGraphSelection] = useState<GraphSelection>({ kind: "base" });
 
   // AI generation
   const [showGenerate, setShowGenerate] = useState(false);
@@ -749,53 +746,6 @@ export function SubmitRun() {
   const lastVariationName = lastVariationDraft
     ? profileList.find((p) => p._id === lastVariationDraft.profileId)?.name
     : null;
-
-  useEffect(() => {
-    setGraphSelection({ kind: "base" });
-  }, [selectedProfileId]);
-
-  useEffect(() => {
-    setGraphSelection((previous) => {
-      if (previous.kind === "variation" && previous.index >= variationDrafts.length) {
-        return { kind: "base" };
-      }
-      return previous;
-    });
-  }, [variationDrafts.length]);
-
-  const selectedGraphPreview = (() => {
-    if (!selectedProfileId) return null;
-
-    if (graphSelection.kind === "base") {
-      const versionDocument =
-        profileVersions.find((version) => version.version === selectedProfileVersion) ??
-        selectedBaseProfile?.version ??
-        null;
-      return {
-        title: "Base Profile",
-        name: selectedBaseProfile?.name ?? selectedProfileId,
-        version: selectedProfileVersion ?? selectedBaseProfile?.latestVersion ?? null,
-        color: "hsl(var(--primary))",
-        versionDocument,
-      };
-    }
-
-    const draft = variationDrafts[graphSelection.index];
-    if (!draft) return null;
-    const profile = profileList.find((item) => item._id === draft.profileId);
-    const versionDocument =
-      (variationProfileVersions[draft.profileId] ?? []).find((version) => version.version === draft.profileVersion) ??
-      profile?.version ??
-      null;
-
-    return {
-      title: `Variation #${graphSelection.index + 1}`,
-      name: profile?.name ?? draft.profileId,
-      version: draft.profileVersion ?? profile?.latestVersion ?? null,
-      color: draft.color ?? VARIATION_COLORS[graphSelection.index % VARIATION_COLORS.length],
-      versionDocument,
-    };
-  })();
 
   useCommandEnter(doSubmit, canSubmit);
 
@@ -1471,88 +1421,6 @@ export function SubmitRun() {
 
           {selectedProfileId && (
             <div className="space-y-3 rounded-md border p-3">
-              <div className="rounded-md border bg-muted/30 p-3">
-                <svg
-                  className="h-auto w-full"
-                  viewBox={`0 0 320 ${Math.max(70, 50 + variationDrafts.length * 34)}`}
-                  preserveAspectRatio="none"
-                  aria-label="Profile composition graph"
-                >
-                  {(() => {
-                    const baseName = selectedBaseProfile?.name ?? selectedProfileId ?? "Base profile";
-                    return (
-                      <g
-                        onClick={() => setGraphSelection({ kind: "base" })}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <text
-                          x="34"
-                          y="22"
-                          fontSize="10"
-                          fill="currentColor"
-                          className="text-foreground"
-                        >
-                          {truncate(baseName, 28)}
-                        </text>
-                      </g>
-                    );
-                  })()}
-                  <circle
-                    cx="20"
-                    cy="18"
-                    r={graphSelection.kind === "base" ? 7 : 6}
-                    fill="hsl(var(--primary))"
-                    style={{ cursor: "pointer" }}
-                    onClick={() => setGraphSelection({ kind: "base" })}
-                  />
-                  {variationDrafts.map((draft, index) => {
-                    const y = 48 + index * 34;
-                    const color = draft.color ?? VARIATION_COLORS[index % VARIATION_COLORS.length];
-                    const variationName = profileList.find((p) => p._id === draft.profileId)?.name ?? "Variation";
-                    return (
-                      <g
-                        key={`variation-link-${index}`}
-                        onClick={() => setGraphSelection({ kind: "variation", index })}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <path
-                          d={`M20 24 V${y} H68`}
-                          stroke={color}
-                          strokeWidth="1.75"
-                          strokeDasharray="4 4"
-                          fill="none"
-                        >
-                          <animate attributeName="stroke-dashoffset" from="8" to="0" dur="0.9s" repeatCount="indefinite" />
-                        </path>
-                        <circle cx="68" cy={y} r={graphSelection.kind === "variation" && graphSelection.index === index ? 6 : 5} fill={color} />
-                        <text x="80" y={y + 4} fontSize="9" fill="currentColor" className="text-foreground">
-                          {truncate(variationName, 28)}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
-
-              {selectedGraphPreview && (
-                <div className="rounded-md border bg-background p-2.5 text-xs">
-                  <p className="font-medium text-foreground">{selectedGraphPreview.title}</p>
-                  <p className="mt-1 truncate" style={{ color: selectedGraphPreview.color }}>
-                    {selectedGraphPreview.name} {selectedGraphPreview.version ? `v${selectedGraphPreview.version}` : ""}
-                  </p>
-                  <p className="mt-1 text-muted-foreground">
-                    {selectedGraphPreview.versionDocument
-                      ? (agentNameById.get(selectedGraphPreview.versionDocument.workerType) ?? "Unknown agent")
-                      : "worker: n/a"}{" "}
-                    · {selectedGraphPreview.versionDocument?.model ?? "model: n/a"}
-                  </p>
-                  <p className="mt-1 text-muted-foreground">
-                    {(selectedGraphPreview.versionDocument?.mcpServers?.length ?? 0)} MCP · {(selectedGraphPreview.versionDocument?.skillRevisions?.length ?? 0)} skills · {(selectedGraphPreview.versionDocument?.extensions?.length ?? 0)} extensions
-                    · {(selectedGraphPreview.versionDocument?.resources?.length ?? 0)} resources
-                  </p>
-                </div>
-              )}
-
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm">Variations</Label>
