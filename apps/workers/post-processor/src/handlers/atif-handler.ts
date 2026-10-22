@@ -35,7 +35,7 @@ export class AtifHandler implements PostProcessHandler {
     const { requestId, runId, iteration } = message;
 
     // Fetch the current document to get turn data
-    const doc = await ctx.collection.findOne({ _id: requestId } as any) as any;
+    const doc = await ctx.collection.findOne({ _id: requestId, "run._id": runId, "run.status": "done" } as any) as any;
     if (!doc?.run?.turns?.length) {
       await ctx.log("info", "No turns found, skipping ATIF generation");
       return;
@@ -84,7 +84,7 @@ export class AtifHandler implements PostProcessHandler {
 
         // Update the turn's atifUrl in the document
         await ctx.collection.updateOne(
-          { _id: requestId, "run.turns.iteration": turn.iteration } as any,
+          { _id: requestId, "run._id": runId, "run.status": "done", "run.turns.iteration": turn.iteration } as any,
           { $set: { "run.turns.$.atifUrl": trajectoryUrl } } as any,
         );
 
