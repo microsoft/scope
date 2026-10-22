@@ -545,6 +545,8 @@ export interface RunState {
   aiCallCount?: number;
   rawChatUrl?: string;
   rawChatFormat?: string;
+  /** Canonical run-scoped report-template IDs frozen for this exact attempt. */
+  reportTemplateIds?: string[];
   /** Per-handler post-processing status. Keys are handler IDs (e.g. "pp-atif"). */
   handlerStatus?: Record<string, HandlerRunStatus>;
   /** Whole-run observation results — one entry per selected `subject:"run"`
@@ -873,10 +875,16 @@ export interface StructuredReportArtifact {
 export interface ReportDocument {
   _id: string;           // UUID
   requestId?: string;    // FK → RequestDocument._id for run reports
+  runId?: string;        // Exact immutable run attempt for run reports
   experimentId?: string; // FK → ExperimentDocument._id for Experiment reports
   experimentExecutionId?: string; // Exact immutable Experiment execution
   projectId: string;     // FK → ProjectDocument._id (denormalized from request)
   templateId?: string;   // FK → ReportTemplateDocument.id (slug of template that generated this report)
+  templateVersionId?: string; // Exact immutable template version used
+  templateVersion?: number;
+  templateContentFingerprint?: string;
+  reportVersion?: number; // Append-only version within one logical exact-execution/template report
+  supersedesReportId?: string;
   reporter?: Reporter;   // Set by the worker when it picks up the job
   content?: string;      // Generated markdown report
   structuredArtifact?: StructuredReportArtifact;
@@ -919,12 +927,21 @@ export interface PromptFeatureTrigger {
   match?: "any" | "all";  // Default: "any"
 }
 
+/** Automatic Experiment trigger linked to exact run-template assignments. */
+export interface RunReportTemplatesTrigger {
+  type: "run-report-templates";
+  reportTemplateIds: string[];
+}
+
 /** Discriminated union of all report trigger types */
 export type ReportTrigger =
   | AlwaysTrigger
   | CriteriaTrigger
   | TaskPromptTrigger
-  | PromptFeatureTrigger;
+  | PromptFeatureTrigger
+  | RunReportTemplatesTrigger;
+
+export type ReportTemplateSubject = "run" | "experiment";
 
 /** System prompt customization for a report template */
 export interface ReportTemplateSystemPrompt {
@@ -937,6 +954,7 @@ export interface ReportTemplateDocument {
   _id: string;                           // Auto-generated UUID
   projectId: string;                     // FK → ProjectDocument._id (immutable scope)
   id: string;                            // Human-readable slug (e.g. "default", "failure-analysis")
+  subject: ReportTemplateSubject;
   name: string;                          // Display name
   description?: string;
   userPrompt: string;                    // REQUIRED — the instruction sent to the agent
@@ -944,9 +962,28 @@ export interface ReportTemplateDocument {
   trigger?: ReportTrigger;               // OPTIONAL — omit = always trigger
   model?: string;                        // OPTIONAL — LLM model override (falls back to REPORT_MODEL env var)
   timeoutMs?: number;                    // OPTIONAL — session timeout override in ms (falls back to SESSION_TIMEOUT_MS env var)
+  enabled: boolean;
+  currentVersionId: string;
+  currentVersion: number;
+  contentFingerprint: string;
   createdAt: Date;
   updatedAt?: Date;
   deletedAt?: Date;                      // Soft-delete timestamp
+}
+
+/** Immutable prompt/config revision for a stable report-template identity. */
+export interface ReportTemplateVersionDocument {
+  _id: string;
+  projectId: string;
+  templateId: string;
+  version: number;
+  contentFingerprint: string;
+  userPrompt: string;
+  systemPrompt?: ReportTemplateSystemPrompt;
+  trigger?: ReportTrigger;
+  model?: string;
+  timeoutMs?: number;
+  createdAt: Date;
 }
 
 // --- Insights System types ---

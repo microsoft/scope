@@ -24,6 +24,7 @@ export const QUALITY_FAMILIES = [
   "judge-instructions",
   "developer-feedback",
   "run-report",
+  "experiment-report",
 ] as const;
 
 export type QualityFamily = (typeof QUALITY_FAMILIES)[number];
@@ -221,6 +222,7 @@ const FAMILY_FILES: Record<QualityFamily, string> = {
   "judge-instructions": "judge.jsonl",
   "developer-feedback": "feedback.jsonl",
   "run-report": "reports.jsonl",
+  "experiment-report": "experiment-reports.jsonl",
 };
 
 const LEGACY_CRITERIA_BEHAVIORS: Record<string, { behavior: string; evidenceSource: string }> = {
@@ -259,6 +261,7 @@ const EVALUATORS: Record<QualityFamily, string[]> = {
   "judge-instructions": ["generation_success", "output_schema", "criterion_coverage", "judge_verdict", "groundedness", "task_adherence", "tool_call_accuracy"],
   "developer-feedback": ["generation_success", "output_schema", "non_empty_feedback", "forbidden_language", "no_questions", "descendant_leakage_check", "feedback_quality", "descendant_leakage", "relevance", "coherence", "groundedness", "task_adherence", "fluency", "intent_resolution"],
   "run-report": ["generation_success", "output_schema", "non_empty_report", "valid_markdown", "no_fabricated_references", "report_quality", "report_simulation_interpretation", "relevance", "coherence", "fluency", "groundedness", "task_adherence", "tool_call_accuracy"],
+  "experiment-report": ["generation_success", "output_schema", "non_empty_report", "valid_markdown", "no_fabricated_references", "report_quality", "relevance", "coherence", "fluency", "groundedness", "task_adherence"],
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -222,6 +222,8 @@ export function SubmitRun({
   const [agentsMd, setAgentsMd] = useState<string>("");
   const [experimentName, setExperimentName] = useState("");
   const [experimentDescription, setExperimentDescription] = useState("");
+  const [experimentReportTemplateIds, setExperimentReportTemplateIds] =
+    useState<string[]>([]);
   const [experimentDescriptionOpen, setExperimentDescriptionOpen] =
     useState(false);
 
@@ -282,6 +284,14 @@ export function SubmitRun({
     queryKey: ["profiles"],
     queryFn: () => api.listProfiles(),
   });
+  const { data: experimentReportTemplates = [] } = useQuery({
+    queryKey: ["report-templates", "experiment", "manual"],
+    queryFn: () => api.listReportTemplates({ subject: "experiment" }),
+    enabled: mode === "experiment",
+  });
+  const manualExperimentReportTemplates = experimentReportTemplates.filter(
+    (template) => !template.trigger,
+  );
 
   const { data: profileVersions = [] } = useQuery({
     queryKey: ["profile-versions", selectedProfileId],
@@ -693,6 +703,7 @@ export function SubmitRun({
                 ? { description: experimentDescription.trim() }
                 : {}),
             },
+            reportTemplateIds: experimentReportTemplateIds,
             ...(request ? { request } : { empty: true }),
           })
         : api.submitRun(request!),
@@ -959,6 +970,45 @@ export function SubmitRun({
                     }
                     placeholder="What this experiment compares and why"
                   />
+                </div>
+              )}
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Selectable reports</Label>
+              <p className="text-xs text-muted-foreground">
+                These manual templates become part of immutable revision 1.
+                Automatic Experiment reports do not need selection.
+              </p>
+              {manualExperimentReportTemplates.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No selectable Experiment report templates.
+                </p>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {manualExperimentReportTemplates.map((template) => (
+                    <label
+                      key={template.id}
+                      className="flex items-center gap-2 rounded-md border p-3 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={experimentReportTemplateIds.includes(
+                          template.id,
+                        )}
+                        onChange={() =>
+                          setExperimentReportTemplateIds((current) =>
+                            current.includes(template.id)
+                              ? current.filter((id) => id !== template.id)
+                              : [...current, template.id],
+                          )
+                        }
+                      />
+                      <span>{template.name}</span>
+                      <Badge variant="secondary">
+                        v{template.currentVersion}
+                      </Badge>
+                    </label>
+                  ))}
                 </div>
               )}
             </div>

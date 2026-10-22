@@ -17,7 +17,10 @@ import {
   promptFeatureAuthoringAdapter,
   promptFeatureExtractionAdapter,
 } from "./targets/prompt-features.js";
-import { reportAdapter } from "./targets/reports.js";
+import {
+  experimentReportAdapter,
+  reportAdapter,
+} from "./targets/reports.js";
 import {
   taskPromptGenerationAdapter,
   taskPromptVariationAdapter,
@@ -34,6 +37,7 @@ const adapters = [
   judgeAdapter,
   feedbackAdapter,
   reportAdapter,
+  experimentReportAdapter,
 ] satisfies PromptTargetAdapter[];
 
 const registry = new Map<QualityFamily, PromptTargetAdapter>(

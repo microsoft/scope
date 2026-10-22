@@ -56,6 +56,7 @@ import type {
   ExperimentView,
 } from "@/lib/experiments";
 import { formatDate, truncate } from "@/lib/utils";
+import type { ReportTemplate } from "@/types";
 
 const RUN_COLUMN_OPTIONS: CustomizeColumnsOption[] = [
   { id: "requestId", label: "ID", required: true },
@@ -213,6 +214,59 @@ function selectedExperimentView(
   };
 }
 
+function TemplateCategory({
+  title,
+  templates,
+  summaries,
+}: {
+  title: string;
+  templates: ReportTemplate[];
+  summaries: Record<string, unknown>;
+}) {
+  return (
+    <div>
+      <div className="mb-2 text-sm font-medium">{title}</div>
+      {templates.length === 0 ? (
+        <p className="text-sm text-muted-foreground">None configured.</p>
+      ) : (
+        <div className="space-y-2">
+          {templates.map((template) => {
+            const summary = summaries[template.id];
+            const status = handlerStatus(summary);
+            const detail =
+              summary && typeof summary === "object"
+                ? (summary as Record<string, unknown>)
+                : undefined;
+            const matchingRunCount =
+              typeof detail?.matchingRunCount === "number"
+                ? detail.matchingRunCount
+                : undefined;
+            return (
+              <div
+                key={template.id}
+                className="flex flex-wrap items-center gap-2 text-sm"
+              >
+                <span>{template.name}</span>
+                <Badge variant="secondary">v{template.currentVersion}</Badge>
+                <Badge variant="outline">{status ?? "not scheduled"}</Badge>
+                {matchingRunCount !== undefined && (
+                  <span className="text-muted-foreground">
+                    {matchingRunCount} matching run
+                    {matchingRunCount === 1 ? "" : "s"}
+                  </span>
+                )}
+                {handlerError(summary) && (
+                  <span className="text-destructive">{handlerError(summary)}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ExperimentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -220,6 +274,9 @@ export function ExperimentDetail() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(
+    new Set(),
+  );
   const selectedExecutionId = searchParams.get("executionId") ?? undefined;
   const selectedReportType = searchParams.get("reportType") ?? undefined;
   const selectedReportId =
@@ -257,6 +314,14 @@ export function ExperimentDetail() {
     queryKey: ["experiment-executions", id],
     queryFn: () => api.listExperimentExecutions(id!, { limit: 100 }),
     enabled: Boolean(id) && experimentQuery.isSuccess,
+  });
+  const templatesQuery = useQuery({
+    queryKey: ["report-templates", "experiment"],
+    queryFn: () =>
+      api.listReportTemplates({
+        subject: "experiment",
+        includeDisabled: true,
+      }),
   });
   const currentExecutionId =
     experimentQuery.data?.execution.experimentExecutionId;
@@ -308,6 +373,26 @@ export function ExperimentDetail() {
       toast.error(error instanceof Error ? error.message : "Retry failed");
     },
   });
+  const retryReport = useMutation({
+    mutationFn: (templateId: string) =>
+      api.retryExperimentReport(
+        experimentQuery.data!.experimentId,
+        experimentQuery.data!.execution.experimentExecutionId,
+        templateId,
+      ),
+    onSuccess: () => {
+      toast.success("Report retry queued");
+      void queryClient.invalidateQueries({
+        queryKey: ["experiment-reports", id],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["experiment", id] });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Report retry failed",
+      );
+    },
+  });
   const removeMembers = useMutation({
     mutationFn: () =>
       api.updateExperimentRequests("DELETE", experimentQuery.data!.experimentId, {
@@ -342,6 +427,62 @@ export function ExperimentDetail() {
       toast.error(error instanceof Error ? error.message : "Runs could not be removed");
     },
   });
+  const updateTemplates = useMutation({
+    mutationFn: () =>
+      api.updateExperimentReportTemplates(experimentQuery.data!.experimentId, {
+        expectedExperimentRevisionId:
+          experimentQuery.data!.revision.experimentRevisionId,
+        reportTemplateIds: [...selectedTemplateIds],
+      }),
+    onSuccess: (nextExperiment) => {
+      toast.success(
+        `Report configuration published as revision ${nextExperiment.revision.revisionNumber}`,
+      );
+      queryClient.setQueryData(["experiment", id], nextExperiment);
+      void queryClient.invalidateQueries({
+        queryKey: ["experiment-executions", id],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["experiments"] });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Report configuration could not be updated",
+      );
+    },
+  });
+
+  useEffect(() => {
+    setSelectedTemplateIds(
+      new Set(experimentQuery.data?.revision.reportTemplateIds ?? []),
+    );
+  }, [
+    experimentQuery.data?.revision.experimentRevisionId,
+    experimentQuery.data?.revision.reportTemplateIds,
+  ]);
+  const manualTemplates = useMemo(
+    () =>
+      (templatesQuery.data ?? []).filter(
+        (template: ReportTemplate) => !template.trigger,
+      ),
+    [templatesQuery.data],
+  );
+  const alwaysTemplates = useMemo(
+    () =>
+      (templatesQuery.data ?? []).filter(
+        (template: ReportTemplate) => template.trigger?.type === "always",
+      ),
+    [templatesQuery.data],
+  );
+  const linkedTemplates = useMemo(
+    () =>
+      (templatesQuery.data ?? []).filter(
+        (template: ReportTemplate) =>
+          template.trigger?.type === "run-report-templates",
+      ),
+    [templatesQuery.data],
+  );
 
   const attemptOptions = useMemo(() => {
     const byId = new Map<string, ExperimentExecutionView>();
@@ -970,7 +1111,14 @@ export function ExperimentDetail() {
               isBlocked={activeExecution.readiness === "blocked"}
               onReportTypeChange={selectReportType}
               onReportVersionChange={selectReportVersion}
-              onRetry={() => void reportsQuery.refetch()}
+              onRetry={() => {
+                const templateId = reportSelection?.report.templateId;
+                if (templateId && !isViewingHistorical) {
+                  retryReport.mutate(templateId);
+                  return;
+                }
+                void reportsQuery.refetch();
+              }}
             />
           </TabsContent>
 
@@ -991,6 +1139,76 @@ export function ExperimentDetail() {
               </Button>
             </div>
             <ExperimentStatusCard experiment={activeExperiment} />
+            {!isViewingHistorical && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Report templates</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <p className="text-sm text-muted-foreground">
+                    Changing selectable reports publishes a new immutable Experiment
+                    revision. Automatic reports run after the built-in readout.
+                  </p>
+                  <div>
+                    <div className="mb-2 text-sm font-medium">
+                      Selectable manual reports
+                    </div>
+                    <div className="space-y-2">
+                      {manualTemplates.map((template) => (
+                        <label
+                          key={template.id}
+                          className="flex items-center gap-2 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedTemplateIds.has(template.id)}
+                            disabled={!template.enabled}
+                            onChange={() =>
+                              setSelectedTemplateIds((current) => {
+                                const next = new Set(current);
+                                if (next.has(template.id)) next.delete(template.id);
+                                else next.add(template.id);
+                                return next;
+                              })
+                            }
+                          />
+                          <span>{template.name}</span>
+                          <Badge variant="secondary">v{template.currentVersion}</Badge>
+                          {!template.enabled && (
+                            <Badge variant="outline">Unavailable</Badge>
+                          )}
+                        </label>
+                      ))}
+                      {manualTemplates.length === 0 && (
+                        <p className="text-sm text-muted-foreground">
+                          No selectable Experiment report templates.
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      className="mt-3"
+                      size="sm"
+                      onClick={() => updateTemplates.mutate()}
+                      disabled={updateTemplates.isPending}
+                    >
+                      {updateTemplates.isPending
+                        ? "Publishing revision…"
+                        : "Publish report configuration"}
+                    </Button>
+                  </div>
+                  <TemplateCategory
+                    title="Automatic always"
+                    templates={alwaysTemplates}
+                    summaries={activeExecution.reportTemplates ?? {}}
+                  />
+                  <TemplateCategory
+                    title="Automatic linked-run"
+                    templates={linkedTemplates}
+                    summaries={activeExecution.reportTemplates ?? {}}
+                  />
+                </CardContent>
+              </Card>
+            )}
             <ExecutionSummary
               execution={activeExecution}
               current={!isViewingHistorical}

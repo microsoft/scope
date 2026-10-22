@@ -120,6 +120,7 @@ let taskPromptCollection: Collection<TaskPromptDocument>;
 let taskPromptStore: TaskPromptStore;
 let featureFlagCollection: Collection<FeatureFlagDocument>;
 let reportTemplateCollection: Collection<ReportTemplateDocument>;
+let reportTemplateVersionCollection: Collection<import("shared").ReportTemplateVersionDocument>;
 let skillCollection: Collection<SkillDocument>;
 let extensionCollection: Collection<ExtensionDocument>;
 let skillRevisionCollection: Collection<SkillRevisionDocument>;
@@ -184,6 +185,7 @@ async function initializeClients(): Promise<void> {
   taskPromptStore = new TaskPromptStore(taskPromptCollection, blobStorage);
   featureFlagCollection = db.collection<FeatureFlagDocument>("feature-flags");
   reportTemplateCollection = db.collection<ReportTemplateDocument>("report-templates");
+  reportTemplateVersionCollection = db.collection("report-template-versions");
   skillCollection = db.collection<SkillDocument>("skills");
   extensionCollection = db.collection<ExtensionDocument>("extensions");
   skillRevisionCollection = db.collection<SkillRevisionDocument>("skill-revisions");
@@ -311,6 +313,7 @@ const routeCtx: RouteContext = {
   get promptFeatureCollection() { return promptFeatureCollection; },
   get reportCollection() { return reportCollection; },
   get reportTemplateCollection() { return reportTemplateCollection; },
+  get reportTemplateVersionCollection() { return reportTemplateVersionCollection; },
   get agentCollection() { return agentCollection; },
   get modelCollection() { return modelCollection; },
   get mcpServerCollection() { return mcpServerCollection; },
@@ -480,6 +483,7 @@ export interface TestDependencies {
   taskPromptStore?: TaskPromptStore;
   featureFlagCollection?: Collection<FeatureFlagDocument>;
   reportTemplateCollection?: Collection<ReportTemplateDocument>;
+  reportTemplateVersionCollection?: Collection<import("shared").ReportTemplateVersionDocument>;
   skillCollection?: Collection<SkillDocument>;
   skillRevisionCollection?: Collection<SkillRevisionDocument>;
   skillRevisionStore?: SkillRevisionStore;
@@ -524,6 +528,7 @@ export function _injectTestDependencies(deps: TestDependencies): void {
   if (deps.taskPromptStore) taskPromptStore = deps.taskPromptStore;
   if (deps.featureFlagCollection) featureFlagCollection = deps.featureFlagCollection;
   if (deps.reportTemplateCollection) reportTemplateCollection = deps.reportTemplateCollection;
+  if (deps.reportTemplateVersionCollection) reportTemplateVersionCollection = deps.reportTemplateVersionCollection;
   if (deps.skillCollection) skillCollection = deps.skillCollection;
   if (deps.skillRevisionCollection) skillRevisionCollection = deps.skillRevisionCollection;
   if (deps.skillRevisionStore) skillRevisionStore = deps.skillRevisionStore;

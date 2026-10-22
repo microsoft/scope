@@ -57,13 +57,22 @@ withProjectOption(withOutputOption(
 reportTemplate
   .command("list")
   .description("List all report templates")
+  .option("--subject <subject>", "Filter by subject: run or experiment")
+  .option("--include-disabled", "Include disabled templates")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
 ))
   .action(async (options) => {
     const format = (options.output || 'table') as OutputFormat;
     const projectId = requireProjectId(options.project);
     try {
-      const response = await apiFetch(options.url, `/report-templates`, { projectId });
+      const params = new URLSearchParams();
+      if (options.subject) params.set("subject", options.subject);
+      if (options.includeDisabled) params.set("includeDisabled", "true");
+      const response = await apiFetch(
+        options.url,
+        `/report-templates${params.size ? `?${params}` : ""}`,
+        { projectId },
+      );
 
       if (!response.ok) {
         const error = await response.json();
@@ -90,6 +99,9 @@ reportTemplate
       const displayFields: DisplayField[] = [
         { key: 'id', label: 'ID', tableFormatter: (t: any) => value(t.id) },
         { key: 'name', label: 'Name' },
+        { key: 'subject', label: 'Subject' },
+        { key: 'enabled', label: 'Enabled' },
+        { key: 'currentVersion', label: 'Version' },
         { key: 'trigger', label: 'Trigger', formatter: (t: any) => t.trigger?.type ?? 'always' },
         { key: 'systemPrompt', label: 'SysPrompt', formatter: (t: any) => t.systemPrompt ? t.systemPrompt.mode : '—' },
         { key: 'userPrompt', label: 'UserPrompt', formatter: (t: any) => {
@@ -175,18 +187,63 @@ reportTemplate
     }
   });
 
+withProjectOption(withOutputOption(
+reportTemplate
+  .command("versions")
+  .description("List immutable versions of a report template")
+  .requiredOption("-i, --id <id>", "Report template ID (slug)")
+  .option("--version <versionId>", "Get one exact immutable version")
+  .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
+))
+  .action(async (options) => {
+    try {
+      const projectId = requireProjectId(options.project);
+      const suffix = options.version
+        ? `/versions/${encodeURIComponent(options.version)}`
+        : "/versions";
+      const response = await apiFetch(
+        options.url,
+        `/report-templates/${encodeURIComponent(options.id)}${suffix}`,
+        { projectId },
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        console.error(errorText("Error:"), error.error || JSON.stringify(error));
+        process.exitCode = 1;
+        return;
+      }
+      const result = await response.json();
+      const items = Array.isArray(result) ? result : [result];
+      console.log(formatData(
+        items,
+        [
+          { key: "_id", label: "Version ID" },
+          { key: "version", label: "Version" },
+          { key: "contentFingerprint", label: "Fingerprint" },
+          { key: "createdAt", label: "Created" },
+        ],
+        (options.output || "table") as OutputFormat,
+      ));
+    } catch (error) {
+      console.error(errorText("Error:"), error instanceof Error ? error.message : error);
+      process.exitCode = 1;
+    }
+  });
+
 reportTemplate
   .command("create")
   .description("Create a new report template")
   .requiredOption("--id <id>", "Template ID slug (lowercase, hyphens)")
   .requiredOption("--name <name>", "Display name for the template")
   .requiredOption("--user-prompt <prompt>", "User prompt (the instruction for the report agent)")
+  .option("--subject <subject>", "Template subject: run or experiment", "run")
+  .option("--disabled", "Create the template disabled")
   .option("--description <desc>", "Optional description")
   .option("--system-prompt-mode <mode>", "System prompt mode: append or override")
   .option("--system-prompt-content <content>", "System prompt content")
   .option("--model <model>", "LLM model to use for this template (overrides global REPORT_MODEL)")
   .option("--timeout-ms <ms>", "Session timeout in milliseconds (overrides global SESSION_TIMEOUT_MS)")
-  .option("--trigger-type <type>", "Trigger type: always, criteria, taskPrompt, promptFeature")
+  .option("--trigger-type <type>", "Trigger type: always, criteria, taskPrompt, promptFeature, run-report-templates")
   .option("--trigger-ids <ids...>", "Trigger IDs (criteria IDs, task prompt IDs, or feature IDs)")
   .option("--trigger-match <match>", "Trigger match mode: any or all (default: all)")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
@@ -198,6 +255,8 @@ reportTemplate
         id: options.id,
         name: options.name,
         userPrompt: options.userPrompt,
+        subject: options.subject,
+        enabled: !options.disabled,
       };
       if (options.description) body.description = options.description;
       if (options.model) body.model = options.model;
@@ -218,6 +277,8 @@ reportTemplate
         } else if (options.triggerType === 'promptFeature' && options.triggerIds) {
           trigger.featureIds = options.triggerIds;
           if (options.triggerMatch) trigger.match = options.triggerMatch;
+        } else if (options.triggerType === 'run-report-templates' && options.triggerIds) {
+          trigger.reportTemplateIds = options.triggerIds;
         }
         body.trigger = trigger;
       }
@@ -254,7 +315,8 @@ reportTemplate
   .option("--system-prompt-content <content>", "System prompt content")
   .option("--model <model>", "LLM model to use for this template (overrides global REPORT_MODEL)")
   .option("--timeout-ms <ms>", "Session timeout in milliseconds (overrides global SESSION_TIMEOUT_MS)")
-  .option("--trigger-type <type>", "New trigger type: always, criteria, taskPrompt, promptFeature")
+  .option("--enabled <enabled>", "Enable or disable the template (true/false)")
+  .option("--trigger-type <type>", "New trigger type: always, criteria, taskPrompt, promptFeature, run-report-templates")
   .option("--trigger-ids <ids...>", "Trigger IDs")
   .option("--trigger-match <match>", "Trigger match mode: any or all")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
@@ -268,6 +330,7 @@ reportTemplate
       if (options.userPrompt !== undefined) body.userPrompt = options.userPrompt;
       if (options.model !== undefined) body.model = options.model;
       if (options.timeoutMs !== undefined) body.timeoutMs = Number(options.timeoutMs);
+      if (options.enabled !== undefined) body.enabled = options.enabled === "true";
       if (options.systemPromptMode && options.systemPromptContent) {
         body.systemPrompt = {
           mode: options.systemPromptMode,
@@ -284,6 +347,8 @@ reportTemplate
         } else if (options.triggerType === 'promptFeature' && options.triggerIds) {
           trigger.featureIds = options.triggerIds;
           if (options.triggerMatch) trigger.match = options.triggerMatch;
+        } else if (options.triggerType === 'run-report-templates' && options.triggerIds) {
+          trigger.reportTemplateIds = options.triggerIds;
         }
         body.trigger = trigger;
       }

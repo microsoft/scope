@@ -237,6 +237,7 @@ def render_response(family: str, output: Any, raw_response: str) -> str:
         "judge-instructions": ("results", "verdicts", "evaluation"),
         "developer-feedback": ("feedback", "text", "message"),
         "run-report": ("markdown", "report", "content"),
+        "experiment-report": ("markdown", "report", "content"),
     }
     for path in preferred_paths.get(family, ()):
         candidate = get_path(output, path)

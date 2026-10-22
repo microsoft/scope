@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Run, RunState, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ResourceDocument, ResourceRevisionDocument, ResourceBindingSpec, CreateResourceBody, CreateResourceRevisionBody, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir, CriterionKind, TaxonomyElementId, CriterionSubject } from "@/types";
+import type { Run, RunState, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTemplateVersion, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ResourceDocument, ResourceRevisionDocument, ResourceBindingSpec, CreateResourceBody, CreateResourceRevisionBody, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir, CriterionKind, TaxonomyElementId, CriterionSubject } from "@/types";
 
 import type { Project, CreateProjectRequest, UpdateProjectRequest } from "@/types";
 import { qs } from "./url";
@@ -275,7 +275,7 @@ export const api = {
   },
 
   createExperiment: async (
-    body: { metadata: ExperimentMetadataView } & (
+    body: { metadata: ExperimentMetadataView; reportTemplateIds?: string[] } & (
       | { request: RunCreateInput; empty?: never }
       | { empty: true; request?: never }
     ),
@@ -296,6 +296,7 @@ export const api = {
           mode: "empty" in body ? "empty" : "compose",
           metadata: body.metadata,
           requests: requestBody ? [requestBody] : [],
+          reportTemplateIds: body.reportTemplateIds ?? [],
         }),
       },
       { scoped: true },
@@ -309,6 +310,7 @@ export const api = {
   createExperimentFromRuns: async (body: {
     metadata: ExperimentMetadataView;
     requestIds: string[];
+    reportTemplateIds?: string[];
   }): Promise<ExistingRunExperimentCreateView> => {
     const value = await request<unknown>(
       "/experiments",
@@ -319,6 +321,7 @@ export const api = {
           metadata: body.metadata,
           requests: [],
           requestIds: body.requestIds,
+          reportTemplateIds: body.reportTemplateIds ?? [],
         }),
       },
       { scoped: true },
@@ -367,6 +370,21 @@ export const api = {
       attachedRequestIds: value.attachedRequestIds,
       detachedRequestIds: value.detachedRequestIds,
     };
+  },
+
+  updateExperimentReportTemplates: async (
+    id: string,
+    body: {
+      expectedExperimentRevisionId: string;
+      reportTemplateIds: string[];
+    },
+  ): Promise<ExperimentView> => {
+    const value = await request<unknown>(
+      `/experiments/${encodeURIComponent(id)}/report-templates`,
+      { method: "PUT", body: JSON.stringify(body) },
+      { scoped: true },
+    );
+    return parseExperiment(value);
   },
 
   listExperiments: async (opts?: {
@@ -477,6 +495,17 @@ export const api = {
       attemptNumber: value.attemptNumber,
     };
   },
+
+  retryExperimentReport: (
+    id: string,
+    experimentExecutionId: string,
+    templateId: string,
+  ): Promise<Report> =>
+    request(
+      `/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(experimentExecutionId)}/reports/${encodeURIComponent(templateId)}/retry`,
+      { method: "POST" },
+      { scoped: true },
+    ),
 
   /** Soft-delete a run */
   deleteRun: (id: string): Promise<{
@@ -1044,13 +1073,24 @@ export const api = {
   },
 
   /** List all report templates */
-  listReportTemplates: (): Promise<ReportTemplate[]> => {
-    return request("/report-templates", undefined, { scoped: true });
+  listReportTemplates: (options?: {
+    subject?: "run" | "experiment";
+    includeDisabled?: boolean;
+  }): Promise<ReportTemplate[]> => {
+    return request(`/report-templates${qs({
+      subject: options?.subject,
+      includeDisabled: options?.includeDisabled ? "true" : undefined,
+    })}`, undefined, { scoped: true });
   },
 
   /** Get a single report template by slug ID */
   getReportTemplate: (id: string): Promise<ReportTemplate> => {
     return request(`/report-templates/${id}`, undefined, { scoped: true });
+  },
+
+  /** List immutable content versions for a report template */
+  listReportTemplateVersions: (id: string): Promise<ReportTemplateVersion[]> => {
+    return request(`/report-templates/${id}/versions`, undefined, { scoped: true });
   },
 
   /** List models available for report generation */
@@ -1061,6 +1101,7 @@ export const api = {
   /** Create a new report template */
   createReportTemplate: (body: {
     id: string;
+    subject: "run" | "experiment";
     name: string;
     userPrompt: string;
     description?: string;
@@ -1068,6 +1109,7 @@ export const api = {
     trigger?: ReportTrigger;
     model?: string;
     timeoutMs?: number;
+    enabled?: boolean;
   }): Promise<ReportTemplate> => {
     return request("/report-templates", {
       method: "POST",
@@ -1084,6 +1126,7 @@ export const api = {
     trigger?: ReportTrigger | null;
     model?: string | null;
     timeoutMs?: number | null;
+    enabled?: boolean;
   }): Promise<ReportTemplate> => {
     return request(`/report-templates/${id}`, {
       method: "PUT",

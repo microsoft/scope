@@ -105,6 +105,166 @@ afterEach(() => {
 });
 
 describe("ExperimentCoordinator", () => {
+  it("queues ready Experiment reports independently from unused linked templates", async () => {
+    const requestState: ExperimentRequestState = {
+      requestId: "request-1",
+      runId: "run-1",
+      dependencies: [],
+      blockers: [],
+    };
+    const initial = experiment([requestState], {
+      handlerSummary: {
+        "pp-readout": {
+          status: "done",
+          version: 1,
+          updatedAt: now,
+        },
+      },
+      reportTemplates: {},
+      report: {
+        reportId: "readout-1",
+        url: "/api/v1/reports/readout-1",
+        updatedAt: now,
+      },
+    });
+    initial.revision.reportTemplateIds = [];
+    const always = {
+      _id: "always",
+      projectId: "project-1",
+      id: "always",
+      subject: "experiment",
+      name: "Always",
+      userPrompt: "Summarize",
+      trigger: { type: "always" as const },
+      enabled: true,
+      currentVersionId: "always:v1",
+      currentVersion: 1,
+      contentFingerprint: "always-fingerprint",
+      createdAt: now,
+    };
+    const linked = {
+      ...always,
+      _id: "linked",
+      id: "linked",
+      name: "Linked",
+      trigger: {
+        type: "run-report-templates" as const,
+        reportTemplateIds: ["security"],
+      },
+      currentVersionId: "linked:v1",
+      contentFingerprint: "linked-fingerprint",
+    };
+    const insertOne = vi.fn().mockResolvedValue({ acknowledged: true });
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(
+      ExperimentStore.prototype,
+      "updateReportTemplateSummaries",
+    ).mockImplementation(async (input) => {
+      const next = structuredClone(initial);
+      next.execution.version = 2;
+      next.execution.reportTemplates = input.summaries;
+      return next;
+    });
+    const coordinator = new ExperimentCoordinator(
+      {
+        requests: {} as Collection<RequestDocument>,
+        experiments: {} as Collection<ExperimentDocument>,
+        executions: {} as Collection<ExperimentExecutionHistoryDocument>,
+        chunks: {} as Collection,
+        services: {
+          find: vi.fn().mockReturnValue(
+            cursor([
+              {
+                _id: "pp-readout",
+                type: "experiment-handler",
+                version: 1,
+                queue: "queue-readout",
+                selector: "readout",
+                autoBackfill: false,
+                dependsOn: [],
+                dependencyMode: "all-runs",
+              },
+            ]),
+          ),
+        } as unknown as Collection<ServiceHandlerDocument>,
+        reportTemplates: {
+          find: vi.fn().mockReturnValue(cursor([always, linked])),
+        } as unknown as Collection,
+        reportTemplateVersions: {} as Collection,
+        reports: {
+          insertOne,
+          findOne: vi.fn(),
+        } as unknown as Collection,
+      },
+      enqueue,
+    );
+    const request = {
+      _id: "request-1",
+      projectId: "project-1",
+      scenario: { task: "task", criteria: [] },
+      workerType: "worker",
+      createdAt: now,
+      taskPromptId: "prompt",
+      priority: 0,
+      run: {
+        _id: "run-1",
+        attemptNumber: 1,
+        status: "done",
+        logsUrl: "https://logs",
+        reportTemplateIds: [],
+      },
+    } as RequestDocument;
+
+    const dispatched = await (
+      coordinator as unknown as {
+        dispatchReadyReportTemplates(
+          experiment: ExperimentDocument,
+          requests: readonly ExperimentRequestState[],
+          requestById: ReadonlyMap<string, RequestDocument>,
+        ): Promise<boolean>;
+      }
+    ).dispatchReadyReportTemplates(
+      initial,
+      [requestState],
+      new Map([[request._id, request]]),
+    );
+
+    expect(dispatched).toBe(true);
+    expect(insertOne).toHaveBeenCalledTimes(1);
+    expect(insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: expect.stringMatching(/^experiment-report-/),
+        templateId: "always",
+        templateVersionId: "always:v1",
+        reportVersion: 1,
+      }),
+    );
+    expect(
+      vi.mocked(ExperimentStore.prototype.updateReportTemplateSummaries).mock
+        .calls[0]?.[0].summaries,
+    ).toMatchObject({
+      always: { status: "queued", blockers: [] },
+      linked: {
+        status: "not-applicable",
+        blockers: [
+          {
+            runTemplateId: "security",
+            reason: "run-template-unused",
+          },
+        ],
+      },
+    });
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: "pp-readout" }),
+      expect.objectContaining({
+        type: "experiment-report",
+        templateId: "always",
+        templateVersionId: "always:v1",
+      }),
+    );
+  });
+
   it("projects authoritative run status and dispatches an exact execution message", async () => {
     const initialRequest: ExperimentRequestState = {
       requestId: "request-1",

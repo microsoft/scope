@@ -50,6 +50,7 @@ import type {
   FeatureFlagResponseSchema,
   ReportTriggerSchema,
   ReportTemplateResponseSchema,
+  ReportTemplateVersionDocument,
   RequestResponseSchema,
   RunHistoryDocumentSchema,
   ExperimentDocument,
@@ -72,8 +73,7 @@ export type ExtensionDocument = z.infer<typeof ExtensionResponseSchema>;
 export type FeatureFlagDocument = z.infer<typeof FeatureFlagResponseSchema>;
 
 export type ReportTrigger = z.infer<typeof ReportTriggerSchema>;
-// Omit _id — MongoDB auto-generates it; the document type only uses `id`
-export type ReportTemplateDocument = Omit<z.infer<typeof ReportTemplateResponseSchema>, "_id">;
+export type ReportTemplateDocument = z.infer<typeof ReportTemplateResponseSchema>;
 export type RequestDocument = z.infer<typeof RequestResponseSchema>;
 export type RunHistoryDocument = z.infer<typeof RunHistoryDocumentSchema>;
 export type WorkerType = string;
@@ -101,6 +101,7 @@ export interface RouteContext {
   promptFeatureCollection: Collection<PromptFeatureDocument>;
   reportCollection: Collection<ReportDocument>;
   reportTemplateCollection: Collection<ReportTemplateDocument>;
+  reportTemplateVersionCollection: Collection<ReportTemplateVersionDocument>;
   agentCollection: Collection<CodingAgentDocument>;
   modelCollection: Collection<ModelDocument>;
   mcpServerCollection: Collection<McpServerDocument>;
