@@ -447,16 +447,15 @@ When set to `"true"`, displays the Pass@k metrics table on the Insights page. By
 
 ## Portal Authentication (Microsoft Entra ID / MSAL)
 
-Build-time (`VITE_*`) configuration for Portal sign-in via MSAL. These are
-inlined into the bundle at build time (retargeting the IdP is a rebuild, not a
-runtime change), matching the auth spec's "hardcoded per build" intent
-(`docs/architecture/auth-rbac.md` §8, subtask 10).
+Portal sign-in uses public MSAL settings from runtime `SCOPE_AUTH_*` variables
+when supplied. Build-time `VITE_AUTH_*` settings remain as a fallback for local
+development and direct builds; no API config fetch is involved.
 
 In **dev** builds (`import.meta.env.DEV`) every value defaults to the seeded
 [entra-local](https://github.com/cmaneu/entra-local) emulator (Docker tag
 `0.0.3`), so sign-in works out of the box once the one-time local setup below is
 done. In **production** builds the config is only considered valid when
-`VITE_AUTH_CLIENT_ID` and `VITE_AUTH_AUTHORITY` are present; otherwise the Portal
+client ID, authority, and API scopes are present; otherwise the Portal
 renders a "not configured" screen instead of silently pointing at `localhost`.
 
 **Docker builds:** the Portal Dockerfile accepts `VITE_AUTH_CLIENT_ID`,
@@ -464,7 +463,8 @@ renders a "not configured" screen instead of silently pointing at `localhost`.
 `VITE_AUTH_PROTOCOL_MODE`, `VITE_AUTH_REDIRECT_URI`,
 `VITE_AUTH_POST_LOGOUT_REDIRECT_URI`, and `VITE_AUTH_CACHE_LOCATION` as build
 arguments in its `builder` stage. Vite embeds them during `pnpm --filter portal
-build`; setting these variables only on the final nginx container has no effect.
+build`; the runtime `SCOPE_AUTH_CLIENT_ID`, `SCOPE_AUTH_AUTHORITY`, and
+`SCOPE_AUTH_SCOPES` override the corresponding embedded settings.
 These are public client settings, not secrets; never pass client secrets or
 access tokens as Portal build arguments.
 
@@ -486,9 +486,13 @@ access tokens as Portal build arguments.
     --build-arg VITE_AUTH_SCOPES="api://<api-client-id>/access_as_user" .
   ```
 
-Rebuild and recreate the Portal after changing IdP settings. A single image
-promoted between environments retains the same IdP settings; only
-`SCOPE_AUTH_ENABLED` remains a runtime auth switch. Empty optional redirect
+Set `SCOPE_AUTH_CLIENT_ID`, `SCOPE_AUTH_AUTHORITY`, and `SCOPE_AUTH_SCOPES` on
+the final nginx container to retarget a promoted image without rebuilding it.
+The entrypoint writes these into `/config.js` as public client metadata; unset
+values fall back to the build only when all three runtime settings are absent.
+When any is supplied, provide the complete triplet; missing or empty members
+trigger the not-configured screen. Scopes use the same comma-separated
+format as `VITE_AUTH_SCOPES`. Empty optional redirect
 arguments retain the current Portal origin, while empty protocol/cache settings
 retain their documented defaults. For Entra cloud through local Compose, also
 set `VITE_AUTH_PROTOCOL_MODE=AAD` and `VITE_AUTH_KNOWN_AUTHORITIES=` to override
@@ -633,6 +637,15 @@ sign in with a seeded user (`alice@entralocal.dev` / `bob@entralocal.dev`).
 > (`ENTRA_LOCAL_PORT` base is `8500`). The compose files inject the resolved
 > `VITE_AUTH_AUTHORITY`/`VITE_AUTH_KNOWN_AUTHORITIES` into the Portal dev
 > container so the browser always targets the correct per-worktree emulator.
+
+### SCOPE_AUTH_CLIENT_ID, SCOPE_AUTH_AUTHORITY, SCOPE_AUTH_SCOPES
+
+**Scope:** Portal nginx container at runtime. These optional public OAuth
+settings are written into `/config.js` at startup and override the matching
+`VITE_AUTH_*` build values as one complete set. Provide the SPA client ID,
+Entra authority URL, and comma-separated API scopes for an environment. An
+explicitly empty value is treated as missing configuration, not as a request to
+use the build fallback.
 
 ### VITE_AUTH_CLIENT_ID
 **Default (dev):** `cccccccc-0000-0000-0000-000000000001` (entra-local seeded "Sample SPA" app)
@@ -1053,7 +1066,7 @@ not used by API verification and not served by an `/auth/config` endpoint.
 **Type:** string (GUID)
 
 Reserved client-configuration metadata; not used by API verification. The current
-Portal uses build-time `VITE_AUTH_CLIENT_ID`, not this API setting or an
+Portal uses runtime `SCOPE_AUTH_CLIENT_ID` or build-time `VITE_AUTH_CLIENT_ID`, not this API setting or an
 `/auth/config` endpoint.
 
 ### AUTH_SCOPES
@@ -1062,7 +1075,8 @@ Portal uses build-time `VITE_AUTH_CLIENT_ID`, not this API setting or an
 
 Scopes intended for clients acquiring an API access token
 (e.g. `api://<AUTH_API_CLIENT_ID>/access`). Not consumed by API verification or
-served by a config endpoint; configure the current Portal through `VITE_AUTH_SCOPES`.
+served by a config endpoint; configure the Portal through runtime
+`SCOPE_AUTH_SCOPES` or build-time `VITE_AUTH_SCOPES`.
 
 ### AUTH_BOOTSTRAP_ADMINS
 **Default:** (empty)
