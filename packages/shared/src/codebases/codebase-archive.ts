@@ -331,10 +331,12 @@ export async function normalizeToRootTarGz(
     }
 
     const fileCount = countFiles(rootDir);
-    const topLevel = readdirSync(rootDir).filter((n) => n !== "." && n !== "..");
 
+    // Archive the directory itself (`.`) so hidden files and folders
+    // (.env, .github, .gitignore) stay in the snapshot. Passing an
+    // explicit readdir list is easy to get wrong on some platforms.
     const outPath = join(workDir, "normalized.tar.gz");
-    await tar.create({ gzip: true, file: outPath, cwd: rootDir }, topLevel);
+    await tar.create({ gzip: true, file: outPath, cwd: rootDir }, ["."]);
 
     const data = readFileSync(outPath);
     return { data, fileCount, sizeBytes: statSync(outPath).size };
