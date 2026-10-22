@@ -164,6 +164,21 @@ describe("McpGatewayClient", () => {
       });
     });
 
+    it.each([
+      ["npx", ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"], ["-y", "@modelcontextprotocol/server-filesystem@1.2.3", "/workspace"]],
+      ["uvx", ["mcp-server-time"], ["mcp-server-time@1.2.3"]],
+      ["npx", ["-y", "server-tools@0.9.0", "/workspace"], ["-y", "server-tools@1.2.3", "/workspace"]],
+    ])("pins the %s package without changing the server name", async (command, args, expectedArgs) => {
+      mockFetch.mockResolvedValueOnce(okResponse());
+
+      await client.registerServer({ slug: "time", name: "Time", type: "stdio", command, args, version: "1.2.3" });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.name).toBe("time");
+      expect(body.args).toEqual(expectedArgs);
+      expect(args).not.toEqual(expectedArgs);
+    });
+
     it("omits env from stdio body when empty", async () => {
       mockFetch.mockResolvedValueOnce(okResponse());
 
