@@ -647,6 +647,11 @@ reusable badge components provide a consistent **hover-to-preview + click-to-nav
 | `components/TaskPromptBadge.tsx` | Task prompt (any type) | `/task-prompts/:id` | Type label, text snippet, list of detected features, created date, **Open details** button |
 | `components/AgentBadge.tsx` | Coding agent | `/agents/:id` | Registry name, internal ID, deleted state, version, **View agent** button |
 
+The Criteria management graph lays out only criteria with a visible dependency
+edge. Criteria without a parent or child in the current gate filter appear in a
+linked **Independent criteria** list below the graph, so they remain accessible
+without widening the DAG canvas.
+
 Both follow the same rules:
 
 - **Self-contained tooltip.** Each wraps its trigger in a Radix `Tooltip` (a local
