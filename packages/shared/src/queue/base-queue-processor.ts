@@ -480,7 +480,11 @@ export abstract class BaseQueueProcessor<TDocument extends { _id: string } = any
         visibilityTimeoutSeconds,
       );
     } catch (error) {
-      console.warn(`[${this.workerName}] Failed to re-defer queue message (will resurface on its own): ${error}`);
+      console.warn(`[${this.workerName}] Failed to re-defer queue message (will resurface on its own): ${error}`, {
+        event: "defer_failed",
+        messageId,
+        queueName: this.config.queueName,
+      });
     }
   }
 
