@@ -48,11 +48,15 @@ API level; run state lives on the request.
 
 ## Submit a request
 
+Every submission must name its project with `?projectId=<project-uuid>`.
+Use `GET /api/v1/projects` to find the project UUID. Scope does not choose a
+default project for API callers; omitting it returns HTTP 400.
+
 Minimum payload — a task prompt (as text), a list of criteria IDs,
 and an inline runtime configuration:
 
 ```http
-POST /api/v1/requests
+POST /api/v1/requests?projectId=your-project-id
 Content-Type: application/json
 
 {
@@ -79,7 +83,7 @@ themselves live in `/api/v1/criteria`. See
 Or submit using a saved profile (recommended for reproducibility):
 
 ```http
-POST /api/v1/requests
+POST /api/v1/requests?projectId=your-project-id
 Content-Type: application/json
 
 {
@@ -152,11 +156,26 @@ configuration, and the current `run` (with `attemptNumber`, `status`,
 `outcome`, `turns`, …).
 
 ```http
-GET /api/v1/requests
+GET /api/v1/requests?projectId=your-project-id
 ```
 
 Lists requests. Supports query parameters for filtering, search, and
 pagination (see Swagger for the full set).
+
+## Migrating existing API clients
+
+Project scoping changed the contract for submissions and top-level lists of
+requests, criteria, profiles, codebases, and other project catalogs. Add
+`?projectId=<project-uuid>` to these operations before upgrading; a missing
+project returns HTTP 400. By-ID calls on human catalog slugs also need the
+project. Nested calls under a request can derive it from that request.
+
+The legacy `promptFeatureExtractionId` submit field and response property
+were removed, and the `prompt-feature-extractions` collection was dropped.
+Remove the field from submit payloads and read prompt-feature results from
+task-prompt data instead. The current submit schema strips unknown input
+fields, so sending the removed field does not produce an error but has no
+effect.
 
 ## Retry
 
