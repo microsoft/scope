@@ -547,7 +547,7 @@ export const api = {
     return request("/prompt-features/generate-prompt", {
       method: "POST",
       body: JSON.stringify({ behavior, ...(currentId && { currentId }) }),
-    });
+    }, { scoped: true });
   },
 
   // ─── Task Prompts ──────────────────────────────────────────────────────────
@@ -591,7 +591,7 @@ export const api = {
     return request("/task-prompts/generate", {
       method: "POST",
       body: JSON.stringify(opts),
-    });
+    }, { scoped: true });
   },
 
   /** Extract prompt features for a task prompt entity */
@@ -608,7 +608,7 @@ export const api = {
     return request(`/prompt-features/extract-from-text`, {
       method: "POST",
       body: JSON.stringify({ text, ...(opts?.model && { model: opts.model }) }),
-    });
+    }, { scoped: true });
   },
 
   /** Toggle a single feature's detected status on a task prompt */

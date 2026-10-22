@@ -205,6 +205,15 @@ the app layer (scoped `findOrCreate` / existence checks) — which is *why* edit
 first and then write by its real `_id`. See `db.md` for the index details. This invariant is
 recorded so future routes and entities keep obeying it; see also `criteria-provider.md`.
 
+The same rule covers **context lookups that feed an LLM**. The AI helpers
+(`POST /api/v1/task-prompts/generate`, `POST /api/v1/task-prompts/:id/extract-features`,
+`POST /api/v1/criteria/generate-prompt`, `POST /api/v1/prompt-features/generate-prompt` and
+`POST /api/v1/prompt-features/extract-from-text`) load existing prompts, criteria or feature
+definitions as model input. Every such query filters by the authorized project: the required
+`?projectId=` for collection-level helpers, or the loaded task prompt's own `projectId` for
+`/:id/extract-features`. They never fall back to an unscoped query, so one project's data cannot
+reach another project's LLM input or the results persisted from it.
+
 A bounded audit brought every project-scoped catalog under this rule. Besides mcp-servers, skills,
 extensions, criteria, and prompt-features (whose resolvers now take a required `projectId`),
 **`report-templates`** by-id `GET/PUT/DELETE /:id` were switched from a global `{ id }` filter to

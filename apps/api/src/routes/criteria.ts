@@ -19,7 +19,7 @@ import { computeMdp } from "../criteria-mdp.js";
 import type { MdpAnalyzableRun } from "../criteria-mdp.js";
 import { generateCriteriaPrompt, isLlmAvailable } from "../llm.js";
 import { isInferenceError } from "../llm-token.js";
-import { ProjectIdQuerySchema, OptionalProjectIdQuerySchema, getQueryProjectId, getOptionalQueryProjectId } from "../utils/project-scope.js";
+import { ProjectIdQuerySchema, getQueryProjectId } from "../utils/project-scope.js";
 
 /**
  * Map a thrown {@link CriteriaStoreError} to an HTTP response. Returns true when
@@ -60,7 +60,7 @@ apiRoute(ctx.app, ctx.registry, {
   path: "/api/v1/criteria/generate-prompt",
   tags: ["Criteria"],
   summary: "Generate criterion prompt from behavior",
-  query: OptionalProjectIdQuerySchema,
+  query: ProjectIdQuerySchema,
   body: z.object({
     behavior: z.string(),
     currentId: z.string().optional(),
@@ -88,9 +88,8 @@ apiRoute(ctx.app, ctx.registry, {
       return;
     }
 
-    const generateProjectId = getOptionalQueryProjectId(req);
     const allCriteria = await ctx.criteriaCollection
-      .find({ ...(generateProjectId ? { projectId: generateProjectId } : {}), deletedAt: { $exists: false } })
+      .find({ projectId: getQueryProjectId(req), deletedAt: { $exists: false } })
       .project({ id: 1, prompt: 1, dependsOn: 1, gates: 1, _id: 0 })
       .toArray();
 
@@ -307,8 +306,9 @@ apiRoute(ctx.app, ctx.registry, {
       : undefined;
     const sinceDate = req.query.since ? new Date(req.query.since) : undefined;
 
+    const mdpProjectId = getQueryProjectId(req);
     const mdpFilter: Record<string, unknown> = {
-      projectId: getQueryProjectId(req),
+      projectId: mdpProjectId,
       "run.status": "done",
       deletedAt: { $exists: false },
     };
@@ -340,7 +340,7 @@ apiRoute(ctx.app, ctx.registry, {
     >();
     if (taskPromptIds.length > 0) {
       const taskPrompts = await ctx.taskPromptCollection
-        .find({ _id: { $in: taskPromptIds } })
+        .find({ _id: { $in: taskPromptIds }, projectId: mdpProjectId })
         .project({ _id: 1, features: 1 })
         .toArray();
       for (const tp of taskPrompts) {
