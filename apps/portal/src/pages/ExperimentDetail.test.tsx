@@ -37,6 +37,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getExperimentExecution: vi.fn(),
       listExperimentReports: vi.fn(),
       retryExperiment: vi.fn(),
+      updateExperimentRequests: vi.fn(),
       experimentReportStructuredUrl: vi.fn(
         (_experimentId: string, executionId: string, reportId: string) =>
           `/api/v1/experiments/experiment-1/executions/${executionId}/reports/${reportId}/structured?projectId=project-1`,
@@ -579,5 +580,52 @@ describe("ExperimentDetail", () => {
     expect(location).toContain("executionId=execution-history");
     expect(location).toContain("tab=reports");
     expect(location).not.toContain("report-previous");
+  });
+
+  it("removes selected current members in one revision-guarded request", async () => {
+    const nextExperiment: ExperimentView = {
+      ...experiment,
+      revision: {
+        experimentRevisionId: "revision-2",
+        revisionNumber: 2,
+        memberCount: 10,
+      },
+      execution: {
+        ...currentExecution,
+        experimentExecutionId: "execution-3",
+        requestCount: 10,
+        requests: currentRequests.filter(
+          (request) => request.requestId !== "request-02",
+        ),
+      },
+    };
+    vi.mocked(api.updateExperimentRequests).mockResolvedValue({
+      experiment: nextExperiment,
+      attachedRequestIds: [],
+      detachedRequestIds: ["request-02"],
+    });
+
+    renderDetail("/experiments/experiment-1?tab=runs");
+
+    const rowCheckboxes = await screen.findAllByRole("checkbox", {
+      name: "Select row",
+    });
+    fireEvent.click(rowCheckboxes[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: /Remove runs/ }));
+
+    await waitFor(() => {
+      expect(api.updateExperimentRequests).toHaveBeenCalledTimes(1);
+    });
+    expect(api.updateExperimentRequests).toHaveBeenCalledWith(
+      "DELETE",
+      "experiment-1",
+      {
+        expectedExperimentRevisionId: "revision-1",
+        requestIds: ["request-02"],
+      },
+    );
+    expect(await screen.findByText(/Revision 2 · 10 current members/)).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toContain("tab=runs");
   });
 });

@@ -14,10 +14,13 @@ import {
   parseExperimentExecution,
   parseExperimentExecutionPage,
   parseExperimentPage,
+  type ExistingRunExperimentCreateView,
   type ExperimentExecutionPageView,
   type ExperimentExecutionView,
+  type ExperimentMembershipMutationView,
   type ExperimentMetadataView,
   type ExperimentPageView,
+  type ExperimentRevisionIdentityView,
   type ExperimentView,
 } from "./experiments";
 
@@ -303,6 +306,69 @@ export const api = {
     return parseExperiment(value.experiment);
   },
 
+  createExperimentFromRuns: async (body: {
+    metadata: ExperimentMetadataView;
+    requestIds: string[];
+  }): Promise<ExistingRunExperimentCreateView> => {
+    const value = await request<unknown>(
+      "/experiments",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          mode: "existing",
+          metadata: body.metadata,
+          requests: [],
+          requestIds: body.requestIds,
+        }),
+      },
+      { scoped: true },
+    );
+    if (
+      !value ||
+      typeof value !== "object" ||
+      !("experiment" in value) ||
+      !("requestIds" in value) ||
+      !Array.isArray(value.requestIds) ||
+      !value.requestIds.every((requestId) => typeof requestId === "string")
+    ) {
+      throw new Error("Invalid existing-run experiment response from Scope");
+    }
+    return {
+      experiment: parseExperiment(value.experiment),
+      requestIds: value.requestIds,
+    };
+  },
+
+  updateExperimentRequests: async (
+    method: "POST" | "DELETE",
+    id: string,
+    body: { expectedExperimentRevisionId: string; requestIds: string[] },
+  ): Promise<ExperimentMembershipMutationView> => {
+    const value = await request<unknown>(
+      `/experiments/${encodeURIComponent(id)}/requests`,
+      { method, body: JSON.stringify(body) },
+      { scoped: true },
+    );
+    if (
+      !value ||
+      typeof value !== "object" ||
+      !("experiment" in value) ||
+      !("attachedRequestIds" in value) ||
+      !Array.isArray(value.attachedRequestIds) ||
+      !value.attachedRequestIds.every((requestId) => typeof requestId === "string") ||
+      !("detachedRequestIds" in value) ||
+      !Array.isArray(value.detachedRequestIds) ||
+      !value.detachedRequestIds.every((requestId) => typeof requestId === "string")
+    ) {
+      throw new Error("Invalid experiment membership response from Scope");
+    }
+    return {
+      experiment: parseExperiment(value.experiment),
+      attachedRequestIds: value.attachedRequestIds,
+      detachedRequestIds: value.detachedRequestIds,
+    };
+  },
+
   listExperiments: async (opts?: {
     cursor?: string;
     limit?: number;
@@ -413,7 +479,11 @@ export const api = {
   },
 
   /** Soft-delete a run */
-  deleteRun: (id: string): Promise<{ id: string; deleted: boolean }> => {
+  deleteRun: (id: string): Promise<{
+    id: string;
+    deleted: boolean;
+    membershipRevision?: ExperimentRevisionIdentityView;
+  }> => {
     return request(`/requests/${id}`, { method: "DELETE" });
   },
 
@@ -486,7 +556,11 @@ export const api = {
   },
 
   /** Bulk soft-delete multiple runs */
-  bulkDeleteRuns: (ids: string[]): Promise<{ deleted: number; notFound: string[] }> => {
+  bulkDeleteRuns: (ids: string[]): Promise<{
+    deleted: number;
+    notFound: string[];
+    membershipRevision?: ExperimentRevisionIdentityView;
+  }> => {
     return request(`/requests/bulk`, {
       method: "DELETE",
       body: JSON.stringify({ ids }),

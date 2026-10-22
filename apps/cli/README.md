@@ -83,6 +83,18 @@ scope run get -i <run-id>
 # Stream logs
 scope run logs -i <run-id>
 
+# Create an Experiment from existing standalone runs
+scope experiment create --name "Comparison" \
+  --request-id <request-id> --request-id <request-id>
+
+# Move standalone runs into one new Experiment revision
+scope experiment add <experiment-id> --revision <revision-id> \
+  --request-id <request-id> --request-id <request-id>
+
+# Remove members to standalone status in one new revision
+scope experiment remove <experiment-id> --revision <revision-id> \
+  --request-id <request-id>
+
 # List criteria
 scope criteria list
 
