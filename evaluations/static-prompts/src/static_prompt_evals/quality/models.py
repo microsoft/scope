@@ -28,6 +28,7 @@ class NormalizedRow:
     response_messages: list[dict[str, Any]]
     tool_definitions: list[dict[str, Any]]
     tool_calls: list[dict[str, Any]]
+    decision_request: dict[str, Any] | None = None
     generation_error: str | None = None
     infrastructure_error: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)

@@ -26,6 +26,7 @@ import {
 } from "./transport.js";
 import {
   AdapterValidationError,
+  AdapterTransportError,
   optionalString,
   record,
   requiredString,
@@ -214,6 +215,7 @@ function classifyError(
   error: unknown,
 ): AdapterErrorRow["error"]["classification"] {
   if (error instanceof AdapterValidationError) return "validation";
+  if (error instanceof AdapterTransportError) return "transport";
   const message = error instanceof Error ? error.message.toLowerCase() : "";
   if (message.includes("parse") || message.includes("json")) return "parse";
   if (

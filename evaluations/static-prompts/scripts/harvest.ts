@@ -7,26 +7,17 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { QUALITY_FAMILIES, type QualityFamily } from "../adapter/protocol.js";
+import { CONTRIBUTION_FIXTURES, contributionFixture } from "./contribution-insights-fixtures.js";
+import { contributionDecisionFixture } from "./contribution-decision-fixtures.js";
+
+export { QUALITY_FAMILIES, type QualityFamily };
 
 export const DEFAULT_BASE_URL = "https://msscope-int.azurewebsites.net";
 export const DEFAULT_PROJECT_NAME = "Default Project";
 export const DEFAULT_DATASET_VERSION = "v1";
 export const DEFAULT_SEED = "scope-static-prompts-v1";
 
-export const QUALITY_FAMILIES = [
-  "criteria-authoring",
-  "parent-dependency-suggestion",
-  "child-dependency-suggestion",
-  "task-prompt-generation",
-  "task-prompt-variation",
-  "prompt-feature-authoring",
-  "prompt-feature-extraction",
-  "judge-instructions",
-  "developer-feedback",
-  "run-report",
-] as const;
-
-export type QualityFamily = (typeof QUALITY_FAMILIES)[number];
 export type JsonValue =
   | null
   | boolean
@@ -221,6 +212,8 @@ const FAMILY_FILES: Record<QualityFamily, string> = {
   "judge-instructions": "judge.jsonl",
   "developer-feedback": "feedback.jsonl",
   "run-report": "reports.jsonl",
+  "contribution-insights": "contribution-insights.jsonl",
+  "contribution-decision": "contribution-decision.jsonl",
 };
 
 const LEGACY_CRITERIA_BEHAVIORS: Record<string, { behavior: string; evidenceSource: string }> = {
@@ -259,6 +252,8 @@ const EVALUATORS: Record<QualityFamily, string[]> = {
   "judge-instructions": ["generation_success", "output_schema", "criterion_coverage", "judge_verdict", "groundedness", "task_adherence", "tool_call_accuracy"],
   "developer-feedback": ["generation_success", "output_schema", "non_empty_feedback", "forbidden_language", "no_questions", "descendant_leakage_check", "feedback_quality", "descendant_leakage", "relevance", "coherence", "groundedness", "task_adherence", "fluency", "intent_resolution"],
   "run-report": ["generation_success", "output_schema", "non_empty_report", "valid_markdown", "no_fabricated_references", "report_quality", "report_simulation_interpretation", "relevance", "coherence", "fluency", "groundedness", "task_adherence", "tool_call_accuracy"],
+  "contribution-insights": ["generation_success", "output_schema", "non_empty_report", "valid_markdown", "contribution_triage_quality", "relevance", "coherence", "groundedness", "task_adherence"],
+  "contribution-decision": ["generation_success", "output_schema", "decision_accuracy"],
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1432,6 +1427,34 @@ function reportCases(
   return [...direct, defaultControl, override];
 }
 
+export function curateContributionCases(options: CurateOptions): DatasetCase[] {
+  return CONTRIBUTION_FIXTURES.map((fixture) => {
+    const snapshot = contributionFixture(fixture.id);
+    return makeCase(
+      "contribution-insights", "default", { snapshot: JSON.stringify(snapshot) },
+      { referenceReport: fixture.reference },
+      [fixture.id, "report-only", "p0"], snapshot, [`synthetic:contribution-insights:${fixture.id}`], [], options,
+      { kind: "synthetic-reviewed", note: "Curated contracts for the new GitHub contribution pipeline; no Scope integration endpoint exists for these repository workflows." },
+    );
+  });
+}
+
+export function curateContributionDecisionCases(options: CurateOptions): DatasetCase[] {
+  return CONTRIBUTION_FIXTURES.map((fixture) => {
+    const { snapshot, assessment } = contributionDecisionFixture(fixture.id);
+    return makeCase(
+      "contribution-decision", "default", { snapshot: JSON.stringify(snapshot), assessment },
+      { action: fixture.decision },
+      [fixture.id, "report-only", "p0", "non-generative"], { snapshot, assessment },
+      [`synthetic:contribution-decision:${fixture.id}`], [], options,
+      {
+        kind: "synthetic-reviewed",
+        note: "Fixed hand-authored Copilot insight fixtures and captured synthetic PR facts for the production Decision-1 request. Expected actions are evaluation-only reviewed labels, never proposed recommendations, live model output, or a production fallback.",
+      },
+    );
+  });
+}
+
 export function curateDataset(source: SourceData, options: CurateOptions): DatasetCase[] {
   const cases = [
     ...criteriaCases(source.criteria, options),
@@ -1440,6 +1463,8 @@ export function curateDataset(source: SourceData, options: CurateOptions): Datas
     ...judgeCases(source.criteria, source.requests, options),
     ...feedbackCases(source.criteria, source.requests, options),
     ...reportCases(source.reports, source.templates, source.requests, options),
+    ...curateContributionCases(options),
+    ...curateContributionDecisionCases(options),
   ];
   return cases.sort((a, b) =>
     a.family.localeCompare(b.family) || a.variant.localeCompare(b.variant) || a.id.localeCompare(b.id));

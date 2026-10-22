@@ -7,12 +7,15 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
   ScopeApiClient,
+  curateContributionCases,
+  curateContributionDecisionCases,
   deterministicSample,
   redactText,
   redactValue,
   resolveProject,
   validateOpenApi,
   type OpenApiDocument,
+  type DatasetCase,
 } from "./harvest.js";
 
 const FIXTURE = resolve(
@@ -156,6 +159,26 @@ describe("project resolution", () => {
 });
 
 describe("deterministic curation and redaction", () => {
+  it.each([
+    ["contribution-insights", curateContributionCases],
+    ["contribution-decision", curateContributionDecisionCases],
+  ] as const)("reproduces the committed %s fixtures without integration or model calls", async (family, curate) => {
+    const rows = (await readFile(new URL(`../datasets/v1/${family}.jsonl`, import.meta.url), "utf8"))
+      .trim().split("\n").map((line): DatasetCase => JSON.parse(line));
+    const provenance = rows[0].provenance;
+    const regenerated = curate({
+      projectId: provenance.projectId, harvestedAt: provenance.harvestedAt, seed: provenance.selectionSeed,
+    }).sort((a, b) => a.id.localeCompare(b.id));
+    expect(regenerated).toEqual(rows);
+    if (family === "contribution-insights") {
+      expect(rows.every((row) => !("contribution_decision" in row.expected))).toBe(true);
+      expect(rows.every((row) => !row.evaluators.includes("contribution_decision"))).toBe(true);
+    } else {
+      expect(new Set(rows.map((row) => row.expected.action))).toContain("manual-review-required");
+      expect(rows.every((row) => !("decision" in row.input) && !("recommendation" in row.input))).toBe(true);
+    }
+  });
+
   it("selects the same identities for the same seed", () => {
     const values = ["a", "b", "c", "d", "e"];
     expect(deterministicSample(values, 3, "seed", String)).toEqual(

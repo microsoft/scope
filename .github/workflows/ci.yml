@@ -845,6 +845,9 @@ jobs:
             typescript:
               - '.github/workflows/ci.yml'
               - '.github/workflows/publish-cli.yml'
+              - '.github/workflows/contribution-insights.md'
+              - '.github/workflows/contribution-insights.lock.yml'
+              - 'scripts/contribution-insights/**'
               - 'scripts/ci-workflow.test.ts'
               - 'scripts/install-cli.test.ts'
               - 'scripts/build-windows-worker.test.ts'

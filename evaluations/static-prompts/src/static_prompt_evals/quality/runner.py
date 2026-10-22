@@ -310,10 +310,11 @@ def run_quality_engine(
 
     family_specs = {
         family: quality_config.evaluator_specs(family)
-        for family in quality_config.families
+        for family in dict.fromkeys(row.family for row in normalized_rows)
     }
+    family_specs = {family: specs for family, specs in family_specs.items() if specs}
     runtime_error: Exception | None = None
-    if azure_runtime is None and not config.offline:
+    if azure_runtime is None and not config.offline and family_specs:
         try:
             azure_runtime = load_azure_runtime()
         except Exception as error:
@@ -324,6 +325,11 @@ def run_quality_engine(
         model = "fake-model"
         sdk_version = None
         auth_mode = "offline"
+    elif not family_specs:
+        azure_outcomes = []
+        model = None
+        sdk_version = None
+        auth_mode = "not-required"
     elif azure_runtime is None:
         redacted = redact_error(runtime_error or RuntimeError("Azure setup failed"))
         azure_outcomes = [

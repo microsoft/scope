@@ -31,9 +31,35 @@ def test_rubrics_cover_all_manifest_families() -> None:
         "judge-instructions",
         "developer-feedback",
         "run-report",
+        "contribution-insights",
+        "contribution-decision",
     }
-    assert all(configuration.evaluator_specs(family) for family in configuration.families)
+    assert all(
+        configuration.evaluator_specs(family)
+        for family in configuration.families if family != "contribution-decision"
+    )
+    assert configuration.evaluator_specs("contribution-decision") == []
+    assert "contribution_decision" not in configuration.graders
+    assert "contribution_decision" not in configuration.thresholds("contribution-insights")
     assert len(configuration.sha256) == 64
+
+
+def test_decision_configuration_uses_exact_deterministic_labels_including_abstention() -> None:
+    configuration = load_quality_configuration(
+        PACKAGE_ROOT / "evaluators" / "rubrics.yaml",
+        manifest_path=PACKAGE_ROOT / "evaluation-manifest.yaml",
+    )
+    family = configuration.families["contribution-decision"]
+    assert [check["check"] for check in family["deterministic"]] == [
+        "generation_success", "output_schema", "decision_accuracy",
+    ]
+    accuracy = family["deterministic"][-1]
+    assert accuracy["predictedPaths"] == ["output.decision.action"]
+    assert accuracy["expectedPaths"] == ["expected.action"]
+    assert set(accuracy["labels"]) == {
+        "prioritize-review", "request-clarification", "request-contributor-changes",
+        "maintainer-scope-decision", "manual-review-required",
+    }
 
 
 def test_configuration_rejects_uncovered_manifest_family(tmp_path: Path) -> None:

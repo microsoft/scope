@@ -324,6 +324,30 @@ The PR owner applies `status: waiting` when requesting a contributor response an
 the contributor responds. State who owes the next action in a comment; the label alone must not
 trigger the closure policy, particularly when a PR is waiting on the team.
 
+### Report-only contribution insights pilot
+
+Maintainers can run Contribution Insights to get an evidence-backed assessment of a community
+PR's value, overlap, review readiness, behavioral evidence, Scope-specific completeness, and
+reviewer routing. Its separate ratings assess the change, not the contributor; missing evidence
+is unassessed rather than zero. The output includes a constructive feedback draft separating
+required changes, optional suggestions, and decisions the team must make.
+
+Copilot supplies all analysis, ratings, evidence, reviewer guidance, and feedback.
+When configured, Microsoft-Decision-1 alone selects the final review action from
+those insights and captured facts. It does not generate feedback or a written
+rationale, and its decision never establishes merge readiness. Without an enabled
+decision stage, the report explicitly has no final decision; a failed stage
+preserves the insights and fails the run instead of falling back to Copilot.
+
+The hosted pilot writes Actions artifacts and a job summary only. Before deployment, maintainers
+can use `pnpm contribution-insights:local --pr <number>` for a real local Copilot assessment with
+local-only artifacts and no Actions dispatch; add `--decision` after configuring an existing
+Microsoft-Decision-1 deployment to include its final action. Neither mode posts feedback, applies
+labels, requests reviewers, modifies branches, approves, closes, or merges PRs. Human review and all
+requirements above remain unchanged. Schedules require an explicit maintainer opt-in.
+See [Contribution Insights](./docs/architecture/contribution-insights.md) for operation, trust
+boundaries, evidence limits, and how to interpret the reports.
+
 ## Repository labels
 
 Use the existing `category: value` labels for issue and PR triage. Check the
@@ -369,6 +393,7 @@ by hand. Use each file's recorded compiler version to avoid unrelated runtime up
 | --- | --- |
 | `daily-test-improver` | `v0.57.1` |
 | `worker-version-upgrade` | `v0.63.0` |
+| `contribution-insights` | `v0.89.21` |
 
 The daily schedules are explicit cron expressions preserving their existing UTC execution times.
 Review changes to `.github/aw/actions-lock.json` and generated workflow permissions, triggers,
