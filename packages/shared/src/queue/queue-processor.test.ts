@@ -7,6 +7,7 @@ import { CodingAgentQueueProcessor, pairBindingsWithConfigs } from "./queue-proc
 import type { QueueProcessorConfig, WorkerProcessor, WorkerResult } from "../types/types.js";
 import type { VisibilityHeartbeat } from "./visibility-heartbeat.js";
 import { InMemoryHeartbeatStore } from "./heartbeat-store.js";
+import { hashRunToken } from "../auth/run-token.js";
 
 const testConfig: QueueProcessorConfig = {
   mongoUri: "mongodb://localhost:27017",
@@ -526,9 +527,15 @@ describe("CodingAgentQueueProcessor pre-processing failures", () => {
 
     await (qp as any).processMessage(message);
 
+    // The claim persists only the digest; the worker sends the raw run token.
+    const claimedHash = updateOne.mock.calls[0][1].$set["run.tokenHash"] as string;
+    expect(claimedHash).toMatch(/^[0-9a-f]{64}$/);
     expect(fetchMock).toHaveBeenCalledWith(
       "http://api:80/api/v1/extensions/ms-python.python?projectId=project%20with%20spaces",
+      { headers: { Authorization: expect.stringMatching(/^Bearer scope_rt_req-extension-failure_/) } },
     );
+    const sentToken = (fetchMock.mock.calls[0][1].headers.Authorization as string).slice("Bearer ".length);
+    expect(hashRunToken(sentToken)).toBe(claimedHash);
     expect(updateOne).toHaveBeenCalledTimes(2);
     expect(updateOne.mock.calls[0][0]).toEqual({
       _id: requestId,
@@ -548,6 +555,8 @@ describe("CodingAgentQueueProcessor pre-processing failures", () => {
       "run.error": expect.stringMatching(/400 Bad Request/),
       "run.durationMs": expect.any(Number),
     });
+    expect(updateOne.mock.calls[1][1].$unset).toEqual({ "run.tokenHash": "" });
+    expect((qp as any).runTokens.size).toBe(0);
     expect((qp as any).processMultiTurn).not.toHaveBeenCalled();
     expect(deleteMessage).toHaveBeenCalledWith("message-1", "receipt-1");
   });

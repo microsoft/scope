@@ -6,6 +6,7 @@ import type {
   ResourceDocument,
   ResourceRevisionDocument,
 } from "../types/resource.js";
+import { fetchWithBearer, type BearerProvider } from "../http/bearer.js";
 
 /**
  * Client for resolving resource specs via the Scope REST API.
@@ -25,15 +26,18 @@ import type {
  */
 export class ResourceClient {
   private readonly apiUrl: string;
+  /** Supplies the run token (when present) for API calls. */
+  private readonly bearer?: BearerProvider;
 
-  constructor(apiUrl: string) {
+  constructor(apiUrl: string, bearer?: BearerProvider) {
     this.apiUrl = apiUrl.replace(/\/+$/, "");
+    this.bearer = bearer;
   }
 
   private async getJson<T>(path: string, projectId: string): Promise<T | null> {
     const sep = path.includes("?") ? "&" : "?";
     const url = `${this.apiUrl}${path}${sep}projectId=${encodeURIComponent(projectId)}`;
-    const res = await fetch(url);
+    const res = await fetchWithBearer(url, this.bearer);
     if (res.status === 404) return null;
     if (!res.ok) {
       throw new Error(`[ResourceClient] GET ${url} failed: ${res.status} ${res.statusText}`);

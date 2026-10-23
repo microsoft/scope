@@ -3,6 +3,7 @@
 
 import type { ExtensionConfig, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo } from '../types/extension.js';
 import { parseExtensionSpec } from '../types/extension.js';
+import { fetchWithBearer, type BearerProvider } from "../http/bearer.js";
 
 /** VS Code marketplace Gallery API response types (subset). */
 interface MarketplaceExtension {
@@ -25,11 +26,14 @@ interface MarketplaceResponse {
  */
 export class ExtensionClient {
   private readonly apiUrl: string;
+  /** Supplies the run token (when present) for API calls. */
+  private readonly bearer?: BearerProvider;
   private static readonly MARKETPLACE_URL =
     "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery";
 
-  constructor(apiUrl: string) {
+  constructor(apiUrl: string, bearer?: BearerProvider) {
     this.apiUrl = apiUrl.replace(/\/+$/, '');
+    this.bearer = bearer;
   }
 
   /**
@@ -101,7 +105,7 @@ export class ExtensionClient {
     for (const spec of specs) {
       const { id, version } = parseExtensionSpec(spec);
       const url = `${this.apiUrl}/api/v1/extensions/${encodeURIComponent(id)}${projectQuery}`;
-      const res = await fetch(url);
+      const res = await fetchWithBearer(url, this.bearer);
 
       if (res.status === 404) {
         throw new Error(`Extension '${id}' not found via API`);

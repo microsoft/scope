@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { SkillConfig, SkillRevisionDocument } from '../types/skill.js';
+import { fetchWithBearer, type BearerProvider } from "../http/bearer.js";
 
 /**
  * Client for resolving skill revision refs via the Scope REST API.
@@ -12,9 +13,12 @@ import type { SkillConfig, SkillRevisionDocument } from '../types/skill.js';
  */
 export class SkillClient {
   private readonly apiUrl: string;
+  /** Supplies the run token (when present) for API calls. */
+  private readonly bearer?: BearerProvider;
 
-  constructor(apiUrl: string) {
+  constructor(apiUrl: string, bearer?: BearerProvider) {
     this.apiUrl = apiUrl.replace(/\/+$/, '');
+    this.bearer = bearer;
   }
 
   /**
@@ -36,7 +40,7 @@ export class SkillClient {
 
     for (const ref of refs) {
       const url = `${this.apiUrl}/api/v1/skill-revisions/by-ref/${encodeURIComponent(ref)}${projectQuery}`;
-      const res = await fetch(url);
+      const res = await fetchWithBearer(url, this.bearer);
 
       if (res.status === 404) {
         throw new Error(`Skill revision '${ref}' not found via API`);
@@ -70,7 +74,7 @@ export class SkillClient {
    */
   async downloadSkillArchive(projectId: string, ref: string): Promise<Buffer> {
     const url = `${this.apiUrl}/api/v1/skill-revisions/by-ref/${encodeURIComponent(ref)}/archive?projectId=${encodeURIComponent(projectId)}`;
-    const res = await fetch(url);
+    const res = await fetchWithBearer(url, this.bearer);
 
     if (res.status === 404) {
       throw new Error(`Skill archive for '${ref}' not found via API`);

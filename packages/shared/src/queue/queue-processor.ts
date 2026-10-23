@@ -40,6 +40,8 @@ import { CodebaseClient } from "../codebases/codebase-client.js";
 import { ResourceClient } from "../resources/resource-client.js";
 import type { ResourceConfig } from "../types/resource.js";
 import { seedCodebaseToWorkspace } from "../codebases/codebase-seeder.js";
+import { mintRunToken } from "../auth/run-token.js";
+import { fetchWithBearer, type BearerProvider } from "../http/bearer.js";
 
 /**
  * Pair each resource binding with its resolved config, preserving submission
@@ -81,6 +83,8 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
   private processor: WorkerProcessor;
   private readonly runtimeAgentVersion: string;
   private postProcessorQueueClient: QueueClient | null = null;
+  /** Raw run tokens for runs this worker currently holds, keyed by request id. Memory only. */
+  private readonly runTokens = new Map<string, string>();
 
   constructor(config: QueueProcessorConfig, processor: WorkerProcessor) {
     super(config, processor.workerName);
@@ -152,7 +156,27 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
     return fields;
   }
 
+  /** Bearer provider returning the current run token for a request, if this worker holds one. */
+  private bearerFor(requestId: string): BearerProvider {
+    return () => this.runTokens.get(requestId);
+  }
+
   protected async handleRequest(
+    requestDoc: RequestDocument,
+    message: DequeuedMessageItem,
+    heartbeat: VisibilityHeartbeat,
+    log: (level: LogEvent["level"], msg: string, data?: Record<string, unknown>) => Promise<void>,
+    payload?: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.handleClaimableRequest(requestDoc, message, heartbeat, log, payload);
+    } finally {
+      // The run token never outlives this worker's handling of the run.
+      this.runTokens.delete(requestDoc._id);
+    }
+  }
+
+  private async handleClaimableRequest(
     requestDoc: RequestDocument,
     message: DequeuedMessageItem,
     heartbeat: VisibilityHeartbeat,
@@ -403,7 +427,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
       if (!apiBaseUrl) {
         throw new Error("MCP servers requested but SCOPE_MT_API_URL is not configured");
       }
-      const mcpClient = new McpServerClient(apiBaseUrl);
+      const mcpClient = new McpServerClient(apiBaseUrl, this.bearerFor(requestDoc._id));
       await log("info", `Resolving ${requestDoc.mcpServers.length} MCP server(s)`, { mcpServers: requestDoc.mcpServers });
       mcpServerConfigs = await mcpClient.resolveServers(requestDoc.projectId, requestDoc.mcpServers);
       await log("info", `Resolved MCP servers: ${mcpServerConfigs.map(s => s.name).join(", ")}`);
@@ -449,7 +473,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
       if (!apiBaseUrl) {
         throw new Error("Skill revisions requested but SCOPE_MT_API_URL is not configured");
       }
-      const skillClient = new SkillClient(apiBaseUrl);
+      const skillClient = new SkillClient(apiBaseUrl, this.bearerFor(requestDoc._id));
       await log("info", `Resolving ${requestDoc.skillRevisions.length} skill revision(s)`, { skillRevisions: requestDoc.skillRevisions });
       skillConfigs = await skillClient.resolveSkills(requestDoc.projectId, requestDoc.skillRevisions);
       await log("info", `Resolved skills: ${skillConfigs.map(s => s.name).join(", ")}`);
@@ -462,7 +486,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
       if (!apiBaseUrl) {
         throw new Error("Extensions requested but SCOPE_MT_API_URL is not configured");
       }
-      const extensionClient = new ExtensionClient(apiBaseUrl);
+      const extensionClient = new ExtensionClient(apiBaseUrl, this.bearerFor(requestDoc._id));
       await log("info", `Resolving ${requestDoc.extensions.length} extension(s)`, { extensions: requestDoc.extensions });
       extensionConfigs = await extensionClient.resolveExtensions(requestDoc.projectId, requestDoc.extensions);
       await log("info", `Resolved extensions: ${extensionConfigs.map(e => e.version ? `${e.id}@${e.version}` : e.id).join(", ")}`);
@@ -478,7 +502,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
         throw new Error("Resources requested but SCOPE_MT_API_URL is not configured");
       }
       const bindings = requestDoc.resources;
-      const resourceClient = new ResourceClient(apiBaseUrl);
+      const resourceClient = new ResourceClient(apiBaseUrl, this.bearerFor(requestDoc._id));
       await log("info", `Resolving ${bindings.length} resource(s)`, { resources: bindings.map(b => b.ref) });
       const resolved = await resourceClient.resolveResources(
         requestDoc.projectId,
@@ -504,6 +528,8 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
 
     const versionFields = this.getVersionFields();
     const startedAt = new Date();
+    // Mint once, outside the retry, so every attempt writes the same digest.
+    const runToken = mintRunToken(requestDoc._id);
     const result = await withRetry(() => this.collection.updateOne(
       {
         _id: requestDoc._id,
@@ -524,6 +550,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
           gateSummaries: [],
           "run.workerVersion": versionFields.workerVersion,
           "run.os": versionFields.os,
+          "run.tokenHash": runToken.hash,
           updatedAt: startedAt,
         },
         $unset: { "run.queuedQueueName": "" },
@@ -540,6 +567,8 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
       instanceId: this.instanceId,
       ...(this.podName ? { podName: this.podName } : {}),
     };
+
+    this.runTokens.set(requestDoc._id, runToken.token);
 
     // Seed liveness immediately so a fast redelivery observes this claim.
     await this.heartbeatStore.set(runId, startedAt);
@@ -588,7 +617,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
     if (!apiBaseUrl) return;
 
     const workspacePath = this.processor.workspacePath || process.env.WORKSPACE_PATH || "/workspace";
-    const skillClient = new SkillClient(apiBaseUrl);
+    const skillClient = new SkillClient(apiBaseUrl, this.bearerFor(requestDoc._id));
     const installedPaths = await extractSkillsToWorkspace({
       refs: requestDoc.skillRevisions,
       skillConfigs,
@@ -628,7 +657,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
       );
     }
 
-    const promptClient = new PromptClient(apiBaseUrl);
+    const promptClient = new PromptClient(apiBaseUrl, this.bearerFor(requestDoc._id));
     const text = await promptClient.getText(agentsMdPromptId);
     const agentsMdPath = join(workspacePath, "AGENTS.md");
     await writeFile(agentsMdPath, text, "utf-8");
@@ -649,6 +678,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
     promptId: string,
     apiBaseUrl: string | undefined,
     log: (level: LogEvent["level"], msg: string, data?: Record<string, unknown>) => Promise<void>,
+    bearer?: BearerProvider,
   ): Promise<string> {
     if (!promptId) {
       throw new Error("Gate is missing a promptId");
@@ -657,7 +687,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
       throw new Error("apiBaseUrl is not configured but a gate references a prompt by id");
     }
     const url = `${apiBaseUrl.replace(/\/$/, "")}/api/v1/task-prompts/${encodeURIComponent(promptId)}`;
-    const res = await fetch(url);
+    const res = await fetchWithBearer(url, bearer);
     if (!res.ok) {
       throw new Error(`Failed to resolve gate prompt '${promptId}': HTTP ${res.status}`);
     }
@@ -758,7 +788,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
     });
 
     // Only create JudgeClient when criteria exist and judge will actually be called
-    const judgeClient = hasCriteria && judgeServiceUrl ? new JudgeClient(judgeServiceUrl) : undefined;
+    const judgeClient = hasCriteria && judgeServiceUrl ? new JudgeClient(judgeServiceUrl, { bearer: this.bearerFor(requestId) }) : undefined;
     const blobStorage = new BlobStorage({
       storageAccountName: this.config.storageAccountName,
       storageConnectionString: this.config.storageConnectionString,
@@ -809,7 +839,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
         }
         const codebaseWorkspacePath =
           this.processor.workspacePath || process.env.WORKSPACE_PATH || "/workspace";
-        const codebaseClient = new CodebaseClient(apiBaseUrl);
+        const codebaseClient = new CodebaseClient(apiBaseUrl, this.bearerFor(requestDoc._id));
         await seedCodebaseToWorkspace({
           revisionId: requestDoc.codebaseRevisionId,
           codebaseClient,
@@ -843,7 +873,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
           if (!gc.promptId) {
             throw new Error(`Gate '${gc.gate}' is missing a resolved promptId.`);
           }
-          promptText = await this.resolveGatePromptText(gc.promptId, apiBaseUrl, log);
+          promptText = await this.resolveGatePromptText(gc.promptId, apiBaseUrl, log, this.bearerFor(requestId));
         }
         resolvedGates.push({
           gate: gc.gate,
@@ -958,6 +988,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
           // Claim for post-processing atomically so polling dispatcher won't re-enqueue
           ...(this.postProcessorQueueClient ? { "run.postProcessorStatus": "queued" } : {}),
         },
+        $unset: { "run.tokenHash": "" },
       }
     ));
 

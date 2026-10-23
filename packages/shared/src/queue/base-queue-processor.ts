@@ -362,6 +362,8 @@ export abstract class BaseQueueProcessor<TDocument extends { _id: string } = any
                   "run.updatedAt": new Date(),
                   updatedAt: new Date(),
                 },
+                // Drop the run-token digest once the attempt is terminal.
+                $unset: { "run.tokenHash": "" },
               } as any
             ));
             if ((result.matchedCount ?? 0) > 0) {

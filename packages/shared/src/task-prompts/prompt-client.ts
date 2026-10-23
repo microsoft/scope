@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { fetchWithBearer, type BearerProvider } from "../http/bearer.js";
 /**
  * Client for resolving prompt text (task or AGENTS.md) via the Scope REST API.
  *
@@ -11,9 +12,12 @@
  */
 export class PromptClient {
   private readonly apiUrl: string;
+  /** Supplies the run token (when present) for API calls. */
+  private readonly bearer?: BearerProvider;
 
-  constructor(apiUrl: string) {
+  constructor(apiUrl: string, bearer?: BearerProvider) {
     this.apiUrl = apiUrl.replace(/\/+$/, "");
+    this.bearer = bearer;
   }
 
   /**
@@ -24,7 +28,7 @@ export class PromptClient {
    */
   async getText(id: string): Promise<string> {
     const url = `${this.apiUrl}/api/v1/task-prompts/${encodeURIComponent(id)}/content`;
-    const res = await fetch(url);
+    const res = await fetchWithBearer(url, this.bearer);
 
     if (res.status === 404) {
       throw new Error(`Prompt '${id}' not found via API`);

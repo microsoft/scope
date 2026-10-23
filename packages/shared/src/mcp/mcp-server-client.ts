@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { McpServerConfig, McpServerDocument } from '../types/mcp.js';
+import { fetchWithBearer, type BearerProvider } from "../http/bearer.js";
 
 /**
  * Client for resolving MCP server slugs via the Scope REST API.
@@ -12,9 +13,12 @@ import type { McpServerConfig, McpServerDocument } from '../types/mcp.js';
  */
 export class McpServerClient {
   private readonly apiUrl: string;
+  /** Supplies the run token (when present) for API calls. */
+  private readonly bearer?: BearerProvider;
 
-  constructor(apiUrl: string) {
+  constructor(apiUrl: string, bearer?: BearerProvider) {
     this.apiUrl = apiUrl.replace(/\/+$/, '');
+    this.bearer = bearer;
   }
 
   /**
@@ -30,7 +34,7 @@ export class McpServerClient {
 
     for (const slug of slugs) {
       const url = `${this.apiUrl}/api/v1/mcp/servers/${encodeURIComponent(slug)}?projectId=${encodeURIComponent(projectId)}`;
-      const res = await fetch(url);
+      const res = await fetchWithBearer(url, this.bearer);
 
       if (res.status === 404) {
         throw new Error(`MCP server '${slug}' not found via API`);

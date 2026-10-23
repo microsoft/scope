@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { CodebaseConfig, CodebaseRevisionDocument } from "../types/codebase.js";
+import { fetchWithBearer, type BearerProvider } from "../http/bearer.js";
 
 /**
  * Client for resolving codebase revisions via the Scope REST API.
@@ -13,9 +14,12 @@ import type { CodebaseConfig, CodebaseRevisionDocument } from "../types/codebase
  */
 export class CodebaseClient {
   private readonly apiUrl: string;
+  /** Supplies the run token (when present) for API calls. */
+  private readonly bearer?: BearerProvider;
 
-  constructor(apiUrl: string) {
+  constructor(apiUrl: string, bearer?: BearerProvider) {
     this.apiUrl = apiUrl.replace(/\/+$/, "");
+    this.bearer = bearer;
   }
 
   /**
@@ -26,7 +30,7 @@ export class CodebaseClient {
    */
   async resolveCodebase(revisionId: string): Promise<CodebaseConfig> {
     const url = `${this.apiUrl}/api/v1/codebase-revisions/${encodeURIComponent(revisionId)}`;
-    const res = await fetch(url);
+    const res = await fetchWithBearer(url, this.bearer);
     if (res.status === 404) {
       throw new Error(`Codebase revision '${revisionId}' not found via API`);
     }
@@ -52,7 +56,7 @@ export class CodebaseClient {
    */
   async downloadCodebaseArchive(revisionId: string): Promise<Buffer> {
     const url = `${this.apiUrl}/api/v1/codebase-revisions/${encodeURIComponent(revisionId)}/archive`;
-    const res = await fetch(url);
+    const res = await fetchWithBearer(url, this.bearer);
     if (res.status === 404) {
       throw new Error(`Codebase archive for '${revisionId}' not found via API`);
     }

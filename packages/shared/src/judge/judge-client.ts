@@ -3,6 +3,7 @@
 
 import { ConversationTurn, CriterionResult, GateId } from "../types/types.js";
 import { withRetry } from "../utils/retry.js";
+import { bearerHeaders, type BearerProvider } from "../http/bearer.js";
 
 /**
  * Request payload for the judge service's /api/v1/evaluate endpoint.
@@ -48,6 +49,8 @@ export interface JudgeEvaluateResponse {
 }
 
 export interface JudgeClientOptions {
+  /** Supplies the run token forwarded to the judge (and on to the API). */
+  bearer?: BearerProvider;
   /** Timeout in ms for evaluate requests (default: JUDGE_CLIENT_TIMEOUT env or 600000 = 10 minutes) */
   timeoutMs?: number;
   /** Maximum retry attempts on timeout/transient errors (default: JUDGE_CLIENT_RETRIES env or 2) */
@@ -147,6 +150,7 @@ export class JudgeClient {
   private baseUrl: string;
   private timeoutMs: number;
   private maxRetries: number;
+  private bearer?: BearerProvider;
 
   constructor(baseUrl: string, options?: JudgeClientOptions) {
     // Strip trailing slash
@@ -155,6 +159,7 @@ export class JudgeClient {
       ?? parseInt(process.env.JUDGE_CLIENT_TIMEOUT || String(DEFAULT_JUDGE_CLIENT_TIMEOUT));
     this.maxRetries = options?.maxRetries
       ?? parseInt(process.env.JUDGE_CLIENT_RETRIES || String(DEFAULT_JUDGE_CLIENT_RETRIES));
+    this.bearer = options?.bearer;
   }
 
   /**
@@ -189,7 +194,7 @@ export class JudgeClient {
   private async doEvaluate(url: string, request: JudgeEvaluateRequest): Promise<JudgeEvaluateResponse> {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...bearerHeaders(this.bearer) },
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(this.timeoutMs),
     });
