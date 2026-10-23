@@ -33,6 +33,20 @@ export interface AuthenticatedUser {
   isService?: boolean;
 }
 
+/**
+ * Non-user caller authenticated by a run token or a service key. Kept separate
+ * from `req.user`/`req.auth` so user identity semantics stay unchanged.
+ */
+export type CallerPrincipal =
+  | { kind: "run"; requestId: string; runId: string; projectId: string }
+  | { kind: "service"; name: string; scopes: readonly string[] };
+
+/** Caller classification for logging and (later) authorization decisions. */
+export type Principal =
+  | { kind: "anonymous" }
+  | { kind: "user"; user: AuthenticatedUser }
+  | CallerPrincipal;
+
 // Augment Express's Request so handlers can read `req.user`.
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -40,6 +54,8 @@ declare global {
     interface Request {
       auth?: VerifiedAuthContext;
       user?: AuthenticatedUser;
+      /** Set only for run-token or service-key callers. */
+      principal?: CallerPrincipal;
     }
   }
 }
@@ -53,4 +69,11 @@ export const ANONYMOUS_USER: AuthenticatedUser = Object.freeze({
 /** Read the principal for a request, defaulting to anonymous. */
 export function getUser(req: Request): AuthenticatedUser {
   return req.user ?? ANONYMOUS_USER;
+}
+
+/** Classify the caller: authenticated user, run/service caller, or anonymous. */
+export function getPrincipal(req: Request): Principal {
+  const user = getUser(req);
+  if (user.isAuthenticated) return { kind: "user", user };
+  return req.principal ?? { kind: "anonymous" };
 }

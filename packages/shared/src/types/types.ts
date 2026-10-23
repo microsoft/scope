@@ -408,6 +408,10 @@ export interface RunState {
   logsUrl?: string;
   updatedAt?: Date;
   startedAt?: Date;                         // When worker picked up this attempt
+  /** Server-only SHA-256 digest of the run token minted at claim. Never
+   *  returned by the API, copied to history, or archived; cleared when the
+   *  attempt finishes. Intentionally absent from the zod RunStateSchema. */
+  tokenHash?: string;
   finishedAt?: Date;                        // When this attempt reached "done"
   /** When this run was paused (if status = "paused") */
   pausedAt?: Date;

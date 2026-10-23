@@ -37,6 +37,14 @@ export interface ApiRouteConfig<
   /** OpenAPI-only security requirements; enforcement remains in auth middleware/handlers. */
   security?: RouteConfig["security"];
 
+  /**
+   * Metadata only: marks a read route that workers call with a run token
+   * during a run. Authentication accepts run tokens on every route; this flag
+   * documents the intended run-token surface (`x-scope-run-token` in OpenAPI)
+   * for the authorization layer to enforce.
+   */
+  runToken?: boolean;
+
   // Schemas (all optional)
   body?: TBody;
   query?: TQuery;
@@ -138,6 +146,7 @@ export function apiRoute<
     summary,
     description,
     security,
+    runToken,
     body,
     query,
     params,
@@ -195,6 +204,7 @@ export function apiRoute<
     summary,
     ...(description ? { description } : {}),
     ...(security !== undefined ? { security } : {}),
+    ...(runToken ? { "x-scope-run-token": true } : {}),
     ...(Object.keys(request).length > 0 ? { request } : {}),
     responses,
   } as Parameters<typeof registry.registerPath>[0]);

@@ -54,7 +54,11 @@ export type AuthErrorCode =
   | "invalid_issuer"
   | "missing_claim"
   | "not_configured"
-  | "service_unavailable";
+  | "service_unavailable"
+  | "invalid_run_token"
+  | "run_not_active"
+  | "run_token_expired"
+  | "invalid_service_key";
 
 /** Error thrown for any authentication failure. */
 export class AuthError extends Error {

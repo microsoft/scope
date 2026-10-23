@@ -14,6 +14,8 @@ import { initTelemetry } from "telemetry";
 import type { TaskPromptDocument, SkillDocument, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, ResourceDocument, ResourceRevisionDocument, ProfileDocument, ProfileVersionDocument, ProjectDocument, HeartbeatStore, AuthProvider, ProfileEnricher, UserDocument } from "shared";
 import { UserStore } from "./auth/user-store.js";
 import { createAuthMiddleware, createUserAccessMiddleware } from "./auth/middleware.js";
+import { createRunTokenVerifier } from "./auth/run-token-verifier.js";
+import { createServiceKeyVerifier } from "./auth/service-principals.js";
 import { authErrorHandler } from "./auth/error-handler.js";
 import { RedisUserAccessCache, type UserAccessCache } from "./auth/user-access-cache.js";
 import { UserAccessResolver, type UserAccessService } from "./auth/user-access-resolver.js";
@@ -320,6 +322,11 @@ const routeCtx: RouteContext = {
   storageAccountName,
 };
 
+// Run tokens are checked against the live request document; service keys are
+// read once from env at startup (missing keys disable that service).
+const runTokenVerifier = createRunTokenVerifier(() => collection);
+const serviceKeyVerifier = createServiceKeyVerifier();
+
 // ─── Route registration ───────────────────────────────────────────────────────
 app.use("/api/v1/users/me", (_req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
@@ -328,6 +335,8 @@ app.use("/api/v1/users/me", (_req, res, next) => {
 app.use(
   createAuthMiddleware({
     getProvider: () => authProvider,
+    getRunTokenVerifier: () => runTokenVerifier,
+    getServiceKeyVerifier: () => serviceKeyVerifier,
   }),
 );
 registerUsersRoutes(routeCtx);

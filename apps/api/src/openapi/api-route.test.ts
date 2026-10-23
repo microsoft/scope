@@ -226,6 +226,25 @@ describe("apiRoute — OpenAPI registration", () => {
     expect(resp.description).toBe("Server-sent event stream");
   });
 
+  it("marks runToken routes with the x-scope-run-token extension only when set", () => {
+    apiRoute(app, registry, {
+      method: "get", path: "/api/v1/flagged/:id", tags: ["Items"], summary: "Flagged",
+      params: z.object({ id: z.string() }), response: z.any(), runToken: true,
+      handler: async (_req, res) => { res.end(); },
+    });
+    apiRoute(app, registry, {
+      method: "get", path: "/api/v1/plain/:id", tags: ["Items"], summary: "Plain",
+      params: z.object({ id: z.string() }), response: z.any(),
+      handler: async (_req, res) => { res.end(); },
+    });
+
+    const doc = generateDoc(registry);
+    const flagged = doc.paths?.["/api/v1/flagged/{id}"]?.get as Record<string, unknown>;
+    const plain = doc.paths?.["/api/v1/plain/{id}"]?.get as Record<string, unknown>;
+    expect(flagged["x-scope-run-token"]).toBe(true);
+    expect(plain["x-scope-run-token"]).toBeUndefined();
+  });
+
   it("registers errorResponses with description only", () => {
     apiRoute(app, registry, {
       method: "get",
