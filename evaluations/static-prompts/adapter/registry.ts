@@ -25,6 +25,7 @@ import {
   taskPromptGenerationAdapter,
   taskPromptVariationAdapter,
 } from "./targets/task-prompts.js";
+export { standaloneTargets, listStandaloneTargets } from "./standalone.js";
 
 const adapters = [
   criteriaAuthoringAdapter,

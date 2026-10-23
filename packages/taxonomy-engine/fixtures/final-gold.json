@@ -1,0 +1,8 @@
+{
+  "final-login": {"beh-skipped-invocation":{"state":"completed","observed":true,"occurrences":[{"source_id":"ep-071","discovery_turn":2,"extension_point_contains":"login/configure"}]}},
+  "final-called": {"beh-skipped-invocation":{"state":"completed","observed":false}},
+  "final-conditional": {"beh-skipped-invocation":{"state":"completed","observed":false}},
+  "final-two": {"beh-skipped-invocation":{"state":"completed","observed":true,"occurrences":[{"source_id":"ep-074","discovery_turn":2,"extension_point_contains":"release-guide.md"},{"source_id":"ep-075","discovery_turn":3,"extension_point_contains":"packagectl"}]}},
+  "final-partial-mixed": {"beh-skipped-invocation":{"state":"indeterminate"},"beh-timeout":{"state":"completed","observed":true,"occurrences":[{"source_id":"ep-076","tool_call_id":"f-remote","related_turns":[2]}]}},
+  "final-available-only": {"beh-skipped-invocation":{"state":"completed","observed":false}}
+}

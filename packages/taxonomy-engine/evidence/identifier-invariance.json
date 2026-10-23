@@ -1,0 +1,222 @@
+{
+  "passed": 3,
+  "total": 3,
+  "model": "gpt-5.6-sol-fast",
+  "calls": 3,
+  "rows": [
+    {
+      "case_id": "train-skill",
+      "input": {
+        "atif": {
+          "schema_version": "ATIF-v1.7",
+          "session_id": "identity-701",
+          "agent": {
+            "name": "fixture"
+          },
+          "steps": [
+            {
+              "step_id": 1,
+              "source": "user",
+              "message": "Build a storage app using the storage skill."
+            },
+            {
+              "step_id": 2,
+              "source": "agent",
+              "message": "Available skill: storage-skill. Its body must be read to use its guidance. I will implement from memory instead."
+            },
+            {
+              "step_id": 3,
+              "source": "agent",
+              "message": "Finished the storage app without opening storage-skill."
+            }
+          ]
+        },
+        "context": {
+          "run_id": "identity-801",
+          "scenario": {
+            "id": "storage",
+            "label": "Storage app",
+            "task": "Build a storage app"
+          },
+          "profile": {
+            "id": "fixture",
+            "label": "Fixture agent"
+          },
+          "completeness": "complete",
+          "sources": [
+            {
+              "id": "storage",
+              "label": "storage-skill",
+              "surface_id": "surface-skills"
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "storage-skill",
+                "source": {
+                  "id": "storage",
+                  "label": "storage-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": []
+    },
+    {
+      "case_id": "val-reference-irrelevant",
+      "input": {
+        "atif": {
+          "schema_version": "ATIF-v1.7",
+          "session_id": "identity-702",
+          "agent": {
+            "name": "fixture"
+          },
+          "steps": [
+            {
+              "step_id": 1,
+              "source": "user",
+              "message": "Change the heading's font size. Do not change authentication."
+            },
+            {
+              "step_id": 2,
+              "source": "agent",
+              "message": "Instructions mention references/identity.md only when configuring authentication. This task is CSS only."
+            },
+            {
+              "step_id": 3,
+              "source": "agent",
+              "message": "Changed the font size."
+            }
+          ]
+        },
+        "context": {
+          "completeness": "complete",
+          "sources": [
+            {
+              "id": "identity-ref",
+              "label": "references/identity.md",
+              "surface_id": "surface-skills"
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": []
+    },
+    {
+      "case_id": "held-several",
+      "input": {
+        "atif": {
+          "schema_version": "ATIF-v1.7",
+          "session_id": "identity-703",
+          "agent": {
+            "name": "fixture"
+          },
+          "steps": [
+            {
+              "step_id": 1,
+              "source": "user",
+              "message": "Create a cloud database; use the database skill and verify with cloud/db-check."
+            },
+            {
+              "step_id": 2,
+              "source": "agent",
+              "message": "Discovered database-skill, whose body explains how to create the database. I will use remembered defaults instead."
+            },
+            {
+              "step_id": 3,
+              "source": "agent",
+              "message": "Discovered cloud/db-check for verification. I will skip verification."
+            },
+            {
+              "step_id": 4,
+              "source": "agent",
+              "message": "Created database from memory. Neither database-skill nor cloud/db-check was invoked."
+            }
+          ]
+        },
+        "context": {
+          "run_id": "identity-803",
+          "scenario": {
+            "id": "db",
+            "label": "Cloud database",
+            "task": "Create and verify database"
+          },
+          "profile": {
+            "id": "fixture",
+            "label": "Fixture agent"
+          },
+          "completeness": "complete",
+          "sources": [
+            {
+              "id": "database-skill",
+              "label": "database-skill",
+              "surface_id": "surface-skills"
+            },
+            {
+              "id": "check",
+              "label": "cloud/db-check",
+              "surface_id": "surface-mcp"
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "database-skill",
+                "source": {
+                  "id": "database-skill",
+                  "label": "database-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "cloud/db-check",
+                "source": {
+                  "id": "check",
+                  "label": "cloud/db-check",
+                  "surface_id": "surface-mcp"
+                },
+                "discovery_turn": 3
+              }
+            ]
+          }
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

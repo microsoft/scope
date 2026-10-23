@@ -1,0 +1,23 @@
+schema_version: scope/taxonomy/v1
+id: engine-test
+version: 1.0.0
+surfaces:
+  - id: surface-skills
+    label: Skills
+  - id: surface-mcp
+    label: MCP
+  - id: surface-docs
+    label: Documentation
+elements:
+  - id: test-observation
+    label: Test Observation
+    implementation:
+      type: prompt
+      prompt: Test-only generic engine fixture.
+    evidence:
+      requires_discovery_event: false
+      complete_for_negative: false
+      requires_task: false
+    output_schema:
+      type: object
+      additionalProperties: true

@@ -1,0 +1,20 @@
+{
+  "name": "taxonome-custom-handler-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test:handler": "vitest run --config vitest.config.ts --reporter=default"
+  },
+  "dependencies": {
+    "taxonomy-engine": "workspace:*",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "taxonome": "workspace:*",
+    "typescript": "^5.6.2",
+    "vitest": "^4.1.0"
+  }
+}

@@ -17,7 +17,8 @@ added to CI without a separate design decision.
 ### Static prompt quality inventory
 
 The committed evaluation manifest covers eleven Scope-owned runtime prompt
-families:
+families in the Azure-backed quality runner, plus one isolated SDK-only spike
+family in `standaloneFamilies`:
 
 | Family | Variants and important coverage |
 |--------|---------------------------------|
@@ -32,6 +33,17 @@ families:
 | Developer feedback | Default persona, custom persona, descendant guard on/off, and multiple root failures |
 | Run reports and Experiment readouts | Default and appended run-report system prompts; override as a control where the default prompt is intentionally absent; exact-execution Experiment readout synthesis |
 | Experiment template reports | Default and appended `EXPERIMENT_REPORT_SYSTEM_PROMPT`; override as a control; configurable template request immediately before the explicit exact-execution evidence envelope |
+| Taxonome Skipped Invocation (standalone) | Structured positive/negative/unknown, conditional references, repeated/mixed sources, untrusted evidence; actual Copilot SDK only |
+
+The Taxonome family is registered in `adapter/standalone.ts`, which calls the
+production `scope/taxonomy/v1` YAML through the same typed loader, Ax program,
+trust wrapper, and validator used by the CLI. Its separate ATIF/gold packet,
+fixed deterministic metric, bounded optimization, and actual SDK replay are
+documented in [taxonome.md](taxonome.md). It intentionally does not use the
+Azure quality runner or add another model transport. Run its live evals with
+`pnpm --silent taxonome eval --taxonomy ... --cases ... --gold ... --ledger ...`;
+the offline composition check is
+`pnpm --filter static-prompt-evals test:ts`.
 
 Judge and report tool descriptions are static AI-facing instructions, but they
 are evaluated through their owning end-to-end judge and report families rather
