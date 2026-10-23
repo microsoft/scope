@@ -16,6 +16,12 @@
 .contrib-fallback, .contrib-message { display: none; }
 .contrib[data-state='empty'] .contrib-list, .contrib[data-state='error'] .contrib-list { display: none; }
 .contrib[data-state='empty'] .contrib-message--empty, .contrib[data-state='error'] .contrib-message--error { display: block; }
+/* Empty published data means there is no feature to promote. Hide the whole
+ * surface, including headings and adjacent links supplied by the host page. */
+[data-contribution-calls]:has(.contrib[data-state='empty']) { display: none; }
+/* Before the stacked contributors feature lands, the landing section contains
+ * only this surface; avoid leaving an empty section behind. */
+.scope-contrib:has(> [data-contribution-calls] .contrib[data-state='empty']):not(:has(scope-contributors)) { display: none; }
 @media (scripting: none) {
 	.contrib-list, .contrib-count { display: none !important; }
 	.contrib-fallback { display: block; }
