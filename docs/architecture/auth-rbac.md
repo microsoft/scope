@@ -574,18 +574,21 @@ queued work without invoking report tools. Existing stored reports remain
 project-readable.
 
 Deferred OBO/service issuance is not an exemption. Report-generator HTTP tools and
-worker codebase/skill/resource API clients do not gain an anonymous principal.
-They must satisfy the same verified identity/membership boundary or fail closed;
-enabling safe service callers is separate work. DB/queue-only workers and scheduler
-are trusted infrastructure, not human API callers.
+worker API clients do not gain an anonymous principal. Worker read clients
+authenticate with a run token and register-agents/model scanners with a
+per-service key (§6); each is limited to its own route allowlist and, for run
+tokens, to the run's project. Every other non-human call fails closed.
+DB/queue-only workers and scheduler are trusted infrastructure, not human API
+callers.
 
 | Scope HTTP caller | Current protected-cutover behavior |
 |-------------------|------------------------------------|
 | Portal and CLI | Unchanged verified IdP bearer; canonical project/platform authorization |
-| Worker codebase, skill, extension, resource, MCP and prompt clients in `packages/shared/src` | No automatic bearer/service identity; unsigned calls receive `401`, not a bypass or an anonymous grant |
-| REST criteria/prompt-feature providers and gate prompt resolution | Same boundary when API-backed; do not claim these configured modes work without a supported credential |
-| Report tools/template fetches | Consumer and generation producers disabled before these paths execute |
-| `scripts/register-agent.sh` registration jobs | Existing unsigned registration POST fails `401`; keep these jobs out of protected worker rollout until registration uses an approved authenticated path |
+| Worker codebase, skill, extension, resource, MCP and prompt clients in `packages/shared/src` | Send the run token for the claimed run; accepted only on `runToken: true` GET/HEAD routes in the run's project (§6). Unsigned calls still receive `401` |
+| Judge criteria provider and gate prompt resolution | Same run token, forwarded by the worker; same route and project limits |
+| REST prompt-feature provider | No run token; unsigned calls receive `401` |
+| Report tools/template fetches and the post-processor report trigger | Consumer and generation producers disabled before these paths execute; they do not send a run token yet (known gap, to be closed before report generation is re-enabled) |
+| `scripts/register-agent.sh` registration jobs and model scanners | Per-service key (`X-Service-Name` + `X-Internal-Key`) limited to the routes their scopes grant (§6); unsigned calls receive `401` |
 | `scripts/acceptance-codebase-astro.sh` | Existing unsigned benchmark script is not an authenticated RBAC acceptance command; do not run it as a workaround |
 
 At cutover stop old report producers/consumers and old anonymous API replicas
@@ -613,6 +616,7 @@ AUTH_TEST_MONGO_URI="$ISOLATED_MONGO_URI" AUTH_TEST_REDIS_PORT="$ISOLATED_REDIS_
   apps/api/src/auth/auth-flow.integration.test.ts \
   apps/api/src/auth/auth-mode.integration.test.ts \
   apps/api/src/auth/admin-operations.integration.test.ts \
+  apps/api/src/auth/caller-authorization.integration.test.ts \
   apps/api/src/routes/project-membership.integration.test.ts \
   packages/db-migrations/src/membership-authority.integration.test.ts \
   packages/db-migrations/src/rbac-codebase-constraints.integration.test.ts
@@ -621,7 +625,8 @@ AUTH_TEST_MONGO_URI="$ISOLATED_MONGO_URI" AUTH_TEST_REDIS_PORT="$ISOLATED_REDIS_
 These checks exercise signed-bearer verification, canonical roles/memberships,
 freshness leases, creator grants, project-admin search and self-removal, pending
 CAS/idempotency recovery, operator-only bootstrap/repair, legacy mappings and
-the actual migration CLI/readiness through 031. Portal component/story tests
+the actual migration CLI/readiness through 031, and run-token/service-key route
+and project limits. Portal component/story tests
 cover capability changes, account reset, fixed-project navigation (including a
 deferred return to the all-project selector), pending retries and platform
 promotion. Story helpers wait for navigation and selector readiness before
@@ -717,7 +722,7 @@ must be resolved with stakeholders before or during implementation.
 |-----------|-------|----------------|
 | API | Verifies the IdP signature and claims before any access-cache lookup. `/users/me` owns explicit enrollment; subsequent middleware resolves existing active users. Public/anonymous rollout is unchanged. | [apps/api/src/index.ts](../../apps/api/src/index.ts), [auth/middleware.ts](../../apps/api/src/auth/middleware.ts), [routes/users.ts](../../apps/api/src/routes/users.ts) |
 | User access | `UserAccessResolver` reads a validated Redis snapshot or the exact `(idp, idpTenant, idpSubject)` Mongo record. Only explicit login invokes `upsertOnLogin`; no per-request JIT. | [auth/user-access-resolver.ts](../../apps/api/src/auth/user-access-resolver.ts), [auth/user-access-cache.ts](../../apps/api/src/auth/user-access-cache.ts), [auth/user-store.ts](../../apps/api/src/auth/user-store.ts) |
-| Service callers | Worker run tokens (`scope_rt_…`) and per-service keys (`X-Service-Name` + `X-Internal-Key`) are verified before the IdP and attached as `req.principal` (`run` / `service`). Authentication only — no route enforcement yet. See §6. | [auth/run-token-verifier.ts](../../apps/api/src/auth/run-token-verifier.ts), [auth/service-principals.ts](../../apps/api/src/auth/service-principals.ts), [shared/src/auth/run-token.ts](../../packages/shared/src/auth/run-token.ts) |
+| Service callers | Worker run tokens (`scope_rt_…`) and per-service keys (`X-Service-Name` + `X-Internal-Key`) are verified before the IdP and attached as `req.principal` (`run` / `service`). The route guard limits run tokens to flagged GET/HEAD routes in the run's project and service keys to the routes their scopes grant. See §6. | [auth/run-token-verifier.ts](../../apps/api/src/auth/run-token-verifier.ts), [auth/service-principals.ts](../../apps/api/src/auth/service-principals.ts), [shared/src/auth/run-token.ts](../../packages/shared/src/auth/run-token.ts) |
 | Runs data model | `RequestResponseSchema` + embedded `RunStateSchema`; history in `runs` collection (`RunHistoryDocumentSchema`). **No owner field.** | [packages/shared/src/schemas/request.ts](../../packages/shared/src/schemas/request.ts) |
 | Run listing | Cursor-paginated `GET /api/v1/requests` with filters; no per-user scoping. | [apps/api/src/routes/requests.ts](../../apps/api/src/routes/requests.ts) |
 | CLI | Centralized `apiFetch()` injects `SCOPE_TOKEN` as a raw IdP bearer. No CLI interactive-login implementation is added here. New identities must explicitly enroll; ordinary CLI calls never enroll them. | [apps/cli/src/utils/api-client.ts](../../apps/cli/src/utils/api-client.ts), [CLI guidance](../../.agents/skills/scope-cli/SKILL.md) |
@@ -1312,12 +1317,12 @@ fields above are documented intent, not implemented yet.
 
 ### 6. Service-to-service auth (run tokens and per-service keys implemented; service JWTs and on-behalf-of deferred)
 
-#### Implemented: run tokens and per-service keys (authentication only)
+#### Implemented: run tokens and per-service keys
 
 Two non-human credentials are recognized by `createAuthMiddleware` **before** the IdP
-bearer is verified. Both are authentication only: they identify the caller as
-`req.principal` but no route enforces scopes or flags yet (that arrives with
-route-level authorization, §4). `req.auth` and `req.user` keep their human meaning —
+bearer is verified. They identify the caller as `req.principal`; the route guard
+then limits what each caller may do (see **Authorization of run and service
+callers** below). `req.auth` and `req.user` keep their human meaning —
 a run or service caller has **no** `req.auth`, an anonymous `req.user`, and never
 reaches enrollment or user-access resolution.
 
@@ -1358,8 +1363,8 @@ sequenceDiagram
 - `run.tokenHash` is server-only: it is not part of `RunStateSchema` and is
   redacted from request, attempt, and run-history responses and from archived HARs.
 - The worker read routes it is intended for carry `runToken: true` in their
-  `apiRoute()` definition, emitted as `x-scope-run-token: true` in OpenAPI. The flag is
-  metadata today; an inventory test pins the flagged set.
+  `apiRoute()` definition, emitted as `x-scope-run-token: true` in OpenAPI. The route
+  guard rejects run tokens everywhere else; an inventory test pins the flagged set.
 - The caller is logged at debug level with request id, run id, and the first 8 hex
   characters of the digest — never the token.
 
@@ -1372,8 +1377,8 @@ sequenceDiagram
   time. A missing key, or one shorter than 32 characters, disables that service
   (fail closed, `401 invalid_service_key`).
 
-  | Service | API key variable | Scopes (identified, not yet enforced) | Caller |
-  |---------|------------------|----------------------------------------|--------|
+  | Service | API key variable | Scopes | Caller |
+  |---------|------------------|--------|--------|
   | `register-agents` | `INTERNAL_API_KEY_REGISTER_AGENTS` | `agents:register` | `scripts/register-agent.sh` |
   | `model-scanner` | `INTERNAL_API_KEY_MODEL_SCANNER` | `agents:read`, `agents:register`, `models:sync` | `packages/model-scanning` |
 
@@ -1385,6 +1390,34 @@ sequenceDiagram
 credentials are ignored and every request stays anonymous. With auth enabled,
 requests without credentials remain anonymous as before; only a presented run
 token or service header is verified (and rejected if invalid).
+
+#### Authorization of run and service callers
+
+The global `/api/v1` gate admits a verified run or service caller, and the
+route guard (`Authorization.guard()` → `decide()` in
+[auth/authorization.ts](../../apps/api/src/auth/authorization.ts)) branches on
+`req.principal` before any user read. Neither caller has an IdP token, so the
+JWT `exp` lease cap does not apply; the guard returns the normal 20-second
+authority lease. `currentUser()` and `/users/me` capabilities return
+`403 user_required` for these callers: they never resolve to a user record or
+membership.
+
+| Caller | Allowed | Denied |
+|--------|---------|--------|
+| Run token | Routes with `runToken: true`, `GET`/`HEAD` only, policy `project`, in the run's own non-deleted project. The project is derived exactly as for users (`?projectId`, point document, `requestId`), and `req.authorizedProjectId` is set. | Any other route, method or policy → `403 run_token_not_allowed`. Another project's or a deleted project's data → `404 not_found` (no existence leak). |
+| Service key | `<method> <route>` pairs granted by its scopes (`SERVICE_SCOPE_ROUTES`). No project check: only metadata/platform catalog routes are granted. | Everything else → `403 insufficient_scope`. |
+| User | Unchanged project-membership and platform-role rules. | Unchanged. |
+
+| Scope | Routes |
+|-------|--------|
+| `agents:read` | `GET`/`HEAD /api/v1/agents` |
+| `agents:register` | `POST /api/v1/agents`, `POST /api/v1/agents/:id/versions` |
+| `models:sync` | `POST /api/v1/models/sync` |
+
+Validity failures (malformed, forged, finished or expired run tokens; wrong
+service keys) are rejected by the middleware with `401` before the guard runs.
+A run token grants read access to every opted-in route in its project, not only
+to the resources the run references; tighter per-resource binding is future work.
 
 > The remainder of this section preserves the future ownership/RBAC design. None of its Scope-issued
 > JWTs, signing keys, service credentials, minting endpoints, or revocation lists are
