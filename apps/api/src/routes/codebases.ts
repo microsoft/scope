@@ -423,6 +423,7 @@ export function registerCodebasesRoutes(ctx: RouteContext): void {
   apiRoute(ctx.app, ctx.registry, {
     method: "get",
     path: "/api/v1/codebase-revisions/:id/archive",
+    runToken: true,
     tags: ["Codebase Revisions"],
     summary: "Download codebase revision archive",
     response: z.any(),
@@ -461,6 +462,7 @@ export function registerCodebasesRoutes(ctx: RouteContext): void {
   apiRoute(ctx.app, ctx.registry, {
     method: "get",
     path: "/api/v1/codebase-revisions/:id",
+    runToken: true,
     tags: ["Codebase Revisions"],
     summary: "Get codebase revision by id",
     response: CodebaseRevisionResponseSchema,

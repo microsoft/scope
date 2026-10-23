@@ -103,6 +103,7 @@ apiRoute(ctx.app, ctx.registry, {
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/api/v1/mcp/servers/:id",
+  runToken: true,
   tags: ["MCP Servers"],
   summary: "Get MCP server",
   params: z.object({ id: z.string() }),

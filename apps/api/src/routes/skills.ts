@@ -560,6 +560,7 @@ apiRoute(ctx.app, ctx.registry, {
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/api/v1/skill-revisions/by-ref/:ref(*)/archive",
+  runToken: true,
   tags: ["Skill Revisions"],
   summary: "Download skill revision archive",
   query: ProjectIdQuerySchema,
@@ -643,6 +644,7 @@ apiRoute(ctx.app, ctx.registry, {
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/api/v1/skill-revisions/by-ref/:ref(*)",
+  runToken: true,
   tags: ["Skill Revisions"],
   summary: "Get skill revision by ref",
   query: ProjectIdQuerySchema,

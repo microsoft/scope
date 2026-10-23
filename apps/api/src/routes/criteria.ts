@@ -217,6 +217,7 @@ apiRoute(ctx.app, ctx.registry, {
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/api/v1/criteria",
+  runToken: true,
   tags: ["Criteria"],
   summary: "List criteria",
   query: z.object({
@@ -399,6 +400,7 @@ apiRoute(ctx.app, ctx.registry, {
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/api/v1/criteria/:id",
+  runToken: true,
   tags: ["Criteria"],
   summary: "Get criterion",
   params: z.object({ id: z.string() }),

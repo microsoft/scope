@@ -60,6 +60,8 @@ export function rewriteHarUrlsForArchive<T extends {
 }>(resource: T): T {
   const copy = JSON.parse(JSON.stringify(resource));
   if (copy.run) {
+    // Archives are user-facing; drop the server-only run-token digest.
+    delete copy.run.tokenHash;
     if (copy.run.harUrl) {
       copy.run.harUrl = "run.har";
     }

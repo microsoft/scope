@@ -103,6 +103,7 @@ apiRoute(ctx.app, ctx.registry, {
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/api/v1/task-prompts/:id",
+  runToken: true,
   tags: ["Task Prompts"],
   summary: "Get task prompt",
   params: z.object({ id: z.string() }),
@@ -134,6 +135,7 @@ apiRoute(ctx.app, ctx.registry, {
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/api/v1/task-prompts/:id/content",
+  runToken: true,
   tags: ["Task Prompts"],
   summary: "Get resolved task prompt content",
   params: z.object({ id: z.string() }),

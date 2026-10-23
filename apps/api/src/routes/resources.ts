@@ -154,6 +154,7 @@ export function registerResourcesRoutes(ctx: RouteContext): void {
   apiRoute(ctx.app, ctx.registry, {
     method: "get",
     path: "/api/v1/resources/:id",
+    runToken: true,
     tags: ["Resources"],
     summary: "Get a resource",
     params: z.object({ id: z.string() }),
@@ -329,6 +330,7 @@ export function registerResourcesRoutes(ctx: RouteContext): void {
   apiRoute(ctx.app, ctx.registry, {
     method: "get",
     path: "/api/v1/resources/:id/revisions/latest",
+    runToken: true,
     tags: ["Resource Revisions"],
     summary: "Get the latest resource revision",
     params: z.object({ id: z.string() }),
@@ -357,6 +359,7 @@ export function registerResourcesRoutes(ctx: RouteContext): void {
   apiRoute(ctx.app, ctx.registry, {
     method: "get",
     path: "/api/v1/resources/:id/revisions/:revisionNumber",
+    runToken: true,
     tags: ["Resource Revisions"],
     summary: "Get a resource revision by resource and revision number",
     params: z.object({ id: z.string(), revisionNumber: z.string() }),
@@ -390,6 +393,7 @@ export function registerResourcesRoutes(ctx: RouteContext): void {
   apiRoute(ctx.app, ctx.registry, {
     method: "get",
     path: "/api/v1/resources/revisions/:id",
+    runToken: true,
     tags: ["Resource Revisions"],
     summary: "Get resource revision by id",
     params: z.object({ id: z.string() }),

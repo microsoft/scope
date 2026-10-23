@@ -4646,6 +4646,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Codebase Revisions",
         ],
+        "x-scope-run-token": true,
       },
     },
     "/api/v1/codebase-revisions/{id}/archive": {
@@ -4665,6 +4666,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Codebase Revisions",
         ],
+        "x-scope-run-token": true,
       },
     },
     "/api/v1/codebases": {
@@ -4957,6 +4959,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Criteria",
         ],
+        "x-scope-run-token": true,
       },
       "post": {
         "parameters": [
@@ -5378,6 +5381,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Criteria",
         ],
+        "x-scope-run-token": true,
       },
       "put": {
         "parameters": [
@@ -5657,6 +5661,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Extensions",
         ],
+        "x-scope-run-token": true,
       },
       "put": {
         "parameters": [
@@ -6673,6 +6678,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "MCP Servers",
         ],
+        "x-scope-run-token": true,
       },
       "put": {
         "parameters": [
@@ -10583,6 +10589,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Resource Revisions",
         ],
+        "x-scope-run-token": true,
       },
     },
     "/api/v1/resources/{id}": {
@@ -10664,6 +10671,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Resources",
         ],
+        "x-scope-run-token": true,
       },
       "patch": {
         "parameters": [
@@ -10865,6 +10873,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Resource Revisions",
         ],
+        "x-scope-run-token": true,
       },
     },
     "/api/v1/resources/{id}/revisions/{revisionNumber}": {
@@ -10918,6 +10927,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Resource Revisions",
         ],
+        "x-scope-run-token": true,
       },
     },
     "/api/v1/runs/upload": {
@@ -11012,6 +11022,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Skill Revisions",
         ],
+        "x-scope-run-token": true,
       },
     },
     "/api/v1/skill-revisions/by-ref/{ref}(*)/archive": {
@@ -11045,6 +11056,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Skill Revisions",
         ],
+        "x-scope-run-token": true,
       },
     },
     "/api/v1/skill-revisions/{id}": {
@@ -11726,6 +11738,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Task Prompts",
         ],
+        "x-scope-run-token": true,
       },
     },
     "/api/v1/task-prompts/{id}/content": {
@@ -11771,6 +11784,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "tags": [
           "Task Prompts",
         ],
+        "x-scope-run-token": true,
       },
     },
     "/api/v1/task-prompts/{id}/extract-features": {

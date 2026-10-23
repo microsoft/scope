@@ -22,6 +22,7 @@
 
 import type { Collection } from "mongodb";
 import type { RunState, RunHistoryDocument } from "shared";
+import { redactRunState } from "./utils/redact-run.js";
 
 export interface RunsRepoOptions {
   runsCollection: Collection<RunHistoryDocument>;
@@ -40,7 +41,8 @@ export async function insertHistoricalRun(
   run: RunState,
   projectId: string,
 ): Promise<void> {
-  const doc: RunHistoryDocument = { ...run, requestId, projectId };
+  // History never carries the claim's run-token digest.
+  const doc: RunHistoryDocument = { ...redactRunState(run), requestId, projectId };
   await opts.runsCollection.insertOne(doc as any);
 }
 

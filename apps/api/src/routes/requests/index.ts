@@ -59,6 +59,7 @@ import { computeAnalysis, capRunsToLimit } from "../../analysis.js";
 import type { AnalysisResponse, AnalyzableRun } from "../../analysis.js";
 import { parseStateKey } from "../../criteria-mdp.js";
 import { buildGroupingPipeline } from "../../grouping.js";
+import { redactRunSecrets, redactRunState } from "../../utils/redact-run.js";
 import {
   buildMultiClause,
   buildSearchClause,
@@ -1410,7 +1411,7 @@ apiRoute(ctx.app, ctx.registry, {
     }
 
     // Map _id back to id for API response
-    res.json({ ...resource, id: resource._id });
+    res.json({ ...redactRunSecrets(resource), id: resource._id });
   },
 });
 
@@ -1754,7 +1755,7 @@ apiRoute(ctx.app, ctx.registry, {
       resources.reverse();
     }
 
-    const data = resources.map((r) => ({ ...r, id: r._id }));
+    const data = resources.map((r) => ({ ...redactRunSecrets(r), id: r._id }));
 
     // Enrich `processing` runs with the latest liveness heartbeat from
     // Redis. The store's mget is cluster-safe (a pipeline of single-key GETs,
@@ -3020,7 +3021,7 @@ apiRoute(ctx.app, ctx.registry, {
       return;
     }
     const history = await listHistoricalRuns({ runsCollection: ctx.runsCollection }, id);
-    const current = request.run ? [request.run] : [];
+    const current = request.run ? [redactRunState(request.run)] : [];
     // Combine current + history; current is always the highest attemptNumber
     res.json([...current, ...history]);
   },
@@ -3043,7 +3044,7 @@ apiRoute(ctx.app, ctx.registry, {
       return;
     }
     if (request.run?._id === runId) {
-      res.json(request.run);
+      res.json(redactRunState(request.run));
       return;
     }
     const historical = await getHistoricalRun({ runsCollection: ctx.runsCollection }, runId);

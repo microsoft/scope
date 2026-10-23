@@ -159,6 +159,7 @@ apiRoute(ctx.app, ctx.registry, {
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/api/v1/extensions/:id",
+  runToken: true,
   tags: ["Extensions"],
   summary: "Get extension by ID",
   params: z.object({ id: z.string() }),
