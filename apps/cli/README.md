@@ -73,6 +73,7 @@ Never print or persist tokens in logs. See [the auth contract](../../docs/archit
 ```bash
 # List all benchmark runs
 scope run list
+scope run list --submission-id <submission-id>
 
 # Submit a run
 scope run submit -s config/scenarios/hello-world.yaml -w coder-acp-copilot
@@ -83,6 +84,23 @@ scope run get -i <run-id>
 # Stream logs
 scope run logs -i <run-id>
 
+# Download a batch by explicit IDs, submission, or experiment
+scope run download-batch --ids <run-id> <run-id>
+scope run download-batch --submission-id <submission-id>
+scope run download-batch --experiment-id <experiment-id>
+
+# Create an Experiment from existing standalone runs
+scope experiment create --name "Comparison" \
+  --request-id <request-id> --request-id <request-id>
+
+# Move standalone runs into one new Experiment revision
+scope experiment add <experiment-id> --revision <revision-id> \
+  --request-id <request-id> --request-id <request-id>
+
+# Remove members to standalone status in one new revision
+scope experiment remove <experiment-id> --revision <revision-id> \
+  --request-id <request-id>
+
 # List criteria
 scope criteria list
 
@@ -90,6 +108,16 @@ scope criteria list
 scope --help
 scope run --help
 ```
+
+`run download-batch` accepts exactly one of `--ids`, `--submission-id`, or
+`--experiment-id`. Submission/experiment selectors require a project and must
+resolve to at most 100 runs, matching the batch archive endpoint limit.
+
+Run archives download to an exclusive same-directory temporary file while
+stderr reports compressed-byte progress. Scope validates a declared
+`Content-Length` and the complete gzip stream/trailer before atomically
+renaming the file into place. Interrupted or corrupt downloads remove the
+temporary file and never overwrite an existing archive.
 
 ### Provider secrets
 

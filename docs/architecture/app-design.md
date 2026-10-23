@@ -495,6 +495,7 @@ A single value compiles to an equality clause; multiple values compile to `$in`.
 | `profileId` | `profileId` |
 | `taskPromptId` | `taskPromptId` |
 | `submissionId` | `submissionId` (prefix match) |
+| `experimentId` | `experimentId` (prefix match) |
 | `criteria` | `scenario.criteria` |
 | `turns` / `maxIterations` | `run.turns` size / `maxIterations` |
 
@@ -598,8 +599,8 @@ applying them.
 `scope run list` exposes every Portal filter and the sort controls, forwarding them to the
 same API params: `--worker` (multi), `--status`, `--outcome`, `--task`, `--profile`,
 `--criteria`, `--model`, `--os`, `--priority`, `--agent-version`, `--search`,
-`--created-after`, `--created-before`, `--sort-by`, `--sort-dir`. (The CLI list stays flat;
-grouping is a Portal view.)
+`--created-after`, `--created-before`, `--submission-id`, `--experiment-id`,
+`--sort-by`, `--sort-dir`. (The CLI list stays flat; grouping is a Portal view.)
 
 ## Real-Time Log Streaming
 

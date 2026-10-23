@@ -104,6 +104,7 @@ scope run status -i <request-id>
 scope run list
 scope run list -w coder-acp-copilot        # filter by worker
 scope run list --submission-id <id>         # filter by submission
+scope run list --experiment-id <id>         # filter by experiment
 scope run list -o json                      # machine-readable
 ```
 
@@ -139,8 +140,20 @@ scope run download -i <request-id> -e -d ./output  # extract
 For bulk downloads:
 
 ```bash
+scope run download-batch --experiment-id <id> -e -d ./batch
 scope run download-batch --submission-id <id> -e -d ./batch
 ```
+
+`download-batch` accepts exactly one source: explicit `--ids`,
+`--submission-id`, or `--experiment-id`. Submission and experiment selectors
+require a project and may resolve at most 100 runs, matching the batch archive
+endpoint limit.
+
+Archive downloads report compressed-byte progress and are published
+atomically. The CLI first writes a temporary file beside the destination,
+checks `Content-Length` when supplied, validates the complete gzip stream, and
+only then renames it to the requested output. A truncated or corrupt transfer
+leaves no invalid destination file and preserves any existing archive.
 
 ## Retry a failed run
 

@@ -758,6 +758,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       "download-batch": {
         "options": [
           "--dir",
+          "--experiment-id",
           "--extract",
           "--ids",
           "--output",
@@ -779,6 +780,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--created-after",
           "--created-before",
           "--criteria",
+          "--experiment-id",
           "--include-deleted",
           "--max-iterations",
           "--model",
