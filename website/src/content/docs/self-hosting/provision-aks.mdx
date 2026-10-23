@@ -1,0 +1,158 @@
+---
+title: Provision Azure infrastructure
+description: Create the Azure resources required to run Scope on AKS.
+---
+
+The [`deploy/azure`](https://github.com/microsoft/scope/tree/main/deploy/azure)
+template provisions the infrastructure required by the Scope
+[Helm chart](https://helm.sh/docs/topics/charts/). It does not install the
+application.
+
+## Deploy through the Azure portal
+
+Use the permanent Azure portal deployment button, which reads the compiled
+template from the `main` branch:
+
+[![Deploy playground to Azure](/deploy-playground-to-azure.svg)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fmicrosoft%2Fscope%2Fmain%2Fdeploy%2Fazure%2Fazuredeploy.json)
+
+Choose a subscription, resource group, region, and environment name. The
+portal's advanced step exposes node pool, SKU, network, namespace, and
+service-account settings.
+
+## Deploy with Azure CLI
+
+```bash
+az group create --name <resource-group> --location <region>
+
+az deployment group create \
+  --resource-group <resource-group> \
+  --template-file deploy/azure/main.bicep \
+  --parameters deploy/azure/main.parameters.json \
+  --parameters environmentName=<environment> location=<region>
+```
+
+Resource names combine `environmentName` with a deterministic suffix.
+
+## Resources
+
+| Module | Resources |
+| --- | --- |
+| Networking | VNet, AKS subnet, private-endpoint subnet, and NSGs |
+| AKS | Public API endpoint, Azure CNI Overlay with Cilium, OIDC, workload identity, and Key Vault Secrets Provider |
+| Key Vault | RBAC authorization, purge protection, private endpoint, and private DNS |
+| Cosmos DB | MongoDB API account and database, serverless throughput, private endpoint, and private DNS |
+| Azure Managed Redis | Balanced tier, private endpoint, private DNS, Entra access policy, and access-key fallback |
+| Storage | Private Blob and Queue endpoints with shared-key access disabled |
+| ACR | Registry for the ACP worker images |
+
+The AKS API remains public and local accounts remain enabled so the quickstart
+works without a VPN, jumpbox, or Entra cluster-admin integration. Key Vault,
+Cosmos DB, Redis, Blob Storage, and Queue Storage are reachable only through
+private endpoints.
+
+## Node pools
+
+| Pool | Mode | OS | Default size | Default count |
+| --- | --- | --- | --- | --- |
+| `system` | System | Linux | `Standard_D4s_v5` | 3 |
+| `user` | User | Linux | `Standard_D4s_v5` | 2 |
+
+The template uses fixed counts. It does not configure cluster autoscaling,
+availability zones, taints, labels, or Windows nodes.
+
+## Workload identities and roles
+
+| Principal | Access |
+| --- | --- |
+| Backend workload identity | Key Vault Secrets Officer; Storage Blob Data Owner; Storage Queue Data Contributor; Redis data-plane access |
+| Worker workload identity | Storage Blob Data Owner; Storage Queue Data Contributor |
+| AKS kubelet identity | `AcrPull` |
+| AKS system identity | Network Contributor on the resource group |
+
+The backend service account defaults to `scope-workload-identity` in the
+`scope` namespace. The worker service account defaults to
+`scope-worker-workload-identity` in the same namespace.
+
+## Parameters
+
+| Parameter | Default |
+| --- | --- |
+| `environmentName` | Required, 3-20 lowercase alphanumeric or hyphen characters |
+| `location` | Resource group location |
+| `tags` | `{}` |
+| `kubernetesVersion` | AKS default |
+| `aksSystemNodeVmSize`, `aksSystemNodeCount` | `Standard_D4s_v5`, `3` |
+| `aksUserNodeVmSize`, `aksUserNodeCount` | `Standard_D4s_v5`, `2` |
+| `acrSkuName` | `Standard` |
+| `cosmosDbConsistencyLevel` | `Session` |
+| `redisSkuName` | `Balanced_B1` |
+| `storageSkuName` | `Standard_LRS` |
+| `vnetAddressPrefix` | `10.20.0.0/16` |
+| `aksSubnetPrefix` | `10.20.0.0/20` |
+| `privateEndpointSubnetPrefix` | `10.20.16.0/24` |
+| Backend namespace and service account | `scope`, `scope-workload-identity` |
+| Worker namespace and service account | `scope`, `scope-worker-workload-identity` |
+
+## Outputs and generated Helm values
+
+The deployment outputs:
+
+- `aksClusterName` and `acrLoginServer`
+- `keyVaultName` and `keyVaultUri`
+- backend and worker workload identity client IDs, namespaces, and
+  service-account names
+- `storageAccountName`
+- `redisHostName` and `redisPort`
+
+The values-generation script reads these outputs and gets the tenant ID from
+`az account show`:
+
+```bash
+./scripts/generate-values-from-bicep.sh \
+  --resource-group <resource-group>
+```
+
+If `--deployment-name` is omitted, the script selects the newest deployment
+whose outputs include `keyVaultName`, `redisHostName`, and
+`workloadIdentityClientId`. It writes `my-values.yaml` by default and refuses
+to overwrite it unless you pass `--force`. Use `--values-file` to choose
+another path and `--image-registry` to override the core image registry.
+
+## Generated secrets
+
+The template writes two objects into Key Vault:
+
+- `cosmos-connection-string`
+- `redis-primary-key`
+
+Storage uses workload identity and RBAC; there is no storage connection-string
+secret.
+
+## Connect to AKS
+
+```bash
+AKS_NAME=$(az deployment group show \
+  --resource-group <resource-group> \
+  --name <deployment-name> \
+  --query properties.outputs.aksClusterName.value -o tsv)
+
+az aks get-credentials \
+  --resource-group <resource-group> \
+  --name "$AKS_NAME"
+kubectl get nodes
+```
+
+## Limits and deletion
+
+Version 1 does not provision observability, an ingress controller, DNS, TLS,
+or an Entra application registration.
+
+Delete the resource group to remove the deployment:
+
+```bash
+az group delete --name <resource-group>
+```
+
+Key Vault purge protection is enabled and its soft-delete retention period is
+90 days. Azure can retain the deleted vault name and recoverable contents
+after the resource group is deleted.

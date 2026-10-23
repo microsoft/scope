@@ -4,12 +4,12 @@
  *
  * Contributors (<scope-contributors>). An avatar wall on the
  * landing page and a card grid on the Community > Contribute page. Shares
- * the card, message and sample-tag styles in contribution-issues.css.
+ * the card, message and sample-tag styles in contributions.css.
  */
 
 .thanks { display: block; color: var(--scope-text); font-family: var(--sl-font); line-height: 1.6; }
 .thanks * { box-sizing: border-box; }
-.thanks :is(p, ul, h3) { margin: 0; }
+.thanks :is(p, ul, h2, h3) { margin: 0; }
 .thanks a { text-decoration: none; }
 .thanks .contrib-message a, .thanks .contrib-fallback a { color: var(--scope-brand); font-weight: 600; text-decoration: underline; text-underline-offset: 0.2em; }
 
@@ -33,7 +33,7 @@
 
 /* Landing heading. */
 .thanks-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1rem; margin-bottom: 1.25rem; }
-.thanks-head h3 { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--scope-text); font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; }
+.thanks-head :is(h2, h3) { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--scope-text); font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; }
 .thanks-head .contrib-count { margin-top: 0 !important; }
 .thanks-heart { display: inline-block; color: #e5484d; transform-origin: center; animation: thanks-beat 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
 @keyframes thanks-beat {
@@ -45,7 +45,7 @@
 .thanks-intro { max-width: 60ch; margin-bottom: 1.25rem !important; color: var(--scope-muted); font-size: 0.9rem; }
 
 /* Wall: overlapping avatars with a ring in the page background colour. */
-.thanks--wall { --size: 3.5rem; margin-top: 4rem; padding-top: 2.5rem; border-top: 1px solid var(--scope-border); }
+.thanks--wall { --size: 3.5rem; }
 .thanks--wall .thanks-list { row-gap: 0.75rem; padding-left: 0.6rem !important; }
 .thanks--wall .thanks-item { margin-left: -0.6rem !important; }
 .thanks--wall .thanks-item:hover, .thanks--wall .thanks-item:focus-within { z-index: 2; }

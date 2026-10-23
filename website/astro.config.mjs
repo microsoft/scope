@@ -4,6 +4,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import mermaid from 'astro-mermaid';
 import starlightOpenAPI, { openAPISidebarGroups } from 'starlight-openapi';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -66,6 +67,10 @@ export default defineConfig({
 		remarkPlugins: [remarkGfm, [remarkBasePath, { base }], remarkHttpSnippets],
 	},
 	integrations: [
+		mermaid({
+			autoTheme: true,
+			enableLog: false,
+		}),
 		starlight({
 			title: 'Scope',
 			logo: {
@@ -75,6 +80,7 @@ export default defineConfig({
 			},
 			customCss: ['./src/styles/landing.css'],
 			components: {
+				Head: './src/components/Head.astro',
 				SiteTitle: './src/components/SiteTitle.astro',
 				Header: './src/components/Header.astro',
 				PageTitle: './src/components/PageTitle.astro',
@@ -102,13 +108,14 @@ export default defineConfig({
 					label: 'Community',
 					items: [
 						{ label: 'Articles & talks', slug: 'community/articles-and-talks' },
-						{ label: 'Contribute', slug: 'community/contribute' },
+						{ label: 'Contributors', slug: 'community/contribute' },
 					],
 				},
 				{
 					label: 'Getting Started',
 					items: [
 						{ label: 'Access', slug: 'getting-started/access' },
+						{ label: 'Local development', slug: 'getting-started/local-development' },
 						{ label: 'Install the CLI', slug: 'getting-started/install-cli' },
 						{ label: 'Your first run', slug: 'getting-started/first-run' },
 					],
@@ -130,6 +137,7 @@ export default defineConfig({
 							collapsed: true,
 							items: [
 								{ label: 'Task prompts', slug: 'guides/managing-task-prompts' },
+								{ label: 'Codebases', slug: 'guides/managing-codebases' },
 								{ label: 'Evaluation criteria', slug: 'guides/defining-criteria' },
 								{ label: 'Agent profiles', slug: 'guides/defining-profiles' },
 								{ label: 'Prompt features', slug: 'guides/prompt-features' },
@@ -148,6 +156,25 @@ export default defineConfig({
 								{ label: 'Use tools, skills & extensions', slug: 'guides/mcp-skills-extensions' },
 							],
 						},
+						{
+							label: 'Admin',
+							collapsed: true,
+							items: [
+								{ label: 'Manage provider credentials', slug: 'guides/managing-credentials' },
+							],
+						},
+					],
+				},
+				{
+					label: 'Kubernetes self-hosting',
+					collapsed: true,
+					items: [
+						{ label: 'Overview', slug: 'self-hosting/overview' },
+						{ label: 'Provision Azure infrastructure', slug: 'self-hosting/provision-aks' },
+						{ label: 'Deploy with Helm', slug: 'self-hosting/deploy-helm' },
+						{ label: 'Autoscaling with KEDA', slug: 'self-hosting/scaling' },
+						{ label: 'Configuration', slug: 'self-hosting/configuration' },
+						{ label: 'Operations', slug: 'self-hosting/operations' },
 					],
 				},
 				{
@@ -163,9 +190,17 @@ export default defineConfig({
 				},
 				...openAPISidebarGroups,
 				{
+					label: 'Contributing',
+					items: [
+						{ label: 'Contributor guide', slug: 'resources/contributing' },
+						{ label: 'Development guide', slug: 'resources/development' },
+					],
+				},
+				{
 					label: 'Resources',
 					collapsed: true,
 					items: [
+						{ label: 'Support and security', slug: 'resources/support' },
 						{ label: 'FAQ', slug: 'resources/faq' },
 						{ label: 'Data collection and privacy', slug: 'resources/data-collection' },
 						{ label: 'Troubleshooting', slug: 'resources/troubleshooting' },

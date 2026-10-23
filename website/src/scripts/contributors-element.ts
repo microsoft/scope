@@ -82,7 +82,7 @@ class ScopeContributors extends HTMLElement {
 		try {
 			result = await fetchContributors(this.dataset.src || CONTRIBUTORS_DATA_URL);
 		} catch (error) {
-			// Same dev fallback as the open calls; removed from production builds.
+			// Development fallback only; production builds omit the sample.
 			if (import.meta.env.DEV) {
 				console.info('[contributors] Live list unavailable; using the dev sample.', error);
 				const { default: text } = await import('../data/contributors.sample.jsonl?raw');

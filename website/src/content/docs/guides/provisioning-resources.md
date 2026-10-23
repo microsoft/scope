@@ -60,7 +60,8 @@ Resource setup runs **before** anything else the run needs:
 1. An empty workspace is created.
 2. **Resource setup scripts run**, in the order you attached them.
 3. MCP servers are registered, using values your resources published.
-4. The codebase is cloned into the workspace.
+4. The selected [codebase revision](/guides/managing-codebases/) is
+   seeded into the workspace.
 5. Skills and `AGENTS.md` are written.
 6. The agent starts.
 

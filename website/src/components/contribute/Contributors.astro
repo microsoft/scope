@@ -3,9 +3,9 @@
 // Licensed under the MIT License.
 
 // Thanks contributors: everyone (bots aside) who got a pull request merged.
-// The contribution-issues workflow publishes the list to the website-data
+// The contribution-data workflow publishes the list to the website-data
 // branch, and the browser fetches it. See website/AGENTS.md.
-import '../../styles/contribution-issues.css';
+import '../../styles/contributions.css';
 import '../../styles/contributors.css';
 import { CONTRIBUTORS_DATA_URL, CONTRIBUTORS_GRAPH_URL } from '../../scripts/contributors';
 
@@ -22,8 +22,7 @@ interface Props {
 const { variant = 'wall', limit } = Astro.props;
 const src = import.meta.env.PUBLIC_CONTRIBUTORS_URL || CONTRIBUTORS_DATA_URL;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-const moreHref = `${base}/community/contribute/#thank-you`;
-const openCallsHref = `${base}/community/contribute/#open-calls`;
+const moreHref = `${base}/community/contribute/`;
 const skeletons = variant === 'wall' ? 8 : 3;
 const listId = `thanks-list-${variant}`;
 ---
@@ -47,8 +46,7 @@ const listId = `thanks-list-${variant}`;
 		)
 	}
 	<p class="contrib-message thanks-message--empty">
-		No pull request has been merged yet. Be the first:
-		<a href={openCallsHref}>pick an open call</a>.
+		No pull request contributors are available yet.
 	</p>
 	<p class="contrib-message thanks-message--error">
 		We couldn't load the list. See

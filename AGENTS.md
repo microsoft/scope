@@ -163,6 +163,15 @@ Built on `mongo-migrate-ts`. Migrations are TypeScript files with `up()` and `do
 - Run: `pnpm migrate:up`, `pnpm migrate:down`, `pnpm migrate:status`
 - Framework docs: [docs/architecture/db-migrations.md](docs/architecture/db-migrations.md)
 
+## Code Readability
+
+- Write for humans: descriptive names, small focused functions, simple control flow, minimal abstraction.
+- Separate logical steps with blank lines; avoid dense one-liners and unrelated statements packed together.
+- Give every non-trivial function and logical code block a short comment explaining what it does; add intent, assumptions, invariants, or surprising reasons where useful.
+- Document function parameters, types, and their fields/properties with concise JSDoc/TSDoc explaining meaning, constraints, units, optionality, and defaults where relevant.
+- Do not narrate trivial or self-evident code. Document public contracts and failure behavior when names and types are insufficient.
+- Follow local conventions and formatters; review readability as well as correctness.
+
 ## Development
 
 ```bash

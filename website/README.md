@@ -7,7 +7,16 @@ End-user documentation site for **Scope**, built with
 and published to GitHub Pages.
 
 The product and this documentation site live in
-[microsoft/scope](https://github.com/microsoft/scope).
+[microsoft/scope](https://github.com/microsoft/scope). Users and contributors
+should start at the [official documentation website](https://microsoft.github.io/scope/).
+
+The root README is a short introduction and entry point to the website.
+Keep detailed setup, usage, and contribution guidance in
+[src/content/docs/](src/content/docs/) and register new pages in the sidebar.
+Local setup lives in
+[getting-started/local-development.md](src/content/docs/getting-started/local-development.md);
+development, contribution, and support guidance live under
+[resources/](src/content/docs/resources/).
 
 ## Project structure
 
@@ -18,7 +27,7 @@ The product and this documentation site live in
 │   ├── assets/
 │   ├── components/                  # Astro landing, interactive example, header, page title, site footer
 │   │   ├── community/               # article/talk lists + landing teaser
-│   │   └── contribute/              # open calls + contributor thanks (landing + page)
+│   │   └── contribute/              # contributor thanks (landing + page)
 │   ├── content/
 │   │   ├── docs/                    # all user-facing pages (.md / .mdx)
 │   │   │   ├── introduction/
@@ -29,14 +38,15 @@ The product and this documentation site live in
 │   │   │   └── community/
 │   │   ├── articles/                # one YAML per published article
 │   │   └── talks/                   # one YAML per talk
-│   ├── data/                        # dev-only samples: contribution issues, contributors
+│   ├── data/                        # dev-only contributor sample
 │   ├── openapi/scope-openapi.json   # artifact generated from the API registry
 │   ├── plugins/
 │   │   ├── remark-base-path.mjs    # applies the deployment base to internal links
 │   │   └── remark-http-snippets.mjs # turns ```http blocks into multi-language tabs
-│   ├── scripts/flow-demo.ts         # progressive-enhancement example controller
-│   ├── scripts/contribution-issues*.ts # open calls: data helpers + custom element
-│   ├── scripts/contributors*.ts     # contributor thanks: data helpers + custom element
+│   ├── scripts/
+│   │   ├── analytics.ts            # consent-gated website-only 1DS analytics
+│   │   ├── flow-demo.ts             # progressive-enhancement example controller
+│   │   └── contributors*.ts         # contributor thanks: data helpers + custom element
 │   ├── styles/landing.css           # shared brand tokens + scoped landing styles
 │   └── content.config.ts
 ├── astro.config.mjs                 # sidebar, plugins, starlight-openapi config
@@ -47,7 +57,42 @@ The product and this documentation site live in
 
 Sidebar order is defined in `astro.config.mjs`, not by directory order.
 
+The landing page places its Kubernetes infrastructure section before the
+final Get started call to action in
+[Home.astro](src/components/Home.astro), styled with Kubernetes blue
+(`#326CE5`) accents on a light background in both site themes. Its
+unmodified full-color logo is vendored from the
+[CNCF Kubernetes artwork](https://github.com/cncf/artwork/tree/main/projects/kubernetes)
+in [public/kubernetes-stacked-color.svg](public/kubernetes-stacked-color.svg).
+Keep the official artwork intact rather than recreating or recoloring it.
+
+The Kubernetes section's Host on Kubernetes link opens the
+[Kubernetes self-hosting overview](src/content/docs/self-hosting/overview.md).
+The infrastructure description and autoscaling tile both name KEDA.
+The feature row starts with queue-driven scaling; its headline
+opens the [Autoscaling with KEDA guide](src/content/docs/self-hosting/scaling.md).
+The compact full-color [KEDA](https://keda.sh/) wordmark links to the
+project site and sits directly on the light section background, without a
+separate badge, keeping Kubernetes as the primary brand.
+The three borderless feature tiles share an equal-height graphic area
+above aligned headlines and descriptions. The KEDA wordmark, container
+icon, and GitOps icon are vertically centered in that area; the tiles
+stack on narrow screens.
+The unmodified SVG is vendored from the
+[CNCF KEDA artwork](https://github.com/cncf/artwork/tree/main/projects/keda)
+in [public/keda-horizontal-color.svg](public/keda-horizontal-color.svg),
+under the [CNCF artwork trademark policy](https://github.com/cncf/artwork/blob/main/LICENSE.md).
+
+Mermaid diagrams in Markdown and MDX are rendered client-side by
+`astro-mermaid`, which must remain before Starlight in the `integrations`
+array. Automatic theme detection keeps diagrams legible when readers switch
+between the light and dark site themes.
+
 ## Commands
+
+Run these commands from `website/`. The site has its own
+[package.json](package.json) and [pnpm-lock.yaml](pnpm-lock.yaml), separate
+from the root pnpm workspace.
 
 | Command                | Action                                                     |
 | :--------------------- | :--------------------------------------------------------- |
@@ -55,8 +100,9 @@ Sidebar order is defined in `astro.config.mjs`, not by directory order.
 | `pnpm dev`             | Start dev server at the worktree's `DOC_PORT` (fallback: 4300) |
 | `pnpm build`           | Build the production site to `./dist/`                     |
 | `pnpm preview`         | Preview the production build locally                       |
-| `pnpm test`            | Test site plugins and scripts with Node's built-in test runner |
-| `pnpm refresh:openapi` | Generate the OpenAPI snapshot from `scope-core` |
+| `pnpm test`            | Test site plugins with Node's built-in test runner          |
+| `pnpm test:a11y`       | Build and check accessibility and privacy links in Chromium |
+| `pnpm refresh:openapi` | Generate the OpenAPI snapshot from this monorepo's API |
 
 ## Authoring docs
 
@@ -80,17 +126,19 @@ Sidebar order is defined in `astro.config.mjs`, not by directory order.
   [`starlight-openapi`](https://starlight-openapi.vercel.app/) — do
   not edit them by hand.
 - Run `pnpm refresh:openapi` from this directory after changing API
-  routes or schemas. It runs `apps/api`'s generator from the same
-  `scope-core` checkout, so root workspace dependencies must be
-  installed first.
+  routes or schemas. It runs `pnpm --filter api generate:openapi` from the
+  repository root, using [apps/api/src/openapi/generate.ts](../apps/api/src/openapi/generate.ts)
+  in this same `microsoft/scope` checkout. Install the root workspace
+  dependencies first; the generator updates
+  [src/openapi/scope-openapi.json](src/openapi/scope-openapi.json).
 
 - To list a new article or talk on the Community page, add one YAML
   file under `src/content/articles/` or `src/content/talks/`. See
   "Articles & talks" in [AGENTS.md](AGENTS.md) for the fields.
 
 See [AGENTS.md](AGENTS.md) for conventions, the source-of-truth
-policy (everything factual must be grounded in scope-core), and
-where to look in scope-core for any given topic.
+policy (everything factual must be grounded in this checkout's source),
+and where to look in the monorepo for any given topic.
 
 ## Deployment
 
@@ -140,20 +188,20 @@ table of contents, code examples, and previous/next navigation.
   Green and red communicate criterion outcomes, always with text.
 - **Navigation:** a landing header with direct documentation and demo
   links, plus task-oriented guide groups: run experiments, design a
-  benchmark, and connect tools. Existing document URLs are preserved.
+  benchmark, and connect tools. The footer's Learn group links to the
+  [Kubernetes deployment guide](src/content/docs/self-hosting/deploy-helm.md).
+  Existing document URLs are preserved.
 - **Onboarding:** a concrete example before terminology, followed by
   separate Portal, CLI, and API entry points. Access requirements are
   explicit rather than promising instant access to a hosted service.
 - **Motion:** limited to the silent showreel, the interactive
-  example, the open-calls cards (staggered entrance, count-up,
-  cursor glow, a rotation through all open calls), and the
-  contributor avatars (pop-in, hover tooltips), with pause controls
-  and reduced-motion support. The logo and documentation chrome remain
-  still.
-- **Contribution:** a "Help build Scope" section lists open calls
-  for contributions and thanks every contributor, refreshed
-  hourly from a data branch without a redeploy. See "Contribution
-  issues" and "Contributors" in `AGENTS.md`.
+  example, and the contributor avatars (pop-in, hover tooltips), with
+  pause controls and reduced-motion support. The logo and documentation
+  chrome remain still.
+- **Contribution:** a landing-page wall and full grid thank merged-PR
+  contributors, refreshed hourly from a data branch without a redeploy.
+  The publisher is `.github/workflows/contribution-data.yml`; see
+  "Contributors" in `AGENTS.md`.
 
 ### Showreel
 
@@ -204,6 +252,119 @@ JavaScript, the poster remains visible and the playback button stays
 hidden. Blocked autoplay offers manual playback; media failures display
 a status message and log the error. All media URLs use the configured
 deployment base.
+
+### Privacy and accessibility
+
+The site-wide footer includes Microsoft's **Privacy & Cookies**,
+**Your Privacy Choices** (with the privacy-options icon), and
+**Consumer Health Privacy** links on landing, documentation, community,
+and generated API pages. Privacy choices are always visible; the static
+site does not infer a visitor's location.
+
+Community videos use labeled **Watch on YouTube** links instead of
+embedded players. No YouTube player, thumbnail, or YouTube script
+loads on page visit. Opening a video is an explicit navigation to
+YouTube, with a new-tab hint for screen readers. Inline event links
+remain underlined so they are not identified by color alone.
+
+#### Website analytics and consent
+
+[Head.astro](src/components/Head.astro) preserves Starlight's default
+metadata and loads [analytics.ts](src/scripts/analytics.ts) on every page,
+including generated API reference pages. The integration runs only in
+production on `https://microsoft.github.io` within the configured
+`BASE_URL`. By default, development, local production previews, and other
+hosts make no consent or analytics requests.
+
+To review the real WCP banner locally, run from `website/`:
+
+```sh
+PUBLIC_CONSENT_PREVIEW=true pnpm dev --host 127.0.0.1
+```
+
+This development-only option enables the banner and **Manage cookies**
+control, but never loads or initializes 1DS, even after accepting
+Analytics. Production builds ignore the preview option. WCP uses your
+local browser's consent choices; use **Manage cookies** to review them
+again after dismissing the banner.
+
+Microsoft WCP provides worldwide opt-in consent and a **Manage cookies**
+footer control. The consent placeholder follows the skip link at the top
+of the body, keeping that link first in keyboard order. The banner sits
+above the fixed site header and follows Starlight's theme. Its measured
+height updates Starlight's navigation offsets as it wraps, resizes, or
+disappears, keeping the header, mobile menu, sidebars, and page content
+clear of the banner.
+
+The 1DS CDN script is requested only after explicit Analytics consent;
+implicit/non-required consent, Global Privacy Control, and Do Not Track
+do not enable analytics. Script or initialization failures log an error
+and leave documentation usable with analytics disabled.
+
+The configuration follows the supplied MarTech 1DS getting-started guide:
+the `ms.analytics-web-3.min.js` CDN, the `scope` tenant's public
+browser-ingestion identifier, a 50-event in-memory limit, `PROD`
+environment, and automatic page, load, unload, click, scroll, resize, and
+JavaScript-error capture. The tenant token is not an authentication
+credential. The SDK's cookie manager is disabled, and page-URL query
+strings and fragments are excluded. Changing consent while the SDK loads
+cannot initialize it after withdrawal. Withdrawal pauses transmission
+channels before unloading, and telemetry initializers reject events
+without current consent. The SDK owns ingestion retries; the site does
+not add another retry layer.
+
+Each SDK instance receives `propertyConfiguration.userConsented` from the
+same current WCP Analytics consent gate before initialization, including
+stored consent on subsequent page visits and reinitialization after
+renewed consent. Delaying SDK initialization alone does not set
+`ext.web.userConsent`. In SDK 3.2.18, omitting this property with the SDK's
+cookie manager disabled produces `userConsent: false` even after accepting
+WCP. The `cookieEnabled` field describes browser cookie capability, not
+Analytics consent; enabling analytics cookies is not the fix.
+
+Keep the registered `scope` App ID and existing browser-ingestion
+identifier unchanged. After deployment, an opted-in `Ms.Web.PageView`
+should retain `iKey: "o:d73f4c6d7bfd4f54ab769e2baaf3156b"` and
+`ext.app.env: "PROD"`, with `ext.web.userConsent: true`. A successful
+collector response confirms delivery, not visibility in Customer Journey
+Analytics (CJA). Downstream processing and data-view configuration must
+be checked separately in CJA.
+
+This is not Scope application telemetry and does not modify the Portal,
+CLI, API, or workers. The
+[data-collection notice](src/content/docs/resources/data-collection.md)
+describes website analytics separately from deployment data and links
+GDPR, UK GDPR/PECR, CCPA/CPRA, LGPD, PIPEDA, Australian, and Japanese
+privacy-law resources. These controls do not certify legal compliance;
+retain the appropriate review of data handling, retention, transfers,
+and applicable regional obligations.
+
+Install the test browser once, then run the regression suite:
+
+```sh
+pnpm exec playwright install chromium
+pnpm test:a11y
+```
+
+On Linux, use `pnpm exec playwright install --with-deps chromium` to
+install the browser's system dependencies as well. The suite builds
+with the production `/scope` base, starts an isolated preview server,
+and runs axe checks in light/dark themes at 1280px and 320px widths.
+It covers the landing page, expanded demo disclosures and results,
+representative documentation, community and API pages, privacy links,
+landmarks, horizontal reflow, keyboard navigation, reduced motion,
+and absence of third-party requests on local previews. Published-origin
+analytics checks mock the Microsoft scripts to cover opt-in, withdrawal,
+stored consent, explicit SDK consent metadata, blocked scripts, privacy
+signals, loading races, and responsive top-banner placement without
+sending real analytics. CI runs the same browser suite against its
+existing production build before deployment.
+
+Automated checks do not certify full accessibility or policy
+compliance. Retain manual keyboard, screen-reader, zoom, and
+Accessibility Insights reviews, and review the internal
+[Website Management Center requirements](https://aka.ms/wmc)
+with an authenticated Microsoft account before compliance sign-off.
 
 ### Interactive example
 

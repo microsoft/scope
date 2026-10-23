@@ -202,8 +202,10 @@ MongoDB is CosmosDB-compatible — avoid MongoDB features that CosmosDB's MongoD
   (`.agents/skills/rust-best-practices/SKILL.md`).
 - **Databases**: keep MongoDB usage CosmosDB-compatible (see migrations above).
 - **Documentation is not optional**: if you add or change a component, API, data model, pattern, or
-  deployment behavior, update the relevant doc in [`docs/`](./docs/) (or add one and link it from the
-  README) as the last step before opening your PR.
+  deployment behavior, update the relevant technical doc in [`docs/`](./docs/) and user-facing
+  guide in [`website/src/content/docs/`](./website/src/content/docs/) as appropriate. Add new
+  website pages to the sidebar in [`website/astro.config.mjs`](./website/astro.config.mjs)
+  as the last step before opening your PR.
 
 ## Submitting a pull request
 
@@ -339,7 +341,7 @@ Automations depend on these exact names:
 | Test Improver issues, PRs, and monthly-summary searches | `type: automation`, `topic: testing` |
 | Dependabot | `type: dependencies`, plus `language: javascript` or `language: rust` |
 | Pull Request Labeler | Area, topic, language, and type labels from `.github/labeler.yml` |
-| Website open calls ([Contribute page](https://microsoft.github.io/scope/community/contribute/)) | Open, unassigned `good first issue` or `help wanted` issues |
+| Community Contribution Labeler | `community-contribution` |
 
 Use `area: reporting` for Scope's benchmark reporting component, not daily repository activity.
 Worker upgrade routing uses `type: worker-update`, not the broader `area: worker`.
@@ -382,7 +384,12 @@ does not enable security updates or change live labels.
 
 `.github/workflows/labeler.yml` runs on the unprivileged `pull_request` event and skips fork PRs.
 Do not switch it to `pull_request_target` just to label fork PRs; that would violate the fork-PR
-security boundary above.
+security boundary above. `.github/workflows/community-contribution-labeler.yml` labels issues
+directly and follows completed PR labeler runs, using GitHub metadata only to apply
+`community-contribution` to human authors whose association is `NONE`, `FIRST_TIMER`,
+`FIRST_TIME_CONTRIBUTOR`, or `CONTRIBUTOR`. It requires `issues: write` for issue labels and
+`pull-requests: write` for pull request labels, but it must not check out pull request code,
+download artifacts, or receive repository secrets.
 
 ## Third-party notices
 
@@ -427,6 +434,9 @@ installed dependencies.
 
 - Start with the [system architecture](./docs/architecture/system-architecture.md) and the
   [app design](./docs/architecture/app-design.md) docs for the big picture.
-- The [README](./README.md) introduces the platform, provides a local quick start, and links the full documentation index.
+- The [official documentation website](https://microsoft.github.io/scope/) includes
+  [local setup](https://microsoft.github.io/scope/getting-started/local-development/),
+  the [development guide](https://microsoft.github.io/scope/resources/development/), and
+  [contribution guidance](https://microsoft.github.io/scope/resources/contributing/).
 - Browse [open issues](https://github.com/microsoft/scope/issues) for bugs and
   proposed improvements. Discuss larger changes in an issue before starting work.

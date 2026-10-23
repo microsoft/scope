@@ -54,6 +54,21 @@ scope run submit \
   --profile my-copilot-profile
 ```
 
+### Starting from a codebase
+
+Use `--codebase` to seed the workspace from a registered codebase.
+Pass a bare slug to resolve the latest revision, or pin a numbered ref
+for reproducibility:
+
+```bash
+scope run submit \
+  -m "Add input validation to the inventory API." \
+  --profile my-copilot-profile \
+  --codebase inventory-service@r3
+```
+
+See [Managing codebases](/guides/managing-codebases/).
+
 ### Additional options
 
 | Flag | Purpose |
@@ -61,6 +76,7 @@ scope run submit \
 | `--model <model>` | Override the model (e.g. `gpt-4o`) |
 | `--mcp-servers <slugs...>` | Attach MCP servers to this run |
 | `--skills <slugs...>` | Attach skills |
+| `--codebase <ref>` | Seed the workspace from a codebase slug, numbered ref, or revision ID |
 | `--extensions <ids...>` | Install VS Code extensions |
 | `--max-iterations <n>` | Max judge iterations (multi-turn) |
 | `--agent-version <ver>` | Pin to a specific agent version |
@@ -171,5 +187,7 @@ directory.
   the criteria DAG that judges your runs.
 - [Defining profiles](/guides/defining-profiles/) — save reusable
   agent configurations.
+- [Managing codebases](/guides/managing-codebases/) — seed runs from
+  versioned project snapshots.
 - [Choosing a coding agent](/guides/choosing-a-coding-agent/) —
   understand the available workers.

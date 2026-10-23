@@ -44,4 +44,22 @@ describe("public CLI release lookup", () => {
     expect(execSync).toHaveBeenCalledWith(expect.stringContaining("gh release list --repo microsoft/scope"), expect.anything());
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("preserves a custom releases URL without invoking gh", async () => {
+    vi.stubEnv("SCOPE_RELEASES_URL", "http://localhost:9999/releases");
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json([{ tag_name: "cli/v2.0.0" }]));
+    vi.stubGlobal("fetch", fetchMock);
+    const { fetchLatestVersion } = await import("./update-check.js");
+    expect(await fetchLatestVersion()).toBe("2.0.0");
+    expect(execSync).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:9999/releases", expect.anything());
+  });
+
+  it("returns no version when no CLI release has been published", async () => {
+    vi.mocked(execSync).mockReturnValue("");
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json([{ tag_name: "other/v9.0.0" }]));
+    vi.stubGlobal("fetch", fetchMock);
+    const { fetchLatestVersion } = await import("./update-check.js");
+    expect(await fetchLatestVersion()).toBeUndefined();
+  });
 });

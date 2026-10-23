@@ -49,6 +49,20 @@ A reusable, versioned description of an agent runtime configuration
 profile has a stable identity and a series of immutable versions. See
 [Defining profiles](/guides/defining-profiles/).
 
+## Codebase
+
+A reusable source project that seeds a run workspace. A codebase is
+registered from a GitHub repository or uploaded archive and has a
+series of immutable revisions. See
+[Managing codebases](/guides/managing-codebases/).
+
+## Codebase revision
+
+An immutable snapshot of a codebase, addressed by a numbered ref such
+as `inventory-service@r3` or by its revision UUID. Requests store the
+resolved revision ID so later codebase changes do not alter a past
+run's starting workspace.
+
 ## Profile version
 
 An immutable snapshot of a profile's runtime configuration.
@@ -92,3 +106,16 @@ tasks. See [Working with prompt features](/guides/prompt-features/).
 
 The prompt the LLM uses to decide whether a given prompt feature
 applies to a task prompt. Stored on the feature catalog entry.
+
+## Helm chart
+
+The package that installs Scope on Kubernetes, in
+`deploy/helm/scope`. See [Deploy with Helm](/self-hosting/deploy-helm/).
+
+## Azure Key Vault Secrets Provider
+
+The AKS add-on that uses the Secrets Store CSI Driver to mount Key Vault
+objects and optionally sync them into Kubernetes Secrets. Scope's Helm chart
+uses one `SecretProviderClass` and a workload identity to create the
+`scope-secrets` Secret. See
+[Secrets](/self-hosting/configuration/#secrets).

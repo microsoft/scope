@@ -17,6 +17,8 @@ A **request** is what you submit to Scope. It bundles:
 - A **criteria set** (by ID) — how the result is judged.
 - A **profile** (by ID or version ID) or an inline runtime
   configuration — which agent, model, and tools to use.
+- An optional **codebase revision** — the project snapshot seeded into
+  the worker's workspace.
 - A **priority** and a few options like `maxIterations`.
 
 You don't run anything yourself — submitting a request hands the work
@@ -68,6 +70,17 @@ forever. This is what makes runs reproducible.
 
 See [Defining profiles](/guides/defining-profiles/).
 
+## Codebase
+
+A **codebase** is a reusable project source attached to a request.
+Codebases can come from GitHub repositories or uploaded archives.
+
+Every codebase has immutable, sequentially numbered revisions. A
+request resolves its selection to one exact revision before queueing,
+so the agent's starting workspace can be inspected and reproduced.
+
+See [Managing codebases](/guides/managing-codebases/).
+
 ## Judge
 
 The **judge** is the service that evaluates a completed run against its
@@ -116,3 +129,20 @@ Optional capabilities that extend what an agent can do during a run:
 
 All three are properties of a profile.
 See [Using MCP servers, skills & extensions](/guides/mcp-skills-extensions/).
+
+## Evaluation building blocks
+
+| Concept | Purpose |
+| --- | --- |
+| Tasks and scenarios | Define the work the agent should perform. |
+| Criteria | Define observable checks and dependencies in the Judge's criteria DAG. |
+| Personas | Configure the evaluation perspective and feedback style. |
+| Profiles and variations | Save an agent configuration and compare changes against a baseline. |
+| Skills and MCP servers | Provide agent instructions and tools through the Model Context Protocol. |
+| Codebases | Seed a run with a versioned starting workspace. See [Managing codebases](/guides/managing-codebases/). |
+
+The YAML files in
+[config/](https://github.com/microsoft/scope/tree/main/config) are portable
+examples, not the live configuration database. MongoDB is the runtime source
+of truth. Manage configuration through the Portal or CLI; don't assume that
+editing an example file changes an existing evaluation.

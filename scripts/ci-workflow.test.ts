@@ -39,6 +39,15 @@ const workflow = parse(readFileSync(".github/workflows/ci.yml", "utf8")) as {
   permissions: Record<string, string>;
   jobs: Record<string, Job>;
 };
+const communityContributionWorkflowSource = readFileSync(".github/workflows/community-contribution-labeler.yml", "utf8");
+const communityContributionWorkflow = parse(communityContributionWorkflowSource) as {
+  on: {
+    issues: { types: string[] };
+    workflow_run: { workflows: string[]; types: string[] };
+  };
+  permissions: Record<string, string>;
+  jobs: Record<string, Job>;
+};
 const jobs = workflow.jobs;
 const directories: string[] = [];
 const trusted = "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository";
@@ -195,6 +204,29 @@ describe("CI repository and credential boundaries", () => {
       const filters = jobs["detect-changes"].steps.find((candidate) => candidate.with?.filters)?.with?.filters;
       expect(filters).toContain(path);
     }
+  });
+});
+
+describe("Community contribution labeler workflow", () => {
+  it("retains the permissions required to label issues and pull requests", () => {
+    expect(communityContributionWorkflow.permissions).toEqual({
+      contents: "read",
+      issues: "write",
+      "pull-requests": "write",
+    });
+  });
+
+  it("follows pull request labeler runs without executing untrusted pull request content", () => {
+    expect(communityContributionWorkflow.on).toEqual({
+      issues: { types: ["opened", "reopened"] },
+      workflow_run: {
+        workflows: ["Pull Request Labeler"],
+        types: ["completed"],
+      },
+    });
+    expect(communityContributionWorkflowSource).not.toMatch(
+      /pull_request_target|actions\/checkout|actions\/download-artifact|secrets\./,
+    );
   });
 });
 

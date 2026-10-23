@@ -6,6 +6,12 @@ description: How to reach the Scope Portal.
 You can access Scope through the web Portal, the REST API, or the
 `scope` CLI.
 
+This page assumes you have access to an existing deployment. To run Scope
+yourself, follow [Local development](/getting-started/local-development/) for
+prerequisites, setup, authentication, and a first evaluation. To host a
+shared deployment, see
+[Kubernetes self-hosting](/self-hosting/overview/).
+
 ## Requirements
 
 Your deployment administrator provides the Portal URL and any required
@@ -33,7 +39,9 @@ You don't need to install anything to use the Portal.
 
 Your deployment may require credentials to run coding agents or pull
 skills from GitHub repositories. Contact your deployment administrator
-for the required setup.
+for the required setup, or see
+[Manage provider credentials](/guides/managing-credentials/) to add
+provider keys yourself.
 
 ## CLI access
 

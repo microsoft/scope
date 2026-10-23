@@ -60,6 +60,13 @@ export function createProxyClient(): ProxyClient {
           };
         }
 
+        // Opt this session into CAPI HMAC (integration) auth. Off by default so
+        // runs using a regular GitHub token are unaffected. The HMAC secret and
+        // integration ID live only in the gateway's environment, never here.
+        if (process.env.GATEWAY_CAPI_HMAC_ENABLED === "true") {
+          plugins.capi_hmac = { enabled: true };
+        }
+
         await gw.startSession(plugins, maxSessionDurationSecs);
       },
       stopAndCollectHar: async (log) => {

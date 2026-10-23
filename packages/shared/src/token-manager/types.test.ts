@@ -2,7 +2,16 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect } from "vitest";
-import { parseAzureAiFoundrySecret } from "./types.js";
+import { isKeyType, parseAzureAiFoundrySecret } from "./types.js";
+
+describe("isKeyType", () => {
+  it("recognises only known key types", () => {
+    expect(isKeyType("anthropic-api-key")).toBe(true);
+    expect(isKeyType("github-oauth-cookie-state")).toBe(true);
+    expect(isKeyType("unknown")).toBe(false);
+    expect(isKeyType(undefined)).toBe(false);
+  });
+});
 
 describe("parseAzureAiFoundrySecret", () => {
   it("parses a well-formed blob with endpoint, apiKey, and model", () => {

@@ -92,10 +92,10 @@ async function validateGitHubToken(
       : [];
 
     return { status: "valid", scopes, rateLimit };
-  } catch (err) {
+  } catch {
     return {
       status: "error",
-      error: `GitHub token validation failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: "GitHub token validation failed",
     };
   }
 }
@@ -157,10 +157,10 @@ async function validateAnthropicKey(
     }
 
     return { status: "valid" };
-  } catch (err) {
+  } catch {
     return {
       status: "error",
-      error: `Anthropic key validation failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: "Anthropic key validation failed",
     };
   }
 }
@@ -185,10 +185,10 @@ async function validateGitHubOAuthCookieState(
     }
     // Structural check — we can't validate the session without a browser
     return { status: "valid" };
-  } catch (err) {
+  } catch {
     return {
       status: "invalid",
-      error: `OAuth cookie state is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      error: "OAuth cookie state is not valid JSON",
     };
   }
 }
@@ -282,13 +282,13 @@ async function validateAzureAiFoundry(
         }
         return {
           status: "invalid",
-          error: `Foundry rejected the validation request (HTTP ${response.status})${responseText ? ` — ${responseText.slice(0, 200)}` : ""}`,
+          error: `Foundry rejected the validation request (HTTP ${response.status})`,
         };
       }
 
       return {
         status: "error",
-        error: `Foundry endpoint returned HTTP ${response.status} for ${url}${responseText ? ` — ${responseText.slice(0, 200)}` : ""}`,
+        error: `Foundry endpoint returned HTTP ${response.status}`,
       };
     }
 
@@ -296,10 +296,10 @@ async function validateAzureAiFoundry(
       status: "error",
       error: "Foundry validation exhausted compatibility attempts",
     };
-  } catch (err) {
+  } catch {
     return {
       status: "error",
-      error: `Foundry validation failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: "Foundry validation failed",
     };
   }
 }

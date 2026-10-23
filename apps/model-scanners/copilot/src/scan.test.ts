@@ -139,6 +139,23 @@ describe("scanCopilotModels", () => {
     ).toBe("vscode-chat");
   });
 
+  it("should omit Authorization and use the injected fetch when token is null", async () => {
+    const globalFetch = vi.spyOn(globalThis, "fetch");
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ id: "claude-opus-4" }] }), { status: 200 }),
+    );
+
+    const result = await scanCopilotModels(null, fetchFn);
+
+    expect(globalFetch).not.toHaveBeenCalled();
+    expect(result.models.map((m) => m.id)).toEqual(["claude-opus-4"]);
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe("https://api.githubcopilot.com/models");
+    const headers = init?.headers as Record<string, string>;
+    expect(headers).not.toHaveProperty("Authorization");
+    expect(headers["Copilot-Integration-Id"]).toBe("vscode-chat");
+  });
+
   it("should throw on 401 response", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("Unauthorized", { status: 401 }),

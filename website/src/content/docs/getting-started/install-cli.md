@@ -34,7 +34,9 @@ curl --fail --location https://raw.githubusercontent.com/microsoft/scope/main/in
 The installer checks the downloaded bundle's version before replacing an
 existing installation. Missing releases, download errors, and version
 mismatches fail without replacing your installed CLI. If no public CLI
-release has been published yet, the installer reports that explicitly.
+release has been published yet, the installer reports that explicitly;
+follow [Local development](/getting-started/local-development/) to build
+the CLI from source instead.
 
 ## Add to PATH
 
