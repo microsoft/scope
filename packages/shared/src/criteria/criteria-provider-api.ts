@@ -3,6 +3,7 @@
 
 import { CriteriaConfig } from '../types/types.js';
 import { CriteriaProvider } from './criteria-provider.js';
+import { fetchWithBearer, type BearerProvider } from '../http/bearer.js';
 
 interface CacheEntry {
   value: CriteriaConfig;
@@ -34,13 +35,19 @@ export class RestApiCriteriaProvider implements CriteriaProvider {
   private readonly maxSize: number;
   private readonly ttlMs: number;
   private readonly projectId?: string;
+  /** Supplies the run token (when present) sent with criteria reads. */
+  private readonly bearer?: BearerProvider;
 
-  constructor(apiUrl: string, options?: { maxSize?: number; ttlMs?: number; projectId?: string }) {
+  constructor(
+    apiUrl: string,
+    options?: { maxSize?: number; ttlMs?: number; projectId?: string; bearer?: BearerProvider },
+  ) {
     // Strip trailing slash
     this.apiUrl = apiUrl.replace(/\/+$/, '');
     this.maxSize = options?.maxSize ?? 200;
     this.ttlMs = options?.ttlMs ?? 60_000; // 1 minute
     this.projectId = options?.projectId;
+    this.bearer = options?.bearer;
   }
 
   /** Append ?projectId= when this provider is bound to a project (per-project isolation). */
@@ -64,7 +71,7 @@ export class RestApiCriteriaProvider implements CriteriaProvider {
 
     // 2. Fetch from API
     const url = this.withProject(`${this.apiUrl}/api/v1/criteria/${encodeURIComponent(id)}`);
-    const res = await fetch(url);
+    const res = await fetchWithBearer(url, this.bearer);
 
     if (res.status === 404) return undefined;
     if (!res.ok) {
@@ -86,7 +93,7 @@ export class RestApiCriteriaProvider implements CriteriaProvider {
 
     // 2. Fetch from API
     const url = this.withProject(`${this.apiUrl}/api/v1/criteria`);
-    const res = await fetch(url);
+    const res = await fetchWithBearer(url, this.bearer);
 
     if (!res.ok) {
       throw new Error(`[RestApiCriteriaProvider] GET ${url} failed: ${res.status} ${res.statusText}`);

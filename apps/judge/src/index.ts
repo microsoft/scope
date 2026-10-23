@@ -7,6 +7,7 @@ import { evaluateWorkspace } from "./judge-agent.js";
 import { verifyCopilotProtocol } from "./protocol-check.js";
 import { resolveCurrentIteration, mapIterationToolCallUrls } from "./tool-call-history.js";
 import { BlobStorage, RedisLogPublisher } from "shared";
+import { forwardableRunToken } from "./run-token-forwarding.js";
 import { initTelemetry, trackMetric, trackEvent } from "telemetry";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -179,6 +180,7 @@ app.post(
           iterationToolCalls,
           projectId,
           currentAgentResponse,
+          runToken: forwardableRunToken(req.headers.authorization),
         });
 
         const elapsed = Date.now() - startTime;

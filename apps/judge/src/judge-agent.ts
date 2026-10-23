@@ -10,7 +10,7 @@ import {
   GateId,
   IterationToolCalls,
 } from "shared";
-import { getCriteriaProvider } from "shared/criteria-provider-factory";
+import { createCriteriaProvider, getCriteriaProvider } from "shared/criteria-provider-factory";
 import { createJudgeStrategy } from "./judge-strategies.js";
 import { FeedbackGenerator } from "./feedback-generator.js";
 
@@ -31,6 +31,8 @@ export interface EvaluationInput {
   projectId?: string;
   /** The coding agent's response (prose) for the iteration being judged, exposed to the judge via read_agent_response. */
   currentAgentResponse?: string;
+  /** The calling run's token, forwarded on criteria reads. Never logged. */
+  runToken?: string;
 }
 
 export interface EvaluationResult {
@@ -65,7 +67,12 @@ export async function evaluateWorkspace(
   // 3. Resolve criteria IDs from provider (with ancestor dependencies)
   let normalizedCriteria: CriteriaConfig[];
   try {
-    const provider = getCriteriaProvider(input.projectId);
+    // A run-token caller gets a per-evaluation provider so the credential is
+    // never shared through the cached provider.
+    const runToken = input.runToken;
+    const provider = runToken
+      ? createCriteriaProvider(input.projectId, { bearer: () => runToken })
+      : getCriteriaProvider(input.projectId);
     normalizedCriteria = await provider.resolveWithAncestors(input.criteria);
     console.log(
       `[judge-agent] Loaded ${normalizedCriteria.length} criteria (including ancestors) from provider`

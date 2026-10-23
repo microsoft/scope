@@ -5,6 +5,7 @@ import { join } from 'path';
 import { CriteriaProvider } from './criteria-provider.js';
 import { FileSystemCriteriaProvider } from './criteria-provider-fs.js';
 import { RestApiCriteriaProvider } from './criteria-provider-api.js';
+import type { BearerProvider } from '../http/bearer.js';
 
 /**
  * Create a CriteriaProvider based on environment variables:
@@ -16,12 +17,19 @@ import { RestApiCriteriaProvider } from './criteria-provider-api.js';
  * When `projectId` is provided, a REST provider is bound to that project so its
  * criteria fetches are isolated (`?projectId=`); the filesystem provider ignores
  * it (single-tenant local config).
+ *
+ * `opts.bearer` attaches a caller credential (the run token) to REST reads.
+ * Providers built with a bearer are per-evaluation and must not be cached.
  */
-export function createCriteriaProvider(projectId?: string): CriteriaProvider {
+export function createCriteriaProvider(
+  projectId?: string,
+  opts?: { bearer?: BearerProvider },
+): CriteriaProvider {
   const apiUrl = process.env.CRITERIA_API_URL;
   if (apiUrl) {
     console.log(`[CriteriaProviderFactory] Using REST API provider: ${apiUrl}${projectId ? ` (project ${projectId})` : ''}`);
-    return new RestApiCriteriaProvider(apiUrl, projectId ? { projectId } : undefined);
+    const options = { ...(projectId ? { projectId } : {}), ...(opts?.bearer ? { bearer: opts.bearer } : {}) };
+    return new RestApiCriteriaProvider(apiUrl, Object.keys(options).length ? options : undefined);
   }
 
   const criteriaDir = process.env.CRITERIA_DIR || join(process.cwd(), 'config', 'criteria');
