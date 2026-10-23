@@ -93,6 +93,18 @@ describe("CI execution prerequisites", () => {
     expect(step("integration-test", "Pre-build Docker test images").run).toContain("${{ matrix.worker.images }}");
   });
 
+  it("runs GEPA tests when the optimizer changes and includes them in the summary", () => {
+    const filtersStep = jobs["detect-changes"].steps.find((candidate) => candidate.uses?.startsWith("dorny/paths-filter@"));
+    const filters = parse(filtersStep!.with!.filters) as Record<string, string[]>;
+    expect(filters.gepa).toContain("apps/gepa-optimizer/**");
+    expect(jobs["detect-changes"].outputs?.gepa).toBe("${{ steps.changes.outputs.gepa }}");
+    expect(jobs.gepa.if).toContain("needs.detect-changes.outputs.gepa == 'true'");
+    expect(step("gepa", "Install locked dependencies").run).toBe("uv sync --locked");
+    expect(step("gepa", "Run tests").run).toBe("uv run pytest");
+    expect(jobs["ci-summary"].needs).toContain("gepa");
+    expect(step("ci-summary", "Check overall status").run).toContain("needs.gepa.result");
+  });
+
   it("parses the remaining inline shell scripts", () => {
     for (const job of Object.values(jobs)) {
       for (const command of job.steps.filter((candidate) => candidate.run && candidate.shell !== "pwsh")) {

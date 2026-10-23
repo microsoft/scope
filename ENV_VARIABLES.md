@@ -1369,6 +1369,73 @@ URL of the gateway/DevProxy REST API. Used to start/stop recording, check status
 
 Host port mapping for the Copilot DevProxy REST API in Docker Compose.
 
+## GEPA Optimizer Configuration (`apps/gepa-optimizer`)
+
+The Python + uv GEPA app optimizes an AGENTS.md file by scoring each candidate
+with real Scope runs. Configure it through `apps/gepa-optimizer/.env`; see the
+co-located `.env.example`.
+
+### SCOPE_API_URL
+**Default:** `http://localhost:3100`
+
+Base URL of the Scope REST API used to submit and poll candidate runs.
+
+### SCOPE_PROJECT_ID
+**Default:** none (required)
+
+Project that owns the criteria and candidate runs. Scope's catalog and run
+creation APIs are project-scoped, so the optimizer fails fast when this is not
+configured.
+
+### SCOPE_EXPERIMENT_ID / SCOPE_EXPERIMENT_NAME
+**Defaults:** empty / `GEPA AGENTS.md optimization <timestamp>`
+
+With no ID, the optimizer creates one empty canonical Experiment and uses its
+membership revisions for every evaluated candidate batch. Set
+`SCOPE_EXPERIMENT_ID` to target an existing Experiment; the optimizer reads its
+current revision before adding requests. `SCOPE_EXPERIMENT_NAME` controls the
+metadata name only when creating a new Experiment.
+
+### SCOPE_WORKER / SCOPE_MODEL
+**Defaults:** `coder-acp-copilot` / `claude-haiku-4.5`
+
+Worker and model used to evaluate each candidate.
+
+### SCOPE_MAX_CONCURRENCY
+**Default:** `10`
+**Type:** integer
+
+Maximum number of candidate runs kept in flight concurrently.
+
+### SCOPE_RUN_TIMEOUT_SECONDS / SCOPE_POLL_INTERVAL_SECONDS
+**Defaults:** `1800` / `15`
+
+Per-run timeout and polling interval, in seconds.
+
+### SCOPE_MAX_ITERATIONS
+**Default:** `10`
+
+Maximum agent/judge iterations for each candidate run.
+
+### SCOPE_SCORE_STRATEGY
+**Default:** `mean`
+**Options:** `mean` | `final` | `weighted`
+
+Aggregation applied to per-turn criteria pass fractions. `weighted` computes
+`0.8 * final + 0.2 * mean`.
+
+### GEPA_MAX_METRIC_CALLS / GEPA_REFLECTION_MINIBATCH_SIZE
+**Defaults:** `12` / `2`
+
+Optimizer budget. Each metric call is a complete Scope agent run.
+
+### GEPA_REFLECTION_LM
+**Default:** `azure/gpt-5.5`
+
+litellm model string for the reflection model that rewrites AGENTS.md.
+Provider-specific credentials such as `AZURE_API_KEY`, `AZURE_API_BASE`, and
+`AZURE_API_VERSION` are consumed by litellm.
+
 ## Observability
 
 ### OTEL_COLLECTOR_ENDPOINT

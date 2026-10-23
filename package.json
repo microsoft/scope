@@ -61,6 +61,8 @@
     "test:gateway": "cd apps/gateway && cargo test",
     "lint:gateway": "cd apps/gateway && cargo clippy -- -D warnings",
     "fmt:gateway": "cd apps/gateway && cargo fmt --check",
+    "build:gepa": "cd apps/gepa-optimizer && uv sync --locked",
+    "test:gepa": "cd apps/gepa-optimizer && uv run pytest",
     "dev:token-manager": "pnpm --filter token-manager dev",
     "dev:model-scanner-copilot": "pnpm --filter model-scanner-copilot dev",
     "dev:model-scanner-anthropic": "pnpm --filter model-scanner-anthropic dev",
