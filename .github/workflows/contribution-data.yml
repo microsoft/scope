@@ -1,14 +1,19 @@
-# Publishes merged pull request contributors to the orphan `website-data`
-# branch. The docs site fetches the deterministic JSONL at runtime.
+# Publishes open calls and merged pull request contributors to the orphan
+# `website-data` branch. The docs site fetches deterministic JSONL at runtime.
 name: Publish website contribution data
 
 on:
+  schedule:
+    - cron: '17 3 * * *'
   push:
     branches: [main]
+  issues:
+    types: [opened, closed, reopened, edited, labeled, unlabeled, assigned, unassigned]
   workflow_dispatch:
 
 permissions:
   contents: write
+  issues: read
   pull-requests: read
 
 concurrency:
@@ -25,6 +30,26 @@ jobs:
       REPO: ${{ github.repository }}
       DATA_BRANCH: website-data
     steps:
+      - name: Collect open calls
+        run: |
+          set -euo pipefail
+          for label in 'good first issue' 'help wanted'; do
+            gh issue list \
+              --repo "$REPO" \
+              --state open \
+              --search 'no:assignee' \
+              --label "$label" \
+              --limit 500 \
+              --json number,title,labels,state,assignees
+          done |
+            jq -cS -s '
+              add
+              | map(select(.state == "OPEN" and (.assignees | length) == 0))
+              | unique_by(.number)
+              | sort_by(.number)
+              | .[]
+              | {number, title, labels: ([.labels[].name] | sort)}' > issues.jsonl
+
       - name: Collect contributors
         run: |
           set -euo pipefail
@@ -65,8 +90,8 @@ jobs:
           else
             git checkout -q --orphan "$DATA_BRANCH"
           fi
-          cp ../contributors.jsonl .
-          git add contributors.jsonl
+          cp ../issues.jsonl ../contributors.jsonl .
+          git add issues.jsonl contributors.jsonl
           if git diff --cached --quiet; then
             echo 'No website data changes.'
             exit 0

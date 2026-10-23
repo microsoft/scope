@@ -218,26 +218,62 @@ Published videos use a labeled Watch on YouTube link, not an iframe
 or remote thumbnail, so visiting a page does not load a third-party
 player or its scripts.
 
+### Contribution issues
+
+The landing page ("Help build Scope") and **Community → Contribute**
+list open, unassigned issues labeled `good first issue` or
+`help wanted`. The list is data, not content, so it isn't in the
+build:
+
+- [`.github/workflows/contribution-data.yml`](../.github/workflows/contribution-data.yml)
+  writes `issues.jsonl` and `contributors.jsonl` to the orphan
+  `website-data` branch. It runs daily at 03:17 UTC, after pushes to
+  `main`, on relevant issue changes, and on demand.
+- `issues.jsonl` is deterministic: one issue per line, sorted by
+  number, with sorted keys and only `number`, `title`, and sorted
+  `labels`. An empty file means there are no open calls; both pages
+  hide the complete calls surface while preserving contributor content.
+- The browser fetches the file from `raw.githubusercontent.com`
+  (`DATA_URL` in
+  [`contribution-issues.ts`](src/scripts/contribution-issues.ts)).
+  Set `PUBLIC_CONTRIBUTION_ISSUES_URL` to point at another file.
+- Display order is decided client-side: good first issues first, then
+  newest. `area:`, `difficulty:`, and `type:` labels show as chips.
+- The landing section shows 4 issues at a time and rotates every 7
+  seconds. Rotation pauses while the whole custom element—including
+  its dots and pause button—is hovered or focused, when off screen or
+  the tab is hidden, and under reduced motion.
+- Check 0, 1, a partial page, exactly 4, 5, several pages, and enough
+  pages to exceed the viewport on desktop and mobile. Also check
+  reduced motion and long user-supplied titles and chip values.
+- In `pnpm run dev`, a failed fetch falls back to
+  [`contribution-issues.sample.jsonl`](src/data/contribution-issues.sample.jsonl)
+  and shows a "Sample data · dev only" tag. Production builds drop
+  that branch and the sample.
+- Titles and labels come from GitHub users. Render them with
+  `textContent` only, never `innerHTML`.
+
 ### Contributors
 
-The landing page (an avatar wall) and the **Community → Contributors**
-page (a card grid) thank every author of a merged pull request,
+The landing page (an avatar wall) and the "Thank you" section of
+**Community → Contribute** (a card grid) thank every author of a merged pull request,
 community and Microsoft alike:
 
 - The publisher writes `contributors.jsonl` to `website-data`. It
   counts merged PRs whose author is a user, not a bot (`[bot]` suffix).
   Team members count too; don't filter on `authorAssociation`.
-- [`.github/workflows/contribution-data.yml`](../.github/workflows/contribution-data.yml)
-  runs after pushes to `main` (including merged pull requests) and on
-  demand. It updates the orphan data branch only when the deterministic
-  file changes.
+- The same workflow publishes this file alongside `issues.jsonl` and
+  updates contributor data after pushes to `main` (including merged
+  pull requests). Issue events and the daily reconciliation can also
+  republish it, but the data branch changes only when deterministic
+  output changes.
 - One line per person, `{"login":"…","prs":N}`, with sorted keys and
   sorted by lowercase login. No avatar URLs or timestamps; avatars come
   from `https://github.com/<login>.png`, and a failed image shows the
   login's initial.
 - The browser sorts by merged PRs, then login. The wall shows up to
   `limit` items; the last slot becomes a "+N" bubble that links to
-  the full grid. The grid shows `limit` cards (30 on the Contributors
+  the full grid. The grid shows `limit` cards (30 on the Contribute
   page) and a "Show all N contributors" button, unless only one card
   would stay hidden. Each person links to their merged PRs.
 - Wall tooltips get a `--tip-shift` so they stay inside the wall (a
@@ -252,6 +288,7 @@ community and Microsoft alike:
   which lists real contributors only.
 - Logins are user data: render them with `textContent` or attributes
   only.
+
 ### Style
 
 - Hard-wrap prose at ~70–80 columns for readable diffs.

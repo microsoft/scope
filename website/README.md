@@ -27,7 +27,7 @@ development, contribution, and support guidance live under
 │   ├── assets/
 │   ├── components/                  # Astro landing, interactive example, header, page title, site footer
 │   │   ├── community/               # article/talk lists + landing teaser
-│   │   └── contribute/              # contributor thanks (landing + page)
+│   │   └── contribute/              # open calls + contributor thanks
 │   ├── content/
 │   │   ├── docs/                    # all user-facing pages (.md / .mdx)
 │   │   │   ├── introduction/
@@ -38,7 +38,7 @@ development, contribution, and support guidance live under
 │   │   │   └── community/
 │   │   ├── articles/                # one YAML per published article
 │   │   └── talks/                   # one YAML per talk
-│   ├── data/                        # dev-only contributor sample
+│   ├── data/                        # dev-only contribution samples
 │   ├── openapi/scope-openapi.json   # artifact generated from the API registry
 │   ├── plugins/
 │   │   ├── remark-base-path.mjs    # applies the deployment base to internal links
@@ -46,6 +46,7 @@ development, contribution, and support guidance live under
 │   ├── scripts/
 │   │   ├── analytics.ts            # consent-gated website-only 1DS analytics
 │   │   ├── flow-demo.ts             # progressive-enhancement example controller
+│   │   ├── contribution-issues*.ts  # open calls: data helpers + custom element
 │   │   └── contributors*.ts         # contributor thanks: data helpers + custom element
 │   ├── styles/landing.css           # shared brand tokens + scoped landing styles
 │   └── content.config.ts
@@ -195,13 +196,14 @@ table of contents, code examples, and previous/next navigation.
   separate Portal, CLI, and API entry points. Access requirements are
   explicit rather than promising instant access to a hosted service.
 - **Motion:** limited to the silent showreel, the interactive
-  example, and the contributor avatars (pop-in, hover tooltips), with
-  pause controls and reduced-motion support. The logo and documentation
+  example, open-call rotation, and contributor avatars, with pause
+  controls and reduced-motion support. The logo and documentation
   chrome remain still.
-- **Contribution:** a landing-page wall and full grid thank merged-PR
-  contributors, refreshed after merges from a data branch without a
-  redeploy. The publisher is `.github/workflows/contribution-data.yml`;
-  see "Contributors" in `AGENTS.md`.
+- **Contribution:** the landing page and Community → Contribute list
+  open calls and thank merged-PR contributors. Merge and issue events
+  refresh `.github/workflows/contribution-data.yml` without a site
+  redeploy, with a daily reconciliation for missed issue updates; see
+  "Contribution issues" and "Contributors" in `AGENTS.md`.
 
 ### Showreel
 
