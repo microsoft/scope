@@ -3,9 +3,10 @@
 // Licensed under the MIT License.
 
 // Lists open, unassigned issues labeled "good first issue" or "help wanted".
-// The contribution-issues workflow publishes the list to the website-data
+// The contribution-data workflow publishes the list to the website-data
 // branch, and the browser fetches it, so it stays fresh without
 // redeploying the site. See website/AGENTS.md.
+import '../../styles/contributions.css';
 import '../../styles/contribution-issues.css';
 import { CONTRIBUTION_LABELS, DATA_URL, searchUrl } from '../../scripts/contribution-issues';
 

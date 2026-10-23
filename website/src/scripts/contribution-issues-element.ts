@@ -236,11 +236,11 @@ class ScopeContributionIssues extends HTMLElement {
 			else this.holds.delete(reason);
 			this.sync();
 		};
-		list.addEventListener('pointerenter', () => hold('hover', true), { signal });
-		list.addEventListener('pointerleave', () => hold('hover', false), { signal });
-		list.addEventListener('focusin', () => hold('focus', true), { signal });
-		list.addEventListener('focusout', (event) => {
-			if (!list.contains(event.relatedTarget as Node | null)) hold('focus', false);
+		this.addEventListener('pointerenter', () => hold('hover', true), { signal });
+		this.addEventListener('pointerleave', () => hold('hover', false), { signal });
+		this.addEventListener('focusin', () => hold('focus', true), { signal });
+		this.addEventListener('focusout', (event) => {
+			if (!this.contains(event.relatedTarget as Node | null)) hold('focus', false);
 		}, { signal });
 		document.addEventListener('visibilitychange', () => hold('hidden', document.hidden), { signal });
 		this.motion.addEventListener('change', () => {

@@ -3,7 +3,7 @@
 
 // Data helpers for the "call for contributions" issue list. The list is
 // published as JSON Lines on the `website-data` branch by
-// .github/workflows/contribution-issues.yml and fetched in the browser.
+// .github/workflows/contribution-data.yml and fetched in the browser.
 // This module has no DOM dependencies so it can be unit-tested in Node.
 
 export const REPOSITORY = 'microsoft/scope';

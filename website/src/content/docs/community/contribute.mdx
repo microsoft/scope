@@ -1,9 +1,10 @@
 ---
 title: Contribute
-description: Open issues where the Scope team is calling for contributions, and how to pick one up.
+description: Open calls for contributions and the people whose pull requests have been merged into Scope.
 ---
 
 import ContributionIssues from '../../../components/contribute/ContributionIssues.astro';
+import Contributors from '../../../components/contribute/Contributors.astro';
 
 <section data-contribution-calls>
 
@@ -30,3 +31,11 @@ The list refreshes about every hour.
 <ContributionIssues variant="list" />
 
 </section>
+
+## Thank you
+
+Thank you to everyone who got a pull request merged, from the community
+and the Scope team alike. Select a name to see their merged pull requests. This list also
+refreshes about every hour.
+
+<Contributors variant="grid" limit={30} />

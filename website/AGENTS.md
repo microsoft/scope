@@ -225,42 +225,66 @@ list open, unassigned issues labeled `good first issue` or
 `help wanted`. The list is data, not content, so it isn't in the
 build:
 
-- [`.github/workflows/contribution-issues.yml`](../.github/workflows/contribution-issues.yml)
-  runs every hour, on issue events, and on demand. It writes
-  `issues.jsonl` to the orphan `website-data` branch and commits only
-  when the file changes. Run it once by hand (`workflow_dispatch`) to
-  create the branch.
-- `issues.jsonl` is deterministic so diffs stay small: one issue per
-  line, sorted by number, with sorted keys and only `number`, `title`,
-  and sorted `labels`. Don't add fields that change on every run
-  (timestamps, comment counts). An empty file means there are no open
-  calls; both pages hide the complete calls surface, including its
-  heading and adjacent links, while leaving the rest of the page intact.
+- [`.github/workflows/contribution-data.yml`](../.github/workflows/contribution-data.yml)
+  writes `issues.jsonl` and `contributors.jsonl` to the orphan
+  `website-data` branch. It runs hourly, after pushes to `main`, on
+  relevant issue changes, and on demand.
+- `issues.jsonl` is deterministic: one issue per line, sorted by
+  number, with sorted keys and only `number`, `title`, and sorted
+  `labels`. An empty file means there are no open calls; both pages
+  hide the complete calls surface while preserving contributor content.
 - The browser fetches the file from `raw.githubusercontent.com`
   (`DATA_URL` in
   [`contribution-issues.ts`](src/scripts/contribution-issues.ts)).
   Set `PUBLIC_CONTRIBUTION_ISSUES_URL` to point at another file.
 - Display order is decided client-side: good first issues first, then
   newest. `area:`, `difficulty:`, and `type:` labels show as chips.
-- The landing section shows 4 issues at a time and rotates through all
-  of them every 7 seconds (`rotate` prop). The active page dot fills
-  as a progress bar. Rotation pauses on hover, on keyboard focus, when
-  off screen or the tab is hidden, and with the pause button. It never
-  autoplays under reduced motion; the dots still work. Page dots wrap
-  rather than widening narrow pages when there are many sets.
-- Check 0, 1, a partial page, exactly 4, 5 (the first wrapped page),
-  several pages, and enough pages to exceed the viewport, on desktop
-  and mobile. Also check reduced motion and long user-supplied titles
-  and chip values.
-- In `pnpm run dev`, if the fetch fails (no branch yet, offline), the
-  list falls back to
+- The landing section shows 4 issues at a time and rotates every 7
+  seconds. Rotation pauses while the whole custom element—including
+  its dots and pause button—is hovered or focused, when off screen or
+  the tab is hidden, and under reduced motion.
+- Check 0, 1, a partial page, exactly 4, 5, several pages, and enough
+  pages to exceed the viewport on desktop and mobile. Also check
+  reduced motion and long user-supplied titles and chip values.
+- In `pnpm run dev`, a failed fetch falls back to
   [`contribution-issues.sample.jsonl`](src/data/contribution-issues.sample.jsonl)
   and shows a "Sample data · dev only" tag. Production builds drop
   that branch and the sample.
 - Titles and labels come from GitHub users. Render them with
   `textContent` only, never `innerHTML`.
-- Motion uses the Web Animations API, with no animation library. Gate
-  any new motion on `prefers-reduced-motion`.
+
+### Contributors
+
+The landing page (an avatar wall) and the "Thank you" section of
+**Community → Contribute** (a card grid) thank every author of a merged pull request,
+community and Microsoft alike:
+
+- The publisher writes `contributors.jsonl` to `website-data`. It
+  counts merged PRs whose author is a user, not a bot (`[bot]` suffix).
+  Team members count too; don't filter on `authorAssociation`.
+- The same workflow publishes this file alongside `issues.jsonl` and
+  updates the data branch only when deterministic output changes.
+- One line per person, `{"login":"…","prs":N}`, with sorted keys and
+  sorted by lowercase login. No avatar URLs or timestamps; avatars come
+  from `https://github.com/<login>.png`, and a failed image shows the
+  login's initial.
+- The browser sorts by merged PRs, then login. The wall shows up to
+  `limit` items; the last slot becomes a "+N" bubble that links to
+  the full grid. The grid shows `limit` cards (30 on the Contribute
+  page) and a "Show all N contributors" button, unless only one card
+  would stay hidden. Each person links to their merged PRs.
+- Wall tooltips get a `--tip-shift` so they stay inside the wall (a
+  hidden tip on an edge avatar would otherwise make narrow pages scroll
+  sideways). The intro and count are hidden in the empty and error
+  states. Check 0, 1, a few, and more contributors than fit the width,
+  on desktop and mobile, when changing the layout.
+- Set `PUBLIC_CONTRIBUTORS_URL` to point at another file
+  ([`contributors.ts`](src/scripts/contributors.ts)). In
+  `pnpm run dev` a failed fetch falls back to
+  [`contributors.sample.jsonl`](src/data/contributors.sample.jsonl),
+  which lists real contributors only.
+- Logins are user data: render them with `textContent` or attributes
+  only.
 
 ### Style
 
@@ -278,7 +302,7 @@ build:
 
 ```sh
 pnpm install
-pnpm test                # plugin and script tests, using Node's built-in test runner
+pnpm test                # plugin regressions, using Node's built-in test runner
 pnpm test:a11y           # production build + Playwright/axe privacy and accessibility checks
 pnpm run build           # writes dist/
 pnpm run dev             # local preview at http://localhost:4321
@@ -300,7 +324,7 @@ or authenticated Website Management Center compliance reviews.
 Both `pnpm test` and `pnpm run build` must pass. The public build uses
 `SITE=https://microsoft.github.io BASE_PATH=/scope pnpm run build`;
 exercise that configuration when changing links or deployment settings,
-not just the local `/` default. The current snapshot produces **215
+not just the local `/` default. The current snapshot produces **203
 pages**, including the generated API reference. An unexpected drop in
 page count can indicate a content collection file failed to parse.
 

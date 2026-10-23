@@ -1,0 +1,100 @@
+# Publishes open calls and merged pull request contributors to the orphan
+# `website-data` branch. The docs site fetches deterministic JSONL at runtime.
+name: Publish website contribution data
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  push:
+    branches: [main]
+  issues:
+    types: [opened, closed, reopened, edited, labeled, unlabeled, assigned, unassigned]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: website-contribution-data
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'microsoft/scope'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      DATA_BRANCH: website-data
+    steps:
+      - name: Collect open calls
+        run: |
+          set -euo pipefail
+          for label in 'good first issue' 'help wanted'; do
+            gh issue list \
+              --repo "$REPO" \
+              --state open \
+              --search 'no:assignee' \
+              --label "$label" \
+              --limit 500 \
+              --json number,title,labels,state,assignees
+          done |
+            jq -cS -s '
+              add
+              | map(select(.state == "OPEN" and (.assignees | length) == 0))
+              | unique_by(.number)
+              | sort_by(.number)
+              | .[]
+              | {number, title, labels: ([.labels[].name] | sort)}' > issues.jsonl
+
+      - name: Collect contributors
+        run: |
+          set -euo pipefail
+          gh api graphql --paginate \
+            -F owner="${REPO%/*}" \
+            -F name="${REPO#*/}" \
+            -f query='
+              query($owner: String!, $name: String!, $endCursor: String) {
+                repository(owner: $owner, name: $name) {
+                  pullRequests(states: MERGED, first: 100, after: $endCursor) {
+                    pageInfo { hasNextPage endCursor }
+                    nodes { author { __typename login } }
+                  }
+                }
+              }' \
+            --jq '.data.repository.pullRequests.nodes[]' |
+            jq -cS -s '
+              map(select(
+                .author != null
+                and .author.__typename == "User"
+                and (.author.login | endswith("[bot]") | not)
+              ))
+              | group_by(.author.login)
+              | map({login: .[0].author.login, prs: length})
+              | sort_by(.login | ascii_downcase)
+              | .[]' > contributors.jsonl
+
+      - name: Publish website data
+        run: |
+          set -euo pipefail
+          git init -q data
+          cd data
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          if git fetch -q --depth 1 origin "$DATA_BRANCH" 2>/dev/null; then
+            git checkout -q -B "$DATA_BRANCH" FETCH_HEAD
+          else
+            git checkout -q --orphan "$DATA_BRANCH"
+          fi
+          cp ../issues.jsonl ../contributors.jsonl .
+          git add issues.jsonl contributors.jsonl
+          if git diff --cached --quiet; then
+            echo 'No website data changes.'
+            exit 0
+          fi
+          git commit -q -m 'Update website contribution data'
+          git push -q origin "HEAD:$DATA_BRANCH"

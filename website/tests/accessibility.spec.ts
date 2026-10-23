@@ -6,6 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const PUBLISHED_DATA_URLS = new Set([
 	'https://raw.githubusercontent.com/microsoft/scope/website-data/issues.jsonl',
+	'https://raw.githubusercontent.com/microsoft/scope/website-data/contributors.jsonl',
 ]);
 
 async function expectAccessible(page: Page) {
@@ -57,6 +58,27 @@ test('landing page and interactive example are accessible', async ({ page }) => 
 		.toBeVisible();
 });
 
+test('focused contribution controls pause carousel rotation', async ({ page }) => {
+	await page.route(
+		'https://raw.githubusercontent.com/microsoft/scope/website-data/issues.jsonl',
+		(route) => route.fulfill({
+			contentType: 'application/x-ndjson',
+			body: Array.from({ length: 5 }, (_, index) => JSON.stringify({
+				number: index + 1,
+				title: `Contribution call ${index + 1}`,
+				labels: ['help wanted'],
+			})).join('\n'),
+		}),
+	);
+	await page.goto('/scope/');
+	const dots = page.locator('.contrib-dot');
+	await expect(dots).toHaveCount(2);
+	await dots.nth(1).click();
+	await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true');
+	await page.waitForTimeout(7_500);
+	await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true');
+});
+
 test('infrastructure feature tiles align their graphics and copy', async ({ page }) => {
 	await page.goto('/scope/');
 	const features = page.locator('.scope-kubernetes-features');
@@ -101,7 +123,7 @@ test('infrastructure feature tiles align their graphics and copy', async ({ page
 	}
 });
 
-for (const path of ['/', '/introduction/what-is-scope/', '/community/articles-and-talks/', '/reference/api/']) {
+for (const path of ['/', '/introduction/what-is-scope/', '/community/articles-and-talks/', '/community/contribute/', '/reference/api/']) {
 	test(`privacy links and landmarks on ${path}`, async ({ page }) => {
 		const externalRequests: string[] = [];
 		page.on('request', (request) => {
