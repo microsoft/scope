@@ -1095,6 +1095,45 @@ identity is promoted only when its tenant is explicitly listed here.
 > secret). A later On-Behalf-Of enrichment would introduce
 > `AUTH_API_CLIENT_SECRET`; it is **not** used now.
 
+### RUN_TOKEN_MAX_AGE_MS
+**Default:** `86400000` (24h)
+**Type:** positive number (milliseconds)
+**Scope:** API
+
+Absolute maximum age of a worker run token, measured from the run's claim
+(`run.startedAt`). A run token is accepted only while its run is `processing` under
+the claim that minted it **and** within this age. Missing or invalid values fall back
+to the default. See [auth-rbac.md §6](docs/architecture/auth-rbac.md).
+
+### INTERNAL_API_KEY_REGISTER_AGENTS
+**Default:** (not set — service disabled)
+**Type:** string, at least 32 characters
+**Scope:** API
+
+Key for the `register-agents` service principal (scope `agents:register`). The API
+accepts `X-Service-Name: register-agents` + `X-Internal-Key: <key>` only when this is
+set; unset or shorter keys disable the principal (fail closed). Only used when
+`AUTH_PROVIDER` is configured. Generate with `openssl rand -hex 32`.
+
+### INTERNAL_API_KEY_MODEL_SCANNER
+**Default:** (not set — service disabled)
+**Type:** string, at least 32 characters
+**Scope:** API
+
+Key for the `model-scanner` service principal (scopes `agents:read`,
+`agents:register`, `models:sync`). Same rules as `INTERNAL_API_KEY_REGISTER_AGENTS`.
+
+### SCOPE_INTERNAL_API_KEY
+**Default:** (not set)
+**Type:** string
+**Scope:** `register-agents` script, model scanners
+
+The calling service's own key. When set, `scripts/register-agent.sh` sends the
+`register-agents` service headers and the model scanners send the `model-scanner`
+service headers; when unset they send no service headers (unchanged behavior). Docker
+Compose maps `INTERNAL_API_KEY_REGISTER_AGENTS` / `INTERNAL_API_KEY_MODEL_SCANNER`
+from `.env` to the matching caller.
+
 ## Token Manager Configuration
 
 ### TOKEN_MANAGER_URL

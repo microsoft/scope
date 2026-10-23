@@ -72,6 +72,7 @@ must be resolved with stakeholders before or during implementation.
 |-----------|-------|----------------|
 | API | Verifies the IdP signature and claims before any access-cache lookup. `/users/me` owns explicit enrollment; subsequent middleware resolves existing active users. Public/anonymous rollout is unchanged. | [apps/api/src/index.ts](../../apps/api/src/index.ts), [auth/middleware.ts](../../apps/api/src/auth/middleware.ts), [routes/users.ts](../../apps/api/src/routes/users.ts) |
 | User access | `UserAccessResolver` reads a validated Redis snapshot or the exact `(idp, idpTenant, idpSubject)` Mongo record. Only explicit login invokes `upsertOnLogin`; no per-request JIT. | [auth/user-access-resolver.ts](../../apps/api/src/auth/user-access-resolver.ts), [auth/user-access-cache.ts](../../apps/api/src/auth/user-access-cache.ts), [auth/user-store.ts](../../apps/api/src/auth/user-store.ts) |
+| Service callers | Worker run tokens (`scope_rt_…`) and per-service keys (`X-Service-Name` + `X-Internal-Key`) are verified before the IdP and attached as `req.principal` (`run` / `service`). Authentication only — no route enforcement yet. See §6. | [auth/run-token-verifier.ts](../../apps/api/src/auth/run-token-verifier.ts), [auth/service-principals.ts](../../apps/api/src/auth/service-principals.ts), [shared/src/auth/run-token.ts](../../packages/shared/src/auth/run-token.ts) |
 | Runs data model | `RequestResponseSchema` + embedded `RunStateSchema`; history in `runs` collection (`RunHistoryDocumentSchema`). **No owner field.** | [packages/shared/src/schemas/request.ts](../../packages/shared/src/schemas/request.ts) |
 | Run listing | Cursor-paginated `GET /api/v1/requests` with filters; no per-user scoping. | [apps/api/src/routes/requests.ts](../../apps/api/src/routes/requests.ts) |
 | CLI | Centralized `apiFetch()` injects `SCOPE_TOKEN` as a raw IdP bearer. No CLI interactive-login implementation is added here. New identities must explicitly enroll; ordinary CLI calls never enroll them. | [apps/cli/src/utils/api-client.ts](../../apps/cli/src/utils/api-client.ts), [CLI guidance](../../.agents/skills/scope-cli/SKILL.md) |
@@ -666,9 +667,83 @@ that must be settled before that work is scheduled. **v1 ships `ownerId` +
 fields above are documented intent, not implemented yet.
 
 
-### 6. Deferred: service-to-service auth
+### 6. Service-to-service auth (run tokens and per-service keys implemented; service JWTs and on-behalf-of deferred)
 
-> This section preserves the future ownership/RBAC design. None of its Scope-issued
+#### Implemented: run tokens and per-service keys (authentication only)
+
+Two non-human credentials are recognized by `createAuthMiddleware` **before** the IdP
+bearer is verified. Both are authentication only: they identify the caller as
+`req.principal` but no route enforces scopes or flags yet (that arrives with
+route-level authorization, §4). `req.auth` and `req.user` keep their human meaning —
+a run or service caller has **no** `req.auth`, an anonymous `req.user`, and never
+reaches enrollment or user-access resolution.
+
+```mermaid
+sequenceDiagram
+    participant W as Worker (queue processor)
+    participant DB as MongoDB
+    participant API
+    participant J as Judge
+    W->>DB: atomic claim ($set run.status=processing, run.tokenHash=sha256(token))
+    W->>API: GET worker read route (Authorization: Bearer scope_rt_…)
+    API->>DB: point read {_id: requestId} (projection: run status/hash/startedAt)
+    API-->>W: 200 (req.principal = run)
+    W->>J: POST /api/v1/evaluate (same bearer)
+    J->>API: GET /api/v1/criteria (same bearer, per-evaluation provider)
+    W->>DB: terminal write ($unset run.tokenHash)
+```
+
+**Run token.**
+
+- Minted by the shared queue processor when it atomically claims a run:
+  `scope_rt_<requestId>_<secret><checksum>` (opaque, 256-bit random secret, CRC-32
+  checksum so malformed tokens are rejected without a database read). Only the
+  SHA-256 digest is stored, in `run.tokenHash`, as part of the claim update. The raw
+  token lives in worker memory for the duration of the handling and is sent as a
+  bearer by the MCP, skill, extension, resource, prompt, codebase, gate-prompt and
+  judge clients. The judge forwards a well-formed run token on its criteria reads
+  using a per-evaluation provider (never the cached one).
+- Verified by a point read on the request: valid only when the digest matches
+  (constant-time), the request is not deleted, `run.status` is `processing`, and
+  `run.startedAt` is within `RUN_TOKEN_MAX_AGE_MS` (default 24h). A new claim
+  replaces the digest; the worker's terminal success/error writes `$unset` it.
+  Other terminal transitions (cancel, stuck-run reaper) leave it in place, but it is
+  rejected because the run is no longer `processing`.
+- Failure codes (all 401): `invalid_run_token` (malformed, forged, mismatched,
+  deleted, no digest), `run_not_active`, `run_token_expired`. A database failure
+  during verification is `503 service_unavailable`.
+- `run.tokenHash` is server-only: it is not part of `RunStateSchema` and is
+  redacted from request, attempt, and run-history responses and from archived HARs.
+- The worker read routes it is intended for carry `runToken: true` in their
+  `apiRoute()` definition, emitted as `x-scope-run-token: true` in OpenAPI. The flag is
+  metadata today; an inventory test pins the flagged set.
+- The caller is logged at debug level with request id, run id, and the first 8 hex
+  characters of the digest — never the token.
+
+**Per-service keys.**
+
+- Each internal caller has its own key; there is no shared key. The API reads
+  `INTERNAL_API_KEY_<NAME>`; the caller sends `X-Service-Name` and
+  `X-Internal-Key` (both required; sending them together with `Authorization` is
+  `400 ambiguous_credentials`). Keys are compared as SHA-256 digests in constant
+  time. A missing key, or one shorter than 32 characters, disables that service
+  (fail closed, `401 invalid_service_key`).
+
+  | Service | API key variable | Scopes (identified, not yet enforced) | Caller |
+  |---------|------------------|----------------------------------------|--------|
+  | `register-agents` | `INTERNAL_API_KEY_REGISTER_AGENTS` | `agents:register` | `scripts/register-agent.sh` |
+  | `model-scanner` | `INTERNAL_API_KEY_MODEL_SCANNER` | `agents:read`, `agents:register`, `models:sync` | `packages/model-scanning` |
+
+  Callers read their key from `SCOPE_INTERNAL_API_KEY`; without it they send no
+  service headers and behave exactly as before. The registration script passes the
+  headers through a private header file so the key is not on the command line.
+
+**Unchanged behavior.** When no `AUTH_PROVIDER` is configured, run and service
+credentials are ignored and every request stays anonymous. With auth enabled,
+requests without credentials remain anonymous as before; only a presented run
+token or service header is verified (and rejected if invalid).
+
+> The remainder of this section preserves the future ownership/RBAC design. None of its Scope-issued
 > JWTs, signing keys, service credentials, minting endpoints, or revocation lists are
 > introduced by the current explicit-login/cache implementation. Human clients keep
 > presenting the IdP bearer; there is no human token-exchange endpoint.
