@@ -226,7 +226,8 @@ build:
   line, sorted by number, with sorted keys and only `number`, `title`,
   and sorted `labels`. Don't add fields that change on every run
   (timestamps, comment counts). An empty file means there are no open
-  calls.
+  calls; both pages hide the complete calls surface, including its
+  heading and adjacent links, while leaving the rest of the page intact.
 - The browser fetches the file from `raw.githubusercontent.com`
   (`DATA_URL` in
   [`contribution-issues.ts`](src/scripts/contribution-issues.ts)).
