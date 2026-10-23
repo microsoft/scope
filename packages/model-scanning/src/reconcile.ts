@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ModelSyncRequest, ReconcileReport, ScanResult } from "./types.js";
+import { serviceAuthHeaders } from "./service-auth.js";
 
 /**
  * Send scanned models to the API for lifecycle reconciliation.
@@ -41,7 +42,7 @@ export async function reconcileModels(
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...serviceAuthHeaders() },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(30_000),
   });

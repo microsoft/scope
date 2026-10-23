@@ -25,11 +25,13 @@ function fixture(statuses: number[], exitCodes: number[] = []) {
   mkdirSync(bin);
   const statusFile = join(directory, "statuses");
   const callsFile = join(directory, "calls");
+  const headersFile = join(directory, "headers");
   const exitCodesFile = join(directory, "exit-codes");
   const agentManifest = join(directory, "agent.yaml");
   const versionManifest = join(directory, "version.yaml");
   writeFileSync(statusFile, `${statuses.join("\n")}\n`);
   writeFileSync(callsFile, "");
+  writeFileSync(headersFile, "");
   writeFileSync(exitCodesFile, `${exitCodes.join("\n")}\n`);
   writeFileSync(agentManifest, "_id: test-worker\n");
   writeFileSync(versionManifest, "agentVersion: test-v1\n");
@@ -51,6 +53,11 @@ while [ "$#" -gt 0 ]; do
   if [ "$1" = "-o" ]; then
     shift
     output=$1
+  elif [ "$1" = "-H" ]; then
+    case "$2" in
+      @*) cat "\${2#@}" >> "$FAKE_CURL_HEADERS_FILE" ;;
+      *) printf '%s\n' "$2" >> "$FAKE_CURL_HEADERS_FILE" ;;
+    esac
   fi
   shift
 done
@@ -93,8 +100,11 @@ esac
     versionManifest,
     statusFile,
     callsFile,
+    headersFile,
     env: {
       ...process.env,
+      SCOPE_INTERNAL_API_KEY: "",
+      FAKE_CURL_HEADERS_FILE: headersFile,
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       FAKE_CURL_STATUS_FILE: statusFile,
       FAKE_CURL_CALLS_FILE: callsFile,
@@ -130,6 +140,35 @@ describe("register-agent.sh", () => {
     expect(readFileSync(test.callsFile, "utf8").trim().split("\n")).toHaveLength(
       5,
     );
+  }, SCRIPT_TEST_TIMEOUT_MS);
+
+  it("sends register-agents service headers from a file when a key is set", () => {
+    const test = fixture([200, 201, 200]);
+    const key = "k".repeat(40);
+    const result = spawnSync(
+      "sh",
+      [script, "http://scope-api", test.agentManifest, test.versionManifest],
+      { encoding: "utf8", env: { ...test.env, SCOPE_INTERNAL_API_KEY: key } },
+    );
+
+    expect(result.status).toBe(0);
+    const calls = readFileSync(test.callsFile, "utf8");
+    expect(calls).not.toContain(key);
+    const headers = readFileSync(test.headersFile, "utf8").split("\n");
+    expect(headers.filter((h) => h === `X-Internal-Key: ${key}`)).toHaveLength(2);
+    expect(headers.filter((h) => h === "X-Service-Name: register-agents")).toHaveLength(2);
+  }, SCRIPT_TEST_TIMEOUT_MS);
+
+  it("sends no service headers when no key is set", () => {
+    const test = fixture([200, 201, 200]);
+    const result = spawnSync(
+      "sh",
+      [script, "http://scope-api", test.agentManifest, test.versionManifest],
+      { encoding: "utf8", env: test.env },
+    );
+
+    expect(result.status).toBe(0);
+    expect(readFileSync(test.headersFile, "utf8")).not.toMatch(/X-Internal-Key|X-Service-Name/);
   }, SCRIPT_TEST_TIMEOUT_MS);
 
   it("fails immediately and non-zero on permanent agent errors", () => {

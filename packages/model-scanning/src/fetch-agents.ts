@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { AgentDefinition } from "./types.js";
+import { serviceAuthHeaders } from "./service-auth.js";
 
 /**
  * Fetch agents that declare a given model provider.
@@ -17,7 +18,7 @@ export async function fetchAgentsByProvider(
 
   const response = await fetch(url, {
     method: "GET",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...serviceAuthHeaders() },
     signal: AbortSignal.timeout(10_000),
   });
 

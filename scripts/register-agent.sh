@@ -63,7 +63,19 @@ fi
 
 TMP_DIR=$(mktemp -d)
 RESPONSE_FILE="$TMP_DIR/response"
-trap 'rm -f "$RESPONSE_FILE"; rmdir "$TMP_DIR"' EXIT HUP INT TERM
+SERVICE_HEADERS_FILE="$TMP_DIR/service-headers"
+trap 'rm -f "$RESPONSE_FILE" "$SERVICE_HEADERS_FILE"; rmdir "$TMP_DIR"' EXIT HUP INT TERM
+
+# Service credential for the register-agents principal. Written to a private
+# header file so the key never appears on the curl command line.
+if [ -n "${SCOPE_INTERNAL_API_KEY:-}" ]; then
+  (
+    umask 077
+    printf 'X-Service-Name: register-agents\nX-Internal-Key: %s\n' "$SCOPE_INTERNAL_API_KEY" > "$SERVICE_HEADERS_FILE"
+  )
+else
+  SERVICE_HEADERS_FILE=
+fi
 
 response_body() {
   if [ -f "$RESPONSE_FILE" ]; then
@@ -158,6 +170,12 @@ post_idempotent() {
   description=$3
   attempt=1
 
+  # Optional service-auth headers, added only when a key is configured.
+  set --
+  if [ -n "$SERVICE_HEADERS_FILE" ]; then
+    set -- -H "@$SERVICE_HEADERS_FILE"
+  fi
+
   while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     status=000
     if status=$(curl -sS --connect-timeout "$CONNECT_TIMEOUT_SECONDS" \
@@ -165,6 +183,7 @@ post_idempotent() {
       -o "$RESPONSE_FILE" -w "%{http_code}" \
       -X POST "$API_URL$path" \
       -H "Content-Type: application/json" \
+      "$@" \
       --data-binary "$payload"); then
       :
     else

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { AgentDefinition } from "./types.js";
+import { serviceAuthHeaders } from "./service-auth.js";
 
 /**
  * Create or update an agent definition via the API.
@@ -18,7 +19,7 @@ export async function upsertAgent(
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...serviceAuthHeaders() },
     body: JSON.stringify(agent),
     signal: AbortSignal.timeout(10_000),
   });
