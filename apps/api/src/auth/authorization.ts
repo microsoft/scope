@@ -6,6 +6,7 @@ import type { Db, Document } from "mongodb";
 import type { Request, Response } from "express";
 import { ANONYMOUS_USER_ID, MembershipSchema, projectPermissions, parseProfileSpec, parseExtensionSpec, type AccessCapabilities, type ProjectPermission, type ProjectMembership, type UserDocument } from "shared";
 import { AccessError, AdminOperations } from "./admin-operations.js";
+import type { CallerPrincipal } from "./types.js";
 
 export type RoutePolicy = "public" | "self" | "platform" | "metadata" | "projects" | "project" | "disabled";
 const publicPaths = new Set(["/health", "/ready", "/about", "/api/v1/version"]);
@@ -20,6 +21,27 @@ const pointParams = ["id", "profileId", "ref"];
 const readOnlyPosts = new Set(["/api/v1/reports/bulk-status", "/api/v1/reports/bulk-summary", "/api/v1/requests/archive"]);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LEASE_MS = 20_000;
+
+/** Route-level options passed from the route definition to {@link Authorization.guard}. */
+export interface GuardOptions {
+  /** The route accepts run tokens (`runToken: true` on the route definition). */
+  runToken?: boolean;
+}
+
+/**
+ * Routes each service scope grants, as `<method> <route pattern>`. A service
+ * caller may call only the routes covered by its scopes; everything else is 403.
+ */
+export const SERVICE_SCOPE_ROUTES: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  "agents:read": ["get /api/v1/agents", "head /api/v1/agents"],
+  "agents:register": ["post /api/v1/agents", "post /api/v1/agents/:id/versions"],
+  "models:sync": ["post /api/v1/models/sync"],
+});
+
+/** Whose access a project-scoped request is checked against. */
+type ProjectAccess =
+  | { kind: "user"; userId: string }
+  | { kind: "run"; projectId: string };
 
 export function routePolicy(method: string, path: string): RoutePolicy {
   if (publicPaths.has(path)) return "public";
@@ -52,6 +74,8 @@ export class Authorization {
   }
 
   async currentUser(req: Request, deadline = performance.now() + LEASE_MS): Promise<UserDocument> {
+    // Run and service callers never resolve to a user record.
+    if (req.principal) throw new AccessError(403, "user_required", "This operation requires a signed-in user");
     if (!req.auth || !req.user?.isAuthenticated) throw new AccessError(401, "authentication_required", "Authentication required");
     const user = await this.db.collection<UserDocument & { lastOperationId?: string }>("users")
       .findOne({ _id: req.user.id }, this.readOptions(deadline));
@@ -125,8 +149,8 @@ export class Authorization {
     return doc;
   }
 
-  async guard(req: Request, method: string, path: string, policy: RoutePolicy): Promise<number> {
-    return this.withBudget(deadline => this.decide(req, method, path, policy, deadline));
+  async guard(req: Request, method: string, path: string, policy: RoutePolicy, options: GuardOptions = {}): Promise<number> {
+    return this.withBudget(deadline => this.decide(req, method, path, policy, options, deadline));
   }
 
   private async withBudget<T>(read: (deadline: number) => Promise<T>): Promise<T> {
@@ -144,7 +168,7 @@ export class Authorization {
     } finally { if (timer) clearTimeout(timer); }
   }
 
-  private async decide(req: Request, method: string, path: string, policy: RoutePolicy, budgetDeadline: number): Promise<number> {
+  private async decide(req: Request, method: string, path: string, policy: RoutePolicy, options: GuardOptions, budgetDeadline: number): Promise<number> {
     const started = budgetDeadline - LEASE_MS;
     if (policy === "disabled") throw new AccessError(503, "report_generation_disabled", "New report generation is disabled");
     if (policy === "public" || policy === "self") return started + LEASE_MS;
@@ -152,10 +176,15 @@ export class Authorization {
       if (path.startsWith("/api/v1/admin/") || /^\/api\/v1\/projects\/[^/]+\/members(?:\/|$)/.test(path)) {
         throw new AccessError(503, "authentication_disabled", "Access administration requires authentication to be enabled");
       }
-      if (policy === "project") await this.projectRequest(req, method, path, req.user?.id ?? ANONYMOUS_USER_ID, budgetDeadline);
+      if (policy === "project") await this.projectRequest(req, method, path, { kind: "user", userId: req.user?.id ?? ANONYMOUS_USER_ID }, budgetDeadline);
       return started + LEASE_MS;
     }
     try {
+      // Run and service callers carry no IdP token, so there is no JWT lease to cap.
+      if (req.principal) {
+        await this.decideCaller(req, req.principal, method, path, policy, options, budgetDeadline);
+        return started + LEASE_MS;
+      }
       const user = await this.currentUser(req, budgetDeadline);
       if (policy === "platform") {
         if (user.role !== "admin") throw new AccessError(403, "insufficient_permission", "Platform administration required");
@@ -170,7 +199,7 @@ export class Authorization {
           await this.requireProject(user._id, req.params.id, membership ? "members:write" : method === "get" ? "content:read" : "settings:write", budgetDeadline);
         }
       } else {
-        await this.projectRequest(req, method, path, user._id, budgetDeadline);
+        await this.projectRequest(req, method, path, { kind: "user", userId: user._id }, budgetDeadline);
       }
       // The unchanged bytes have already passed the IdP verifier.
       const claims: unknown = req.auth
@@ -187,7 +216,34 @@ export class Authorization {
     }
   }
 
-  private async projectRequest(req: Request, method: string, path: string, userId: string, deadline: number): Promise<void> {
+  /**
+   * Authorize a run or service caller. Run tokens are limited to opted-in
+   * GET/HEAD project routes in the run's own project; service keys are limited
+   * to the routes their scopes grant.
+   */
+  private async decideCaller(req: Request, principal: CallerPrincipal, method: string, path: string, policy: RoutePolicy, options: GuardOptions, deadline: number): Promise<void> {
+    if (principal.kind === "service") {
+      const route = `${method} ${path}`;
+      if (!principal.scopes.some(scope => SERVICE_SCOPE_ROUTES[scope]?.includes(route))) {
+        throw new AccessError(403, "insufficient_scope", "Service is not allowed to call this route");
+      }
+      return;
+    }
+    if (!options.runToken || (method !== "get" && method !== "head") || policy !== "project") {
+      throw new AccessError(403, "run_token_not_allowed", "Run tokens are not accepted on this route");
+    }
+    await this.projectRequest(req, method, path, { kind: "run", projectId: principal.projectId }, deadline);
+  }
+
+  /** A run may read only its own, non-deleted project; anything else looks absent. */
+  private async requireRunProject(runProjectId: string, projectId: string, deadline: number): Promise<void> {
+    if (runProjectId !== projectId) throw new AccessError(404, "not_found", "Not found");
+    const project = await this.db.collection<Document & { _id: string }>("projects")
+      .findOne({ _id: projectId, deletedAt: { $exists: false } }, this.readOptions(deadline));
+    if (!project) throw new AccessError(404, "not_found", "Not found");
+  }
+
+  private async projectRequest(req: Request, method: string, path: string, access: ProjectAccess, deadline: number): Promise<void> {
     let projectId = text(req.query.projectId);
     const body = record(req.body);
     const root = Object.keys(collections).find(key => path === `/api/v1/${key}` || path.startsWith(`/api/v1/${key}/`));
@@ -211,7 +267,8 @@ export class Authorization {
     if (text(body.projectId) && body.projectId !== projectId) throw new AccessError(404, "not_found", "Not found");
     const permission = method === "get" || method === "head" || readOnlyPosts.has(path)
       ? "content:read" : method === "delete" ? "content:delete" : "content:write";
-    await this.requireProject(userId, projectId, permission, deadline);
+    if (access.kind === "run") await this.requireRunProject(access.projectId, projectId, deadline);
+    else await this.requireProject(access.userId, projectId, permission, deadline);
     req.authorizedProjectId = projectId;
     // Bulk identifiers and referenced documents cannot widen the authorized scope.
     for (const key of ["ids", "requestIds", "reportIds"]) {

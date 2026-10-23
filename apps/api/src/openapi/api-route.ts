@@ -41,10 +41,10 @@ export interface ApiRouteConfig<
   policy?: RoutePolicy;
 
   /**
-   * Metadata only: marks a read route that workers call with a run token
-   * during a run. Authentication accepts run tokens on every route; this flag
-   * documents the intended run-token surface (`x-scope-run-token` in OpenAPI)
-   * for the authorization layer to enforce.
+   * Marks a read route that workers may call with a run token during a run
+   * (`x-scope-run-token` in OpenAPI). Authorization rejects run tokens on
+   * every route without this flag, on non-GET/HEAD methods, and outside the
+   * run's project.
    */
   runToken?: boolean;
 
@@ -263,9 +263,9 @@ export function apiRoute<
       const authorization = getAuthorization?.();
       if (policy !== "public") {
         if (!authorization) throw new AccessError(503, "authority_unavailable", "Authorization authority unavailable");
-        const deadline = await authorization.guard(req, method, path, policy);
+        const deadline = await authorization.guard(req, method, path, policy, { runToken });
         if (authorization.enabled !== false && rawResponse && path.endsWith("/logs")) {
-          protectStream(res, () => authorization.guard(req, method, path, policy), deadline);
+          protectStream(res, () => authorization.guard(req, method, path, policy, { runToken }), deadline);
         }
       }
       next();

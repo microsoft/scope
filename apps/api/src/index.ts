@@ -348,7 +348,7 @@ app.use(express.json());
 registerUsersRoutes(routeCtx);
 app.use(createUserAccessMiddleware(() => authEnabled ? userAccessResolver : null));
 app.use((req, res, next) => {
-  if (authEnabled && req.path.startsWith("/api/v1/") && !["/api/v1/version"].includes(req.path) && !req.user?.isAuthenticated) {
+  if (authEnabled && req.path.startsWith("/api/v1/") && !["/api/v1/version"].includes(req.path) && !req.user?.isAuthenticated && !req.principal) {
     res.status(401).json({ error: "Authentication required", code: "authentication_required" });
     return;
   }

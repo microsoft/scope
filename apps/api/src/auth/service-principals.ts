@@ -19,8 +19,8 @@ export interface ServicePrincipalDefinition {
   /** API env var holding this service's key. */
   keyEnv: string;
   /**
-   * Scopes this service is identified with. Recorded on the principal only;
-   * enforcement is added by the authorization layer.
+   * Scopes granted to this service. Authorization maps each scope to the
+   * routes it allows (`SERVICE_SCOPE_ROUTES` in `authorization.ts`).
    */
   scopes: readonly string[];
 }
