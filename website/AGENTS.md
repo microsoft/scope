@@ -227,8 +227,8 @@ build:
 
 - [`.github/workflows/contribution-data.yml`](../.github/workflows/contribution-data.yml)
   writes `issues.jsonl` and `contributors.jsonl` to the orphan
-  `website-data` branch. It runs hourly, after pushes to `main`, on
-  relevant issue changes, and on demand.
+  `website-data` branch. It runs daily at 03:17 UTC, after pushes to
+  `main`, on relevant issue changes, and on demand.
 - `issues.jsonl` is deterministic: one issue per line, sorted by
   number, with sorted keys and only `number`, `title`, and sorted
   `labels`. An empty file means there are no open calls; both pages
@@ -263,7 +263,10 @@ community and Microsoft alike:
   counts merged PRs whose author is a user, not a bot (`[bot]` suffix).
   Team members count too; don't filter on `authorAssociation`.
 - The same workflow publishes this file alongside `issues.jsonl` and
-  updates the data branch only when deterministic output changes.
+  updates contributor data after pushes to `main` (including merged
+  pull requests). Issue events and the daily reconciliation can also
+  republish it, but the data branch changes only when deterministic
+  output changes.
 - One line per person, `{"login":"…","prs":N}`, with sorted keys and
   sorted by lowercase login. No avatar URLs or timestamps; avatars come
   from `https://github.com/<login>.png`, and a failed image shows the

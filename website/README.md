@@ -200,9 +200,10 @@ table of contents, code examples, and previous/next navigation.
   controls and reduced-motion support. The logo and documentation
   chrome remain still.
 - **Contribution:** the landing page and Community → Contribute list
-  open calls and thank merged-PR contributors. Both datasets refresh
-  from `.github/workflows/contribution-data.yml` without a site
-  redeploy; see "Contribution issues" and "Contributors" in `AGENTS.md`.
+  open calls and thank merged-PR contributors. Merge and issue events
+  refresh `.github/workflows/contribution-data.yml` without a site
+  redeploy, with a daily reconciliation for missed issue updates; see
+  "Contribution issues" and "Contributors" in `AGENTS.md`.
 
 ### Showreel
 

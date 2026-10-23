@@ -4,7 +4,7 @@ name: Publish website contribution data
 
 on:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '17 3 * * *'
   push:
     branches: [main]
   issues:
