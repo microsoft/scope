@@ -228,8 +228,9 @@ community and Microsoft alike:
   counts merged PRs whose author is a user, not a bot (`[bot]` suffix).
   Team members count too; don't filter on `authorAssociation`.
 - [`.github/workflows/contribution-data.yml`](../.github/workflows/contribution-data.yml)
-  runs hourly, after pushes to `main`, and on demand. It updates the
-  orphan data branch only when the deterministic file changes.
+  runs after pushes to `main` (including merged pull requests) and on
+  demand. It updates the orphan data branch only when the deterministic
+  file changes.
 - One line per person, `{"login":"…","prs":N}`, with sorted keys and
   sorted by lowercase login. No avatar URLs or timestamps; avatars come
   from `https://github.com/<login>.png`, and a failed image shows the
