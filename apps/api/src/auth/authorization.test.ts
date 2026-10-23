@@ -4,14 +4,15 @@
 import { performance } from "node:perf_hooks";
 import express from "express";
 import request from "supertest";
-import { MongoClient } from "mongodb";
+import { MongoClient, type Db } from "mongodb";
 import { UserDocumentSchema, type ProjectMembership } from "shared";
 import { OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
 import { z } from "zod";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRoute } from "../openapi/api-route.js";
-import { Authorization, protectStream, routePolicy } from "./authorization.js";
+import { Authorization, SERVICE_SCOPE_ROUTES, protectStream, routePolicy } from "./authorization.js";
 import { AccessError } from "./admin-operations.js";
+import type { CallerPrincipal } from "./types.js";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
@@ -231,5 +232,126 @@ describe("Open stream freshness leases", () => {
     await Promise.resolve();
     expect(res.write("late result must not grant access")).toBe(false);
     expect(res.end).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Run-token and service-key callers", () => {
+  const projectX = "11111111-1111-4111-8111-111111111111";
+  const projectY = "22222222-2222-4222-8222-222222222222";
+  const criterionX = "33333333-3333-4333-8333-333333333333";
+  const criterionY = "44444444-4444-4444-8444-444444444444";
+
+  /** Minimal in-memory Db: equality on top-level fields plus `{ $exists: false }`. */
+  function fakeDb(data: Record<string, Array<Record<string, unknown>>>): Db {
+    const matches = (doc: Record<string, unknown>, query: Record<string, unknown>) =>
+      Object.entries(query).every(([key, value]) => {
+        if (key === "$or") return true;
+        if (value && typeof value === "object" && "$exists" in value) return (doc[key] !== undefined) === (value as { $exists: boolean }).$exists;
+        return doc[key] === value;
+      });
+    return {
+      collection: (name: string) => ({
+        findOne: async (query: Record<string, unknown>) => (data[name] ?? []).find(doc => matches(doc, query)) ?? null,
+        find: () => ({ toArray: async () => [] }),
+      }),
+    } as unknown as Db;
+  }
+
+  function setup(projects: Array<Record<string, unknown>> = [{ _id: projectX }, { _id: projectY }]) {
+    const authority = new Authorization(fakeDb({
+      projects,
+      criteria: [{ _id: criterionX, projectId: projectX }, { _id: criterionY, projectId: projectY }],
+    }));
+    const currentUser = vi.spyOn(authority, "currentUser");
+    return { authority, currentUser };
+  }
+
+  function caller(principal: CallerPrincipal, query: Record<string, string> = {}, params: Record<string, string> = {}) {
+    return Object.assign(Object.create(express.request) as express.Request, {
+      params, query, body: {}, principal, user: { id: "anonymous", isAuthenticated: false },
+    });
+  }
+  const run: CallerPrincipal = { kind: "run", requestId: "request-x", runId: "run-x", projectId: projectX };
+  const scanner: CallerPrincipal = { kind: "service", name: "model-scanner", scopes: ["agents:read", "agents:register", "models:sync"] };
+  const register: CallerPrincipal = { kind: "service", name: "register-agents", scopes: ["agents:register"] };
+
+  it("allows a run token on flagged GET routes in its own project without reading a user or JWT lease", async () => {
+    const { authority, currentUser } = setup();
+    const list = caller(run, { projectId: projectX });
+    await expect(authority.guard(list, "get", "/api/v1/criteria", "project", { runToken: true })).resolves.toBeTypeOf("number");
+    expect(list.authorizedProjectId).toBe(projectX);
+    const point = caller(run, {}, { id: criterionX });
+    await expect(authority.guard(point, "head", "/api/v1/criteria/:id", "project", { runToken: true })).resolves.toBeTypeOf("number");
+    expect(point.authorizedProjectId).toBe(projectX);
+    expect(currentUser).not.toHaveBeenCalled();
+  });
+
+  it("hides other projects and deleted projects from a run token (404)", async () => {
+    const { authority } = setup();
+    await expect(authority.guard(caller(run, { projectId: projectY }), "get", "/api/v1/criteria", "project", { runToken: true }))
+      .rejects.toMatchObject({ status: 404 });
+    await expect(authority.guard(caller(run, {}, { id: criterionY }), "get", "/api/v1/criteria/:id", "project", { runToken: true }))
+      .rejects.toMatchObject({ status: 404 });
+    const deleted = setup([{ _id: projectX, deletedAt: new Date() }]);
+    await expect(deleted.authority.guard(caller(run, { projectId: projectX }), "get", "/api/v1/criteria", "project", { runToken: true }))
+      .rejects.toMatchObject({ status: 404 });
+  });
+
+  it.each([
+    ["an unflagged project read", "get", "/api/v1/profiles", "project", {}],
+    ["a write on a flagged path", "post", "/api/v1/criteria", "project", { runToken: true }],
+    ["a metadata route", "get", "/api/v1/agents", "metadata", {}],
+    ["a platform route", "get", "/api/v1/admin/users", "platform", {}],
+    ["the projects catalog", "get", "/api/v1/projects", "projects", {}],
+  ] as const)("rejects a run token on %s (403)", async (_label, method, path, policy, options) => {
+    const { authority } = setup();
+    await expect(authority.guard(caller(run, { projectId: projectX }), method, path, policy, options))
+      .rejects.toMatchObject({ status: 403, code: "run_token_not_allowed" });
+  });
+
+  it.each([
+    ["get", "/api/v1/agents", "metadata"],
+    ["post", "/api/v1/agents", "platform"],
+    ["post", "/api/v1/models/sync", "platform"],
+  ] as const)("allows the model scanner on in-scope %s %s", async (method, path, policy) => {
+    const { authority, currentUser } = setup();
+    await expect(authority.guard(caller(scanner), method, path, policy)).resolves.toBeTypeOf("number");
+    expect(currentUser).not.toHaveBeenCalled();
+  });
+
+  it("allows register-agents to register agents and versions only", async () => {
+    const { authority } = setup();
+    await expect(authority.guard(caller(register), "post", "/api/v1/agents", "platform")).resolves.toBeTypeOf("number");
+    await expect(authority.guard(caller(register), "post", "/api/v1/agents/:id/versions", "platform")).resolves.toBeTypeOf("number");
+    await expect(authority.guard(caller(register), "get", "/api/v1/agents", "metadata"))
+      .rejects.toMatchObject({ status: 403, code: "insufficient_scope" });
+  });
+
+  it.each([
+    ["get", "/api/v1/projects", "projects"],
+    ["get", "/api/v1/criteria", "project"],
+    ["delete", "/api/v1/agents/:id", "platform"],
+    ["get", "/api/v1/admin/users", "platform"],
+    ["get", "/api/v1/keys", "platform"],
+  ] as const)("rejects the model scanner out of scope on %s %s (403)", async (method, path, policy) => {
+    const { authority } = setup();
+    await expect(authority.guard(caller(scanner, { projectId: projectX }), method, path, policy, { runToken: true }))
+      .rejects.toMatchObject({ status: 403, code: "insufficient_scope" });
+  });
+
+  it("never resolves a run or service caller to a user record", async () => {
+    const { authority } = setup();
+    for (const principal of [run, scanner]) {
+      await expect(authority.currentUser(caller(principal))).rejects.toMatchObject({ status: 403, code: "user_required" });
+      await expect(authority.capabilities(caller(principal))).rejects.toMatchObject({ status: 403 });
+    }
+  });
+
+  it("maps every service scope to explicit method and route pairs", () => {
+    expect(SERVICE_SCOPE_ROUTES).toEqual({
+      "agents:read": ["get /api/v1/agents", "head /api/v1/agents"],
+      "agents:register": ["post /api/v1/agents", "post /api/v1/agents/:id/versions"],
+      "models:sync": ["post /api/v1/models/sync"],
+    });
   });
 });
