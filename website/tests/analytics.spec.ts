@@ -3,6 +3,10 @@
 
 import { expect, test, type Page } from '@playwright/test';
 
+const PUBLISHED_DATA_URLS = new Set([
+	'https://raw.githubusercontent.com/microsoft/scope/website-data/issues.jsonl',
+]);
+
 interface AnalyticsTestState {
 	granted: boolean;
 	consentRequired: boolean;
@@ -298,7 +302,12 @@ test('blocked analytics scripts leave consent management and documentation usabl
 test('local production previews make no consent or analytics requests', async ({ page }) => {
 	const externalRequests: string[] = [];
 	page.on('request', (request) => {
-		if (new URL(request.url()).origin !== 'http://127.0.0.1:14321') externalRequests.push(request.url());
+		if (
+			new URL(request.url()).origin !== 'http://127.0.0.1:14321' &&
+			!PUBLISHED_DATA_URLS.has(request.url())
+		) {
+			externalRequests.push(request.url());
+		}
 	});
 	await page.goto('/scope/');
 	await expect(page.getByRole('main')).toBeVisible();

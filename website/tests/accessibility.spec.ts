@@ -4,6 +4,10 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+const PUBLISHED_DATA_URLS = new Set([
+	'https://raw.githubusercontent.com/microsoft/scope/website-data/issues.jsonl',
+]);
+
 async function expectAccessible(page: Page) {
 	const results = await new AxeBuilder({ page }).analyze();
 	expect(results.violations.map(({ id, nodes }) => ({
@@ -101,7 +105,10 @@ for (const path of ['/', '/introduction/what-is-scope/', '/community/articles-an
 	test(`privacy links and landmarks on ${path}`, async ({ page }) => {
 		const externalRequests: string[] = [];
 		page.on('request', (request) => {
-			if (new URL(request.url()).origin !== 'http://127.0.0.1:14321') {
+			if (
+				new URL(request.url()).origin !== 'http://127.0.0.1:14321' &&
+				!PUBLISHED_DATA_URLS.has(request.url())
+			) {
 				externalRequests.push(request.url());
 			}
 		});
