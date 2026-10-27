@@ -8,7 +8,7 @@
 set -eu
 
 DOCS_BASE_URL="${SCOPE_DOCS_BASE_URL:-https://urban-disco-1qzzq7z.pages.github.io}"
-CONFIG_PATH="/usr/share/nginx/html/config.js"
+CONFIG_PATH="${SCOPE_CONFIG_PATH:-/usr/share/nginx/html/config.js}"
 
 # Auth feature toggle for this environment (integration/production). Auth is ON
 # by default (secure by default); set SCOPE_AUTH_ENABLED=false on the overlay to
@@ -19,12 +19,35 @@ case "$(printf '%s' "${SCOPE_AUTH_ENABLED:-true}" | tr '[:upper:]' '[:lower:]' |
   *) AUTH_ENABLED=true ;;
 esac
 
-# Escape characters that are special inside a JS double-quoted string.
-escaped_docs_base=$(printf '%s' "$DOCS_BASE_URL" | sed 's/\\/\\\\/g; s/"/\\"/g')
+# Serialize UTF-8 strings as JS literals, including embedded quotes and newlines.
+js_string() {
+  printf '"'
+  printf '%s' "$1" | od -An -v -tu1 | awk '
+    { for (i = 1; i <= NF; i++) {
+        byte = $i + 0
+        if (byte == 34 || byte == 92) printf "\\%c", byte
+        else if (byte < 32 || byte == 127) printf "\\x%02X", byte
+        else printf "%c", byte
+      }
+    }'
+  printf '"'
+}
+
+DOCS_JS=$(js_string "$DOCS_BASE_URL")
+AUTH_CONFIG=""
+if [ "${SCOPE_AUTH_CLIENT_ID+x}" ]; then
+  AUTH_CONFIG="${AUTH_CONFIG}, authClientId: $(js_string "$SCOPE_AUTH_CLIENT_ID")"
+fi
+if [ "${SCOPE_AUTH_AUTHORITY+x}" ]; then
+  AUTH_CONFIG="${AUTH_CONFIG}, authAuthority: $(js_string "$SCOPE_AUTH_AUTHORITY")"
+fi
+if [ "${SCOPE_AUTH_SCOPES+x}" ]; then
+  AUTH_CONFIG="${AUTH_CONFIG}, authScopes: $(js_string "$SCOPE_AUTH_SCOPES")"
+fi
 
 cat > "$CONFIG_PATH" <<EOF
 window.__SCOPE_CONFIG__ = Object.assign(
-  { docsBaseUrl: "${escaped_docs_base}", authEnabled: ${AUTH_ENABLED} },
+  { docsBaseUrl: ${DOCS_JS}, authEnabled: ${AUTH_ENABLED}${AUTH_CONFIG} },
   window.__SCOPE_CONFIG__
 );
 EOF

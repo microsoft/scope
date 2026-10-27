@@ -889,8 +889,11 @@ The remaining interactive CLI design is **deferred**:
 
 - MSAL (`@azure/msal-browser` + `@azure/msal-react`) uses **Auth Code + PKCE**
   redirect login. `MsalProvider` and `AuthProvider` are composed in
-  [main.tsx](../../apps/portal/src/main.tsx). IdP settings are build-time
-  `VITE_AUTH_*` configuration; there is no `/api/v1/auth/config` fetch.
+  [main.tsx](../../apps/portal/src/main.tsx). The container entrypoint writes
+  public `SCOPE_AUTH_CLIENT_ID`, `SCOPE_AUTH_AUTHORITY`, and `SCOPE_AUTH_SCOPES`
+  to `/config.js`; the complete runtime triplet overrides build-time `VITE_AUTH_*`
+  settings. A partial runtime triplet is unconfigured. There is no
+  `/api/v1/auth/config` fetch.
 - `initializeAuth()` distinguishes an account-bound completed callback from a
   cached-account reload. `AuthProvider` alone owns the Scope handshake via
   `api.enrollCurrentUser({ signal })` or `api.getCurrentUser({ signal })`:
@@ -956,7 +959,7 @@ the existing External Secrets pipeline.**
 | Material | Secret? | Where it lives | Notes |
 |----------|---------|----------------|-------|
 | **IdP JWKS** (signing public keys) | No | **Fetched at runtime** from the IdP's `jwks_uri`, cached in-memory in the API with TTL + `kid` rotation | Public keys; never persisted to disk or DB. |
-| **OIDC discovery / authority / clientId / scopes / audience** | No | Plain env / ConfigMap for the API; **hardcoded into the CLI and Portal builds** (no `/auth/config` endpoint) | Non-secret configuration. |
+| **OIDC discovery / authority / clientId / scopes / audience** | No | Plain env / ConfigMap for the API; Portal runtime `/config.js` with build-time fallback; CLI build settings (no `/auth/config` endpoint) | Non-secret configuration. |
 | **`INTERNAL_API_KEY_<NAME>`** (per-service key, service-to-service) | **Yes** | **Azure Key Vault** \u2192 synced to a K8s Secret by **External Secrets Operator** (same pattern as `mongo-secrets`/`redis-secrets`); each service gets its **own** key mounted as env | Constant-time compared; **no single global key**; rotate per-service in Key Vault. || **`INTERNAL_JWT_SECRET` / internal signing key** (mints on-behalf-of user tokens) | **Yes** | **Azure Key Vault** → External Secret. **Asymmetric (chosen)**: API holds the **private** key; downstream verifiers hold only the **public** key. HMAC secret is a single-deployment alternative. | Scope-owned, **independent of the IdP**; rotate via Key Vault. || **Entra API client secret** (only if the optional confidential-client/client-credentials path in \u00a76 is used) | **Yes** | **Azure Key Vault** \u2192 External Secret | The public CLI/Portal clients are **public** clients (PKCE / device-code) and have **no** secret. |
 | **CLI user tokens** (access/refresh) | **Yes** | User's machine via the Scope **`SecretStore`** abstraction (default backend **`cross-keychain`** → OS keychain, service `scope-cli`); `0600` file backend only where no keyring exists | MSAL token cache; never logged; silent refresh. **No `keytar`.** |
 | **Portal tokens** | **Yes** | Browser memory via MSAL (session/`localStorage` per MSAL cache config) | No tokens in app code or repo. |
@@ -1092,24 +1095,26 @@ verified separately when those deferred credentials are introduced.
 10. 🟡 **Portal auth** — Delivered: MSAL bearer transport plus one `AuthProvider`
     handshake, callback/reload distinction, query gating, account-bound deduplication/
     cancellation, and API-authoritative Scope identity/role (§8). **Deferred**:
-    permission-aware nav/pages and self-scoped runs. IdP settings remain build-time
-    `VITE_AUTH_*`; no `/auth/config`, Scope token store, or dev role switcher.
+    permission-aware nav/pages and self-scoped runs. Portal IdP settings are
+    runtime `SCOPE_AUTH_*` with build-time `VITE_AUTH_*` fallback; no `/auth/config`,
+    Scope token store, or dev role switcher.
 
     > **MVP shipped (authentication only).** Delivered so far: MSAL sign-in
     > (auth-code + PKCE redirect), `MsalProvider` + `AuthProvider`, a `RequireAuth`
     > route guard, a header sign-in/sign-out `UserMenu`, and centralized token
     > acquisition + silent refresh + `401`→re-auth handled entirely inside the
     > `api-client` interceptor (`apps/portal/src/lib/api-client.ts`, via the
-    > `setApiTokenProvider`/`setReauthHandler` seams). IdP config is build-time
-    > (`VITE_AUTH_*`, see [ENV_VARIABLES.md](../../ENV_VARIABLES.md)) defaulting to
-    > the `entra-local` emulator for local dev.
+    > `setApiTokenProvider`/`setReauthHandler` seams). Public IdP config uses
+    > runtime `SCOPE_AUTH_*` with build-time `VITE_AUTH_*` fallback (see
+    > [ENV_VARIABLES.md](../../ENV_VARIABLES.md)); local dev defaults to `entra-local`.
     > Docker's `builder` stage accepts these public settings as build arguments:
     > Compose forwards them through `portal.build.args`, and CI forwards the
     > same-named GitHub Actions configuration variables. They are embedded by
-    > Vite, not read from the final nginx container's environment. The dev image
-    > continues to read them from the Vite process environment. Changing the
-    > IdP requires rebuilding the image; promoting one image preserves its IdP
-    > settings. Empty optional redirect settings retain the current Portal origin.
+    > Vite as fallbacks. The final nginx container reads `SCOPE_AUTH_CLIENT_ID`,
+    > `SCOPE_AUTH_AUTHORITY`, and `SCOPE_AUTH_SCOPES` at startup and writes them
+    > safely to `/config.js`; a promoted image can use each environment's IdP.
+    > The dev image reads `VITE_AUTH_*` from its Vite process environment. Empty
+    > optional redirect settings retain the current Portal origin.
     >
     > **Feature toggle (important).** Portal auth is **on by default (secure by
     > default)** but can be turned off per environment via **three independent
