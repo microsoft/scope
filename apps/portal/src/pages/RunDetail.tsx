@@ -312,11 +312,18 @@ export function RunDetail() {
   const isActive = activeRun?.status === "pending" || activeRun?.status === "processing";
   // Note: "done" is terminal — not active, no log streaming needed
 
-  // Lift the log stream so it can be shared between LogViewer and CriteriaGraphView
-  // Must be called unconditionally (before any early returns) per Rules of Hooks
-  // The SSE endpoint handles completed runs by replaying blob logs then closing.
+  // Share live logs between LogViewer and CriteriaGraphView. Terminal attempts
+  // read the same stored events over JSON without opening an SSE connection.
   // When viewing a historical run, use the per-run logs endpoint; otherwise use the
   // default endpoint with attemptNumber for reconnection on retry.
+  const isTerminal = activeRun?.status === "done";
+  const { data: storedLogs, error: storedLogsError } = useQuery({
+    queryKey: ["run-log-events", run?._id, activeRun?._id],
+    queryFn: () => isViewingHistorical
+      ? api.getRunLogEvents(run!._id, activeRun!._id)
+      : api.getLogEvents(run!._id),
+    enabled: !!run && !!activeRun && isTerminal,
+  });
   const logStreamUrlBuilder = useMemo(() => {
     if (isViewingHistorical && activeRun?._id && run?._id) {
       const requestId = run._id;
@@ -328,16 +335,20 @@ export function RunDetail() {
 
   const logStream = useLogStream({
     id: run?._id ?? "",
-    enabled: !!run,
+    enabled: !!run && !isTerminal,
     fromStart: true,
     attemptNumber: activeRun?.attemptNumber,
     urlBuilder: logStreamUrlBuilder,
   });
 
-  const effectiveLogs = logStream.logs;
+  const effectiveLogs = isTerminal
+    ? (storedLogs ?? (isViewingHistorical ? [] : logStream.logs))
+    : logStream.logs;
   const effectiveIsConnected = isActive ? logStream.isConnected : false;
-  const effectiveIsDone = logStream.isDone;
-  const effectiveError = logStream.error;
+  const effectiveIsDone = isTerminal || logStream.isDone;
+  const effectiveError = isTerminal
+    ? (storedLogsError instanceof Error ? storedLogsError.message : null)
+    : logStream.error;
 
   // Fetch linked task prompt (if present) — provides prompt features
   const taskPromptId = run?.taskPromptId;
