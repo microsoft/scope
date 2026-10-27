@@ -13,6 +13,11 @@ import {
   detectBundledToolCallsFiles,
   uploadBundledToolCallsFiles,
   packRunIntoTar,
+  detectBundledArtifactFiles,
+  uploadBundledArtifactFiles,
+  ATIF_ARTIFACT,
+  BUNDLED_RUN_ARTIFACTS,
+  HAR_ARTIFACT,
   type BlobUploader,
   type BlobDownloader,
   type ArchivableRun,
@@ -563,6 +568,68 @@ describe("uploadBundledToolCallsFiles", () => {
 });
 
 // --- packRunIntoTar ---
+
+// --- Generic spec-driven helpers (#951) ---
+
+describe("generic bundled artifact helpers", () => {
+  it("lists every bundled artifact once, in tar entry order", () => {
+    expect(BUNDLED_RUN_ARTIFACTS.map((spec) => spec.suffix)).toEqual([
+      ".har",
+      ".chat-export.json",
+      ".chat-result.json",
+      ".tool-calls.jsonl",
+      ".atif.trajectory.json",
+    ]);
+  });
+
+  it("only accepts a top-level file for artifacts that have one", () => {
+    const names = ["run.har", "run.atif.trajectory.json", "iteration-3.atif.trajectory.json", "iteration-x.har"];
+
+    expect(detectBundledArtifactFiles(names, HAR_ARTIFACT)).toEqual([{ fileName: "run.har", iteration: null }]);
+    expect(detectBundledArtifactFiles(names, ATIF_ARTIFACT)).toEqual([
+      { fileName: "iteration-3.atif.trajectory.json", iteration: 3 },
+    ]);
+  });
+
+  it("treats the suffix literally rather than as a regex", () => {
+    // `.` in the suffix must not match arbitrary characters.
+    expect(detectBundledArtifactFiles(["iteration-1xatifxtrajectoryxjson"], ATIF_ARTIFACT)).toEqual([]);
+  });
+
+  it("uploads a new artifact type from its spec alone", async () => {
+    const uploaded: Array<{ blobName: string; contentType?: string; tags?: Record<string, string> }> = [];
+    const client: BlobUploader = {
+      getBlockBlobClient(blobName: string) {
+        return {
+          url: `https://mock.blob.core.windows.net/snapshots/${blobName}`,
+          async uploadFile(_filePath, options) {
+            uploaded.push({ blobName, contentType: options?.blobHTTPHeaders?.blobContentType, tags: options?.tags });
+          },
+        };
+      },
+    };
+    const turns: Array<{ iteration: number; atifUrl?: string }> = [{ iteration: 2 }];
+
+    const topLevelUrl = await uploadBundledArtifactFiles({
+      spec: ATIF_ARTIFACT,
+      files: [{ fileName: "iteration-2.atif.trajectory.json", iteration: 2 }],
+      runDir: "/tmp/run",
+      runId: "run1",
+      turns,
+      containerClient: client,
+    });
+
+    expect(topLevelUrl).toBeUndefined();
+    expect(uploaded).toEqual([
+      {
+        blobName: "run1/iteration-2/atif.trajectory.json",
+        contentType: "application/json",
+        tags: { requestId: "run1", iteration: "2" },
+      },
+    ]);
+    expect(turns[0].atifUrl).toBe("https://mock.blob.core.windows.net/snapshots/run1/iteration-2/atif.trajectory.json");
+  });
+});
 
 describe("packRunIntoTar", () => {
   function makeMockBlobContainer(blobs: Record<string, { body: Buffer; length: number }> = {}): BlobDownloader {
