@@ -538,6 +538,7 @@ describe("CodingAgentQueueProcessor pre-processing failures", () => {
     });
     expect(updateOne.mock.calls[1][0]).toEqual({
       _id: requestId,
+      deletedAt: { $exists: false },
       "run._id": runId,
       "run.status": "processing",
       "run.worker.instanceId": (qp as any).instanceId,

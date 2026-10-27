@@ -63,6 +63,13 @@ function matches(document: object, filter: Document): boolean {
         Boolean((expected as { $exists: unknown }).$exists)
       );
     }
+    if (
+      typeof expected === "object" &&
+      expected !== null &&
+      "$nin" in expected
+    ) {
+      return !(expected as { $nin: unknown[] }).$nin.includes(actual);
+    }
     return actual === expected;
   });
 }

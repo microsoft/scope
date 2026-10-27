@@ -358,6 +358,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
           _id: requestDoc._id,
           "run._id": requestDoc.run!._id,
           "run.status": "processing",
+          deletedAt: { $exists: false },
           ...(currentOwnerId
             ? { "run.worker.instanceId": currentOwnerId }
             : { "run.worker": { $exists: false } }),
