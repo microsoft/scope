@@ -48,6 +48,9 @@ function makeProcessor() {
 
   (processor as any).collection = collection;
   (processor as any).blobStorage = blobStorage;
+  (processor as any).db = {
+    collection: vi.fn().mockReturnValue({}),
+  };
 
   const safeDeleteMessage = vi
     .spyOn(processor as any, "safeDeleteMessage")
