@@ -27,6 +27,7 @@ export interface AuthUser extends CurrentUserResponse {
 export type AuthStatus = "signed-out" | "resolving" | "ready" | "denied" | "error";
 
 interface AuthContextValue {
+  authEnabled: boolean;
   account: AccountInfo | null;
   user: AuthUser | null;
   status: AuthStatus;
@@ -63,6 +64,7 @@ interface Session {
   key: string;
   controller: AbortController;
   status: AuthStatus;
+  capabilities?: string;
 }
 
 interface Snapshot {
@@ -140,6 +142,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (!isCurrent()) return;
       if (redirectLogin) consumeRedirectLogin(redirectLogin);
       current.status = "ready";
+      current.capabilities = JSON.stringify(user.capabilities);
       setSnapshot({ key, status: "ready", user: toUser(account, user), error: null });
     }, (cause: unknown) => {
       if (!isCurrent()) return;
@@ -148,6 +151,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setSnapshot({ key, status: current.status, user: null, error });
     });
   }, [account, key, canResolve, attempt, clearSession]);
+
+  useEffect(() => {
+    if (!isAuthEnabled || !account || snapshot?.status !== "ready") return;
+    const current = session.current;
+    if (!current) return;
+    let running = false;
+    const timer = setInterval(() => {
+      if (running || current.controller.signal.aborted) return;
+      running = true;
+      void api.getCurrentUser({ signal: AbortSignal.any([current.controller.signal, AbortSignal.timeout(5_000)]) })
+        .then(user => {
+          if (session.current !== current || current.controller.signal.aborted) return;
+          const next = toUser(account, user);
+          const capabilities = JSON.stringify(next.capabilities);
+          if (current.capabilities !== capabilities) {
+            void queryClient.cancelQueries();
+            queryClient.clear();
+            current.capabilities = capabilities;
+          }
+          setSnapshot(previous => {
+            if (!previous || previous.key !== current.key) return previous;
+            return { ...previous, user: next };
+          });
+        }, (cause: unknown) => {
+          if (session.current !== current || current.controller.signal.aborted) return;
+          const error = cause instanceof Error ? cause : new Error("Access refresh failed");
+          current.status = cause instanceof ApiError && cause.status === 403 ? "denied" : "error";
+          current.controller.abort();
+          void queryClient.cancelQueries();
+          queryClient.clear();
+          setSnapshot({ key: current.key, status: current.status, user: null, error });
+        }).finally(() => { running = false; });
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [account, snapshot?.status, queryClient]);
 
   const logout = useCallback(async () => {
     clearSession();
@@ -170,6 +208,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       ? "resolving" : "signed-out");
   const user = active?.user ?? null;
   const value: AuthContextValue = {
+    authEnabled: isAuthEnabled,
     account,
     user,
     status,

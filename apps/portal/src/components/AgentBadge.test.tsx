@@ -10,6 +10,8 @@ import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 
 import type { CodingAgent } from "@/types";
+import { AuthContext, type AuthContextValue } from "@/contexts/AuthContext";
+import { anonymousAuth, signedInAuth } from "@/contexts/authFixtures";
 
 const { listAgents } = vi.hoisted(() => ({
   listAgents: vi.fn<
@@ -32,13 +34,17 @@ const activeAgent: CodingAgent = {
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
-function renderBadge(ui: ReactNode) {
+const adminAuth: AuthContextValue = { ...signedInAuth, user: signedInAuth.user && { ...signedInAuth.user,
+  capabilities: { ...signedInAuth.user.capabilities, platformAdmin: true },
+} };
+
+function renderBadge(ui: ReactNode, auth: AuthContextValue = adminAuth) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <AuthContext.Provider value={auth}><MemoryRouter>{ui}</MemoryRouter></AuthContext.Provider>
     </QueryClientProvider>,
   );
 }
@@ -108,5 +114,31 @@ describe("AgentBadge", () => {
 
     expect(screen.getByRole("link", { name: activeAgent.name })).toBeTruthy();
     expect(listAgents).not.toHaveBeenCalled();
+  });
+
+  it("keeps catalog names and hover metadata for members without management links", async () => {
+    listAgents.mockResolvedValue([activeAgent]);
+    renderBadge(<AgentBadge agentId={activeAgent._id} version="example-version" />, signedInAuth);
+    const label = await screen.findByText(activeAgent.name);
+    expect(label.closest("a")).toBeNull();
+    await userEvent.hover(label);
+    expect((await screen.findAllByText(activeAgent._id)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("example-version").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByText("View agent")).toBeNull();
+    expect(listAgents).toHaveBeenCalledWith({ includeDeleted: true });
+  });
+
+  it("does not query or link the catalog while auth capabilities are resolving", () => {
+    renderBadge(<AgentBadge agentId={activeAgent._id} />, {
+      ...adminAuth, isReady: false, status: "resolving",
+    });
+    expect(listAgents).not.toHaveBeenCalled();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("keeps links in explicit auth-disabled mode", () => {
+    renderBadge(<AgentBadge agentId={activeAgent._id} agent={activeAgent} />, anonymousAuth);
+    expect(screen.getByRole("link", { name: activeAgent.name })).toBeTruthy();
   });
 });

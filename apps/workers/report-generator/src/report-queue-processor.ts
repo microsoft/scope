@@ -6,6 +6,7 @@ import { CopilotClient, SessionEvent } from "@github/copilot-sdk";
 import { mkdirSync, rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import { REPORT_GENERATION_ENABLED } from "shared/rbac";
 import {
   BaseQueueProcessor,
   BaseQueueProcessorConfig,
@@ -85,6 +86,15 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
     heartbeat: VisibilityHeartbeat,
     log: (level: LogEvent["level"], msg: string, data?: Record<string, unknown>) => Promise<void>
   ): Promise<void> {
+    if (!REPORT_GENERATION_ENABLED) {
+      await this.collection.updateOne({ _id: doc._id }, {
+        $set: { status: "failed", error: "report_generation_disabled", updatedAt: new Date() },
+      });
+      await log("warn", "Report generation disabled; queued work is blocked pending service authorization");
+      const receipt = heartbeat.stop();
+      await this.safeDeleteMessage(message.messageId, receipt);
+      return;
+    }
     const generationStart = Date.now();
     const reportId = doc._id;
     const requestId = doc.requestId;

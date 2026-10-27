@@ -431,6 +431,9 @@ const SKIP_AUTH_HEADER = "x-scope-skip-auth";
  * never clobbers a caller-supplied `Authorization`.
  */
 const authHook: BeforeRequestHook = async ({ request }) => {
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && !request.headers.has("Idempotency-Key")) {
+    request.headers.set("Idempotency-Key", crypto.randomUUID());
+  }
   const skip = request.headers.has(SKIP_AUTH_HEADER);
   request.headers.delete(SKIP_AUTH_HEADER);
   if (skip) return;

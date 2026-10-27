@@ -5,6 +5,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
+    "./rbac": {
+      "source": "./src/rbac.ts",
+      "types": "./dist/rbac.d.ts",
+      "import": "./dist/rbac.js"
+    },
     ".": {
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",

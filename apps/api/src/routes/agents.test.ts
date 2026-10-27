@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { RouteContext } from "../route-context.js";
 import { registerAgentsRoutes } from "./agents.js";
+import { mockRouteAuthorization } from "../test-helpers.js";
 
 extendZodWithOpenApi(z);
 
@@ -59,6 +60,7 @@ function buildApp() {
   } as unknown as RouteContext["agentCollection"];
 
   const app = express();
+  mockRouteAuthorization(app);
   app.use(express.json());
   registerAgentsRoutes({
     app,
@@ -96,6 +98,7 @@ function buildVersionApp(documents: Array<Record<string, unknown>>) {
   } as unknown as RouteContext["agentCollection"];
 
   const app = express();
+  mockRouteAuthorization(app);
   app.use(express.json());
   registerAgentsRoutes({
     app,

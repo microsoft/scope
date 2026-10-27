@@ -6,13 +6,11 @@ import { z } from "zod";
 /**
  * The `users` collection document.
  *
- * Holds identity plus a deliberately loose `role` string only. The
- * role/permission model is expected to change substantially, so no role union
- * or permission types are defined here yet. `permissionsAdd` / `permissionsRemove`
- * exist for forward-compatibility and are unused today.
+ * Canonical identity, platform role and disable authority. Project role bundles
+ * live in project_memberships. Legacy permission override fields stay inactive.
  */
 export const UserDocumentSchema = z.object({
-  /** Scope User ID — an app-owned UUID. Referenced by `ownerId` everywhere later. */
+  /** Scope User ID — an app-owned UUID used by memberships and audit references. */
   _id: z.string(),
   /** Provider id, e.g. "entra". */
   idp: z.string(),
@@ -23,8 +21,13 @@ export const UserDocumentSchema = z.object({
   email: z.string().optional(),
   emailVerified: z.boolean().optional(),
   displayName: z.string().optional(),
-  /** Loose role string (default "user"). Intentionally NOT a union yet. */
+  /** Advisory login label from signed profile claims; never an identity or permission key. */
+  alias: z.string().optional(),
+  /** Stored platform role; canonical authorization rejects unknown values. */
   role: z.string().default("user"),
+  revision: z.number().int().nonnegative().optional(),
+  lastOperationId: z.string().optional(),
+  appliedOperationIds: z.array(z.string()).optional(),
   /** Forward-compat, unused today. */
   permissionsAdd: z.array(z.string()).optional(),
   /** Forward-compat, unused today. */

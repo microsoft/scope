@@ -3,6 +3,7 @@
 
 import { DequeuedMessageItem, QueueClient } from "@azure/storage-queue";
 import { DefaultAzureCredential } from "@azure/identity";
+import { REPORT_GENERATION_ENABLED } from "../rbac.js";
 import os from "node:os";
 import {
   RequestDocument,
@@ -552,6 +553,10 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
    * and creates a report for each matching template.
    */
   private async triggerReportGeneration(requestId: string): Promise<void> {
+    if (!REPORT_GENERATION_ENABLED) {
+      console.info(`[${this.workerName}] Report generation disabled; request ${requestId} remains project work`);
+      return;
+    }
     const apiBaseUrl = (this.config as QueueProcessorConfig).apiBaseUrl;
     if (!apiBaseUrl) return;
 

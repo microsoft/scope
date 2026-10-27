@@ -406,7 +406,7 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       const reports = await ctx.reportCollection
-        .find({ "insightReferences.insightId": id })
+        .find({ "insightReferences.insightId": id, projectId: insight.projectId })
         .sort({ createdAt: -1 })
         .toArray();
 

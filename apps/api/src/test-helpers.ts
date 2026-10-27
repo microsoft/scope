@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import { vi } from "vitest";
+import type { Express, RequestHandler } from "express";
+import { performance } from "node:perf_hooks";
 import type {
   Collection,
   Db,
@@ -9,6 +11,21 @@ import type {
 } from "mongodb";
 import type { BlobStorage } from "shared";
 import type { TestDependencies } from "./index.js";
+
+/** Controller-only harness: authorization itself is covered separately. */
+export function mockRouteAuthorization(app: Express) {
+  const guard = vi.fn(async () => performance.now() + 20_000);
+  app.locals.authorization = () => ({ guard });
+  return guard;
+}
+
+/** Controller-only fixture; never used by real-auth integration/acceptance tests. */
+export function mockControllerUserAccessMiddleware(): RequestHandler {
+  return (req, _res, next) => {
+    req.user = { id: "unit-controller-user", role: "user", isAuthenticated: true };
+    next();
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Mock MongoDB collection

@@ -40,23 +40,35 @@ flowchart LR
 `users._id` is a Scope-owned UUID. The unique external identity is
 `(idp, idpTenant, idpSubject)` (`idp`, Entra `tid`, Entra `oid`), never email.
 `UserStore.upsertOnLogin()` is called only by the explicit
-`POST /api/v1/users/me` path for JIT/profile/`lastLoginAt`/eligible
-bootstrap-admin writes. `lastLoginAt` records that upsert, not request activity or
+`POST /api/v1/users/me` path for JIT/profile/`lastLoginAt` writes. New users
+receive `role: "user"`; login never changes role or disabled state. Initial admin
+bootstrap and lockout repair use the operator-only exact-identity utility, not
+environment allowlists or HTTP recovery routes. `lastLoginAt` records that upsert, not request activity or
 proof of an interactive prompt; the disabled check still occurs after the upsert.
 
 After IdP verification, `UserAccessResolver.resolveExisting()` uses a validated
 `RedisUserAccessCache` snapshot or `UserStore.findByIdentity()` on cache miss/outage.
 It never upserts. The versioned cache key includes independently encoded Mongo
 database namespace, provider, tenant, and subject; only active users are positively
-cached. Fixed/non-sliding TTL defaults to 300 seconds
-(`AUTH_USER_CACHE_TTL_SECONDS`), so DB-only role/disable edits can remain stale until
-expiry. Redis failure falls back to Mongo, not anonymous access.
+cached. Fixed/non-sliding identity TTL defaults to 300 seconds
+(`AUTH_USER_CACHE_TTL_SECONDS`). Authorization independently rereads canonical
+users/memberships/projects and operation markers, so cached identity role/disable
+metadata does not preserve an authorization grant. Redis failure falls back to
+Mongo, not anonymous access.
 
 The Portal handshake uses POST `/me` after callback and GET `/me` after an
 MSAL-cached reload, gating all queries until its API-authoritative UUID/role arrives.
-The singular stored role is metadata today: the permission bundles, ownership
-enforcement, service credentials, and internal JWTs in
-[Authentication & RBAC](auth-rbac.md) are deferred, not a global API lockdown.
+The singular stored `user`/`admin` role controls platform administration.
+Unique project memberships supply fixed reader/contributor/admin bundles;
+the admin bundle includes `members:write` for roster and existing-user membership
+management within that project, including bounded enrolled-user discovery by
+name/email/Scope UUID through the project-authorized membership picker. Global
+administrative directory endpoints remain platform-only. Platform administration does not imply
+project-content access. Protected routes
+fail closed, with a 20-second total authority decision/stream lease budget.
+See [Authentication & RBAC](auth-rbac.md) for current local implementation status,
+durable administrative operations, operator recovery and remaining release gates.
+Creator ownership, service issuance and internal JWTs remain deferred.
 
 ### Benchmark entities
 
@@ -129,10 +141,10 @@ To support submitting an AGENTS.md prompt with a run, the request carries:
 
 A **Project** (`projects` collection, `ProjectStore`) is the top-level container that
 partitions all user-facing data. Every scoped entity carries one **immutable `projectId`**,
-set at creation and never changed. This is the data-organization layer only — it is a
-**filter, not a security boundary** (future ownership/RBAC is specified in
-[`auth-rbac.md`](auth-rbac.md); any caller admitted by the current auth rollout may
-pass any `projectId`).
+set at creation and never changed. Project filtering is combined with the canonical
+membership authorization boundary in [`auth-rbac.md`](auth-rbac.md); a caller cannot
+widen access by supplying another project's ID. Child/reference checks preserve
+the authorized parent project, including bulk, artifact and stream endpoints.
 
 ### Scoped vs. unscoped entities
 
@@ -141,7 +153,7 @@ pass any `projectId`).
 | **Root** (no parent) | `requests`, `profiles`, `criteria`, `prompt-features`, `mcp-servers`, `report-templates`, `skills`, `extensions`, `codebases`, `resources` | From the `?projectId=` query param at create time |
 | **Child** (references a parent) | `runs` (history), `profile-versions`, `codebase-revisions`, `resource-revisions`, `reports`, `insights` | Copied from the parent doc's `projectId` |
 | **Special** (deterministic key → per-project copies) | `task-prompts`, `skill-revisions` | From the run's `projectId`; see below |
-| **Unscoped** | `projects`, `agents`, `models`, tokens/accounts, feature-flags | n/a — never filtered by project |
+| **Unscoped storage** | `projects`, `agents`, `models`, tokens/accounts, feature-flags | Project inventory is membership-filtered except the platform control plane; agent/model reads require active membership; credential/config administration is platform-only |
 
 ### Resolution model (no default, fail-fast)
 
@@ -192,6 +204,15 @@ partition. Cosmos degrades that index to **non-unique**, so per-project uniquene
 the app layer (scoped `findOrCreate` / existence checks) — which is *why* edits resolve the row
 first and then write by its real `_id`. See `db.md` for the index details. This invariant is
 recorded so future routes and entities keep obeying it; see also `criteria-provider.md`.
+
+The same rule covers **context lookups that feed an LLM**. The AI helpers
+(`POST /api/v1/task-prompts/generate`, `POST /api/v1/task-prompts/:id/extract-features`,
+`POST /api/v1/criteria/generate-prompt`, `POST /api/v1/prompt-features/generate-prompt` and
+`POST /api/v1/prompt-features/extract-from-text`) load existing prompts, criteria or feature
+definitions as model input. Every such query filters by the authorized project: the required
+`?projectId=` for collection-level helpers, or the loaded task prompt's own `projectId` for
+`/:id/extract-features`. They never fall back to an unscoped query, so one project's data cannot
+reach another project's LLM input or the results persisted from it.
 
 A bounded audit brought every project-scoped catalog under this rule. Besides mcp-servers, skills,
 extensions, criteria, and prompt-features (whose resolvers now take a required `projectId`),
@@ -622,7 +643,18 @@ The Portal mirrors the API's fail-fast model: it holds a **selected project** (n
 - **`components/ProjectSwitcher.tsx`** is the header control (beside `ThemeToggle`) that lists projects, switches the active one — invalidating all scoped queries via `hooks/useSelectProject.ts`, since query keys don't embed `projectId` — and offers inline create + a link to `/projects`. Its presentational `ProjectSwitcherView` is story/play-tested.
 - **`components/ProjectGate.tsx`** guards scoped routes: when no project is selected it renders a first-run pick/create screen (`ProjectFirstRunView`) instead of firing a scoped request that would 400. Point-read detail routes (resolve by `_id`) and unscoped areas (agents, models, secrets, admin, `/projects`) stay ungated. The index route `/` is served by **`components/HomeRoute.tsx`**, the unscoped **home**: on entry it clears any active project (`useSelectProject(undefined)`, which also resets scoped query caches) and renders the picker, then forwards to `/statistics` once the user picks a project. Reaching `/` by any means (the logo, a typed URL, the back button, a bookmark) therefore de-scopes; there is no default project.
 - **`components/Layout.tsx`** hides project-scoped sidebar entries until a project is in use: with no selection (`hasProject === false`) only the global entries render (Projects, the Platform group of Agents/Models/Secrets, and the footer), while the New Run CTA and the Activity / Library / Resources / Dev groups appear once a project is selected. This keeps the first-run sidebar from advertising links that would only hit the `ProjectGate`. Scoped-vs-global mirrors `App.tsx` (`<ProjectGate>`-wrapped routes are scoped). The **Scope logo** doubles as home: it is a plain link to `/`, so clicking it lands on `HomeRoute`, which does the de-scoping — no click-handler side effect and no open-in-new-tab special-casing.
-- **`pages/Projects.tsx`** (`/projects`, unscoped) manages projects themselves — create / rename / describe / soft-delete. Delete always succeeds (**204**), even for a non-empty project, because it is a reversible soft-delete. A **Show deleted** toggle lists soft-deleted projects (`GET /projects?includeDeleted=true`) and offers a **Restore** action per row (`POST /projects/:id/restore`); deleted projects are not selectable until restored. The same affordances exist in the CLI (`project list --include-deleted`, `project restore <id>`).
+- **`pages/Projects.tsx`** (`/projects`, unscoped) lists only projects where the user has membership with `content:read`, including for platform admins. It retains create / rename / describe / soft-delete within the applicable role permissions. Deleted/non-readable projects are excluded and cannot be selected. Platform admins manage all memberships and discover/restore deleted projects in **`pages/AccessAdministration.tsx`** (`/access`), using the control-plane inventory. Plain `/access` keeps the project selector; `/access?projectId=...` locks to that project with no selector and an **All project access** return link. The CLI retains equivalent inventory/restore operations (`access projects`, `project list --include-deleted`, `project restore <id>`).
+
+These role restrictions apply with `SCOPE_AUTH_ENABLED=true` (the default).
+Explicit off disables API auth/RBAC and Portal sign-in together for trusted
+local/test deployments; project scoping/reference checks remain active.
+Anonymous `/projects` lists the application inventory and supports create,
+settings, delete, **Show deleted** and restore, without creating users/memberships.
+`/access` and identity administration remain unavailable, and report generation
+remains disabled. `AuthModeGate` checks the public API mode before mounting
+account/app providers and every 10 seconds thereafter; missing/mismatched/
+unavailable mode blocks application access. Existing access data survives mode
+changes. See [auth deployment mode](auth-rbac.md#deployment-mode-one-auth-and-rbac-switch).
 
 ### User disclosures
 

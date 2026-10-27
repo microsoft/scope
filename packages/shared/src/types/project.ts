@@ -27,4 +27,7 @@ export interface ProjectDocument {
   createdAt: Date;
   updatedAt?: Date;
   deletedAt?: Date;     // Soft-delete timestamp
+  revision?: number;
+  lastOperationId?: string;
+  appliedOperationIds?: string[];
 }

@@ -11,7 +11,7 @@ import { AuthProvider, useAuth, type AuthContextValue } from "./AuthContext";
 import { FeatureFlagProvider } from "./FeatureFlagContext";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useFavicon } from "@/hooks/useFavicon";
-import { api } from "@/lib/api";
+import { api, type CurrentUserResponse } from "@/lib/api";
 import {
   resetApiClient, setApiTokenProvider, setReauthHandler,
   type TokenProvider, type ReauthHandler,
@@ -73,7 +73,8 @@ const scopeAlice = {
   role: "user",
   displayName: "Scope Alice",
   email: "scope-alice@example.test",
-};
+  capabilities: { platformAdmin: false, reportsEnabled: false, memberships: [] },
+} satisfies CurrentUserResponse;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -136,6 +137,7 @@ describe("Scope authentication handshake", () => {
     focusManager.setFocused(undefined);
     resetApiClient();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   function freshLogin() {
@@ -168,6 +170,46 @@ describe("Scope authentication handshake", () => {
     return fetchMock.mock.calls.map(([request]) => (request as Request).method);
   }
 
+  it("refreshes capabilities by GET only and clears cached project content on membership loss", async () => {
+    vi.useFakeTimers();
+    freshLogin();
+    const initial: CurrentUserResponse = {
+      ...scopeAlice, capabilities: { platformAdmin: false, reportsEnabled: false,
+        memberships: [{ projectId: "project-a", role: "contributor", revision: 1,
+          permissions: ["content:read", "content:write", "content:delete"] }] },
+    };
+    fetchMock.mockImplementation(async (req: Request) => response(
+      pathOf(req).startsWith("/api/v1/users/me") ? initial : [],
+    ));
+    await act(async () => { render(tree()); });
+    expect(auth.status).toBe("ready");
+    client.setQueryData(["private-project-data"], "sensitive fixture");
+    fetchMock.mockImplementation(async (req: Request) => response(
+      pathOf(req).startsWith("/api/v1/users/me") ? scopeAlice : [],
+    ));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    expect(auth.user?.capabilities.memberships).toEqual([]);
+    expect(client.getQueryData(["private-project-data"])).toBeUndefined();
+    const identityRequests: Request[] = fetchMock.mock.calls.map(([req]) => req)
+      .filter(req => pathOf(req).startsWith("/api/v1/users/me"));
+    expect(identityRequests.map(req => req.method)).toEqual(["POST", "GET"]);
+  });
+
+  it("denies the session and clears cached content when capability authority is unavailable", async () => {
+    vi.useFakeTimers();
+    await act(async () => { render(tree()); });
+    expect(auth.status).toBe("ready");
+    client.setQueryData(["private-project-data"], "sensitive fixture");
+    fetchMock.mockImplementation(async (req: Request) => response(
+      { error: "Authority unavailable" }, pathOf(req).startsWith("/api/v1/users/me") ? 503 : 200,
+    ));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    expect(auth.isReady).toBe(false);
+    expect(auth.user).toBeNull();
+    expect(client.getQueryData(["private-project-data"])).toBeUndefined();
+    expect(requestMethods()).not.toContain("POST");
+  });
+
   it("sends exactly the enrollment POST first; flags, favicon and pages wait for its response", async () => {
     freshLogin();
     const lookup = deferred<Response>();
@@ -193,8 +235,9 @@ describe("Scope authentication handshake", () => {
 
     await act(async () => lookup.resolve(response(scopeAlice)));
     await waitFor(() => expect(requests()).toEqual(expect.arrayContaining([
-      "/api/v1/feature-flags", "/api/v1/version", "/api/v1/projects",
+      "/api/v1/version", "/api/v1/projects",
     ])));
+    expect(requests()).not.toContain("/api/v1/feature-flags");
     expect(auth.user).toMatchObject({
       ...scopeAlice, name: "Scope Alice", username: alice.username, subject: alice.localAccountId,
     });
@@ -212,13 +255,14 @@ describe("Scope authentication handshake", () => {
   });
 
   it("uses a plain lookup on cached-account reload and keeps IdP display fallbacks", async () => {
-    fetchMock.mockResolvedValueOnce(response({ id: scopeAlice.id, role: "admin" }));
+    fetchMock.mockResolvedValueOnce(response({ id: scopeAlice.id, role: "admin", capabilities: { ...scopeAlice.capabilities, platformAdmin: true } }));
     render(tree());
     await waitFor(() => expect(auth.isReady).toBe(true));
     expect(requests()[0]).toBe("/api/v1/users/me");
     expect(requestMethods()[0]).toBe("GET");
     expect(auth.user).toEqual({
       id: scopeAlice.id, role: "admin", name: alice.name,
+      capabilities: { ...scopeAlice.capabilities, platformAdmin: true },
       username: alice.username, subject: alice.localAccountId,
     });
     expect(msal.consume).not.toHaveBeenCalled();
@@ -245,11 +289,13 @@ describe("Scope authentication handshake", () => {
     msal.account = null;
     msal.enabled = false;
     render(tree());
-    await waitFor(() => expect(requests()).toContain("/api/v1/feature-flags"));
+    await waitFor(() => expect(requests()).toContain("/api/v1/projects"));
+    expect(requests()).toContain("/api/v1/feature-flags");
     expect(requests()).toContain("/api/v1/projects");
     expect(requests()).toContain("/api/v1/version");
     expect(requests().some((path) => path.includes("/users/me"))).toBe(false);
     expect(auth.user).toBeNull();
+    expect(auth.authEnabled).toBe(false);
     expect(auth.isReady).toBe(true);
   });
 
@@ -385,7 +431,7 @@ describe("Scope authentication handshake", () => {
     expect(auth.user).toBeNull();
     expect(msal.consume).not.toHaveBeenCalled();
     const bobId = "66666666-7777-4888-9999-aaaaaaaaaaaa";
-    await act(async () => second.resolve(response({ id: bobId, role: "user" })));
+    await act(async () => second.resolve(response({ id: bobId, role: "user", capabilities: scopeAlice.capabilities })));
     await waitFor(() => expect(auth.user?.id).toBe(bobId));
     expect(auth.user?.subject).toBe("bob-subject");
     expect(auth.user?.name).toBe("Bob");
@@ -438,7 +484,7 @@ describe("Scope authentication handshake", () => {
     expect(auth.user).toBeNull();
 
     const bobId = "66666666-7777-4888-9999-aaaaaaaaaaaa";
-    await act(async () => nextLookup.resolve(response({ id: bobId })));
+    await act(async () => nextLookup.resolve(response({ id: bobId, capabilities: scopeAlice.capabilities })));
     await waitFor(() => expect(auth.user?.id).toBe(bobId));
     expect(auth.user?.role).toBeUndefined();
   });

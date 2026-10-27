@@ -7,6 +7,7 @@ import { AuthError, type VerifiedIdentity } from "shared";
 import { app, _injectTestDependencies } from "../index.js";
 import { createAllMockDependencies } from "../test-helpers.js";
 import { UserAccessError, type UserAccessService } from "../auth/user-access-resolver.js";
+import { Authorization } from "../auth/authorization.js";
 
 vi.mock("db-migrations/check-migrations", () => ({
   checkMigrations: vi.fn().mockResolvedValue({ ready: true, applied: ["001"], pending: [] }),
@@ -51,6 +52,9 @@ const resolver = {
 describe("/api/v1/users/me", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.spyOn(Authorization.prototype, "capabilities").mockResolvedValue({
+      platformAdmin: false, reportsEnabled: false, memberships: [],
+    });
     provider.verifyAccessToken.mockResolvedValue(identity);
     resolver.resolveExisting.mockResolvedValue(principal);
     resolver.enrollOnLogin.mockResolvedValue(principal);
@@ -80,6 +84,7 @@ describe("/api/v1/users/me", () => {
       displayName: "Test User",
       idp: "entra",
       idpTenant: "tenant-1",
+      capabilities: { platformAdmin: false, reportsEnabled: false, memberships: [] },
     });
     expect(provider.verifyAccessToken).toHaveBeenCalledExactlyOnceWith("token");
     expect(resolver.resolveExisting).toHaveBeenCalledExactlyOnceWith(identity);

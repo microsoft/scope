@@ -4,18 +4,10 @@
 import { randomUUID } from "node:crypto";
 import { MongoServerError, type Collection, type UpdateFilter } from "mongodb";
 import {
-  bootstrapAdminKey,
   type UserDocument,
   type UserProfile,
   type VerifiedIdentity,
 } from "shared";
-
-export interface UserStoreOptions {
-  /** Identity keys (`${idp}:${tenant}/${subject}`) to promote to admin. */
-  bootstrapAdmins?: Set<string>;
-  /** Tenant allowlist gating bootstrap promotion (empty = no promotion). */
-  bootstrapTenants?: Set<string>;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -46,20 +38,10 @@ function isIdentityUpsertCollision(error: unknown, identity: VerifiedIdentity): 
  * provisioning): a new user is minted a Scope User ID (UUID) with the default
  * role `"user"`, and an existing user has its profile (`email`, `displayName`,
  * `emailVerified`) and `lastLoginAt` refreshed. Email is persisted only when
- * explicitly verified. Admin bootstrap is **promote-only** and requires an
- * exact identity match and membership in the configured tenant allowlist.
+ * explicitly verified. Login never changes an existing role or disabled state.
  */
 export class UserStore {
-  private readonly bootstrapAdmins: Set<string>;
-  private readonly bootstrapTenants: Set<string>;
-
-  constructor(
-    private readonly collection: Collection<UserDocument>,
-    options: UserStoreOptions = {},
-  ) {
-    this.bootstrapAdmins = options.bootstrapAdmins ?? new Set();
-    this.bootstrapTenants = options.bootstrapTenants ?? new Set();
-  }
+  constructor(private readonly collection: Collection<UserDocument>) {}
 
   /** JIT-upsert the user for a verified identity and return the stored record. */
   async upsertOnLogin(
@@ -75,6 +57,7 @@ export class UserStore {
     // Only refresh fields the profile actually provided, so a token missing a
     // claim never clobbers a previously-known value.
     if (profile.displayName !== undefined) set.displayName = profile.displayName;
+    if (profile.alias !== undefined || profile.email !== undefined) set.alias = profile.alias ?? profile.email;
     if (profile.emailVerified === true) {
       if (profile.email !== undefined) set.email = profile.email;
       set.emailVerified = true;
@@ -121,21 +104,7 @@ export class UserStore {
     if (!result) {
       throw new Error("Failed to upsert user during login");
     }
-    let user = result as UserDocument;
-
-    if (this.shouldBootstrapAdmin(identity) && user.role !== "admin") {
-      const promoted = await this.collection.findOneAndUpdate(
-        { _id: user._id } as unknown as UpdateFilter<UserDocument>,
-        { $set: { role: "admin", updatedAt: new Date() } } as unknown as
-          UpdateFilter<UserDocument>,
-        { returnDocument: "after" },
-      );
-      if (promoted) {
-        user = promoted as UserDocument;
-      }
-    }
-
-    return user;
+    return result;
   }
 
   /** Read an existing identity without provisioning or refreshing login/profile fields. */
@@ -155,13 +124,4 @@ export class UserStore {
     return (doc as UserDocument | null) ?? null;
   }
 
-  private shouldBootstrapAdmin(identity: VerifiedIdentity): boolean {
-    const key = bootstrapAdminKey(
-      identity.idp,
-      identity.idpTenant,
-      identity.idpSubject,
-    );
-    if (!this.bootstrapAdmins.has(key)) return false;
-    return this.bootstrapTenants.has(identity.idpTenant);
-  }
 }

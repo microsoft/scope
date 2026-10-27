@@ -25,6 +25,8 @@ import { gzipSync, gunzipSync } from "zlib";
 import { pack as tarPack, extract as tarExtract } from "tar-stream";
 import { RestError } from "@azure/storage-blob";
 import { computeTaskPromptId } from "shared";
+import { stringify as yamlStringify } from "yaml";
+import { mockRouteAuthorization } from "../../test-helpers.js";
 
 const TEST_PROJECT_ID = "test-project";
 
@@ -244,6 +246,7 @@ function buildApp(
   taskPromptStore: ReturnType<typeof makeTaskPromptStore> = makeTaskPromptStore(),
 ): Express {
   const app = express();
+  mockRouteAuthorization(app);
   app.use(express.json({ limit: "10mb" }));
 
   const ctx: any = {
@@ -379,7 +382,7 @@ describe("run import/export — validation (POST /api/v1/runs/upload)", () => {
 
   it("returns 409 when a run with the same _id already exists", async () => {
     const reqs = makeRequestCollection();
-    reqs.docs.set("dup-1", { _id: "dup-1", run: { status: "done" } });
+    reqs.docs.set("dup-1", { _id: "dup-1", projectId: TEST_PROJECT_ID, run: { status: "done" } });
     const app = buildApp(reqs);
 
     const archive = await buildTarGz({
@@ -454,7 +457,7 @@ describe("run import/export — validation (POST /api/v1/runs/upload)", () => {
     // the ifNoneMatch guard on uploadStream must refuse to overwrite, and
     // the per-run cleanup must not delete the existing blob either.
     const reqs = makeRequestCollection();
-    reqs.docs.set("dup-noclob", { _id: "dup-noclob", run: { status: "done" } });
+    reqs.docs.set("dup-noclob", { _id: "dup-noclob", projectId: TEST_PROJECT_ID, run: { status: "done" } });
     const app = buildApp(reqs);
 
     const originalIterBytes = Buffer.from("ORIGINAL iteration contents");
@@ -472,11 +475,52 @@ describe("run import/export — validation (POST /api/v1/runs/upload)", () => {
       .post(`/api/v1/runs/upload?projectId=${TEST_PROJECT_ID}`)
       .attach("archive", archive, "archive.tar.gz");
 
-    // Status may be 409 (Mongo dup wins the race) or 500 (uploadStream's
-    // 412 surfaces as a per-run upload failure first). Either way the
-    // critical invariant is the existing blob bytes are untouched.
-    expect([409, 500]).toContain(res.status);
+    expect(res.status).toBe(409);
     expect(blobStore.get(originalBlobKey)).toEqual(originalIterBytes);
+  });
+
+  it("rejects a foreign request ID without exposing its status or uploading new blobs", async () => {
+    const reqs = makeRequestCollection();
+    const fixture = makeFixtureRun("foreign-run");
+    reqs.docs.set(fixture._id, { ...fixture, projectId: "another-project", run: { ...fixture.run, status: "processing" } });
+    const archive = await buildTarGz({
+      [`${fixture._id}/iteration-1.har`]: "must not upload",
+      [`${fixture._id}/run.yaml`]: yamlStringify(fixture),
+    });
+    const res = await request(buildApp(reqs))
+      .post(`/api/v1/runs/upload?projectId=${TEST_PROJECT_ID}`)
+      .attach("archive", archive, "archive.tar.gz");
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("Not found");
+    expect(JSON.stringify(res.body)).not.toMatch(/processing|existingStatus|another-project/);
+    expect(blobStore.size).toBe(0);
+    expect(reqs.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("never imports serialized artifact URLs without the corresponding archive bytes", async () => {
+    const reqs = makeRequestCollection();
+    const fixture = makeFixtureRun("own-import");
+    const foreign = blobUrl("snapshots", "foreign-request/private-artifact");
+    const archive = await buildTarGz({
+      [`${fixture._id}/run.yaml`]: yamlStringify({
+        ...fixture, run: {
+          ...fixture.run, logsUrl: foreign, harUrl: foreign, rawChatUrl: foreign,
+          videoUrls: [foreign], setupVideoUrls: [foreign],
+          turns: fixture.run.turns.map(turn => ({
+            ...turn, snapshotUrl: foreign, harUrl: foreign, rawChatUrl: foreign,
+            chatResultUrl: foreign, toolCallsUrl: foreign, atifUrl: foreign, videoUrls: [foreign],
+          })),
+        },
+      }),
+    });
+    const res = await request(buildApp(reqs))
+      .post(`/api/v1/runs/upload?projectId=${TEST_PROJECT_ID}`)
+      .attach("archive", archive, "archive.tar.gz");
+    expect(res.status).toBe(201);
+    const imported: unknown = reqs.docs.get(fixture._id);
+    expect(JSON.stringify(imported)).not.toContain("foreign-request");
+    expect(imported).toMatchObject({ run: { turns: [{ snapshotUrl: "" }] } });
+    expect(blobStore.size).toBe(0);
   });
 });
 
