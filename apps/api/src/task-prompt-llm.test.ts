@@ -17,19 +17,34 @@ vi.mock("@azure/core-auth", () => ({
   AzureKeyCredential: vi.fn(),
 }));
 
-// Mock llm-token module — provides both the legacy GitHub Models helpers
-// and the new shared acquireInferenceClient(). The task-prompt module now
-// only calls acquireInferenceClient, but we keep the legacy exports so
-// the rest of the module surface stays compatible.
 vi.mock("./llm-token.js", () => ({
   isLlmAvailable: vi.fn(() => true),
-  isGitHubModelsTokenAvailable: vi.fn(() => true),
-  acquireGitHubModelsToken: vi.fn(async () => "fake-token"),
-  acquireInferenceClient: vi.fn(async () => ({
-    client: { path: () => ({ post: mockPost }) },
-    endpoint: "https://test.example.com",
-    source: "azure-ai-foundry",
-  })),
+  completePortalLlm: vi.fn(async (request: {
+    messages: Array<{ role: string; content: string }>;
+    model: string;
+    temperature: number;
+    max_tokens: number;
+  }, explicitModel?: string) => {
+    const { postAdaptiveChatCompletion } = await import("./adaptive-chat-completions.js");
+    const response = await postAdaptiveChatCompletion({
+      endpoint: "https://test.example.com",
+      model: explicitModel || request.model,
+      messages: request.messages,
+      temperature: request.temperature,
+      maxTokens: request.max_tokens,
+      send: (body) => mockPost({ body }),
+    });
+    if (response.status !== "200") {
+      const body = response.body as { error?: { message?: string } };
+      throw new Error(`LLM request failed: ${body.error?.message || response.status}`);
+    }
+    const body = response.body as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = body.choices?.[0]?.message?.content;
+    if (!content) throw new Error("LLM returned empty response");
+    return content;
+  }),
 }));
 
 import { generateTaskPrompt, isTaskPromptLlmAvailable } from "./task-prompt-llm.js";

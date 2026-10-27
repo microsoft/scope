@@ -92,12 +92,12 @@ may contain a `requestProfile` field; the parser accepts and ignores it.
 
 | Capability | Description |
 |------------|-------------|
-| `github-models` | Access to GitHub Models API (GPT-4o, etc.) |
+| `github-models` | Access to the legacy GitHub Models fallback |
 | `github-public-api` | Read-only access to the GitHub REST API for public repos (skill discovery / resolution) |
-| `copilot-sdk` | GitHub Copilot SDK integration |
+| `copilot-sdk` | GitHub Copilot SDK integration, including Portal AI |
 | `copilot-cli` | GitHub Copilot CLI authentication |
 | `claude-code-cli` | Anthropic Claude Code CLI |
-| `azure-ai-inference` | Chat-completion inference against an Azure AI Foundry deployment (used by the portal's AI features) |
+| `azure-ai-inference` | Chat-completion inference against an Azure AI Foundry deployment (used by Portal AI) |
 
 `github-public-api` is granted to **any** valid GitHub bearer token (PAT classic, PAT fine-grained, OAuth, scopeless OAuth) since public-repo reads require no scopes.
 
@@ -114,9 +114,9 @@ The API's discovery endpoint uses this chain via the `github-api-token` helper t
 
 | Token Type | Permissions / Scope | How to Obtain | Validity | GitHub Models | Copilot SDK | Copilot CLI | Claude Code CLI | VS Code Copilot |
 |------------|---------------------|---------------|----------|:-------------:|:-----------:|:-----------:|:---------------:|:---------------:|
-| **GitHub PAT (classic)** `ghp_` | `copilot` | Settings → Tokens (classic) | No expiry or custom | ❌ | ✅¹ | ✅¹ | ❌ | ✅¹ |
-| **GitHub PAT (fine-grained)** `github_pat_` | `models:read` | Settings → Fine-grained tokens | Max 1 year | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **GitHub OAuth** `gho_` | (all via OAuth flow) | `gh auth login` → `gh auth token` | Until revoked | ✅ | ✅¹ | ✅¹ | ❌ | ✅¹ |
+| **GitHub PAT (classic)** `ghp_` | `copilot` | Settings → Tokens (classic) | No expiry or custom | ❌ | ✅¹ (Portal AI) | ✅¹ | ❌ | ✅¹ |
+| **GitHub PAT (fine-grained)** `github_pat_` | `models:read` | Settings → Fine-grained tokens | Max 1 year | ✅ (legacy Portal AI fallback) | ❌ | ❌ | ❌ | ❌ |
+| **GitHub OAuth** `gho_` | (all via OAuth flow) | `gh auth login` → `gh auth token` | Until revoked | ✅ (legacy fallback) | ✅¹ (Portal AI) | ✅¹ | ❌ | ✅¹ |
 | **GitHub OAuth cookie state** | (browser session) | Browser DevTools → cookies | Session-bound | ❌ | ❌ | ❌ | ❌ | ✅² |
 | **Anthropic API Key** `sk-ant-` | (full access) | console.anthropic.com | Until revoked | ❌ | ❌ | ❌ | ✅ | ❌ |
 
@@ -250,11 +250,9 @@ if (result) {
 
 ### LLM Module Integration
 
-The API's portal-LLM modules (`llm.ts`, `prompt-feature-llm.ts`,
-`task-prompt-llm.ts`) all go through a shared
-`acquireInferenceClient()` helper in `apps/api/src/llm-token.ts`. The
-helper resolves a chat-completions client in this order, returning the
-first source that succeeds:
+The API's Portal AI modules (`llm.ts`, `prompt-feature-llm.ts`, and
+`task-prompt-llm.ts`) share one provider-selection path. It selects the first
+configured provider in this order:
 
 1. **Azure AI Foundry via env vars** —
    `AZURE_AI_INFERENCE_ENDPOINT` + `AZURE_AI_INFERENCE_API_KEY`.
@@ -266,40 +264,75 @@ first source that succeeds:
    (endpoint + key + model), not just the API key. The capability
    `azure-ai-inference` is derived from any registered `azure-ai-foundry`
    key.
-3. **GitHub Models** — `GITHUB_MODELS_API_KEY` env var, then
-   `TokenManagerClient.acquireToken("github-models")`, then `GITHUB_TOKEN`.
+3. **GitHub Copilot SDK** — `GITHUB_TOKEN` or a registered classic PAT/OAuth
+   token with the `copilot-sdk` capability. This is a convenience path for
+   desktop and straightforward self-hosted installations: the same GitHub
+   OAuth flow can enable Portal AI without a separately provisioned inference
+   endpoint.
+4. **GitHub Models (legacy fallback)** — `GITHUB_MODELS_API_KEY`, a registered
+   `github-models` token, or the legacy `GITHUB_TOKEN` path.
 
-Each successful acquisition logs a single line:
+Each successful acquisition logs the selected source. GitHub Models remains
+available for compatibility, but new deployments should use Foundry or Copilot
+SDK credentials.
 
-```
-[llm-token] inference provider: source=… via=… endpoint=… model=…
-```
+For production deployments, prefer Foundry or another direct chat-completions
+endpoint over Copilot SDK. The SDK launches Copilot CLI child processes and
+requires Scope to operate a bounded client pool, whereas a direct endpoint
+avoids subprocess lifecycle and pool-capacity overhead and exposes native
+inference controls.
 
-`via` distinguishes `azure-ai-foundry-env`,
-`azure-ai-foundry-token-manager`, `github-models-env`,
-`github-models-token-manager`, and `github-token`.
+### Copilot SDK request isolation
 
-When none of the three tiers is configured, the helper throws a single
-"LLM not configured" error that the route handlers convert into a 503
-with an actionable message pointing at `/secrets/keys/new`.
+Portal AI bounds Copilot SDK concurrency with a fixed-size client pool (default
+maximum: two clients; minimum: zero). Pool acquisition, runtime startup,
+response generation, idle reaping, and shutdown all have explicit timeouts so
+requests and child processes do not wait indefinitely. A request borrows one
+client, creates a **one-shot** session, sends one prompt, then disconnects and
+deletes the session in `finally` before returning the client to the pool.
+Session cleanup therefore runs after success, provider errors, and timeouts.
 
-**No automatic failover at request time.** The chain only steps down
-when the predecessor returns *nothing* (env var unset, no key
-registered). It does **not** step down when the predecessor returns a
-credential that then 4xx/5xx's on the chat-completion call — that error
-propagates to the user verbatim. This is intentional: silent fallback
-would mask a misconfigured higher-priority backend (e.g. a wrong Foundry
-deployment name) and the operator would never realise they were paying
-the slower fallback's latency.
+The pool exists because the SDK runtime is not in-process: every pooled client
+owns a Copilot CLI child process. This tradeoff streamlines desktop setup, but
+production capacity planning must account for the child processes' memory,
+startup, health-check, and idle-eviction behavior. A direct inference endpoint
+is therefore the recommended production architecture.
 
-```typescript
-import { acquireInferenceClient } from "./llm-token.js";
+The session is intentionally isolated from coding-agent behavior:
 
-const { client, model: foundryModel } = await acquireInferenceClient();
-const modelName = explicit || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
-await client.path("/chat/completions").post({ body: { messages, model: modelName, … } });
-```
+- The Copilot client uses `mode: "empty"`. Its SDK session uses an empty tool
+  set and does not receive MCP servers, skills, custom agents, extensions, or
+  repository/workspace context.
+- Only the system and user prompts required by the Portal AI operation are
+  sent.
+- The Copilot CLI child process receives a sanitized environment containing
+  only the variables required for runtime and authentication; unrelated Scope
+  service secrets are not forwarded.
+- The session is not reused across requests, users, or projects.
+
+The adapter preserves the operation's system and user prompts. Copilot model
+resolution is: explicit request override → `PORTAL_COPILOT_MODEL` → `LLM_MODEL`
+→ automatic selection from the authenticated account's available models. Each
+pooled client discovers its models at startup and prefers `gpt-5.4-mini`,
+`gpt-5.4`, `gpt-5.1`, then `gpt-5-mini`; if none is present it uses the first
+listed model. It fails client startup if Copilot returns no models. Copilot
+therefore does not inherit the REST-only `gpt-4.1` default when no override is
+configured.
+
+The Copilot SDK session API does not expose the REST chat-completions
+`temperature` or maximum-token controls, so those remain specific to the
+Foundry and legacy GitHub Models REST paths. Those REST providers continue to
+default to `gpt-4.1`.
+
+When no provider is configured, route handlers return HTTP 503 with actionable
+registration guidance.
+
+**No automatic failover at request time.** Provider precedence is evaluated
+only while selecting an available credential. Once a provider is selected, an
+authentication error, timeout, rate limit, or inference failure is returned to
+the caller; Scope does not retry the request through a lower-priority provider.
+This prevents a broken Foundry or Copilot configuration from being hidden by
+the legacy GitHub Models fallback.
 
 The legacy `acquireGitHubModelsToken()` helper still exists for callers
-that specifically need a GitHub Models bearer token; it follows the same
-1→3 chain restricted to the GitHub Models tiers.
+that specifically need a GitHub Models bearer token.

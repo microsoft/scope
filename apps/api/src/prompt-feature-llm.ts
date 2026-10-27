@@ -1,14 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { isUnexpected } from "@azure-rest/ai-inference";
 import {
   PromptFeatureConfig,
   PromptFeatureResult,
   SuggestedPromptFeature,
 } from "shared";
-import { postAdaptiveChatCompletion } from "./adaptive-chat-completions.js";
-import { acquireInferenceClient, isLlmAvailable as inferenceAvailable } from "./llm-token.js";
+import {
+  completePortalLlm,
+  isLlmAvailable as inferenceAvailable,
+} from "./llm-token.js";
 
 // ---------------------------------------------------------------------------
 // Generate prompt feature prompt (mirrors criteria generateCriteriaPrompt)
@@ -166,40 +167,14 @@ export async function generatePromptFeaturePrompt(
   existingFeatures: ExistingPromptFeature[] = [],
   model?: string,
 ): Promise<GeneratePromptFeatureResult> {
-  const {
-    client: llm,
-    endpoint,
-    model: foundryModel,
-  } = await acquireInferenceClient();
-
-  // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
-  const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
+  const modelName = model || process.env.LLM_MODEL || "gpt-4.1";
   const request = buildPromptFeatureAuthoringRequest(
     behavior,
     existingFeatures,
     modelName,
   );
 
-  const response = await postAdaptiveChatCompletion({
-    endpoint,
-    model: request.model,
-    messages: request.messages,
-    temperature: request.temperature,
-    maxTokens: request.max_tokens,
-    send: (body) => llm.path("/chat/completions").post({ body }),
-  });
-
-  if (isUnexpected(response)) {
-    const errBody = response.body as any;
-    throw new Error(
-      `LLM request failed: ${errBody?.error?.message || response.status}`,
-    );
-  }
-
-  const content = response.body.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("LLM returned empty response");
-  }
+  const content = await completePortalLlm(request, model);
 
   return parsePromptFeatureAuthoringResponse(content, existingFeatures);
 }
@@ -348,40 +323,14 @@ export async function extractPromptFeatures(
   features: PromptFeatureConfig[],
   model?: string,
 ): Promise<ExtractionResult> {
-  const {
-    client: llm,
-    endpoint,
-    model: foundryModel,
-  } = await acquireInferenceClient();
-
-  // Priority: explicit arg > key-specific (from Foundry blob) > env > default.
-  const modelName = model || foundryModel || process.env.LLM_MODEL || "gpt-4.1";
+  const modelName = model || process.env.LLM_MODEL || "gpt-4.1";
   const request = buildPromptFeatureExtractionRequest(
     taskText,
     features,
     modelName,
   );
 
-  const response = await postAdaptiveChatCompletion({
-    endpoint,
-    model: request.model,
-    messages: request.messages,
-    temperature: request.temperature,
-    maxTokens: request.max_tokens,
-    send: (body) => llm.path("/chat/completions").post({ body }),
-  });
-
-  if (isUnexpected(response)) {
-    const errBody = response.body as any;
-    throw new Error(
-      `LLM extraction failed: ${errBody?.error?.message || response.status}`,
-    );
-  }
-
-  const content = response.body.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("LLM returned empty response");
-  }
+  const content = await completePortalLlm(request, model);
 
   return parsePromptFeatureExtractionResponse(content, features);
 }

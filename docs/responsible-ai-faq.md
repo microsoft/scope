@@ -44,7 +44,13 @@ Scope uses AI in several places, depending on deployment configuration:
 | Report generation | A report-generation worker can use an LLM to analyze completed runs and produce Markdown reports and reusable insights. |
 | Model discovery | Model scanners can discover available capabilities from supported providers such as Copilot and Anthropic integrations. |
 
-For its LLM-assisted platform features (Judge, criteria/prompt/report generation), Scope routes inference through a unified backend that supports Azure AI Foundry and GitHub Models. Coding-agent surfaces reach their own model backends directly: GitHub Copilot via the GitHub Copilot SDK/APIs, and Claude Code via Anthropic APIs. The available providers depend on the deployment and registered credentials.
+Portal AI provider precedence is Azure AI Foundry environment credentials, Azure AI Foundry credentials from Token Manager, GitHub Copilot SDK credentials from Token Manager, and then GitHub Models as a legacy fallback. Once a provider is selected, Scope does not fail over to another provider after an authentication, timeout, rate-limit, or inference error. Judge and report generation use their separately configured Copilot SDK integrations, while coding-agent surfaces reach their own model backends directly.
+
+The Portal AI Copilot SDK provider is intended as a convenience for desktop and simple self-hosted Scope installations: users can enable assistance through a GitHub OAuth flow without first provisioning an inference resource. Because the SDK launches Copilot CLI child processes and requires a bounded client pool, production deployments should prefer Azure AI Foundry or another direct completion endpoint with native inference controls and no subprocess-pool overhead.
+
+Portal AI's Copilot SDK path uses a bounded client pool and a fresh one-shot session for each request. The client runs in empty mode; the session has no tools, MCP servers, skills, custom agents, extensions, or repository context, receives only the operation's system and user prompts, and is disconnected and deleted before its client returns to the pool. The child process receives a sanitized environment rather than the API service's complete environment. These controls reduce cross-request context and credential exposure, but generated content still requires human review.
+
+The Copilot SDK path preserves the Portal operation's system prompt, user prompt, and model selection. REST-specific temperature and maximum-token controls are not exposed by the SDK session API, so they apply only to the Foundry and legacy GitHub Models REST paths.
 
 ## Inputs and outputs
 
@@ -108,6 +114,7 @@ Users should:
 | Insecure generated code | Scope is an evaluation tool; users remain responsible for code review, testing, linting, and security scanning before using generated code. |
 | Secret exposure in captured traffic | Supported HAR capture paths redact sensitive headers such as authorization, API key, cookie, and set-cookie headers before storage. |
 | Credential misuse | Provider credentials are managed through a Token Manager with capability-based token acquisition and Key Vault-backed storage in production-style deployments. |
+| Cross-request Portal AI context or tool access | Copilot SDK requests use one-shot sessions with empty tools and no MCP, skills, or workspace context; sessions are destroyed after each request and the child process receives a sanitized environment. |
 | Prompt injection | Users should treat repository content, prompts, MCP data, and external inputs as untrusted. Scope’s Judge uses read-only tools, and outputs should be reviewed before action. |
 | Overreliance on AI-generated reports | Reports are generated from run data and should be reviewed by a human before being used for decisions. |
 | Cross-project data confusion | Scope uses explicit project IDs for scoped entities and fails fast when project context is missing. Deployment owners should still implement and verify access control for shared environments. |

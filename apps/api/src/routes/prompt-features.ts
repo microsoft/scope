@@ -13,6 +13,7 @@ import { apiRoute } from "../openapi/api-route.js";
 import type { PromptFeatureDocument, RouteContext } from "../route-context.js";
 import { extractPromptFeatures, generatePromptFeaturePrompt, isLlmAvailable as isPromptFeatureLlmAvailable } from "../prompt-feature-llm.js";
 import { isInferenceError } from "../llm-token.js";
+import { PORTAL_AI_NOT_CONFIGURED_ERROR } from "../portal-ai-copy.js";
 import { ProjectIdQuerySchema, OptionalProjectIdQuerySchema, getQueryProjectId, getOptionalQueryProjectId } from "../utils/project-scope.js";
 
 export function registerPromptFeaturesRoutes(ctx: RouteContext): void {
@@ -43,7 +44,7 @@ apiRoute(ctx.app, ctx.registry, {
     }
 
     if (!isPromptFeatureLlmAvailable()) {
-      res.status(503).json({ error: "LLM not configured: no inference backend available. Please register a new secret key for GitHub Model or Azure Foundry." });
+      res.status(503).json({ error: PORTAL_AI_NOT_CONFIGURED_ERROR });
       return;
     }
 
@@ -161,7 +162,7 @@ apiRoute(ctx.app, ctx.registry, {
     }
 
     if (!isPromptFeatureLlmAvailable()) {
-      res.status(503).json({ error: "LLM not configured: no inference backend available. Please register a new secret key for GitHub Model or Azure Foundry." });
+      res.status(503).json({ error: PORTAL_AI_NOT_CONFIGURED_ERROR });
       return;
     }
 
