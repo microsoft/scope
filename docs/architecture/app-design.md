@@ -498,6 +498,10 @@ A single value compiles to an equality clause; multiple values compile to `$in`.
 | `criteria` | `scenario.criteria` |
 | `turns` / `maxIterations` | `run.turns` size / `maxIterations` |
 
+In the Portal's Iterations filter, the comparison operator can be selected
+before a number is entered. The operator is kept in URL state while the value is
+empty; the API query includes it only when the corresponding number is present.
+
 Additional cross-cutting filters:
 
 - **`(Unknown)` sentinel** — the literal value `__empty__` (exported as `EMPTY_FILTER_VALUE`)
