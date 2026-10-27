@@ -6,6 +6,8 @@ import {
   startVisibilityHeartbeat,
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_VISIBILITY_SECONDS,
+  HEARTBEAT_REQUEST_TIMEOUT_MS,
+  HeartbeatRequestTimeoutError,
   type VisibilityHeartbeat,
 } from "./visibility-heartbeat.js";
 import type { QueueClient } from "@azure/storage-queue";
@@ -47,7 +49,7 @@ describe("visibility heartbeat", () => {
     await vi.advanceTimersByTimeAsync(150);
 
     expect(qc.updateMessage).toHaveBeenCalledTimes(1);
-    expect(qc.updateMessage).toHaveBeenCalledWith("msg-1", "receipt-0", undefined, 120);
+    expect(qc.updateMessage).toHaveBeenCalledWith("msg-1", "receipt-0", undefined, 120, { abortSignal: expect.any(AbortSignal) });
     expect(hb.popReceipt).toBe("receipt-1");
 
     hb.stop();
@@ -66,12 +68,12 @@ describe("visibility heartbeat", () => {
     // Tick 1
     await vi.advanceTimersByTimeAsync(150);
     expect(hb.popReceipt).toBe("receipt-1");
-    expect(qc.updateMessage).toHaveBeenLastCalledWith("msg-1", "receipt-0", undefined, 120);
+    expect(qc.updateMessage).toHaveBeenLastCalledWith("msg-1", "receipt-0", undefined, 120, { abortSignal: expect.any(AbortSignal) });
 
     // Tick 2
     await vi.advanceTimersByTimeAsync(100);
     expect(hb.popReceipt).toBe("receipt-2");
-    expect(qc.updateMessage).toHaveBeenLastCalledWith("msg-1", "receipt-1", undefined, 120);
+    expect(qc.updateMessage).toHaveBeenLastCalledWith("msg-1", "receipt-1", undefined, 120, { abortSignal: expect.any(AbortSignal) });
 
     hb.stop();
   });
@@ -124,7 +126,7 @@ describe("visibility heartbeat", () => {
     // Tick 2 — succeeds with the same receipt-0 (since tick 1 failed)
     await vi.advanceTimersByTimeAsync(100);
     expect(qc.updateMessage).toHaveBeenCalledTimes(2);
-    expect(qc.updateMessage).toHaveBeenLastCalledWith("msg-1", "receipt-0", undefined, 120);
+    expect(qc.updateMessage).toHaveBeenLastCalledWith("msg-1", "receipt-0", undefined, 120, { abortSignal: expect.any(AbortSignal) });
     expect(hb.popReceipt).toBe("receipt-2");
 
     hb.stop();
@@ -192,6 +194,58 @@ describe("visibility heartbeat", () => {
   it("exports correct default constants", () => {
     expect(HEARTBEAT_INTERVAL_MS).toBe(15_000);
     expect(HEARTBEAT_VISIBILITY_SECONDS).toBe(60);
+    expect(HEARTBEAT_REQUEST_TIMEOUT_MS).toBeLessThan(HEARTBEAT_INTERVAL_MS);
+  });
+
+  it("reports a hung updateMessage as a failed tick and keeps beating (#805)", async () => {
+    const qc = createMockQueueClient();
+    const signals: AbortSignal[] = [];
+    // First call never settles (frozen endpoint); the second succeeds.
+    (qc.updateMessage as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce((_id, _receipt, _text, _visibility, options) => {
+        signals.push(options.abortSignal);
+        return new Promise(() => {});
+      })
+      .mockResolvedValue({ popReceipt: "receipt-1" });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const hb = startVisibilityHeartbeat(
+      qc, "msg-1", "receipt-0", "test-worker", 100, 120, {}, undefined, 50,
+    );
+
+    // Tick 1 starts at 100ms and times out at 150ms.
+    await vi.advanceTimersByTimeAsync(160);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Visibility heartbeat tick failed (1 consecutive)"),
+      expect.any(HeartbeatRequestTimeoutError),
+    );
+    expect(signals[0].aborted).toBe(true);
+
+    // Tick 2 starts 100ms after the timeout and succeeds.
+    await vi.advanceTimersByTimeAsync(100);
+    expect(qc.updateMessage).toHaveBeenCalledTimes(2);
+    expect(hb.popReceipt).toBe("receipt-1");
+
+    hb.stop();
+    warnSpy.mockRestore();
+  });
+
+  it("cancels an in-flight updateMessage when stopped", async () => {
+    const qc = createMockQueueClient();
+    let signal: AbortSignal | undefined;
+    (qc.updateMessage as ReturnType<typeof vi.fn>).mockImplementation(
+      (_id, _receipt, _text, _visibility, options) => {
+        signal = options.abortSignal;
+        return new Promise(() => {});
+      },
+    );
+
+    const hb = startVisibilityHeartbeat(qc, "msg-1", "receipt-0", "test-worker", 100, 120);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(signal?.aborted).toBe(false);
+
+    hb.stop();
+    expect(signal?.aborted).toBe(true);
   });
 
   it("logs start and stop with tick count", async () => {
