@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { describe, expect, it } from "vitest";
-import { layoutGraph, edgePath } from "./CriteriaGraphView";
+import { layoutGraph, edgePath, separateIndependentCriteria } from "./CriteriaGraphView";
 import type { CriteriaGraphData } from "@/types";
 
 function node(id: string) {
@@ -15,6 +15,23 @@ function graphOf(ids: string[], edges: Array<[string, string]>): CriteriaGraphDa
     edges: edges.map(([source, target]) => ({ source, target })),
   } as unknown as CriteriaGraphData;
 }
+
+describe("separateIndependentCriteria", () => {
+  it("keeps only connected criteria in the graph and lists isolated criteria", () => {
+    const graph = graphOf(["root", "child", "standalone"], [["root", "child"]]);
+    const { linkedGraph, independentNodes } = separateIndependentCriteria(graph);
+
+    expect(linkedGraph.nodes.map((node) => node.id)).toEqual(["root", "child"]);
+    expect(linkedGraph.edges).toEqual(graph.edges);
+    expect(independentNodes.map((node) => node.id)).toEqual(["standalone"]);
+  });
+
+  it("supports a selection with only independent criteria", () => {
+    const { linkedGraph, independentNodes } = separateIndependentCriteria(graphOf(["a", "b"], []));
+    expect(linkedGraph.nodes).toEqual([]);
+    expect(independentNodes.map((node) => node.id)).toEqual(["a", "b"]);
+  });
+});
 
 describe("layoutGraph", () => {
   it("lays out an acyclic graph with all nodes positioned", () => {
