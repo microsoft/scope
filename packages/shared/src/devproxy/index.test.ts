@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { createProxyClient } from "./index.js";
+import { GatewayClient } from "./gateway-client.js";
+import type { HarFile } from "../har/types.js";
+import { RUN_SCRATCH_ROOT, cleanupRunScratch, cleanupWorkspaces } from "../utils/workspace.js";
 
 describe("createProxyClient (devproxy backend)", () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -149,5 +154,45 @@ describe("gateway startRecording plugin assembly", () => {
     await client.startRecording();
     const plugins = getPluginsFromCall();
     expect(plugins.capi_hmac).toBeUndefined();
+  });
+});
+
+describe("createProxyClient (gateway backend) HAR temp files", () => {
+  let originalEnv: NodeJS.ProcessEnv;
+
+  /** Minimal HAR the mocked gateway returns. */
+  const har: HarFile = { log: { version: "1.2", creator: { name: "gateway", version: "0" }, entries: [] } };
+
+  beforeEach(() => {
+    originalEnv = { ...process.env };
+    process.env.PROXY_BACKEND = "gateway";
+    vi.spyOn(GatewayClient.prototype, "stopSession").mockResolvedValue();
+    vi.spyOn(GatewayClient.prototype, "deleteSession").mockResolvedValue();
+    vi.spyOn(GatewayClient.prototype, "rotateHar").mockResolvedValue(2);
+    vi.spyOn(GatewayClient.prototype, "downloadHar").mockResolvedValue(har);
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.restoreAllMocks();
+    cleanupRunScratch();
+  });
+
+  it("writes the final HAR into the run scratch dir so teardown removes it (#703)", async () => {
+    const result = await createProxyClient().stopAndCollectHar(async () => {});
+
+    expect(result.harFilePath).toBeTruthy();
+    expect(dirname(result.harFilePath!)).toBe(RUN_SCRATCH_ROOT);
+    expect(existsSync(result.harFilePath!)).toBe(true);
+
+    cleanupWorkspaces();
+    expect(existsSync(result.harFilePath!)).toBe(false);
+  });
+
+  it("writes per-iteration HARs into the run scratch dir", async () => {
+    const result = await createProxyClient().collectHar(1, async () => {});
+
+    expect(dirname(result.harFilePath!)).toBe(RUN_SCRATCH_ROOT);
+    expect(result.harFilePath).toMatch(/gateway-iter1-\d+\.har$/);
   });
 });
