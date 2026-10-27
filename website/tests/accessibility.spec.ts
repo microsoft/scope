@@ -5,6 +5,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 const PUBLISHED_DATA_URLS = new Set([
+	'https://raw.githubusercontent.com/microsoft/scope/website-data/issues.jsonl',
 	'https://raw.githubusercontent.com/microsoft/scope/website-data/contributors.jsonl',
 ]);
 
@@ -55,6 +56,27 @@ test('landing page and interactive example are accessible', async ({ page }) => 
 	await expect(page).toHaveURL(/\/scope\/self-hosting\/scaling\/$/);
 	await expect(page.getByRole('heading', { name: 'Autoscaling with KEDA', level: 1, exact: true }))
 		.toBeVisible();
+});
+
+test('focused contribution controls pause carousel rotation', async ({ page }) => {
+	await page.route(
+		'https://raw.githubusercontent.com/microsoft/scope/website-data/issues.jsonl',
+		(route) => route.fulfill({
+			contentType: 'application/x-ndjson',
+			body: Array.from({ length: 5 }, (_, index) => JSON.stringify({
+				number: index + 1,
+				title: `Contribution call ${index + 1}`,
+				labels: ['help wanted'],
+			})).join('\n'),
+		}),
+	);
+	await page.goto('/scope/');
+	const dots = page.locator('.contrib-dot');
+	await expect(dots).toHaveCount(2);
+	await dots.nth(1).click();
+	await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true');
+	await page.waitForTimeout(7_500);
+	await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true');
 });
 
 test('infrastructure feature tiles align their graphics and copy', async ({ page }) => {
