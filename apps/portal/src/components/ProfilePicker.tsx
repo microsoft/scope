@@ -6,7 +6,6 @@ import { Check, Search } from "lucide-react";
 
 import type { ProfileWithVersion } from "@/types";
 import { Input } from "@/components/ui/input";
-import { truncate } from "@/lib/utils";
 import { AgentBadge } from "@/components/AgentBadge";
 
 interface ProfilePickerProps {
@@ -139,7 +138,9 @@ export function ProfilePicker({
                   onClick={() => handleSelect(profile._id)}
                 >
                   <p className="flex items-center justify-between gap-2 font-medium">
-                    {truncate(profile.name, 80)}
+                    <span className="min-w-0 flex-1 truncate" title={profile.name}>
+                      {profile.name}
+                    </span>
                     {isSelected && <Check className="h-4 w-4 shrink-0" />}
                   </p>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
