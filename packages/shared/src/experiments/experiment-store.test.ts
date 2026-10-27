@@ -182,6 +182,7 @@ function experiment(): ExperimentDocument {
 function chunkCollection() {
   const documents = new Map<string, Document>();
   return {
+    documents,
     async updateOne(
       filter: Document,
       update: { $setOnInsert?: Document; $set?: Document },
@@ -214,10 +215,303 @@ function chunkCollection() {
     async findOne(filter: Document) {
       return documents.get(String(filter._id)) ?? null;
     },
+    async deleteMany(filter: { _id: { $in: string[] } }) {
+      let deletedCount = 0;
+      for (const id of filter._id.$in) {
+        if (documents.delete(id)) deletedCount += 1;
+      }
+      return { deletedCount };
+    },
   };
 }
 
+function historyCollection() {
+  const documents = new Map<string, Document>();
+  return {
+    documents,
+    async updateOne(
+      filter: Document,
+      update: { $setOnInsert?: Document },
+    ) {
+      const id = String(filter._id);
+      if (!documents.has(id) && update.$setOnInsert) {
+        documents.set(id, structuredClone(update.$setOnInsert));
+      }
+      return { acknowledged: true, matchedCount: 1, modifiedCount: 1 };
+    },
+    async findOne(filter: Document) {
+      return structuredClone(documents.get(String(filter._id)) ?? null);
+    },
+  };
+}
+
+function requestVector(count: number): ExperimentRequestState[] {
+  return Array.from({ length: count }, (_, index) => ({
+    requestId: `request-${index.toString().padStart(5, "0")}`,
+    runId: `run-${index.toString().padStart(5, "0")}`,
+    dependencies: [
+      {
+        handlerId: "pp-observations",
+        state: index % 2 === 0 ? "ready" as const : "waiting" as const,
+        ...(index % 2 === 0 ? { version: 3 } : {}),
+      },
+    ],
+    blockers:
+      index % 2 === 0
+        ? []
+        : [{
+            requestId: `request-${index.toString().padStart(5, "0")}`,
+            runId: `run-${index.toString().padStart(5, "0")}`,
+            handlerId: "pp-observations",
+            reason: "dependency-not-ready" as const,
+          }],
+  }));
+}
+
 describe("ExperimentStore CAS contracts", () => {
+  it("publishes inline membership revisions without changing representation", async () => {
+    const experiments = atomicCollection(experiment());
+    const histories = historyCollection();
+    const store = new ExperimentStore({
+      experiments:
+        experiments as unknown as Collection<ExperimentDocument>,
+      executions:
+        histories as unknown as Collection<ExperimentExecutionHistoryDocument>,
+      chunks: chunkCollection() as unknown as Collection,
+    });
+    const nextRequests = requestVector(2);
+
+    const claimed = await store.replaceMembership({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      expectedExperimentRevisionId: "revision-1",
+      expectedRevisionNumber: 1,
+      expectedExperimentExecutionId: "execution-1",
+      expectedExecutionVersion: 1,
+      nextExperimentRevisionId: "revision-2",
+      nextExperimentExecutionId: "execution-2",
+      requests: nextRequests,
+      deferPublication: true,
+    });
+
+    expect(claimed?.execution.requests.storage).toBe("inline");
+    expect(
+      claimed?.execution.rollover?.nextExecution.requests.storage,
+    ).toBe("inline");
+    const published = await store.repairRollover(
+      "project-1",
+      "experiment-1",
+    );
+    expect(published).toMatchObject({
+      revision: {
+        experimentRevisionId: "revision-2",
+        revisionNumber: 2,
+        memberCount: 2,
+      },
+      execution: {
+        experimentExecutionId: "execution-2",
+        attemptNumber: 1,
+        requests: {
+          storage: "inline",
+          entryCount: 2,
+        },
+      },
+    });
+    expect(
+      await store.readExecutionRequests({
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-2",
+      }),
+    ).toEqual(nextRequests);
+  });
+
+  it("archives an immutable inline revision while publishing chunked membership", async () => {
+    const experiments = atomicCollection(experiment());
+    const chunks = chunkCollection();
+    const histories = historyCollection();
+    const store = new ExperimentStore({
+      experiments:
+        experiments as unknown as Collection<ExperimentDocument>,
+      executions:
+        histories as unknown as Collection<ExperimentExecutionHistoryDocument>,
+      chunks: chunks as unknown as Collection,
+    });
+    const nextRequests = requestVector(4_000);
+
+    const claimed = await store.replaceMembership({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      expectedExperimentRevisionId: "revision-1",
+      expectedRevisionNumber: 1,
+      expectedExperimentExecutionId: "execution-1",
+      expectedExecutionVersion: 1,
+      nextExperimentRevisionId: "revision-2",
+      nextExperimentExecutionId: "execution-2",
+      requests: nextRequests,
+      deferPublication: true,
+    });
+
+    expect(
+      claimed?.execution.rollover?.nextExecution.requests.storage,
+    ).toBe("chunked");
+    const published = await store.repairRollover(
+      "project-1",
+      "experiment-1",
+    );
+    expect(published?.execution.requests.storage).toBe("chunked");
+    expect(published?.revision.membershipFingerprint).toBe(
+      fingerprintExperimentRequestVector(nextRequests),
+    );
+    expect(
+      await store.readExecutionRequests({
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-2",
+      }),
+    ).toEqual(nextRequests);
+    expect(histories.documents.get("execution-1")).toMatchObject({
+      revision: { experimentRevisionId: "revision-1" },
+      requests: { storage: "inline", entryCount: 1 },
+    });
+  });
+
+  it("plans chunked-to-chunked growth and chunked-to-inline shrink independently", async () => {
+    const chunks = chunkCollection();
+    const payloadStore = new FixedPayloadStore(
+      chunks as unknown as Collection<Document>,
+    );
+    const chunkedRequests = (count: number) =>
+      requestVector(count).map((request) => ({
+        ...request,
+        dependencies: Array.from({ length: 4 }, (_, index) => ({
+          handlerId: `handler-${index}`.padEnd(200, "x"),
+          state: "ready" as const,
+          version: 3,
+        })),
+        blockers: [],
+      }));
+    const currentRequests = chunkedRequests(320);
+    const root = experiment();
+    root.revision.memberCount = currentRequests.length;
+    root.revision.membershipFingerprint =
+      fingerprintExperimentRequestVector(currentRequests);
+    root.execution.requests = await payloadStore.prepareRequests({
+      identity: {
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        ownerId: "execution-1",
+        generation: 1,
+      },
+      entries: currentRequests,
+      inlineDocument: (requests) => ({
+        ...root,
+        execution: { ...root.execution, requests },
+      }),
+    });
+    root.execution.vectorFingerprint =
+      fingerprintExperimentRequestVector(currentRequests);
+    expect(root.execution.requests.storage).toBe("chunked");
+
+    const growExperiments = atomicCollection(root);
+    const grow = new ExperimentStore({
+      experiments:
+        growExperiments as unknown as Collection<ExperimentDocument>,
+      executions:
+        historyCollection() as unknown as Collection<ExperimentExecutionHistoryDocument>,
+      chunks: chunks as unknown as Collection,
+    });
+    const grownRequests = chunkedRequests(330);
+    const grown = await grow.replaceMembership({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      expectedExperimentRevisionId: "revision-1",
+      expectedRevisionNumber: 1,
+      expectedExperimentExecutionId: "execution-1",
+      expectedExecutionVersion: 1,
+      nextExperimentRevisionId: "revision-grown",
+      nextExperimentExecutionId: "execution-grown",
+      requests: grownRequests,
+      deferPublication: true,
+    });
+    expect(
+      grown?.execution.rollover?.nextExecution.requests.storage,
+    ).toBe("chunked");
+
+    const shrinkExperiments = atomicCollection(root);
+    const shrink = new ExperimentStore({
+      experiments:
+        shrinkExperiments as unknown as Collection<ExperimentDocument>,
+      executions:
+        historyCollection() as unknown as Collection<ExperimentExecutionHistoryDocument>,
+      chunks: chunks as unknown as Collection,
+    });
+    const shrunkRequests = requestVector(1);
+    const shrunk = await shrink.replaceMembership({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      expectedExperimentRevisionId: "revision-1",
+      expectedRevisionNumber: 1,
+      expectedExperimentExecutionId: "execution-1",
+      expectedExecutionVersion: 1,
+      nextExperimentRevisionId: "revision-shrunk",
+      nextExperimentExecutionId: "execution-shrunk",
+      requests: shrunkRequests,
+      deferPublication: true,
+    });
+    expect(
+      shrunk?.execution.rollover?.nextExecution.requests.storage,
+    ).toBe("inline");
+  });
+
+  it("atomically aborts an unpublished membership claim and discards its chunks", async () => {
+    const experiments = atomicCollection(experiment());
+    const chunks = chunkCollection();
+    const store = new ExperimentStore({
+      experiments:
+        experiments as unknown as Collection<ExperimentDocument>,
+      executions:
+        historyCollection() as unknown as Collection<ExperimentExecutionHistoryDocument>,
+      chunks: chunks as unknown as Collection,
+    });
+    const nextRequests = requestVector(4_000);
+
+    const claimed = await store.replaceMembership({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      expectedExperimentRevisionId: "revision-1",
+      expectedRevisionNumber: 1,
+      expectedExperimentExecutionId: "execution-1",
+      expectedExecutionVersion: 1,
+      nextExperimentRevisionId: "revision-2",
+      nextExperimentExecutionId: "execution-2",
+      requests: nextRequests,
+      deferPublication: true,
+    });
+    const nextPayload = claimed?.execution.rollover?.nextExecution.requests;
+    expect(nextPayload?.storage).toBe("chunked");
+    expect(chunks.documents.size).toBeGreaterThan(0);
+
+    const aborted = await store.abortMembershipReplacement({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      expectedExperimentExecutionId: "execution-1",
+      nextExperimentExecutionId: "execution-2",
+      nextExperimentRevisionId: "revision-2",
+    });
+
+    expect(aborted).toMatchObject({
+      revision: { experimentRevisionId: "revision-1" },
+      execution: {
+        experimentExecutionId: "execution-1",
+        version: 3,
+      },
+    });
+    expect(aborted?.execution.rollover).toBeUndefined();
+    expect(aborted?.execution.frozenAt).toBeUndefined();
+    expect(chunks.documents.size).toBe(0);
+  });
+
   it("allows exactly one winner in a writer-freezer race", async () => {
     const experiments = atomicCollection(experiment());
     const store = new ExperimentStore({

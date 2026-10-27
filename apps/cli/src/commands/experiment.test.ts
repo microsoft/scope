@@ -149,12 +149,105 @@ describe("experiment commands", () => {
         mode: "empty",
         metadata: { name: "Empty" },
         requests: [],
+        requestIds: [],
       }),
     });
     expect(requests[0]?.url).toBe(
       "http://localhost:3100/api/v1/experiments?projectId=project-1",
     );
   });
+
+  it("creates an experiment from existing standalone requests", async () => {
+      const { requests } = mockFetchWith({
+        experiment: {
+          ...experiment,
+          revision: { ...experiment.revision, memberCount: 2 },
+        },
+        requestIds: ["request-1", "request-2"],
+      });
+      vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await makeProgram().parseAsync(
+        [
+          "experiment",
+          "create",
+          "--name",
+          "Existing",
+          "--request-id",
+          "request-1",
+          "--request-id",
+          "request-2",
+          "--project",
+          "project-1",
+          "--url",
+          "http://localhost:3100",
+        ],
+        { from: "user" },
+      );
+
+      expect(requests[0]).toMatchObject({
+        method: "POST",
+        body: JSON.stringify({
+          mode: "existing",
+          metadata: { name: "Existing" },
+          requests: [],
+          requestIds: ["request-1", "request-2"],
+        }),
+      });
+  });
+
+  it.each([
+    ["add", "POST"],
+    ["remove", "DELETE"],
+  ])(
+    "%s sends one complete membership revision request",
+    async (command, method) => {
+        const { requests } = mockFetchWith({
+          experiment: {
+            ...experiment,
+            revision: {
+              ...experiment.revision,
+              experimentRevisionId: "revision-2",
+              revisionNumber: 2,
+            },
+          },
+          attachedRequestIds: command === "add" ? ["request-1", "request-2"] : [],
+          detachedRequestIds:
+            command === "remove" ? ["request-1", "request-2"] : [],
+        });
+        vi.spyOn(console, "log").mockImplementation(() => {});
+
+        await makeProgram().parseAsync(
+          [
+            "experiment",
+            command,
+            "experiment-1",
+            "--revision",
+            "revision-1",
+            "--request-id",
+            "request-1",
+            "--request-id",
+            "request-2",
+            "--project",
+            "project-1",
+            "--url",
+            "http://localhost:3100",
+          ],
+          { from: "user" },
+        );
+
+        expect(requests[0]).toMatchObject({
+          method,
+          body: JSON.stringify({
+            expectedExperimentRevisionId: "revision-1",
+            requestIds: ["request-1", "request-2"],
+          }),
+        });
+        expect(requests[0]?.url).toBe(
+          "http://localhost:3100/api/v1/experiments/experiment-1/requests?projectId=project-1",
+        );
+    },
+  );
 
   it("gets an exact project-scoped execution", async () => {
     const { requests } = mockFetchWith(experiment.execution);

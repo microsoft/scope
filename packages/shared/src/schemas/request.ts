@@ -193,6 +193,8 @@ export const RequestResponseSchema = z
     experimentRequestIndex: z.number().int().min(0).optional(),
     experimentInitialRunId: z.string().optional(),
     experimentFinalizedAt: z.coerce.date().optional(),
+    experimentMembershipOperationId: z.string().optional(),
+    experimentMembershipRevisionId: z.string().optional(),
     priority: z.number().int().default(0),
     gates: z.array(GateConfigSchema).optional(),
     observations: z.array(z.string()).optional(),

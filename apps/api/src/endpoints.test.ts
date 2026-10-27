@@ -7,6 +7,8 @@ import { app, _injectTestDependencies } from "./index.js";
 import { useTestServer } from "./test-server.js";
 import { _resetRunFacetsCacheForTests } from "./routes/requests/index.js";
 import { createAllMockDependencies, createMockCollection } from "./test-helpers.js";
+import { ExperimentStore } from "shared";
+import { ExperimentMembershipCoordinator } from "./experiment-membership.js";
 
 const TEST_PROJECT_ID = "test-project";
 
@@ -1137,6 +1139,10 @@ describe("API Endpoints", () => {
 
   describe("DELETE /api/v1/requests/:id", () => {
     it("returns 200 when request is soft-deleted", async () => {
+      (mocks.collection.findOne as any).mockResolvedValue({
+        _id: "r1",
+        projectId: TEST_PROJECT_ID,
+      });
       (mocks.collection.updateOne as any).mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
 
       const res = await request(testServer()).delete("/api/v1/requests/r1");
@@ -1158,6 +1164,155 @@ describe("API Endpoints", () => {
 
       const res = await request(testServer()).delete("/api/v1/requests/r1");
       expect(res.status).toBe(410);
+    });
+
+    it("publishes one membership revision before deleting a member", async () => {
+      (mocks.collection.findOne as any).mockResolvedValue({
+        _id: "r1",
+        projectId: TEST_PROJECT_ID,
+        experimentId: "experiment-1",
+      });
+      const get = vi.spyOn(ExperimentStore.prototype, "get").mockResolvedValue({
+        revision: {
+          experimentRevisionId: "revision-1",
+        },
+      } as any);
+      const remove = vi.spyOn(
+        ExperimentMembershipCoordinator.prototype,
+        "remove",
+      ).mockResolvedValue({
+        experiment: {
+          revision: {
+            experimentRevisionId: "revision-2",
+            revisionNumber: 2,
+          },
+        },
+        attachedRequestIds: [],
+        detachedRequestIds: ["r1"],
+      } as any);
+      (mocks.collection.updateOne as any).mockResolvedValue({
+        matchedCount: 1,
+        modifiedCount: 1,
+      });
+
+      const res = await request(testServer()).delete("/api/v1/requests/r1");
+
+      expect(res.status).toBe(200);
+      expect(res.body.membershipRevision).toEqual({
+        experimentId: "experiment-1",
+        experimentRevisionId: "revision-2",
+        revisionNumber: 2,
+      });
+      expect(get).toHaveBeenCalledWith(TEST_PROJECT_ID, "experiment-1");
+      expect(remove).toHaveBeenCalledWith({
+        projectId: TEST_PROJECT_ID,
+        experimentId: "experiment-1",
+        expectedExperimentRevisionId: "revision-1",
+        requestIds: ["r1"],
+      });
+      expect(remove.mock.invocationCallOrder[0]).toBeLessThan(
+        (mocks.collection.updateOne as any).mock.invocationCallOrder[0],
+      );
+      expect(mocks.collection.updateOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          _id: "r1",
+          experimentId: { $exists: false },
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe("DELETE /api/v1/requests/bulk", () => {
+    it("publishes one revision for several members before deleting them", async () => {
+      const documents = [
+        {
+          _id: "r1",
+          projectId: TEST_PROJECT_ID,
+          experimentId: "experiment-1",
+        },
+        {
+          _id: "r2",
+          projectId: TEST_PROJECT_ID,
+          experimentId: "experiment-1",
+        },
+      ];
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(documents),
+      });
+      vi.spyOn(ExperimentStore.prototype, "get").mockResolvedValue({
+        revision: { experimentRevisionId: "revision-1" },
+      } as any);
+      const remove = vi.spyOn(
+        ExperimentMembershipCoordinator.prototype,
+        "remove",
+      ).mockResolvedValue({
+        experiment: {
+          revision: {
+            experimentRevisionId: "revision-2",
+            revisionNumber: 2,
+          },
+        },
+        attachedRequestIds: [],
+        detachedRequestIds: ["r1", "r2"],
+      } as any);
+      (mocks.collection.updateMany as any).mockResolvedValue({
+        matchedCount: 2,
+        modifiedCount: 2,
+      });
+
+      const res = await request(testServer())
+        .delete("/api/v1/requests/bulk")
+        .send({ ids: ["r1", "r2"] });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        deleted: 2,
+        notFound: [],
+        membershipRevision: {
+          experimentId: "experiment-1",
+          experimentRevisionId: "revision-2",
+          revisionNumber: 2,
+        },
+      });
+      expect(remove).toHaveBeenCalledOnce();
+      expect(remove).toHaveBeenCalledWith(
+        expect.objectContaining({ requestIds: ["r1", "r2"] }),
+      );
+      expect(remove.mock.invocationCallOrder[0]).toBeLessThan(
+        (mocks.collection.updateMany as any).mock.invocationCallOrder[0],
+      );
+    });
+
+    it("rejects a selection spanning several Experiments without deletion", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: "r1",
+            projectId: TEST_PROJECT_ID,
+            experimentId: "experiment-1",
+          },
+          {
+            _id: "r2",
+            projectId: TEST_PROJECT_ID,
+            experimentId: "experiment-2",
+          },
+        ]),
+      });
+
+      const res = await request(testServer())
+        .delete("/api/v1/requests/bulk")
+        .send({ ids: ["r1", "r2"] });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        code: "multiple-experiment-delete-conflict",
+        conflicts: [
+          { requestId: "r1", experimentId: "experiment-1" },
+          { requestId: "r2", experimentId: "experiment-2" },
+        ],
+      });
+      expect(mocks.collection.updateMany).not.toHaveBeenCalled();
     });
   });
 
