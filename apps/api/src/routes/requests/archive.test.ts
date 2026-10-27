@@ -614,6 +614,7 @@ describe("run import/export — round-trip (export → import)", () => {
       if (srcKey === "<yaml>") continue;
       expect(entries[entryName]).toEqual(blobStore.get(srcKey));
     }
+    expect(entries[`${id}/run.yaml`].toString()).toContain("# run._id is this execution attempt's ID");
 
     // 2. Re-import into a fresh blob store + Mongo. Importer ingests every
     // bundled artifact: HAR, chat-export, tool-calls, chat-result and
