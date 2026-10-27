@@ -455,6 +455,9 @@ registrations continue to require a non-empty queue.
 5. `workerType`, `agentVersion`, and `model` are persisted on the pending `RequestDocument`
 6. On every dispatch cycle, the scheduler refreshes the registry and sends the request only to the selected version's advertised queue
 
+Model discovery, disappearance, and replacement behavior are documented in
+[Model lifecycle](model-lifecycle.md).
+
 Profiles, profile variations, bulk resubmission, and retries use the same target
 resolver. Retries preserve and revalidate the original exact version; bulk
 resubmission resolves a currently active version unless a version is explicitly
