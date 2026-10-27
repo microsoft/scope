@@ -4,9 +4,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Command } from "commander";
+import EventSource from "eventsource";
 import { stringify as stringifyYaml } from "yaml";
 import { resolveScenarioAndPersona } from "../config-loader.js";
-import { apiFetch } from "../utils/api-client.js";
+import { apiFetch, getApiBasePath } from "../utils/api-client.js";
 import { requireProjectId } from "../utils/config.js";
 import { formatData, isMachineReadable } from "../utils/formatters.js";
 import { parseGatesOption } from "../utils/gates.js";
@@ -14,6 +15,7 @@ import { configureHelp } from "../utils/helpFormatter.js";
 import { buildResourceBindingSpecs, collectRepeatable } from "../utils/resources.js";
 import {
   getDefaultApiUrl,
+  normalizeUrl,
   withOutputOption,
   withProjectOption,
 } from "../utils/shared.js";
@@ -34,10 +36,10 @@ interface ExperimentExecution {
   requests: ExperimentRequestSummary[];
   handlerProgress: JsonRecord;
   blocking: ExperimentBlocker[];
-  currentReport?: {
-    reportId?: string;
-    url?: string;
-    updatedAt?: string;
+  report?: {
+    reportId: string;
+    url: string;
+    updatedAt: string;
   };
   createdAt: string;
   updatedAt?: string;
@@ -188,9 +190,9 @@ function parseExecution(value: unknown): ExperimentExecution {
       {},
     "experiment handler progress",
   );
-  const report = execution.currentReport === undefined
+  const report = execution.report === undefined
     ? undefined
-    : asRecord(execution.currentReport, "experiment report");
+    : asRecord(execution.report, "experiment report");
   return {
     experimentExecutionId: stringField(
       execution,
@@ -214,11 +216,11 @@ function parseExecution(value: unknown): ExperimentExecution {
     requests: requestVector.requests,
     handlerProgress: progress,
     blocking,
-    currentReport: report
+    report: report
       ? {
-          reportId: stringField(report, "reportId", "experiment report", true),
-          url: stringField(report, "url", "experiment report", true),
-          updatedAt: stringField(report, "updatedAt", "experiment report", true),
+          reportId: stringField(report, "reportId", "experiment report")!,
+          url: stringField(report, "url", "experiment report")!,
+          updatedAt: stringField(report, "updatedAt", "experiment report")!,
         }
       : undefined,
     createdAt: stringField(
@@ -835,6 +837,129 @@ export function registerExperimentCommands(program: Command): void {
       );
       process.exitCode = 1;
     }
+  });
+
+  withProjectOption(
+    withOutputOption(
+      experiment
+        .command("reports")
+        .description("List or retrieve reports for one exact experiment execution")
+        .argument("<id>", "Experiment ID")
+        .argument("<executionId>", "Experiment execution ID")
+        .option("--report <reportId>", "Select one report")
+        .option("--structured", "Print the selected report's structured JSON artifact")
+        .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
+      ["markdown"],
+    ),
+  ).action(async (id: string, executionId: string, options) => {
+    try {
+      const projectId = requireProjectId(options.project);
+      const path =
+        `/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(executionId)}/reports`;
+      const response = await apiFetch(options.url, path, { projectId });
+      if (!response.ok) await throwApiError(response);
+      const reportsValue = await json(response);
+      if (!Array.isArray(reportsValue)) {
+        throw new Error("Invalid experiment reports response from Scope");
+      }
+      const reports = reportsValue.map((item) =>
+        asRecord(item, "experiment report"),
+      );
+      const selected = options.report
+        ? reports.find((item) => item.id === options.report)
+        : reports[0];
+      if (options.report && !selected) {
+        throw new Error(`Report ${options.report} was not found for this execution`);
+      }
+      if (options.structured) {
+        if (!selected) {
+          throw new Error("No report is available for this execution");
+        }
+        const reportId = stringField(selected, "id", "experiment report")!;
+        const structuredResponse = await apiFetch(
+          options.url,
+          `${path}/${encodeURIComponent(reportId)}/structured`,
+          { projectId },
+        );
+        if (!structuredResponse.ok) await throwApiError(structuredResponse);
+        console.log(JSON.stringify(await json(structuredResponse), null, 2));
+        return;
+      }
+      const format = (options.output ?? "table") as OutputFormat;
+      if (format === "markdown") {
+        console.log(selected?.content ?? "");
+        return;
+      }
+      console.log(
+        formatData(
+          options.report && selected ? [selected] : reports,
+          [
+            { key: "id", label: "Report" },
+            { key: "status", label: "Status" },
+            {
+              key: "reporter",
+              label: "Reporter",
+              formatter: (row: JsonRecord) =>
+                String((row.reporter as JsonRecord | undefined)?.name ?? ""),
+            },
+            { key: "createdAt", label: "Created" },
+            { key: "updatedAt", label: "Updated" },
+          ],
+          format,
+        ),
+      );
+    } catch (error) {
+      console.error(
+        errorText("Error:"),
+        error instanceof Error ? error.message : error,
+      );
+      process.exitCode = 1;
+    }
+  });
+
+  withProjectOption(
+    experiment
+      .command("logs")
+      .description("Stream logs for one exact experiment execution")
+      .argument("<id>", "Experiment ID")
+      .argument("<executionId>", "Experiment execution ID")
+      .option("--from-start", "Include historical logs from the beginning", false)
+      .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
+  ).action(async (id: string, executionId: string, options) => {
+    const projectId = requireProjectId(options.project);
+    const params = new URLSearchParams({ projectId });
+    if (options.fromStart) params.set("fromStart", "true");
+    const eventSource = new EventSource(
+      `${normalizeUrl(options.url)}${getApiBasePath()}/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(executionId)}/logs?${params}`,
+    );
+    eventSource.onmessage = (event: MessageEvent) => {
+      try {
+        const log = JSON.parse(event.data) as {
+          timestamp: string;
+          level: string;
+          source?: string;
+          message: string;
+        };
+        const source = log.source ? ` [${log.source}]` : "";
+        console.log(
+          `${new Date(log.timestamp).toLocaleTimeString()} ${log.level}${source} ${log.message}`,
+        );
+      } catch {
+        console.log(event.data);
+      }
+    };
+    eventSource.addEventListener("done", () => {
+      eventSource.close();
+      process.exit(0);
+    });
+    eventSource.addEventListener("timeout", () => {
+      eventSource.close();
+      process.exit(0);
+    });
+    eventSource.onerror = () => {
+      eventSource.close();
+      process.exit(1);
+    };
   });
 
   withProjectOption(

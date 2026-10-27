@@ -44,9 +44,23 @@ Experiment-specific status, revision, attempt, and run-count columns. After
 creation, the Portal opens Experiment Detail, where you can inspect one
 processing attempt at a time. The current attempt is selected by default; use
 the header selector to open a historical attempt, whose URL can be shared
-directly. Each selected attempt shows its blockers, handler progress, and a
-sortable, customizable, paginated table of exact linked runs. Empty Experiments
-remain useful as durable placeholders.
+directly. The compact header is followed by three tabs:
+
+- **Runs** shows the selected attempt's exact linked runs in a sortable,
+  customizable, paginated table.
+- **Reports** shows one report at a time. The latest report is the default.
+  When retries have created previous versions, use the compact version selector
+  to open one historical version. A report-type selector appears only when the
+  Experiment has more than one report type. Structured JSON and the report
+  detail link remain scoped to the selected attempt and version.
+- **Processing** shows handler progress, blockers, errors, execution metadata,
+  and retry controls. Processing retry is available only for the current
+  attempt.
+
+The selected attempt, tab, report type, and report version are preserved in
+the URL. Old links without these values continue to use the latest defaults,
+and stale selections fall back to available data. Empty Experiments remain
+useful as durable placeholders.
 
 ## Create from the CLI
 

@@ -424,6 +424,11 @@ export function RunDetail() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const selectedRunId = searchParams.get("runId");
+  const fromExperimentId = searchParams.get("fromExperiment");
+  const fromExperimentExecutionId = searchParams.get("experimentExecution");
+  const experimentHref = fromExperimentId
+    ? `/experiments/${fromExperimentId}${fromExperimentExecutionId ? `?execution=${encodeURIComponent(fromExperimentExecutionId)}` : ""}`
+    : undefined;
   const [copied, setCopied] = useState(false);
   const [reportsView, setReportsView] = useState<"grid" | "list">("grid");
   const [reportsFilter, setReportsFilter] = useState<"latest" | "all">("latest");
@@ -705,9 +710,10 @@ export function RunDetail() {
   if (error || !run) {
     return (
       <div className="space-y-4">
-        <Link to="/runs">
+        <Link to={experimentHref ?? "/runs"}>
           <Button variant="ghost" className="gap-1.5">
-            <ArrowLeft className="h-4 w-4" /> Back to runs
+            <ArrowLeft className="h-4 w-4" />{" "}
+            {experimentHref ? "Back to experiment" : "Back to runs"}
           </Button>
         </Link>
         <div className="text-center py-12 text-destructive">
@@ -804,9 +810,14 @@ export function RunDetail() {
     <div className="space-y-6">
       {/* Back link + header */}
       <div>
-        <Link to="/runs">
+        <Link
+          to={
+            experimentHref ?? "/runs"
+          }
+        >
           <Button variant="ghost" size="sm" className="gap-1.5 mb-2">
-            <ArrowLeft className="h-4 w-4" /> Back to runs
+            <ArrowLeft className="h-4 w-4" />{" "}
+            {experimentHref ? "Back to experiment" : "Back to runs"}
           </Button>
         </Link>
 
