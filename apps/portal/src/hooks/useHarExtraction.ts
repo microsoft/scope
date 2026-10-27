@@ -7,7 +7,6 @@ import { api } from "@/lib/api";
 import { apiClient } from "@/lib/api-client";
 import type { ConversationTurn } from "@/types";
 import {
-  extractChronologicalSegments,
   extractFromHar,
   type ConversationSegment,
   type HarExtractedData,
@@ -54,7 +53,7 @@ export function useHarExtraction(runId: string, iteration?: number, hasHar?: boo
 }
 
 // ---------------------------------------------------------------------------
-// React hook: fetch HARs for ALL turns and aggregate tool calls
+// React hook: fetch server-extracted tool calls for all turns
 // ---------------------------------------------------------------------------
 export interface AggregatedToolCall extends ToolCall {
   _iteration?: number;
@@ -63,34 +62,14 @@ export interface AggregatedToolCall extends ToolCall {
 export function useAllTurnsToolCalls(
   runId: string,
   turns?: ConversationTurn[],
-  topLevelHarUrl?: string,
   attemptRunId?: string,
 ): { allToolCalls: AggregatedToolCall[]; isLoading: boolean } {
-  // Turns that already have pre-computed `toolCalls` (legacy inline shape)
-  // don't need any blob fetch.
-  const preComputed = useMemo(() => {
-    const out: AggregatedToolCall[] = [];
-    if (turns) {
-      for (const t of turns) {
-        if (t.toolCalls && t.toolCalls.length > 0) {
-          for (const tc of t.toolCalls) {
-            out.push({ ...tc, timestamp: tc.timestamp ?? "", _iteration: t.iteration });
-          }
-        }
-      }
-    }
-    return out;
-  }, [turns]);
-
-  // New shape: per-iteration tool-calls.jsonl in blob storage. Fetched via
-  // the API proxy (`/api/v1/requests/:id/tool-calls?iteration=N`) and parsed
-  // line-by-line. Preferred over re-extracting from the HAR.
+  // Per-iteration tool-calls.jsonl is the source for the Tool Calls tab.
   const jsonlQueries = useMemo(() => {
     const q: { iteration: number }[] = [];
     if (turns) {
       for (const t of turns) {
-        const hasInline = t.toolCalls && t.toolCalls.length > 0;
-        if (!hasInline && t.toolCallsUrl) {
+        if (t.toolCallsUrl) {
           q.push({ iteration: t.iteration });
         }
       }
@@ -115,48 +94,8 @@ export function useAllTurnsToolCalls(
     })),
   });
 
-  // Legacy fallback: turns that have `harUrl` but neither inline `toolCalls`
-  // nor a `toolCallsUrl` blob — re-extract from the HAR.
-  const queries = useMemo(() => {
-    const q: { iteration: number | undefined; enabled: boolean }[] = [];
-
-    // One-shot run: top-level HAR, no iteration
-    if (topLevelHarUrl && (!turns || turns.length === 0)) {
-      q.push({ iteration: undefined, enabled: true });
-    }
-
-    // Multi-turn: one query per turn with harUrl but WITHOUT pre-computed
-    // toolCalls and WITHOUT a tool-calls JSONL blob.
-    if (turns) {
-      for (const t of turns) {
-        const hasInline = t.toolCalls && t.toolCalls.length > 0;
-        const hasJsonl = !!t.toolCallsUrl;
-        if (t.harUrl && !hasInline && !hasJsonl) {
-          q.push({ iteration: t.iteration, enabled: true });
-        }
-      }
-    }
-
-    return q;
-  }, [turns, topLevelHarUrl]);
-
-  const results = useQueries({
-    queries: queries.map((q) => ({
-      queryKey: ["har", runId, q.iteration, attemptRunId],
-      queryFn: async () => {
-        const url = attemptRunId ? api.runHarUrl(runId, attemptRunId, q.iteration) : api.harUrl(runId, q.iteration);
-        const res = await apiClient(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<HarFile>;
-      },
-      enabled: q.enabled,
-      staleTime: Infinity,
-    })),
-  });
-
   const allToolCalls = useMemo(() => {
-    const out: AggregatedToolCall[] = [...preComputed];
-    // JSONL blob fetches first
+    const out: AggregatedToolCall[] = [];
     for (let i = 0; i < jsonlResults.length; i++) {
       const tcs = jsonlResults[i].data;
       if (!tcs) continue;
@@ -165,23 +104,10 @@ export function useAllTurnsToolCalls(
         out.push({ ...tc, timestamp: tc.timestamp ?? "", _iteration: iteration });
       }
     }
-    // Legacy HAR re-extraction
-    for (let i = 0; i < results.length; i++) {
-      const har = results[i].data;
-      if (!har) continue;
-      const segments = extractChronologicalSegments(har);
-      const tcs = segments
-        .filter((s): s is ConversationSegment & { type: "tool_calls" } => s.type === "tool_calls")
-        .flatMap((s) => s.toolCalls);
-      const iteration = queries[i].iteration;
-      for (const tc of tcs) {
-        out.push({ ...tc, _iteration: iteration });
-      }
-    }
     return out;
-  }, [preComputed, jsonlResults, jsonlQueries, results, queries]);
+  }, [jsonlResults, jsonlQueries]);
 
-  const isLoading = results.some((r) => r.isLoading) || jsonlResults.some((r) => r.isLoading);
+  const isLoading = jsonlResults.some((r) => r.isLoading);
 
   return { allToolCalls, isLoading };
 }
