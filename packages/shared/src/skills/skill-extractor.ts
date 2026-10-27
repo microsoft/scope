@@ -37,9 +37,10 @@ const AGENT_SPECIFIC_DIRS: Record<string, string[]> = {
 };
 
 export interface ExtractSkillsOptions {
-  /** Skill revision refs to download + extract */
-  refs: string[];
-  /** Resolved SkillConfig objects (for name mapping) */
+  /**
+   * Resolved skills to download and extract. Each config's `ref` selects the
+   * archive and its `name` selects the install directory.
+   */
   skillConfigs: SkillConfig[];
   /** SkillClient instance (pre-configured with API URL) */
   skillClient: SkillClient;
@@ -64,9 +65,9 @@ export interface ExtractSkillsOptions {
  * @returns Array of installed skill directory paths (relative to workspace)
  */
 export async function extractSkillsToWorkspace(options: ExtractSkillsOptions): Promise<string[]> {
-  const { refs, skillConfigs, skillClient, projectId, workspacePath, agentType, log } = options;
+  const { skillConfigs, skillClient, projectId, workspacePath, agentType, log } = options;
 
-  if (refs.length === 0 || skillConfigs.length === 0) {
+  if (skillConfigs.length === 0) {
     return [];
   }
 
@@ -78,10 +79,8 @@ export async function extractSkillsToWorkspace(options: ExtractSkillsOptions): P
     targetDirs.push(...AGENT_SPECIFIC_DIRS[agentType]);
   }
 
-  for (let i = 0; i < refs.length; i++) {
-    const ref = refs[i];
-    const config = skillConfigs[i];
-    if (!config) continue;
+  for (const config of skillConfigs) {
+    const { ref } = config;
 
     try {
       await log?.(`Downloading archive for skill "${config.name}" (ref: ${ref})`);
