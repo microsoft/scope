@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect } from "vitest";
-import type { Request } from "express";
+import { describe, it, expect, vi } from "vitest";
+import type { NextFunction, Request, Response } from "express";
 import type { Collection } from "mongodb";
 import {
   ProjectScopeError,
@@ -11,6 +11,8 @@ import {
   getOptionalQueryProjectId,
   deriveProjectIdFromParent,
   assertSameProject,
+  LiveProjectGuard,
+  type ProjectLookup,
 } from "./project-scope.js";
 
 /** Build a minimal Express-like request carrying only a query bag. */
@@ -133,5 +135,80 @@ describe("assertSameProject", () => {
       expect((err as ProjectScopeError).status).toBe(409);
       expect((err as Error).message).toMatch(/Cross-project reference rejected/);
     }
+  });
+});
+
+describe("LiveProjectGuard (#1301)", () => {
+  /** Lookup backed by a fixed map of projects; missing ids resolve to null. */
+  function lookup(projects: Record<string, { deletedAt?: Date }>) {
+    return {
+      get: vi.fn(async (id: string) =>
+        projects[id] ? { _id: id, name: id, createdAt: new Date(), ...projects[id] } : null,
+      ),
+    } satisfies ProjectLookup;
+  }
+
+  /** Run the guard middleware and resolve with whatever it passed to next(). */
+  function runMiddleware(guard: LiveProjectGuard, method: string, query: Record<string, unknown>) {
+    return new Promise<unknown>((resolve) => {
+      const req = { method, query } as unknown as Request;
+      guard.middleware()(req, {} as Response, ((err?: unknown) => resolve(err)) as NextFunction);
+    });
+  }
+
+  it("admits a write to a live project", async () => {
+    const guard = new LiveProjectGuard(() => lookup({ p1: {} }));
+    await expect(guard.assertWritable("p1")).resolves.toBeUndefined();
+  });
+
+  it("rejects an unknown project with 404", async () => {
+    const guard = new LiveProjectGuard(() => lookup({}));
+    await expect(guard.assertWritable("ghost")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("rejects a soft-deleted project with 409", async () => {
+    const guard = new LiveProjectGuard(() => lookup({ gone: { deletedAt: new Date() } }));
+    await expect(guard.assertWritable("gone")).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("caches live projects for the TTL, then re-reads", async () => {
+    const projects = lookup({ p1: {} });
+    let now = 0;
+    const guard = new LiveProjectGuard(() => projects, 1_000, () => now);
+
+    await guard.assertWritable("p1");
+    await guard.assertWritable("p1");
+    expect(projects.get).toHaveBeenCalledTimes(1);
+
+    now = 1_001;
+    await guard.assertWritable("p1");
+    expect(projects.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("never caches a missing project, so a new project is writable at once", async () => {
+    const projects: Record<string, { deletedAt?: Date }> = {};
+    const guard = new LiveProjectGuard(() => lookup(projects));
+
+    await expect(guard.assertWritable("p1")).rejects.toBeInstanceOf(ProjectScopeError);
+    projects.p1 = {};
+    await expect(guard.assertWritable("p1")).resolves.toBeUndefined();
+  });
+
+  it("middleware skips reads and requests without ?projectId=", async () => {
+    const projects = lookup({});
+    const guard = new LiveProjectGuard(() => projects);
+
+    expect(await runMiddleware(guard, "GET", { projectId: "ghost" })).toBeUndefined();
+    expect(await runMiddleware(guard, "POST", {})).toBeUndefined();
+    expect(projects.get).not.toHaveBeenCalled();
+  });
+
+  it("middleware forwards a scope error for a write to a missing project", async () => {
+    const guard = new LiveProjectGuard(() => lookup({}));
+
+    const err = await runMiddleware(guard, "POST", { projectId: " ghost " });
+
+    expect(err).toBeInstanceOf(ProjectScopeError);
+    expect((err as ProjectScopeError).status).toBe(404);
   });
 });

@@ -205,6 +205,32 @@ describe("API Endpoints", () => {
     });
   });
 
+  describe("Scoped writes require a live project (#1301)", () => {
+    it("returns 404 when ?projectId= names no project", async () => {
+      mocks.projectStore.get.mockResolvedValue(null as never);
+
+      const res = await request(testServer())
+        .post("/api/v1/criteria?projectId=ghost-project")
+        .send({ id: "new_crit", prompt: "Does it work?", dependsOn: [] });
+
+      expect(res.status).toBe(404);
+      expect(mocks.criteriaCollection.insertOne).not.toHaveBeenCalled();
+    });
+
+    it("returns 409 when ?projectId= names a soft-deleted project", async () => {
+      mocks.projectStore.get.mockResolvedValue(
+        { _id: "deleted-project", name: "Old", createdAt: new Date(), deletedAt: new Date() } as never,
+      );
+
+      const res = await request(testServer())
+        .post("/api/v1/criteria?projectId=deleted-project")
+        .send({ id: "new_crit", prompt: "Does it work?", dependsOn: [] });
+
+      expect(res.status).toBe(409);
+      expect(mocks.criteriaCollection.insertOne).not.toHaveBeenCalled();
+    });
+  });
+
   describe("POST /api/v1/criteria", () => {
     it("returns 201 when creating a new criterion", async () => {
       // findOne returns null (no duplicate)
