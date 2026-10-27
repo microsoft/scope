@@ -681,6 +681,9 @@ A sibling affordance, `components/ShortId.tsx`, applies the same hoverable-toolt
 (`formatId`), and on hover the tooltip reveals the full ID plus a copy-to-clipboard button. The
 trigger stays an inline `<span>` (not a link) so the row click still navigates to the run; the
 copy button calls `e.stopPropagation()` so copying never triggers row navigation.
+Run detail shows the complete submission ID in its metadata when available,
+using the same component for an explicit copy action; older runs without a
+submission ID omit the field.
 
 ## Criteria System
 
