@@ -10,17 +10,40 @@ extendZodWithOpenApi(z);
 
 export { PromptTypeSchema };
 
+/** Longest accepted task prompt name, in characters. */
+export const TASK_PROMPT_NAME_MAX_LENGTH = 100;
+
+/**
+ * A task prompt's human-readable name: trimmed, 1–100 characters. Free-form,
+ * so both slugs (`"ecommerce-order-api"`) and phrases work.
+ */
+export const TaskPromptNameSchema = z
+  .string()
+  .trim()
+  .min(1, "name must not be empty")
+  .max(TASK_PROMPT_NAME_MAX_LENGTH, `name must be at most ${TASK_PROMPT_NAME_MAX_LENGTH} characters`);
+
 export const CreateTaskPromptInputSchema = z
   .object({
     text: z.string(),
     type: PromptTypeSchema.optional(),
+    /** Optional label; applied on create, or to an existing match that has no name yet. */
+    name: TaskPromptNameSchema.optional(),
   })
   .openapi("CreateTaskPromptInput");
+
+/** Body of `PATCH /task-prompts/:id`: set the name, or clear it with `null`. */
+export const UpdateTaskPromptInputSchema = z
+  .object({
+    name: TaskPromptNameSchema.nullable(),
+  })
+  .openapi("UpdateTaskPromptInput");
 
 export const TaskPromptResponseSchema = z
   .object({
     _id: z.string(),
     keyId: z.string(),
+    name: z.string().optional(),
     type: PromptTypeSchema.optional(),
     // Present for inline-stored bodies; absent when the body lives in blob
     // storage (see `contentBlobUrl`). Use the `/content` endpoint to always

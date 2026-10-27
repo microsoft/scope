@@ -16,6 +16,7 @@ import { formatDate } from "@/lib/utils";
 import { TaskPromptFeatures } from "@/components/TaskPromptFeatures";
 import { Badge } from "@/components/ui/badge";
 import { promptTypeLabel } from "@/lib/gates";
+import { TaskPromptNameEditor } from "@/components/TaskPromptNameEditor";
 
 export function TaskPromptDetail() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +27,15 @@ export function TaskPromptDetail() {
     queryKey: ["task-prompt", id],
     queryFn: () => api.getTaskPrompt(id!),
     enabled: !!id,
+  });
+
+  // Renaming updates both the detail cache and the list.
+  const renameMutation = useMutation({
+    mutationFn: (name: string | null) => api.renameTaskPrompt(id!, name),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["task-prompt", id], updated);
+      queryClient.invalidateQueries({ queryKey: ["task-prompts"] });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -102,12 +112,18 @@ export function TaskPromptDetail() {
       {/* Identity card */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">{promptTypeLabel(taskPrompt.type)} Prompt</CardTitle>
+          <CardTitle className="text-lg">
+            {taskPrompt.name ?? `${promptTypeLabel(taskPrompt.type)} Prompt`}
+          </CardTitle>
           <CardDescription className="font-mono text-xs select-all">
             {taskPrompt._id}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-1">
+            <span className="text-sm font-medium text-muted-foreground">Name</span>
+            <TaskPromptNameEditor name={taskPrompt.name} onSave={(name) => renameMutation.mutateAsync(name)} />
+          </div>
           <div className="space-y-1">
             <span className="text-sm font-medium text-muted-foreground">Type</span>
             <div>

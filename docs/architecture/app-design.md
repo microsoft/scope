@@ -107,6 +107,15 @@ shared by two prompt kinds:
   is set. `resolvePromptText(doc)` returns the inline body or downloads the blob, so
   callers (feature extraction, the worker text endpoint) get plain text regardless
   of location.
+- **Optional `name` label (#176).** `TaskPromptDocument.name?: string` (trimmed,
+  1–100 chars) is a human-readable label only — it is not hashed into `keyId`,
+  not unique, and never changes `_id`. `POST /task-prompts` accepts `name`: it is
+  set on create and, on an existing `(projectId, keyId)` match, only fills in a
+  missing name (never overwrites). `PATCH /task-prompts/:id` with
+  `{ name: string | null }` sets or clears it (`TaskPromptStore.rename`;
+  addressed by the global `_id`, so no `projectId` needed). `GET /task-prompts?search=`
+  matches name **or** text. CLI parity: `task-prompt create --name`,
+  `task-prompt rename --name | --clear`, and a Name column in `task-prompt list`.
 - **Prompt features are typed the same way.** `PromptFeatureDocument.type?:
   'task' | 'agents.md'` (absent ⇒ `'task'`); feature extraction selects only
   features of the prompt's type.

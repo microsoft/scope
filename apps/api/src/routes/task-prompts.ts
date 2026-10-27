@@ -9,6 +9,7 @@ import {
   PromptTypeSchema,
   SuggestedPromptFeatureSchema,
   TaskPromptResponseSchema,
+  UpdateTaskPromptInputSchema,
 } from "shared";
 import { apiRoute } from "../openapi/api-route.js";
 import type { RouteContext } from "../route-context.js";
@@ -76,6 +77,7 @@ apiRoute(ctx.app, ctx.registry, {
   path: "/api/v1/task-prompts",
   tags: ["Task Prompts"],
   summary: "List task prompts",
+  description: "`search` matches the prompt name or text (case-insensitive).",
   query: z.object({
     limit: z.coerce.number().optional(),
     offset: z.coerce.number().optional(),
@@ -168,17 +170,47 @@ apiRoute(ctx.app, ctx.registry, {
     400: { description: "Empty text string" },
   },
   handler: async (req, res, next) => {
-    const { text, type } = req.body;
+    const { text, type, name } = req.body;
     if (!text || typeof text !== "string" || !text.trim()) {
       res.status(400).json({ error: "Body must contain a non-empty 'text' string" });
       return;
     }
 
     try {
-      const taskPrompt = await ctx.taskPromptStore.findOrCreate(getQueryProjectId(req), text, type);
+      const taskPrompt = await ctx.taskPromptStore.findOrCreate(getQueryProjectId(req), text, type, name);
       res.status(201).json(taskPrompt);
     } catch (err) {
       next(err);
+    }
+  },
+});
+
+// PATCH /api/v1/task-prompts/:id — set or clear the human-readable name.
+// Addressed by the globally unique `_id`, so no projectId is needed (by-id
+// invariant). The name is a label only; text, `_id` and `keyId` never change.
+apiRoute(ctx.app, ctx.registry, {
+  method: "patch",
+  path: "/api/v1/task-prompts/:id",
+  tags: ["Task Prompts"],
+  summary: "Rename task prompt",
+  params: z.object({ id: z.string() }),
+  body: UpdateTaskPromptInputSchema,
+  response: TaskPromptResponseSchema,
+  successStatus: 200,
+  errorResponses: {
+    400: { description: "Invalid name" },
+    404: { description: "Task prompt not found" },
+  },
+  handler: async (req, res, next) => {
+    try {
+      const updated = await ctx.taskPromptStore.rename(req.params.id, req.body.name);
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      next(error);
     }
   },
 });

@@ -12,7 +12,8 @@ const PID = "proj-test";
 // ── Mock Collection ──────────────────────────────────────────────────────────
 // Simulates a MongoDB collection in-memory for deterministic unit testing.
 // Matches the subset of filters the store issues: `_id`, `projectId`, `keyId`,
-// `type`, `deletedAt.$exists`, `text.$regex`, and the `$or` type clause.
+// `type`, `deletedAt.$exists`, `text`/`name` `$regex`, and `$or` clauses built
+// from those (the type clause and the name-or-text search).
 
 function createMockCollection() {
   const docs = new Map<string, TaskPromptDocument>();
@@ -31,10 +32,13 @@ function createMockCollection() {
     if (filter.keyId !== undefined && doc.keyId !== filter.keyId) return false;
     if (filter.deletedAt?.$exists === false && doc.deletedAt) return false;
     if (filter.deletedAt?.$exists === true && !doc.deletedAt) return false;
-    if (filter.text?.$regex) {
-      const regex = new RegExp(filter.text.$regex, filter.text.$options);
-      if (!regex.test(doc.text ?? "")) return false;
+    for (const field of ["text", "name"] as const) {
+      if (filter[field]?.$regex) {
+        const regex = new RegExp(filter[field].$regex, filter[field].$options);
+        if (!regex.test(doc[field] ?? "")) return false;
+      }
     }
+    if (filter.$or && !filter.$or.some((clause: any) => matches(doc, clause))) return false;
     if (!matchesType(filter, doc)) return false;
     return true;
   };
@@ -85,17 +89,12 @@ function createMockCollection() {
   };
 }
 
-/** Replicates the store's `$or`/`type` filter against an in-memory doc. */
+/** Replicates the store's `type` filter (inside or outside `$or`) against an in-memory doc. */
 function matchesType(filter: any, doc: TaskPromptDocument): boolean {
-  if (filter.$or) {
-    return filter.$or.some((clause: any) => {
-      if (clause.type?.$exists === false) return doc.type === undefined;
-      return doc.type === clause.type;
-    });
-  }
   if (filter.type !== undefined) {
     const cond = filter.type;
     if (cond && typeof cond === "object") {
+      if (cond.$exists === false) return doc.type === undefined;
       // `$nin` (and `$in`) treat a missing `type` as `undefined` — mirrors Mongo,
       // so legacy untyped docs stay visible under the default `$nin` filter.
       if (Array.isArray(cond.$nin)) return !cond.$nin.includes(doc.type);
@@ -359,6 +358,14 @@ describe("TaskPromptStore", () => {
       expect(items[0].text).toBe("Azure deployment");
     });
 
+    it("search also matches the prompt name", async () => {
+      await store.findOrCreate(PID, "Build an order API", "select", "ecommerce-order-api");
+      await store.findOrCreate(PID, "Build a snake game");
+      const { items, total } = await store.getAll({ search: "ECOMMERCE" });
+      expect(total).toBe(1);
+      expect(items[0].name).toBe("ecommerce-order-api");
+    });
+
     it("defaults to all prompt types (including agents.md and legacy untyped docs)", async () => {
       await store.findOrCreate(PID, "a task prompt");
       await store.findOrCreate(PID, "an agents file", "agents.md");
@@ -405,6 +412,55 @@ describe("TaskPromptStore", () => {
       await store.attachFeatures(doc._id, v1);
       const updated = await store.attachFeatures(doc._id, v2);
       expect(updated.features).toEqual(v2);
+    });
+  });
+
+  // -- name (#176) -----------------------------------------------------------
+
+  describe("name", () => {
+    it("stores the name on create without changing the content address", async () => {
+      const named = await store.findOrCreate(PID, "Hello world", "select", "greeting");
+      expect(named.name).toBe("greeting");
+      expect(named.keyId).toBe(computePromptId("select", "Hello world"));
+    });
+
+    it("omits name when none is given", async () => {
+      const doc = await store.findOrCreate(PID, "unnamed");
+      expect(doc).not.toHaveProperty("name");
+    });
+
+    it("fills in a missing name on an existing match", async () => {
+      const first = await store.findOrCreate(PID, "same text");
+      const second = await store.findOrCreate(PID, "same text", "select", "late-name");
+      expect(second._id).toBe(first._id);
+      expect(second.name).toBe("late-name");
+      expect((await store.get(first._id))?.name).toBe("late-name");
+    });
+
+    it("never overwrites an existing name through findOrCreate", async () => {
+      const first = await store.findOrCreate(PID, "same text", "select", "original");
+      const second = await store.findOrCreate(PID, "same text", "select", "other");
+      expect(second._id).toBe(first._id);
+      expect(second.name).toBe("original");
+    });
+
+    it("rename sets and clears the name", async () => {
+      const doc = await store.findOrCreate(PID, "rename me");
+
+      const renamed = await store.rename(doc._id, "new-name");
+      expect(renamed.name).toBe("new-name");
+      expect(renamed._id).toBe(doc._id);
+
+      const cleared = await store.rename(doc._id, null);
+      expect(cleared).not.toHaveProperty("name");
+    });
+
+    it("rename throws for a missing or soft-deleted prompt", async () => {
+      await expect(store.rename("nope", "x")).rejects.toThrow(/not found/);
+
+      const doc = await store.findOrCreate(PID, "gone");
+      await store.delete(doc._id);
+      await expect(store.rename(doc._id, "x")).rejects.toThrow(/not found/);
     });
   });
 });

@@ -49,7 +49,11 @@ export function TaskPromptPreviewPanel() {
 
   return (
     <DetailPanel
-      title={<span className="truncate font-mono text-sm">{formatId(taskPrompt._id)}</span>}
+      title={
+        taskPrompt.name
+          ? <span className="truncate text-sm font-medium">{taskPrompt.name}</span>
+          : <span className="truncate font-mono text-sm">{formatId(taskPrompt._id)}</span>
+      }
       subtitle={truncate(taskPrompt.text ?? "", 80)}
       onClose={closePanel}
       headerActions={

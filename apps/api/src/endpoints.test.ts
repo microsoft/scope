@@ -1513,6 +1513,82 @@ describe("API Endpoints", () => {
 
       expect(res.status).toBe(400);
     });
+
+    it("passes a trimmed name through to the store", async () => {
+      (mocks.taskPromptStore as any).findOrCreate.mockResolvedValue({
+        _id: "tp-new",
+        name: "ecommerce-order-api",
+        text: "New task",
+        createdAt: new Date(),
+      });
+
+      const res = await request(testServer())
+        .post(`/api/v1/task-prompts?projectId=${TEST_PROJECT_ID}`)
+        .send({ text: "New task", name: "  ecommerce-order-api  " });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toHaveProperty("name", "ecommerce-order-api");
+      const args = (mocks.taskPromptStore.findOrCreate as any).mock.calls[0];
+      expect(args[3]).toBe("ecommerce-order-api");
+    });
+
+    it("returns 400 for a blank or over-long name", async () => {
+      for (const name of ["   ", "x".repeat(101)]) {
+        const res = await request(testServer())
+          .post(`/api/v1/task-prompts?projectId=${TEST_PROJECT_ID}`)
+          .send({ text: "New task", name });
+        expect(res.status).toBe(400);
+      }
+      expect(mocks.taskPromptStore.findOrCreate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("PATCH /api/v1/task-prompts/:id", () => {
+    it("renames the prompt", async () => {
+      (mocks.taskPromptStore as any).rename.mockResolvedValue({
+        _id: "tp-1",
+        keyId: "k",
+        projectId: TEST_PROJECT_ID,
+        name: "order-api",
+        text: "Build it",
+        createdAt: new Date(),
+      });
+
+      const res = await request(testServer())
+        .patch("/api/v1/task-prompts/tp-1")
+        .send({ name: " order-api " });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("name", "order-api");
+      expect(mocks.taskPromptStore.rename).toHaveBeenCalledWith("tp-1", "order-api");
+    });
+
+    it("clears the name with null", async () => {
+      const res = await request(testServer())
+        .patch("/api/v1/task-prompts/tp-1")
+        .send({ name: null });
+
+      expect(res.status).toBe(200);
+      expect(mocks.taskPromptStore.rename).toHaveBeenCalledWith("tp-1", null);
+    });
+
+    it("returns 400 when name is missing or empty", async () => {
+      for (const body of [{}, { name: "" }]) {
+        const res = await request(testServer()).patch("/api/v1/task-prompts/tp-1").send(body);
+        expect(res.status).toBe(400);
+      }
+      expect(mocks.taskPromptStore.rename).not.toHaveBeenCalled();
+    });
+
+    it("returns 404 for an unknown prompt", async () => {
+      (mocks.taskPromptStore as any).rename.mockRejectedValue(new Error("Task prompt 'nope' not found"));
+
+      const res = await request(testServer())
+        .patch("/api/v1/task-prompts/nope")
+        .send({ name: "x" });
+
+      expect(res.status).toBe(404);
+    });
   });
 
   // ===================================================================
