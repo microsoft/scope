@@ -83,6 +83,7 @@ export const ConversationTurnSchema = z
     codingAgentResponse: z.string().optional(),
     judgeFeedback: z.string(),
     snapshotUrl: z.string(),
+    workspaceSizeBytes: z.number().int().nonnegative().optional(),
     passed: z.boolean(),
     timestamp: z.coerce.date(),
     criteriaResults: z.array(CriterionResultSchema).optional(),

@@ -17,7 +17,7 @@ const { runGatedLoop } = await import("./gated-loop.js");
 function makeBlob() {
   return {
     uploadFile: vi.fn().mockResolvedValue("https://blob/file"),
-    uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot"),
+    uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }),
     writeToolCalls: vi.fn().mockResolvedValue(undefined),
     getToolCallsBlobUrl: vi.fn().mockReturnValue("https://blob/toolcalls"),
   } as any;

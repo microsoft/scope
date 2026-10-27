@@ -609,6 +609,10 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             },
             "type": "array",
           },
+          "workspaceSizeBytes": {
+            "minimum": 0,
+            "type": "integer",
+          },
         },
         "required": [
           "iteration",

@@ -48,6 +48,7 @@ import type { RunState, LogEvent, ResourceBinding, ResourceRunOutcome } from "@/
 import { useShiftModifier } from "@/hooks/useShiftModifier";
 import { getRetryButtonState } from "@/components/RetryButton";
 import { getRunSkillReferences } from "@/lib/skill-spec";
+import { formatSnapshotBytes, summarizeWorkspaceSizes } from "@/lib/workspace-size";
 
 /** A compact labeled stat: a micro uppercase label above its value. */
 function MetaItem({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
@@ -731,6 +732,35 @@ export function RunDetail() {
                   }
                 />
               )}
+              {(() => {
+                // Total compressed workspace snapshot size across this attempt's iterations.
+                const turns = activeRun?.turns ?? [];
+                if (turns.length === 0) return null;
+                const { totalBytes, measured, missing } = summarizeWorkspaceSizes(turns);
+                if (measured === 0) {
+                  return (
+                    <MetaItem
+                      label="Workspace snapshots"
+                      title="Snapshot sizes were not recorded for this run (legacy or imported run)"
+                      value={<span className="text-muted-foreground">Unavailable</span>}
+                    />
+                  );
+                }
+                return (
+                  <MetaItem
+                    label="Workspace snapshots"
+                    title={`${totalBytes.toLocaleString()} bytes across ${measured} iteration${measured === 1 ? "" : "s"}${missing > 0 ? `; ${missing} without a recorded size` : ""}`}
+                    value={(
+                      <span className="font-mono">
+                        {formatSnapshotBytes(totalBytes)}
+                        {missing > 0 && (
+                          <span className="ml-1 text-muted-foreground">({measured}/{turns.length} measured)</span>
+                        )}
+                      </span>
+                    )}
+                  />
+                );
+              })()}
               {activeRun?.aiCallCount !== undefined && (
                 <MetaItem
                   label="LLM calls"

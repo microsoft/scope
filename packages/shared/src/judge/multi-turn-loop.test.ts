@@ -11,7 +11,7 @@ const mockUploadFile = vi.fn();
 vi.mock("../storage/blob-storage.js", () => ({
   BlobStorage: vi.fn().mockImplementation(() => ({
     uploadFile: mockUploadFile,
-    uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot"),
+    uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }),
   })),
 }));
 
@@ -76,7 +76,7 @@ describe("runMultiTurnLoop — video upload", () => {
       maxIterations: 1,
       workspacePath: "/workspace",
       judgeClient: { evaluate: vi.fn().mockResolvedValue({ passed: true, feedback: "OK" }) } as any,
-      blobStorage: { uploadFile: mockBlobUploadFile, uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot") } as any,
+      blobStorage: { uploadFile: mockBlobUploadFile, uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }) } as any,
       requestId: "req1",
       runId: "attempt-1",
       log: mockLog,
@@ -108,7 +108,7 @@ describe("runMultiTurnLoop — video upload", () => {
       maxIterations: 1,
       workspacePath: "/workspace",
       judgeClient: { evaluate: vi.fn().mockResolvedValue({ passed: true, feedback: "OK" }) } as any,
-      blobStorage: { uploadFile: mockBlobUploadFile, uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot") } as any,
+      blobStorage: { uploadFile: mockBlobUploadFile, uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }) } as any,
       requestId: "req1",
       runId: "attempt-1",
       log: mockLog,
@@ -133,7 +133,7 @@ describe("runMultiTurnLoop — video upload", () => {
       maxIterations: 1,
       workspacePath: "/workspace",
       judgeClient: { evaluate: vi.fn().mockResolvedValue({ passed: true, feedback: "OK" }) } as any,
-      blobStorage: { uploadFile: mockBlobUploadFile, uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot") } as any,
+      blobStorage: { uploadFile: mockBlobUploadFile, uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }) } as any,
       requestId: "req1",
       runId: "attempt-1",
       log: mockLog,
@@ -163,7 +163,7 @@ describe("runMultiTurnLoop — lifecycle hooks", () => {
       maxIterations: 3,
       workspacePath: "/workspace",
       judgeClient: { evaluate: vi.fn().mockResolvedValue({ passed: true, feedback: "OK" }) } as any,
-      blobStorage: { uploadFile: vi.fn().mockResolvedValue("https://blob/video"), uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot") } as any,
+      blobStorage: { uploadFile: vi.fn().mockResolvedValue("https://blob/video"), uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }) } as any,
       requestId: "req1",
       runId: "attempt-1",
       log: mockLog,
@@ -267,7 +267,7 @@ describe("runMultiTurnLoop — tool call extraction", () => {
       judgeClient: { evaluate: vi.fn().mockResolvedValue({ passed: true, feedback: "OK" }) } as any,
       blobStorage: {
         uploadFile: vi.fn().mockResolvedValue("https://blob/har"),
-        uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot"),
+        uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }),
         writeToolCalls: vi.fn().mockResolvedValue(undefined),
         getToolCallsBlobUrl: vi.fn().mockReturnValue("https://blob/tool-calls.jsonl"),
       } as any,
@@ -389,7 +389,7 @@ describe("runMultiTurnLoop — hadError", () => {
       judgeClient: { evaluate: vi.fn().mockResolvedValue({ passed: false, feedback: "Not done" }) } as any,
       blobStorage: {
         uploadFile: vi.fn().mockResolvedValue("https://blob/file"),
-        uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot"),
+        uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }),
       } as any,
       requestId: "req1",
       runId: "attempt-1",
@@ -508,7 +508,7 @@ describe("runMultiTurnLoop — aiCallCount", () => {
       judgeClient: { evaluate: vi.fn().mockResolvedValue({ passed: true, feedback: "OK" }) } as any,
       blobStorage: {
         uploadFile: vi.fn().mockResolvedValue("https://blob/har"),
-        uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot"),
+        uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }),
       } as any,
       requestId: "req1",
       runId: "attempt-1",
@@ -599,7 +599,7 @@ describe("runMultiTurnLoop — optional criteria (issue #605)", () => {
       judgeClient: { evaluate: vi.fn().mockResolvedValue({ passed: true, feedback: "OK" }) } as any,
       blobStorage: {
         uploadFile: vi.fn().mockResolvedValue("https://blob/har"),
-        uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot"),
+        uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }),
       } as any,
       requestId: "req1",
       runId: "attempt-1",
@@ -806,7 +806,7 @@ describe("runMultiTurnLoop — per-iteration timeout", () => {
       judgeClient: { evaluate: vi.fn().mockResolvedValue({ passed: false, feedback: "try again" }) } as any,
       blobStorage: {
         uploadFile: vi.fn().mockResolvedValue("https://blob/x"),
-        uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot"),
+        uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }),
       } as any,
       requestId: "req1",
       runId: "attempt-1",
@@ -871,5 +871,58 @@ describe("runMultiTurnLoop — per-iteration timeout", () => {
     expect(result.passed).toBe(true);
     expect(result.turns).toHaveLength(3);
     expect(processMessage).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("runMultiTurnLoop — workspace snapshot size (#1564)", () => {
+  const mockProcessor = { workerName: "test-worker", processMessage: vi.fn() };
+  const baseOptions = () => ({
+    processor: mockProcessor as any,
+    task: "Do something",
+    criteria: ["check"],
+    workspacePath: "/workspace",
+    requestId: "req1",
+    runId: "attempt-1",
+    log: vi.fn().mockResolvedValue(undefined),
+    onTurnComplete: vi.fn().mockResolvedValue(undefined),
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockProcessor.processMessage.mockResolvedValue({ response: "done" } satisfies WorkerResult);
+  });
+
+  it("records each iteration's snapshot size on its turn", async () => {
+    const uploadWorkspaceSnapshot = vi.fn()
+      .mockResolvedValueOnce({ url: "https://blob/snap-1", sizeBytes: 1000 })
+      .mockResolvedValueOnce({ url: "https://blob/snap-2", sizeBytes: 3500 });
+
+    const result = await runMultiTurnLoop({
+      ...baseOptions(),
+      maxIterations: 2,
+      judgeClient: { evaluate: vi.fn().mockResolvedValue({ passed: false, feedback: "again" }) } as any,
+      blobStorage: { uploadFile: vi.fn(), uploadWorkspaceSnapshot } as any,
+    });
+
+    expect(result.turns.map((t) => [t.snapshotUrl, t.workspaceSizeBytes])).toEqual([
+      ["https://blob/snap-1", 1000],
+      ["https://blob/snap-2", 3500],
+    ]);
+  });
+
+  it("leaves the size unset when the snapshot upload fails", async () => {
+    const result = await runMultiTurnLoop({
+      ...baseOptions(),
+      maxIterations: 1,
+      judgeClient: { evaluate: vi.fn() } as any,
+      blobStorage: {
+        uploadFile: vi.fn(),
+        uploadWorkspaceSnapshot: vi.fn().mockRejectedValue(new Error("blob down")),
+      } as any,
+    });
+
+    expect(result.hadError).toBe(true);
+    expect(result.turns[0].snapshotUrl).toBe("");
+    expect(result.turns[0]).not.toHaveProperty("workspaceSizeBytes");
   });
 });
