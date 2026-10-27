@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSy
 import { tmpdir } from "os";
 import { join } from "path";
 import yazl from "yazl";
-import { extractArchiveBuffer, resolveSafeEntryPath, assertTarEntrySafe } from "./codebase-archive.js";
+import { extractArchiveBuffer, resolveSafeEntryPath, assertTarEntrySafe, normalizeToRootTarGz } from "./codebase-archive.js";
 
 /**
  * Build a raw (uncompressed) USTAR archive from a map of entry name -> contents.
@@ -266,5 +266,38 @@ describe("extractArchiveBuffer (zip) — extraction limits", () => {
     await expect(
       extractArchiveBuffer(buffer, dest, { maxBytes: 1_000_000, maxEntries: 1 })
     ).rejects.toThrow(/maximum entry count/);
+  });
+});
+
+describe("normalizeToRootTarGz — hidden files", () => {
+  const dirs: string[] = [];
+  const newDir = () => {
+    const d = mkdtempSync(join(tmpdir(), "codebase-archive-dot-test-"));
+    dirs.push(d);
+    return d;
+  };
+
+  afterEach(() => {
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+
+  it("keeps top-level dotfiles and dot folders in the snapshot", async () => {
+    const tar = await import("tar");
+    const src = newDir();
+    writeFileSync(join(src, "readme.txt"), "visible");
+    writeFileSync(join(src, ".env"), "SECRET=1");
+    mkdirSync(join(src, ".github"));
+    writeFileSync(join(src, ".github", "ci.yml"), "name: ci");
+    const tgz = newDir();
+    const tgzPath = join(tgz, "in.tar.gz");
+    await tar.create({ gzip: true, file: tgzPath, cwd: src }, ["."]);
+
+    const normalized = await normalizeToRootTarGz(readFileSync(tgzPath));
+    const dest = newDir();
+    await extractArchiveBuffer(normalized.data, dest);
+
+    expect(readFileSync(join(dest, "readme.txt"), "utf8")).toBe("visible");
+    expect(readFileSync(join(dest, ".env"), "utf8")).toBe("SECRET=1");
+    expect(readFileSync(join(dest, ".github", "ci.yml"), "utf8")).toBe("name: ci");
   });
 });
