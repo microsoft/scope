@@ -1111,6 +1111,19 @@ describe("API Endpoints", () => {
       expect(res.body).toHaveProperty("status", "pending");
     });
 
+    it("mints a UUIDv7 report ID", async () => {
+      (mocks.collection.findOne as any).mockResolvedValue({ _id: "r1", status: "completed" });
+
+      const res = await request(testServer())
+        .post("/api/v1/reports")
+        .send({ requestId: "r1" });
+
+      expect(res.status).toBe(201);
+      expect(res.body.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    });
+
     it("returns 400 when requestId missing", async () => {
       const res = await request(testServer())
         .post("/api/v1/reports")
@@ -1843,6 +1856,62 @@ describe("API Endpoints", () => {
           params: { REPO: "run/repo", AS: "pinned/ns" },
         },
       ]);
+    });
+  });
+
+  describe("POST /api/v1/requests?worker=... (ID generation)", () => {
+    /** Matches a UUIDv7: version nibble 7, RFC 9562 variant bits (8, 9, a or b). */
+    const UUID_V7_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+    beforeEach(() => {
+      (mocks.agentCollection.findOne as any).mockResolvedValue({
+        _id: "coder-acp-copilot",
+        available: true,
+        versions: [{ agentVersion: "v1", status: "active", queueName: "queue-coder-acp-copilot", createdAt: new Date() }],
+      });
+    });
+
+    it("mints UUIDv7 submission, request and run IDs", async () => {
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({ scenario: { task: "Build something", criteria: ["works"] } });
+
+      expect(res.status).toBe(201);
+      const doc = (mocks.collection.insertOne as any).mock.calls[0][0];
+      expect(doc._id).toMatch(UUID_V7_RE);
+      expect(doc.submissionId).toMatch(UUID_V7_RE);
+      expect(doc.run._id).toMatch(UUID_V7_RE);
+    });
+
+    it("mints submission IDs that sort in creation order", async () => {
+      const submissionIds: string[] = [];
+
+      // Submit sequentially so each ID is minted after the previous one.
+      for (let i = 0; i < 3; i++) {
+        const res = await request(testServer())
+          .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+          .send({ scenario: { task: "Build something", criteria: ["works"] } });
+        expect(res.status).toBe(201);
+        submissionIds.push(res.body.submissionId);
+      }
+
+      expect([...submissionIds].sort()).toEqual(submissionIds);
+    });
+
+    it("mints UUIDv7 IDs for every run of a multi-run submission", async () => {
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({ scenario: { task: "Build something", criteria: ["works"] }, count: 2 });
+
+      expect(res.status).toBe(201);
+      const docs = (mocks.collection.insertMany as any).mock.calls[0][0];
+      expect(docs).toHaveLength(2);
+      for (const doc of docs) {
+        expect(doc._id).toMatch(UUID_V7_RE);
+        expect(doc.run._id).toMatch(UUID_V7_RE);
+        expect(doc.submissionId).toBe(res.body.submissionId);
+      }
+      expect(res.body.submissionId).toMatch(UUID_V7_RE);
     });
   });
 

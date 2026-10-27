@@ -461,6 +461,15 @@ resubmission resolves a currently active version unless a version is explicitly
 pinned. Invalid historical pending targets stay pending and produce scheduler
 telemetry rather than being sent to a guessed queue.
 
+Run identifiers minted at submission — `submissionId`, the request `_id`, and
+each attempt's `run._id` (including retries) — and report `_id`s are
+**UUIDv7** (RFC 9562). Their leading bits encode the creation time in
+milliseconds, so newer IDs sort after older ones and grouping by
+`submissionId` orders chronologically without a separate timestamp. IDs
+minted before this change are UUIDv4: still valid and accepted everywhere,
+but they carry no ordering. Content-addressed IDs (task prompts, skill
+revisions) stay UUIDv5.
+
 When a codebase is selected, the API resolves the submitted spec (`codebaseRevisionId`, `{slug}@r{N}`, or bare `{slug}`) before enqueueing. Bare archive slugs resolve to the latest existing revision; bare Git slugs resolve the default branch at submit time and create a new immutable revision. The resolved revision UUID is stored as `RequestDocument.codebaseRevisionId`, and workers seed the workspace from that revision after setup and before skills extraction.
 
 Profile fan-out mode is also supported for comparative runs:

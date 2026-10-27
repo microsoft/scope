@@ -12,7 +12,10 @@ import { parse as yamlParse } from "yaml";
 import { tmpdir } from "os";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
-import { v4 as uuidv4 } from "uuid";
+// Submission, request and run IDs are UUIDv7 (RFC 9562): the leading bits
+// encode creation time, so newer IDs sort after older ones. Existing v4 IDs
+// stay valid; they just carry no ordering (issue #572).
+import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import {
   BulkResubmitInputSchema,
@@ -809,7 +812,7 @@ apiRoute(ctx.app, ctx.registry, {
       // Pass 2: build documents and insert them under a single shared submissionId.
       // All variations belong to the same comparative submission so consumers can
       // group them via `submissionId` (matches docs/architecture/app-design.md).
-      const submissionId = uuidv4();
+      const submissionId = uuidv7();
       const allNewIds: string[] = [];
       const newDocs: RequestDocument[] = [];
       const variationResults: Array<{ profileId: string; label?: string; ids: string[] }> = [];
@@ -819,8 +822,8 @@ apiRoute(ctx.app, ctx.registry, {
       for (const r of resolved) {
         const newIds: string[] = [];
         for (let i = 0; i < count; i++) {
-          const requestId = uuidv4();
-          const runId = uuidv4();
+          const requestId = uuidv7();
+          const runId = uuidv7();
           newIds.push(requestId);
           allNewIds.push(requestId);
 
@@ -1234,7 +1237,7 @@ apiRoute(ctx.app, ctx.registry, {
       : undefined;
 
     // Generate a submission ID to group all runs from this request
-    const submissionId = uuidv4();
+    const submissionId = uuidv7();
 
     // Handle multiple runs (count > 1)
     if (count > 1) {
@@ -1242,8 +1245,8 @@ apiRoute(ctx.app, ctx.registry, {
       const newDocs: RequestDocument[] = [];
 
       for (let i = 0; i < count; i++) {
-        const requestId = uuidv4();
-        const runId = uuidv4();
+        const requestId = uuidv7();
+        const runId = uuidv7();
         newIds.push(requestId);
 
         const requestDoc: RequestDocument = {
@@ -1304,8 +1307,8 @@ apiRoute(ctx.app, ctx.registry, {
     }
 
     // Single run (count === 1) - original behavior
-    const requestId = uuidv4();
-    const runId = uuidv4();
+    const requestId = uuidv7();
+    const runId = uuidv7();
 
     // Create request document
     const requestDoc: RequestDocument = {
@@ -2018,14 +2021,14 @@ apiRoute(ctx.app, ctx.registry, {
     const foundIds = new Set(originalRuns.map(r => r._id));
     const notFound = ids.filter((id: string) => !foundIds.has(id));
 
-    const submissionId = uuidv4();
+    const submissionId = uuidv7();
     const newIds: string[] = [];
     const newDocs: RequestDocument[] = [];
 
     for (const original of originalRuns) {
       for (let i = 0; i < count; i++) {
-        const requestId = uuidv4();
-        const runId = uuidv4();
+        const requestId = uuidv7();
+        const runId = uuidv7();
         newIds.push(requestId);
 
         // Determine effective profile for this run
@@ -2602,7 +2605,7 @@ async function finalizePendingRun(
     createdAt: runDoc.createdAt ?? new Date(),
     priority: runDoc.priority ?? 0,
     taskPromptId: resolvedTaskPromptId,
-    ...(runDoc.submissionId ? {} : { submissionId: uuidv4() }),
+    ...(runDoc.submissionId ? {} : { submissionId: uuidv7() }),
     run: {
       ...(runState as unknown as RunState),
       // Per-attempt `run._id` is preserved from the yaml (NOT clobbered
@@ -3119,7 +3122,7 @@ apiRoute(ctx.app, ctx.registry, {
 
       const runToDemote = currentRun;
       const newAttemptNumber = (runToDemote.attemptNumber ?? 1) + 1;
-      const newRunId = uuidv4();
+      const newRunId = uuidv7();
       const newRun: RunState = {
         _id: newRunId,
         attemptNumber: newAttemptNumber,
@@ -3225,7 +3228,7 @@ apiRoute(ctx.app, ctx.registry, {
     const runToDemote = currentRun;
 
     const newAttemptNumber = (runToDemote.attemptNumber ?? 1) + 1;
-    const newRunId = uuidv4();
+    const newRunId = uuidv7();
     const newRun: RunState = {
       _id: newRunId,
       attemptNumber: newAttemptNumber,
