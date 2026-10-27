@@ -77,6 +77,9 @@ scope run list
 # Submit a run
 scope run submit -s config/scenarios/hello-world.yaml -w coder-acp-copilot
 
+# Submit a task directly
+scope run submit --task "Create a hello-world app" -w coder-acp-copilot
+
 # Get run details
 scope run get -i <run-id>
 
@@ -90,6 +93,9 @@ scope criteria list
 scope --help
 scope run --help
 ```
+
+`--task` is the name of the direct task option. The former `--message` option
+remains accepted as a hidden compatibility alias; `-m` still works.
 
 ### Provider secrets
 
