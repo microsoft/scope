@@ -75,7 +75,7 @@ describe("run list", () => {
           id: "req-paginated-1",
           workerType: "coder-acp-copilot",
           run: { status: "done", outcome: "succeeded" },
-          submissionId: "submission-12345678",
+          experimentId: "experiment-12345678",
         },
       ],
       pageInfo: {
@@ -99,7 +99,7 @@ describe("run list", () => {
         id: "req-array-1",
         workerType: "coder-acp-claude-code",
         run: { status: "running", outcome: "finished" },
-        submissionId: "submission-abcdef12",
+        experimentId: "experiment-abcdef12",
       },
     ]);
 
@@ -117,7 +117,7 @@ describe("run list", () => {
           id: "req-json-1",
           workerType: "coder-acp-copilot",
           run: { status: "done", outcome: "succeeded" },
-          submissionId: "submission-feedbeef",
+          experimentId: "experiment-feedbeef",
         },
       ],
       pageInfo: {
@@ -139,7 +139,7 @@ describe("run list", () => {
           id: "req-tsv-1",
           workerType: "coder-acp-copilot",
           run: { status: "done", outcome: "succeeded" },
-          submissionId: "submission-11223344",
+          experimentId: "experiment-11223344",
         },
       ],
       pageInfo: {
@@ -149,7 +149,7 @@ describe("run list", () => {
     });
 
     const output = await runListAndCaptureOutput(["-o", "tsv"]);
-    expect(output).toContain("req-tsv-1\tcoder-acp-copilot\tdone\tsubmissi");
+    expect(output).toContain("req-tsv-1\tcoder-acp-copilot\tdone\texperime");
     expect(output).not.toContain("Found 1 request(s):");
   });
 
@@ -160,7 +160,7 @@ describe("run list", () => {
           id: "req-yaml-1",
           workerType: "coder-acp-copilot",
           run: { status: "done", outcome: "succeeded" },
-          submissionId: "submission-a1b2c3d4",
+          experimentId: "experiment-a1b2c3d4",
         },
       ],
       pageInfo: {
@@ -235,6 +235,59 @@ describe("run submit", () => {
 
     const { body } = captureSubmit();
     expect(body).not.toHaveProperty("agentsMd");
+  });
+
+  it("warns on deprecated multi-request composition", async () => {
+    mockFetchWith({
+      ids: ["req-submit-3", "req-submit-4"],
+      count: 2,
+      status: "queued",
+    });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await makeProgram().parseAsync(
+      [
+        "run", "submit",
+        "-m", "repeat task",
+        "--worker", "dynamic-worker",
+        "--count", "2",
+        "--no-stream",
+        "-u", "http://localhost:3100",
+        "--project", "proj-test",
+      ],
+      { from: "user" },
+    );
+
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls.flat().join(" ")).toContain(
+      "legacy-request-composition",
+    );
+  });
+
+  it("does not warn for an ordinary single request", async () => {
+    mockFetchWith({
+      id: "req-submit-5",
+      workerType: "coder-acp-copilot",
+      status: "queued",
+    });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await makeProgram().parseAsync(
+      [
+        "run", "submit",
+        "-m", "single task",
+        "--worker", "dynamic-worker",
+        "--count", "1",
+        "--no-stream",
+        "-u", "http://localhost:3100",
+        "--project", "proj-test",
+      ],
+      { from: "user" },
+    );
+
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });
 

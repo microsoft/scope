@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { http, HttpResponse } from "msw";
 import { PROJECT_STORAGE_KEY } from "@/lib/project-scope";
@@ -38,6 +38,64 @@ export const Collapsed: Story = {
   play: async ({ canvas }) => {
     localStorage.removeItem("scope:layout:sidebar-expanded");
     await expect(canvas.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+    const newRun = canvas.getByRole("link", { name: "New Run" });
+    const body = within(document.body);
+    await userEvent.hover(newRun);
+    let tray = body.getByRole("group", { name: "New workflow choices" });
+    await expect(tray).toBeVisible();
+    await expect(tray.getBoundingClientRect().left).toBe(
+      newRun.getBoundingClientRect().left,
+    );
+    await expect(tray.getBoundingClientRect().top).toBe(
+      newRun.getBoundingClientRect().top,
+    );
+    await expect(tray.getBoundingClientRect().height).toBe(
+      newRun.getBoundingClientRect().height,
+    );
+    await expect(tray.getBoundingClientRect().width).toBeGreaterThan(
+      newRun.getBoundingClientRect().width,
+    );
+    await expect(tray.className).toContain("transition-[width]");
+    await expect(tray.className).toContain("origin-left");
+    const expandedPlus = within(tray).getByTestId("expanded-workflow-plus-tile");
+    const runLabel = within(tray).getByTestId("expanded-workflow-run-label");
+    await expect(expandedPlus.getBoundingClientRect()).toEqual(
+      newRun.getBoundingClientRect(),
+    );
+    await expect(runLabel.getBoundingClientRect().left).toBe(
+      newRun.getBoundingClientRect().right,
+    );
+    await expect(tray.getBoundingClientRect().right).toBeLessThanOrEqual(
+      window.innerWidth,
+    );
+    await expect(
+      within(tray).getByRole("link", { name: "New Run" }),
+    ).toHaveAttribute("href", "/runs/new");
+    await expect(
+      within(tray).getByRole("link", { name: "New Experiment" }),
+    ).toHaveAttribute("href", "/experiments/new");
+
+    await userEvent.unhover(newRun);
+    await waitFor(() =>
+      expect(
+        body.queryByRole("group", { name: "New workflow choices" }),
+      ).toBeNull(),
+    );
+
+    newRun.focus();
+    tray = body.getByRole("group", { name: "New workflow choices" });
+    await expect(tray).toBeVisible();
+    await userEvent.tab();
+    await expect(within(tray).getByRole("link", { name: "New Run" })).toHaveFocus();
+    await userEvent.tab();
+    await expect(
+      within(tray).getByRole("link", { name: "New Experiment" }),
+    ).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    await expect(
+      body.queryByRole("group", { name: "New workflow choices" }),
+    ).toBeNull();
+    await expect(newRun).toHaveFocus();
     await expect(
       canvas.getByText(/This is an AI evaluation platform\./),
     ).toBeVisible();
@@ -49,8 +107,19 @@ export const Expanded: Story = {
     localStorage.removeItem("scope:layout:sidebar-expanded");
     await userEvent.click(canvas.getByRole("button", { name: "Expand sidebar" }));
     await expect(canvas.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+    await expect(
+      canvas.getByRole("link", { name: "New Experiment" }),
+    ).toBeVisible();
     // With a project selected, scoped nav is present.
     await expect(canvas.getByRole("link", { name: "Runs" })).toBeVisible();
+    const experimentsLink = canvas.getByRole("link", { name: "Experiments" });
+    const runsLink = canvas.getByRole("link", { name: "Runs" });
+    const criteriaLink = canvas.getByRole("link", { name: "Criteria" });
+    await expect(experimentsLink.querySelector(".lucide-atom")).not.toBeNull();
+    await expect(
+      criteriaLink.querySelector(".lucide-flask-conical"),
+    ).not.toBeNull();
+    await expect(experimentsLink.nextElementSibling).toBe(runsLink);
   },
 };
 

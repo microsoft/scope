@@ -9,6 +9,17 @@ import { recordServerDate } from "./serverClock";
 import { apiClient } from "./api-client";
 import { getSelectedProjectId, ProjectRequiredError } from "./project-scope";
 import { MAX_ARCHIVE_UPLOAD_LABEL } from "./codebaseUpload";
+import {
+  parseExperiment,
+  parseExperimentExecution,
+  parseExperimentExecutionPage,
+  parseExperimentPage,
+  type ExperimentExecutionPageView,
+  type ExperimentExecutionView,
+  type ExperimentMetadataView,
+  type ExperimentPageView,
+  type ExperimentView,
+} from "./experiments";
 
 const BASE = "/api/v1";
 
@@ -85,7 +96,7 @@ export interface RunFilterParams {
   profileId?: string | string[];
   taskPromptId?: string;
   criteria?: string;
-  submissionId?: string;
+  experimentId?: string;
   search?: string;
   createdAfter?: string;
   createdBefore?: string;
@@ -108,7 +119,7 @@ function runFilterQs(f: RunFilterParams): Record<string, string | string[] | und
     profileId: f.profileId,
     taskPromptId: f.taskPromptId,
     criteria: f.criteria,
-    submissionId: f.submissionId,
+    experimentId: f.experimentId,
     search: f.search,
     createdAfter: f.createdAfter,
     createdBefore: f.createdBefore,
@@ -158,6 +169,36 @@ async function requestCurrentUser(
   return validateCurrentUser(user);
 }
 
+export interface RunCreateInput {
+  scenario: { task: string; criteria: string[]; version?: "v1" | "v2" };
+  observations?: string[];
+  worker?: string;
+  model?: string;
+  reasoningEffort?: string;
+  maxIterations?: number;
+  personaInstructions?: string;
+  persona?: {
+    personality: string;
+    experience: string;
+    verbosity: string;
+    type: string;
+  };
+  count?: number;
+  mcpServers?: string[];
+  skills?: string[];
+  extensions?: string[];
+  resources?: ResourceBindingSpec[];
+  agentVersion?: string;
+  profileId?: string;
+  profileVariations?: string[];
+  agentsMd?: string;
+  agentsMdParentIds?: string[];
+  gates?: GateConfig[];
+  codebase?: string;
+  codebaseRevisionId?: string;
+  priority?: number;
+}
+
 export const api = {
   /** Only AuthProvider calls these; enrollment must never be prefetched. */
   getCurrentUser: (opts: { signal?: AbortSignal } = {}): Promise<CurrentUserResponse> =>
@@ -178,8 +219,8 @@ export const api = {
     })}`, undefined, { scoped: true });
   },
 
-  /** List runs grouped by task/profile/submissionId, with cursor pagination and server-side filtering */
-  listRunGroups: (opts: RunFilterParams & { groupBy: "task" | "submissionId" | "profile"; sortBy?: RunSortField; sortDir?: RunSortDir; limit?: number; after?: string; before?: string; last?: boolean }): Promise<CursorPaginatedResponse<RunGroup>> => {
+  /** List runs grouped by task/profile/experimentId, with cursor pagination and server-side filtering */
+  listRunGroups: (opts: RunFilterParams & { groupBy: "task" | "experimentId" | "profile"; sortBy?: RunSortField; sortDir?: RunSortDir; limit?: number; after?: string; before?: string; last?: boolean }): Promise<CursorPaginatedResponse<RunGroup>> => {
     return request(`/requests${qs({
       groupBy: opts.groupBy,
       ...runFilterQs(opts),
@@ -209,35 +250,143 @@ export const api = {
   },
 
   /** Submit a new run (or multiple runs if count > 1) */
-  submitRun: (body: {
-    scenario: { task: string; criteria: string[]; version?: "v1" | "v2" };
-    observations?: string[];
-    worker?: string;
-    model?: string;
-    reasoningEffort?: string;
-    maxIterations?: number;
-    personaInstructions?: string;
-    persona?: { personality: string; experience: string; verbosity: string; type: string };
-    count?: number;
-    mcpServers?: string[];
-    skills?: string[];
-    extensions?: string[];
-    resources?: ResourceBindingSpec[];
-    agentVersion?: string;
-    profileId?: string;
-    profileVariations?: string[];
-    agentsMd?: string;
-    agentsMdParentIds?: string[];
-    gates?: GateConfig[];
-    codebase?: string;
-    codebaseRevisionId?: string;
-  }): Promise<(Run & { message: string }) | { ids: string[]; count: number; message: string }> => {
+  submitRun: (body: RunCreateInput): Promise<
+    (Run & {
+      message: string;
+      experimentId?: string;
+      submissionId?: string;
+    }) | {
+      ids: string[];
+      count: number;
+      message: string;
+      experimentId?: string;
+      submissionId?: string;
+    }
+  > => {
     const { worker, ...payload } = body;
     const url = worker ? `/requests?worker=${encodeURIComponent(worker)}` : `/requests`;
     return request(url, {
       method: "POST",
       body: JSON.stringify(payload),
     }, { scoped: true });
+  },
+
+  createExperiment: async (
+    body: { metadata: ExperimentMetadataView } & (
+      | { request: RunCreateInput; empty?: never }
+      | { empty: true; request?: never }
+    ),
+  ): Promise<ExperimentView> => {
+    const composedRequest = "request" in body ? body.request : undefined;
+    const worker = composedRequest?.worker;
+    const requestBody = composedRequest
+      ? { ...composedRequest, worker: undefined }
+      : undefined;
+    const path = worker
+      ? `/experiments?worker=${encodeURIComponent(worker)}`
+      : "/experiments";
+    const value = await request<unknown>(
+      path,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          mode: "empty" in body ? "empty" : "compose",
+          metadata: body.metadata,
+          requests: requestBody ? [requestBody] : [],
+        }),
+      },
+      { scoped: true },
+    );
+    if (!value || typeof value !== "object" || !("experiment" in value)) {
+      throw new Error("Invalid experiment create response from Scope");
+    }
+    return parseExperiment(value.experiment);
+  },
+
+  listExperiments: async (opts?: {
+    cursor?: string;
+    limit?: number;
+  }): Promise<ExperimentPageView> => {
+    const value = await request<unknown>(
+      `/experiments${qs({
+        after: opts?.cursor,
+        limit: opts?.limit ? String(opts.limit) : undefined,
+      })}`,
+      undefined,
+      { scoped: true },
+    );
+    return parseExperimentPage(value);
+  },
+
+  getExperiment: async (id: string): Promise<ExperimentView> => {
+    const value = await request<unknown>(
+      `/experiments/${encodeURIComponent(id)}`,
+      undefined,
+      { scoped: true },
+    );
+    return parseExperiment(value);
+  },
+
+  listExperimentExecutions: async (
+    id: string,
+    opts?: { cursor?: string; limit?: number },
+  ): Promise<ExperimentExecutionPageView> => {
+    const value = await request<unknown>(
+      `/experiments/${encodeURIComponent(id)}/executions${qs({
+        after: opts?.cursor,
+        limit: opts?.limit ? String(opts.limit) : undefined,
+      })}`,
+      undefined,
+      { scoped: true },
+    );
+    return parseExperimentExecutionPage(value);
+  },
+
+  getExperimentExecution: async (
+    id: string,
+    experimentExecutionId: string,
+  ): Promise<ExperimentExecutionView> => {
+    const value = await request<unknown>(
+      `/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(experimentExecutionId)}`,
+      undefined,
+      { scoped: true },
+    );
+    return parseExperimentExecution(value);
+  },
+
+  retryExperiment: async (
+    id: string,
+    experimentExecutionId: string,
+  ): Promise<{
+    experimentId: string;
+    experimentExecutionId: string;
+    attemptNumber: number;
+  }> => {
+    const value = await request<unknown>(
+      `/experiments/${encodeURIComponent(id)}/retry`,
+      {
+        method: "POST",
+        body: JSON.stringify({ experimentExecutionId }),
+      },
+      { scoped: true },
+    );
+    if (
+      !value ||
+      typeof value !== "object" ||
+      !("experimentId" in value) ||
+      typeof value.experimentId !== "string" ||
+      !("experimentExecutionId" in value) ||
+      typeof value.experimentExecutionId !== "string" ||
+      !("attemptNumber" in value) ||
+      typeof value.attemptNumber !== "number"
+    ) {
+      throw new Error("Invalid experiment retry response from Scope");
+    }
+    return {
+      experimentId: value.experimentId,
+      experimentExecutionId: value.experimentExecutionId,
+      attemptNumber: value.attemptNumber,
+    };
   },
 
   /** Soft-delete a run */

@@ -121,6 +121,161 @@ describe("createHttpServer", () => {
     expect(handler.onRunTerminal).not.toHaveBeenCalled();
   });
 
+  it("accepts exact experiment handler completions", async () => {
+    const onExperimentHandlerComplete = vi.fn().mockResolvedValue(true);
+    const handler: NotifyHandler = {
+      onRunTerminal: vi.fn().mockResolvedValue(undefined),
+      onHandlerComplete: vi.fn().mockResolvedValue(undefined),
+      onExperimentHandlerComplete,
+      registerHandler: vi.fn().mockResolvedValue(undefined),
+    };
+    const { server, baseUrl } = await startServer(handler);
+    servers.push(server);
+    const body = {
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      experimentExecutionId: "execution-1",
+      executionVersion: 4,
+      handlerId: "experiment-report",
+      handlerVersion: 2,
+      claimToken: "claim-1",
+      status: "done",
+    };
+
+    const response = await fetch(
+      `${baseUrl}/notify/experiment-handler-complete`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(onExperimentHandlerComplete).toHaveBeenCalledWith(body);
+  });
+
+  it("claims an exact experiment handler execution and returns its new version", async () => {
+    const onExperimentHandlerClaim = vi.fn().mockResolvedValue(5);
+    const handler: NotifyHandler = {
+      onRunTerminal: vi.fn().mockResolvedValue(undefined),
+      onHandlerComplete: vi.fn().mockResolvedValue(undefined),
+      onExperimentHandlerClaim,
+      registerHandler: vi.fn().mockResolvedValue(undefined),
+    };
+    const { server, baseUrl } = await startServer(handler);
+    servers.push(server);
+    const body = {
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      experimentExecutionId: "execution-1",
+      executionVersion: 4,
+      handlerId: "experiment-report",
+      handlerVersion: 2,
+      claimToken: "claim-1",
+    };
+
+    const response = await fetch(
+      `${baseUrl}/notify/experiment-handler-claim`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ok: true,
+      executionVersion: 5,
+    });
+    expect(onExperimentHandlerClaim).toHaveBeenCalledWith(body);
+  });
+
+  it("rejects stale experiment handler claims", async () => {
+    const handler: NotifyHandler = {
+      onRunTerminal: vi.fn().mockResolvedValue(undefined),
+      onHandlerComplete: vi.fn().mockResolvedValue(undefined),
+      onExperimentHandlerClaim: vi.fn().mockResolvedValue(null),
+      registerHandler: vi.fn().mockResolvedValue(undefined),
+    };
+    const { server, baseUrl } = await startServer(handler);
+    servers.push(server);
+
+    const response = await fetch(
+      `${baseUrl}/notify/experiment-handler-claim`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project-1",
+          experimentId: "experiment-1",
+          experimentExecutionId: "execution-1",
+          executionVersion: 4,
+          handlerId: "experiment-report",
+          handlerVersion: 2,
+          claimToken: "claim-1",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: "Stale experiment handler claim discarded",
+    });
+  });
+
+  it("rejects stale and malformed experiment handler completions", async () => {
+    const onExperimentHandlerComplete = vi.fn().mockResolvedValue(false);
+    const handler: NotifyHandler = {
+      onRunTerminal: vi.fn().mockResolvedValue(undefined),
+      onHandlerComplete: vi.fn().mockResolvedValue(undefined),
+      onExperimentHandlerComplete,
+      registerHandler: vi.fn().mockResolvedValue(undefined),
+    };
+    const { server, baseUrl } = await startServer(handler);
+    servers.push(server);
+
+    const stale = await fetch(
+      `${baseUrl}/notify/experiment-handler-complete`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project-1",
+          experimentId: "experiment-1",
+          experimentExecutionId: "execution-1",
+          executionVersion: 4,
+          handlerId: "experiment-report",
+          handlerVersion: 2,
+          claimToken: "claim-1",
+          status: "failed",
+          error: "worker failed",
+        }),
+      },
+    );
+    const malformed = await fetch(
+      `${baseUrl}/notify/experiment-handler-complete`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project-1",
+          experimentId: "experiment-1",
+          status: "done",
+        }),
+      },
+    );
+
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({
+      error: "Stale experiment handler completion discarded",
+    });
+    expect(malformed.status).toBe(400);
+    expect(onExperimentHandlerComplete).toHaveBeenCalledTimes(1);
+  });
+
   it("returns 400 when required fields are missing", async () => {
     const handler: NotifyHandler = {
       onRunTerminal: vi.fn().mockResolvedValue(undefined),
@@ -190,6 +345,39 @@ describe("createHttpServer", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, handlerId: "pp-example" });
+    expect(handler.registerHandler).toHaveBeenCalledWith(doc);
+  });
+
+  it("registers experiment-processing handlers", async () => {
+    const handler: NotifyHandler = {
+      onRunTerminal: vi.fn().mockResolvedValue(undefined),
+      onHandlerComplete: vi.fn().mockResolvedValue(undefined),
+      registerHandler: vi.fn().mockResolvedValue(undefined),
+    };
+    const { server, baseUrl } = await startServer(handler);
+    servers.push(server);
+    const doc = {
+      _id: "experiment-processing",
+      type: "experiment-handler",
+      version: 1,
+      queue: "experiment-processing-queue",
+      selector: "experiment-processing",
+      autoBackfill: false,
+      dependsOn: ["pp-observations"],
+      dependencyMode: "all-runs",
+    };
+
+    const response = await fetch(`${baseUrl}/handlers/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(doc),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ok: true,
+      handlerId: "experiment-processing",
+    });
     expect(handler.registerHandler).toHaveBeenCalledWith(doc);
   });
 

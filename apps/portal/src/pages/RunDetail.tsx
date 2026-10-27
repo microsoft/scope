@@ -531,7 +531,7 @@ export function RunDetail() {
     (activeRun?.observationResults?.length ?? 0) > 0;
   const hasConfiguredObservations = (run?.observations?.length ?? 0) > 0;
   // Aggregate enrichment status across the whole post-processing DAG so the
-  // "Enriched" badge waits for pp-taxonomy instead of flipping after pp-atif.
+  // "Enriched" badge waits for pp-observations instead of flipping after pp-atif.
   const enrichmentStatus = useMemo(
     () => deriveEnrichmentStatus(activeRun, hasConfiguredObservations),
     [activeRun, hasConfiguredObservations],
@@ -905,6 +905,19 @@ export function RunDetail() {
                 />
               )}
               <MetaItem label="Created" value={formatDate(run.createdAt)} />
+              {run.experimentId && (
+                <MetaItem
+                  label="Experiment"
+                  value={(
+                    <Link
+                      to={`/experiments/${run.experimentId}`}
+                      className="font-mono text-primary hover:underline"
+                    >
+                      {run.experimentId.slice(0, 8)}
+                    </Link>
+                  )}
+                />
+              )}
               {run.maxIterations && <MetaItem label="Max iterations" value={run.maxIterations} />}
               {(() => {
                 const totalDuration = activeRun?.turns?.reduce((sum, t) => sum + (t.durationMs ?? 0), 0);
