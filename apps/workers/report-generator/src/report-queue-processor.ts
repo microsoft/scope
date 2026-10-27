@@ -11,6 +11,7 @@ import {
   BaseQueueProcessorConfig,
   LogEvent,
   ReportDocument,
+  RequestDocument,
   ReportTemplateDocument,
   Reporter,
   TokenManagerClient,
@@ -27,6 +28,47 @@ export interface ReportQueueProcessorConfig extends BaseQueueProcessorConfig {
   apiBaseUrl: string;
   /** Timeout in ms for the Copilot SDK session (default: 5 min) */
   sessionTimeoutMs?: number;
+}
+
+/**
+ * How long a report job for an unfinished run is hidden before it is
+ * re-checked (seconds). The report stays `pending` meanwhile.
+ */
+export const RUN_NOT_FINISHED_DEFER_SECONDS = 60;
+
+/**
+ * Whether a report can be generated for its run yet (issue #1287).
+ *  - `ready`         — the run finished and has at least one turn to assess.
+ *  - `waiting`       — the run is still pending/queued/processing/paused.
+ *  - `non-evaluable` — the run finished without producing any turn, so there
+ *                      is no implementation to score.
+ */
+export type RunReadiness =
+  | { state: "ready" }
+  | { state: "waiting"; runStatus: string }
+  | { state: "non-evaluable"; reason: string };
+
+/**
+ * Classify a run for report generation from its request document.
+ *
+ * @param request - The run's request document as returned by the API.
+ */
+export function classifyRunReadiness(request: Pick<RequestDocument, "run">): RunReadiness {
+  const run = request.run;
+  const runStatus = run?.status ?? "pending";
+  if (runStatus !== "done") {
+    return { state: "waiting", runStatus };
+  }
+
+  if ((run?.turns?.length ?? 0) === 0) {
+    const detail = run?.error ? `: ${run.error}` : "";
+    return {
+      state: "non-evaluable",
+      reason: `Run finished (${run?.outcome ?? "unknown outcome"}) without any turns, so there is no implementation to assess${detail}`,
+    };
+  }
+
+  return { state: "ready" };
 }
 
 export interface ResolvedReportPrompts {
@@ -123,6 +165,27 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
       }
 
       await log("info", `Using report template '${template.id}' (${template.name})`);
+
+      // --- Wait for an evaluable run ---
+      // Generating before the run finishes yields a stale "0 turns / 0%"
+      // report that later looks like the real result (issue #1287).
+      const readiness = classifyRunReadiness(await this.fetchRun(requestId));
+      if (readiness.state === "waiting") {
+        await log(
+          "info",
+          `Waiting for run ${requestId} to finish (status: ${readiness.runStatus}); re-checking in ${RUN_NOT_FINISHED_DEFER_SECONDS}s`,
+        );
+        // Keep the report pending and hide the message until the next check.
+        const popReceipt = heartbeat.stop();
+        await this.safeDeferMessage(message.messageId, popReceipt, RUN_NOT_FINISHED_DEFER_SECONDS);
+        return;
+      }
+      if (readiness.state === "non-evaluable") {
+        await this.markNonEvaluable(reportId, readiness.reason, log);
+        const popReceipt = heartbeat.stop();
+        await this.safeDeleteMessage(message.messageId, popReceipt);
+        return;
+      }
 
       // Resolve model: template override → global config fallback
       const resolvedModel = template.model ?? this.reportConfig.reportModel;
@@ -345,6 +408,38 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
         return "unknown";
       }
     }
+  }
+
+  /**
+   * Fetch the run a report is about.
+   *
+   * @throws When the API does not return the run (missing run, API outage);
+   *   the base processor then records the failure.
+   */
+  private async fetchRun(requestId: string): Promise<Pick<RequestDocument, "run">> {
+    const response = await fetch(`${this.reportConfig.apiBaseUrl}/api/v1/requests/${encodeURIComponent(requestId)}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch run ${requestId} for report readiness: ${response.status}`);
+    }
+    return await response.json() as Pick<RequestDocument, "run">;
+  }
+
+  /**
+   * Fail a report whose run produced nothing to assess, with an explicit
+   * reason instead of a misleading 0% implementation score.
+   */
+  private async markNonEvaluable(
+    reportId: string,
+    reason: string,
+    log: (level: LogEvent["level"], msg: string, data?: Record<string, unknown>) => Promise<void>,
+  ): Promise<void> {
+    const error = `Non-evaluable run: ${reason}`;
+    await withRetry(() => this.collection.updateOne(
+      { _id: reportId } as any,
+      { $set: { status: "failed", error, updatedAt: new Date() } } as any,
+    ));
+    await log("warn", error, { final: true });
+    trackEvent({ name: "report_generator.run_non_evaluable", properties: { reportId } });
   }
 
   /**
