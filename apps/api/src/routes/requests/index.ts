@@ -2184,6 +2184,21 @@ apiRoute(ctx.app, ctx.registry, {
   },
 });
 
+/**
+ * Soft-delete every still-active report generated for the given runs, so a
+ * deleted run no longer surfaces its reports in report lists, status rollups,
+ * or insight back-references.
+ *
+ * @param runIds - Ids of runs that were just soft-deleted.
+ * @param deletedAt - Timestamp stamped on the runs, reused for their reports.
+ */
+async function softDeleteRunReports(runIds: string[], deletedAt: Date): Promise<void> {
+  await ctx.reportCollection.updateMany(
+    { requestId: { $in: runIds }, deletedAt: { $exists: false } },
+    { $set: { deletedAt } }
+  );
+}
+
 // Bulk soft-delete requests
 apiRoute(ctx.app, ctx.registry, {
   method: "delete",
@@ -2208,10 +2223,17 @@ apiRoute(ctx.app, ctx.registry, {
     const existingIds = new Set(existingDocs.map(d => d._id));
 
     // Soft-delete all matching documents
+    const deletedAt = new Date();
     const result = await ctx.requestCollection.updateMany(
       { _id: { $in: ids }, deletedAt: { $exists: false } },
-      { $set: { deletedAt: new Date() } }
+      { $set: { deletedAt } }
     );
+
+    // Cascade to the deleted runs' reports. Skip the query when nothing was
+    // deleted so we never issue a no-op `$in: []` update.
+    if (existingIds.size > 0) {
+      await softDeleteRunReports([...existingIds], deletedAt);
+    }
 
     // Determine which IDs were not found or already deleted
     const notFound = ids.filter(id => !existingIds.has(id));
@@ -2235,9 +2257,10 @@ apiRoute(ctx.app, ctx.registry, {
   handler: async (req, res) => {
     const { id } = req.params;
 
+    const deletedAt = new Date();
     const result = await ctx.requestCollection.updateOne(
       { _id: id, deletedAt: { $exists: false } },
-      { $set: { deletedAt: new Date() } }
+      { $set: { deletedAt } }
     );
 
     if (result.matchedCount === 0) {
@@ -2249,6 +2272,8 @@ apiRoute(ctx.app, ctx.registry, {
       }
       return;
     }
+
+    await softDeleteRunReports([id], deletedAt);
 
     res.json({ id, deleted: true });
   },
@@ -2989,7 +3014,7 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       const reports = await ctx.reportCollection
-        .find({ requestId: id })
+        .find({ requestId: id, deletedAt: { $exists: false } })
         .sort({ createdAt: -1 })
         .toArray();
 

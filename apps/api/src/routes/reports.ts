@@ -123,7 +123,7 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       const reports = await ctx.reportCollection
-        .find(filter)
+        .find({ ...filter, deletedAt: { $exists: false } })
         .sort({ createdAt: -1 })
         .toArray();
 
@@ -222,7 +222,7 @@ apiRoute(ctx.app, ctx.registry, {
 
       // Find the latest report for each requestId
       const reports = await ctx.reportCollection
-        .find({ requestId: { $in: requestIds } })
+        .find({ requestId: { $in: requestIds }, deletedAt: { $exists: false } })
         .sort({ createdAt: -1 })
         .toArray();
 
@@ -267,7 +267,7 @@ apiRoute(ctx.app, ctx.registry, {
       // Aggregation: group by (requestId, templateId), keep latest status per
       // template, then roll up into per-requestId status counts.
       const pipeline = [
-        { $match: { requestId: { $in: requestIds } } },
+        { $match: { requestId: { $in: requestIds }, deletedAt: { $exists: false } } },
         { $sort: { createdAt: -1 as const } },
         // Keep only the latest report per (requestId, templateId)
         {
@@ -323,7 +323,7 @@ apiRoute(ctx.app, ctx.registry, {
     try {
       const { id } = req.params;
 
-      const report = await ctx.reportCollection.findOne({ _id: id });
+      const report = await ctx.reportCollection.findOne({ _id: id, deletedAt: { $exists: false } });
 
       if (!report) {
         res.status(404).json({ error: "Report not found" });
@@ -354,7 +354,7 @@ apiRoute(ctx.app, ctx.registry, {
       const { id } = req.params;
       const fromStart = req.query.fromStart === "true";
 
-      const report = await ctx.reportCollection.findOne({ _id: id });
+      const report = await ctx.reportCollection.findOne({ _id: id, deletedAt: { $exists: false } });
 
       if (!report) {
         res.status(404).json({ error: "Report not found" });
@@ -646,7 +646,7 @@ apiRoute(ctx.app, ctx.registry, {
   handler: async (req, res, next) => {
     try {
       const { id } = req.params;
-      const report = await ctx.reportCollection.findOne({ _id: id });
+      const report = await ctx.reportCollection.findOne({ _id: id, deletedAt: { $exists: false } });
       if (!report) {
         res.status(404).json({ error: "Report not found" });
         return;
