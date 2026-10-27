@@ -141,4 +141,30 @@ describe("extractHarMetadata", () => {
     );
     expect(tokenLogCalls).toHaveLength(0);
   });
+
+  it("warns when the model was called but no usage was recorded", async () => {
+    const har = harWithToolCallsAndUsage();
+    const content = har.log.entries[0].response.content;
+    const body = JSON.parse(content.text!);
+    delete body.usage;
+    content.text = JSON.stringify(body);
+
+    const log = vi.fn();
+    const result = await extractHarMetadata(har, "/tmp/test.har", log);
+
+    expect(result.tokenUsage).toBeUndefined();
+    expect(result.aiCallCount).toBe(1);
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "No token usage found in HAR despite 1 AI call(s); this turn will have no tokenUsage",
+      { aiCallCount: 1, harEntryCount: 1, harFilePath: "/tmp/test.har" },
+    );
+  });
+
+  it("does not warn about missing usage when the HAR has no AI calls", async () => {
+    const log = vi.fn();
+    await extractHarMetadata(emptyHar(), null, log);
+
+    expect(log.mock.calls.some(([level]) => level === "warn")).toBe(false);
+  });
 });

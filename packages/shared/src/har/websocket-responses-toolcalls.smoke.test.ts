@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from "vitest";
 import { fileURLToPath } from "node:url";
-import { parseHarFile, extractToolCalls } from "./har-parser.js";
+import { parseHarFile, extractToolCalls, extractTokenUsage } from "./har-parser.js";
 
 /**
  * Smoke test (#1253): a realistic HAR mirroring the exact gateway
@@ -54,5 +54,12 @@ describe("extractToolCalls — WebSocket Responses API smoke test (real gateway 
     // later request), so it has no matched result.
     expect(byId["call_done"]).toMatchObject({ name: "task_complete" });
     expect(byId["call_done"].response).toBeUndefined();
+  });
+
+  it("sums token usage from the response.completed frames (#472)", async () => {
+    const har = await parseHarFile(fixturePath);
+
+    // Two responses in the fixture: 120 + 400 input, 40 + 60 output tokens.
+    expect(extractTokenUsage(har)).toEqual({ promptTokens: 520, completionTokens: 100, totalTokens: 620 });
   });
 });

@@ -32,7 +32,7 @@
  */
 
 import { readFile, writeFile } from "node:fs/promises";
-import type { HarFile, HarEntry, HarNameValue, ToolCall } from "./types.js";
+import type { HarFile, HarEntry, HarNameValue, HarWebSocketMessage, ToolCall } from "./types.js";
 import type { TokenUsage } from "../types/types.js";
 import {
   extractResponsesApiToolCallsFromBody,
@@ -541,6 +541,11 @@ export function extractThinkingContent(har: HarFile): string {
  *  cache_creation_input_tokens / cache_read_input_tokens which are added to the
  *  prompt count since Anthropic's `input_tokens` excludes cached tokens).
  *
+ * Also reads WebSocket entries (gateway `_webSocketMessages`): when the
+ * Responses API runs over a WebSocket, each `receive` text frame is one
+ * streamed event, and `response.completed` carries `response.usage`, exactly
+ * like the SSE `data:` payloads of the HTTP transport (#472).
+ *
  * Sums usage across all matching responses in the HAR.
  * Returns undefined if no token usage data is found.
  */
@@ -551,6 +556,11 @@ export function extractTokenUsage(har: HarFile): TokenUsage | undefined {
   let found = false;
 
   for (const entry of har.log.entries) {
+    // WebSocket connections carry their events in frames, not an HTTP body.
+    if (accumulateWebSocketUsage(entry._webSocketMessages)) {
+      found = true;
+    }
+
     const body = getResponseBody(entry);
     if (!body) continue;
 
@@ -583,7 +593,7 @@ export function extractTokenUsage(har: HarFile): TokenUsage | undefined {
 
   if (!found) {
     // Fallback: extract from telemetry POST request bodies (for WebSocket runs
-    // where response bodies are empty). The Copilot CLI emits `assistant_usage`
+    // whose frames were not captured, so neither bodies nor frames carry usage). The Copilot CLI emits `assistant_usage`
     // events to the telemetry endpoint with metrics.{input_tokens, output_tokens}.
     const telemetryResult = extractTokenUsageFromTelemetry(har);
     if (telemetryResult) return telemetryResult;
@@ -591,6 +601,31 @@ export function extractTokenUsage(har: HarFile): TokenUsage | undefined {
   }
 
   return { promptTokens, completionTokens, totalTokens };
+
+  /**
+   * Add usage from a connection's server→client text frames. Send frames are
+   * client requests and binary/unparseable frames carry no JSON, so both are
+   * skipped. Returns true when any frame contributed usage.
+   */
+  function accumulateWebSocketUsage(messages: HarWebSocketMessage[] | undefined): boolean {
+    if (!Array.isArray(messages)) return false;
+
+    let foundInFrames = false;
+    for (const frame of messages) {
+      if (!frame || frame.type !== "receive" || frame.opcode === 2) continue;
+      if (typeof frame.data !== "string" || !frame.data) continue;
+
+      try {
+        const json = JSON.parse(frame.data);
+        if (json && typeof json === "object" && accumulateUsage(json)) {
+          foundInFrames = true;
+        }
+      } catch {
+        continue;
+      }
+    }
+    return foundInFrames;
+  }
 
   function accumulateUsage(json: Record<string, unknown>): boolean {
     // Check top-level usage first, then nested response.usage (Responses API)

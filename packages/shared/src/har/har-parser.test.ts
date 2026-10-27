@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { parseHarFile, extractToolCalls, sanitizeHar, extractThinkingContent, extractTokenUsage, extractAiCallCount, extractTokenUsageFromTelemetry, countAiCallsFromTelemetry } from "./har-parser.js";
 import type { HarFile, ToolCall } from "./types.js";
-import { makeHar, makeEntry } from "./test-helpers.js";
+import { makeHar, makeEntry, makeWsEntry } from "./test-helpers.js";
 
 // Mock fs/promises for parseHarFile tests
 vi.mock("node:fs/promises", () => ({
@@ -990,6 +990,54 @@ describe("extractTokenUsage", () => {
       makeEntry({}),
     ]);
     expect(extractTokenUsage(har)).toBeUndefined();
+  });
+
+  describe("Responses API over WebSocket (#472)", () => {
+    const recv = (obj: unknown) => ({ type: "receive" as const, data: JSON.stringify(obj) });
+    const send = (obj: unknown) => ({ type: "send" as const, data: JSON.stringify(obj) });
+
+    it("sums response.completed usage from receive frames", () => {
+      const har = makeHar([
+        makeWsEntry({
+          messages: [
+            send({ type: "response.create", input: [] }),
+            // created / in_progress carry `response.usage: null` and must not count.
+            recv({ type: "response.created", response: { id: "r1", usage: null } }),
+            recv({ type: "response.in_progress", response: { id: "r1", usage: null } }),
+            recv({ type: "response.completed", response: { id: "r1", usage: { input_tokens: 120, output_tokens: 40, total_tokens: 160 } } }),
+            recv({ type: "response.completed", response: { id: "r2", usage: { input_tokens: 400, output_tokens: 60, total_tokens: 460 } } }),
+          ],
+        }),
+      ]);
+
+      expect(extractTokenUsage(har)).toEqual({ promptTokens: 520, completionTokens: 100, totalTokens: 620 });
+    });
+
+    it("ignores send frames, binary frames and unparseable frames", () => {
+      const usage = { input_tokens: 10, output_tokens: 5, total_tokens: 15 };
+      const har = makeHar([
+        makeWsEntry({
+          messages: [
+            send({ type: "response.create", usage }),
+            { ...recv({ type: "response.completed", response: { usage } }), opcode: 2 },
+            { type: "receive", data: "not json" },
+          ],
+        }),
+      ]);
+
+      expect(extractTokenUsage(har)).toBeUndefined();
+    });
+
+    it("adds WebSocket usage to HTTP usage in the same HAR", () => {
+      const har = makeHar([
+        makeEntry({ responseBody: { usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 } } }),
+        makeWsEntry({
+          messages: [recv({ type: "response.completed", response: { usage: { input_tokens: 20, output_tokens: 10, total_tokens: 30 } } })],
+        }),
+      ]);
+
+      expect(extractTokenUsage(har)).toEqual({ promptTokens: 120, completionTokens: 60, totalTokens: 180 });
+    });
   });
 });
 
