@@ -3,7 +3,7 @@
 
 import express, { Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
-import { evaluateWorkspace } from "./judge-agent.js";
+import { evaluateWorkspace, usesProjectScopedCriteria } from "./judge-agent.js";
 import { verifyCopilotProtocol } from "./protocol-check.js";
 import { resolveCurrentIteration, mapIterationToolCallUrls } from "./tool-call-history.js";
 import { BlobStorage, RedisLogPublisher } from "shared";
@@ -79,6 +79,16 @@ app.post(
 
       if (conversationHistory && !Array.isArray(conversationHistory)) {
         res.status(400).json({ error: "conversationHistory must be an array" });
+        return;
+      }
+
+      // Criteria are project-scoped; never fall back to the global scope.
+      if (projectId !== undefined && (typeof projectId !== "string" || projectId.length === 0)) {
+        res.status(400).json({ error: "projectId must be a non-empty string" });
+        return;
+      }
+      if (!projectId && usesProjectScopedCriteria()) {
+        res.status(400).json({ error: "projectId is required to resolve project-scoped criteria" });
         return;
       }
 

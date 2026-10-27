@@ -40,6 +40,32 @@ export interface EvaluationResult {
 }
 
 /**
+ * Whether criteria are resolved through the project-scoped REST API.
+ * The filesystem provider (local dev) is single-tenant and ignores projectId.
+ */
+export function usesProjectScopedCriteria(): boolean {
+  return Boolean(process.env.CRITERIA_API_URL);
+}
+
+/**
+ * Fail closed when a run reaches the judge without a project scope.
+ *
+ * Criteria are isolated per project, so an unscoped REST lookup would
+ * silently resolve the legacy/global criteria and produce a wrong evaluation
+ * instead of an error (issue #1303).
+ *
+ * @param projectId - The run's project, if known.
+ * @throws When criteria come from the REST API and `projectId` is absent.
+ */
+export function assertProjectScope(projectId: string | undefined): void {
+  if (!projectId && usesProjectScopedCriteria()) {
+    throw new Error(
+      "Evaluation has no projectId — refusing to resolve criteria outside a project scope",
+    );
+  }
+}
+
+/**
  * Evaluate workspace against criteria using the sophisticated DAG system
  *
  * This function:
@@ -63,6 +89,7 @@ export async function evaluateWorkspace(
     process.env.FEEDBACK_DESCENDANT_GUARD !== "false";
 
   // 3. Resolve criteria IDs from provider (with ancestor dependencies)
+  assertProjectScope(input.projectId);
   let normalizedCriteria: CriteriaConfig[];
   try {
     const provider = getCriteriaProvider(input.projectId);
