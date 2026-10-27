@@ -16,6 +16,8 @@ const CRITERIA: CriteriaDocument[] = [
   { id: "crit_a", prompt: "criterion a" } as CriteriaDocument,
   { id: "crit_b", prompt: "criterion b" } as CriteriaDocument,
   { id: "crit_c", prompt: "criterion c" } as CriteriaDocument,
+  { id: "observation_a", prompt: "record a", kind: "observation", createdAt: "" },
+  { id: "observation_b", prompt: "record b", kind: "observation", createdAt: "" },
 ];
 
 vi.mock("@/lib/api", () => ({
@@ -39,12 +41,14 @@ function Harness({
   parentCandidates = true,
   childCandidates = true,
   generationError,
+  observationMode = false,
 }: {
   initialParents?: string[];
   initialChildren?: string[];
   parentCandidates?: boolean;
   childCandidates?: boolean;
   generationError?: unknown;
+  observationMode?: boolean;
 }) {
   const [dependsOn, setDependsOn] = useState<string[]>(initialParents);
   const [acceptedChildren, setAcceptedChildren] = useState<string[]>(initialChildren);
@@ -57,6 +61,7 @@ function Harness({
     // undefined gates = universal, so the gate-compat filter admits every
     // candidate and cross-exclusion is the only thing removing ids.
     gates: undefined,
+    kind: observationMode ? "observation" : "gate",
     prompt: "p",
     setPrompt: () => {},
     aiGenerated: false,
@@ -74,7 +79,7 @@ function Harness({
     createMutation: noopMutation,
   } as unknown as CriteriaWizardState;
 
-  return <CriteriaWizardStep2 wizard={wizard} />;
+  return <CriteriaWizardStep2 wizard={wizard} observationMode={observationMode} />;
 }
 
 function renderStep2(props: Parameters<typeof Harness>[0]) {
@@ -184,5 +189,24 @@ describe("CriteriaWizardStep2 — generation errors", () => {
         `AI generation failed — ${PORTAL_AI_REGISTRATION_GUIDANCE}`,
       ),
     ).toBeTruthy();
+  });
+});
+
+describe("CriteriaWizardStep2 — Observation mode", () => {
+  it("restricts dependency choices to observations and preserves cross-exclusion", async () => {
+    renderStep2({
+      observationMode: true,
+      initialParents: ["observation_a"],
+      parentCandidates: false,
+      childCandidates: false,
+    });
+    const inputs = await screen.findAllByPlaceholderText("Search observations…");
+    fireEvent.focus(inputs[1]);
+    expect(openDropdownText()).toContain("observation_b");
+    expect(openDropdownText()).not.toContain("observation_a");
+    expect(openDropdownText()).not.toContain("crit_a");
+    expect(screen.queryByText(/No gate-compatible criteria/)).toBeNull();
+    expect(screen.getByText("Observation Prompt")).toBeTruthy();
+    expect(screen.queryByText("Kind", { exact: true })).toBeNull();
   });
 });

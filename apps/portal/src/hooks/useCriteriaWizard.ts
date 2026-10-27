@@ -22,6 +22,8 @@ export interface UseCriteriaWizardOptions {
   initialSubject?: CriterionSubject;
   /** Called with the new criterion ID after successful creation */
   onSuccess: (id: string) => void;
+  /** User-facing entity name for notifications. */
+  entityLabel?: "Criterion" | "Observation";
 }
 
 export function useCriteriaWizard({
@@ -32,6 +34,7 @@ export function useCriteriaWizard({
   initialTaxonomyElementId,
   initialSubject = "run",
   onSuccess,
+  entityLabel = "Criterion",
 }: UseCriteriaWizardOptions) {
   const queryClient = useQueryClient();
 
@@ -202,11 +205,14 @@ export function useCriteriaWizard({
         }),
       );
       queryClient.invalidateQueries({ queryKey: ["criteria"] });
-      toast.success(`Criterion "${data.id}" created`);
+      toast.success(`${entityLabel} "${data.id}" created`);
       if (failedChildren.length > 0) {
+        const childLabel = entityLabel === "Observation"
+          ? failedChildren.length === 1 ? "observation" : "observations"
+          : failedChildren.length === 1 ? "criterion" : "criteria";
         toast.warning(
           `Created "${data.id}", but couldn't link ${failedChildren.length} child ` +
-            `${failedChildren.length === 1 ? "criterion" : "criteria"} ` +
+            `${childLabel} ` +
             `(${failedChildren.join(", ")}). Add the dependency manually.`,
         );
       }

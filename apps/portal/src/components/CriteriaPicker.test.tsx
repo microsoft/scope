@@ -9,8 +9,9 @@ import { CriteriaPicker } from "./CriteriaPicker";
 import type { CriteriaDocument } from "@/types";
 
 const CRITERIA: CriteriaDocument[] = [
-  { id: "crit_a", prompt: "a" } as CriteriaDocument,
-  { id: "crit_b", prompt: "b" } as CriteriaDocument,
+  { id: "crit_a", prompt: "a", createdAt: "" },
+  { id: "crit_b", prompt: "b", createdAt: "" },
+  { id: "observation_a", prompt: "record a", kind: "observation", createdAt: "" },
 ];
 
 vi.mock("@/lib/api", () => ({
@@ -59,5 +60,23 @@ describe("CriteriaPicker dropdown", () => {
     const option = await screen.findByRole("button", { name: /crit_a/ });
     fireEvent.click(option);
     expect(selected).toEqual(["crit_a"]);
+  });
+
+  it("uses specialized copy without admitting gate criteria to observation suggestions", async () => {
+    const onChange = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <CriteriaPicker selected={[]} onChange={onChange} kind="observation" entityLabel="observations" />
+      </QueryClientProvider>,
+    );
+    const input = await screen.findByPlaceholderText("Search observations…");
+    fireEvent.focus(input);
+    expect(screen.queryByRole("button", { name: /crit_a/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /observation_a/ }));
+    expect(onChange).toHaveBeenCalledWith(["observation_a"]);
+
+    fireEvent.change(input, { target: { value: "missing" } });
+    expect(screen.getByText("No matching observations")).toBeTruthy();
   });
 });
