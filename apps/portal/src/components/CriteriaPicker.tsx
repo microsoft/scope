@@ -117,6 +117,11 @@ export function CriteriaPicker({ selected, onChange, aiSuggested = [], inputId, 
   // overflow-y-auto scroll containers (e.g. dialogs).
   const [dropdownStyle, setDropdownStyle] = useState<CSSProperties>({ pointerEvents: "auto" });
 
+  // Stable key for the current selection. Adding or removing a badge can wrap
+  // the badge row and move the input while the dropdown stays open, so the
+  // position must be recomputed whenever the selection changes (#1186).
+  const selectionKey = selected.join("\u0000");
+
   useEffect(() => {
     if (!open || !inputRef.current) return;
     let rafId: number | undefined;
@@ -160,16 +165,26 @@ export function CriteriaPicker({ selected, onChange, aiSuggested = [], inputId, 
     };
     updatePosition();
 
+    // Follow layout shifts that fire no scroll/resize event: the badge row
+    // wrapping onto a new line grows the picker and pushes the input down.
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? undefined
+      : new ResizeObserver(scheduleUpdatePosition);
+    if (containerRef.current) {
+      resizeObserver?.observe(containerRef.current);
+    }
+
     window.addEventListener("scroll", scheduleUpdatePosition, true);
     window.addEventListener("resize", scheduleUpdatePosition);
     return () => {
       if (rafId !== undefined) {
         window.cancelAnimationFrame(rafId);
       }
+      resizeObserver?.disconnect();
       window.removeEventListener("scroll", scheduleUpdatePosition, true);
       window.removeEventListener("resize", scheduleUpdatePosition);
     };
-  }, [open]);
+  }, [open, selectionKey]);
 
   if (isLoading) {
     return <Skeleton className="h-9 w-full" />;

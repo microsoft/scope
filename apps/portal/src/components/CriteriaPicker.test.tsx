@@ -60,4 +60,42 @@ describe("CriteriaPicker dropdown", () => {
     fireEvent.click(option);
     expect(selected).toEqual(["crit_a"]);
   });
+
+  // Regression (#1186): adding a criterion can wrap the badge row and push the
+  // input down while the dropdown is still open. The dropdown must follow the
+  // input instead of staying where it was and covering the text field.
+  it("repositions the open dropdown when the selection moves the input", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let inputBottom = 40;
+    const view = render(
+      <QueryClientProvider client={qc}>
+        <CriteriaPicker selected={[]} onChange={() => {}} />
+      </QueryClientProvider>,
+    );
+    const input = await screen.findByPlaceholderText("Type to search criteria…");
+    vi.spyOn(input, "getBoundingClientRect").mockImplementation(
+      () => ({ top: inputBottom - 36, bottom: inputBottom, left: 10, width: 300 }) as DOMRect,
+    );
+    fireEvent.focus(input);
+
+    const portal = await waitFor(() => {
+      const p = document.querySelector("[data-criteria-picker-portal]") as HTMLElement | null;
+      if (!p) throw new Error("dropdown not open");
+      return p;
+    });
+    expect(portal.style.top).toBe("44px");
+
+    // A new badge wraps onto a second row and pushes the input down.
+    inputBottom = 72;
+    view.rerender(
+      <QueryClientProvider client={qc}>
+        <CriteriaPicker selected={["crit_a"]} onChange={() => {}} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      const p = document.querySelector("[data-criteria-picker-portal]") as HTMLElement;
+      expect(p.style.top).toBe("76px");
+    });
+  });
 });
