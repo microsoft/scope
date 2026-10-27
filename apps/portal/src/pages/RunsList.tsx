@@ -56,7 +56,7 @@ import { isAgentAvailable, isAgentVersionAvailable, STATUS_LIST, OUTCOME_LIST } 
 import type { Run, RunStatus, RunOutcome, IterationOp, BulkResubmitOverrides, RunSortField, RunFacetBucket } from "@/types";
 import { buildRunWorkerFilterOptions } from "./run-worker-filter-options";
 
-const FILTER_KEYS = ["worker", "status", "outcome", "taskPromptId", "submissionId", "criteria", "model", "profile", "os", "priority", "version", "dateFrom", "dateTo", "groupBy", "turns", "turnsOp", "maxIter", "maxIterOp"] as const;
+const FILTER_KEYS = ["worker", "status", "outcome", "taskPromptId", "submissionId", "experimentId", "criteria", "model", "profile", "os", "priority", "version", "dateFrom", "dateTo", "groupBy", "turns", "turnsOp", "maxIter", "maxIterOp"] as const;
 
 /**
  * Describes how to fetch a given (1-based) page from the cursor-paginated
@@ -137,12 +137,14 @@ const GROUP_MEMBER_PAGE = 100;
  * the `__empty__` sentinel so the API matches rows lacking the field).
  */
 function groupKeyExtraFilter(
-  groupBy: "task" | "submissionId" | "profile",
+  groupBy: "task" | "submissionId" | "profile" | "experiment",
   key: string,
-): { taskPromptId?: string; submissionId?: string; profileId?: string[] } {
+): { taskPromptId?: string; submissionId?: string; profileId?: string[]; experimentId?: string[] } {
   if (groupBy === "task") return { taskPromptId: key };
   if (groupBy === "profile")
     return { profileId: [key === "no-profile" ? EMPTY_FILTER_VALUE : key] };
+  if (groupBy === "experiment")
+    return { experimentId: [key === "no-experiment" ? EMPTY_FILTER_VALUE : key] };
   return { submissionId: key === "no-submission" ? EMPTY_FILTER_VALUE : key };
 }
 
@@ -314,6 +316,7 @@ const COLUMN_OPTIONS: CustomizeColumnsOption[] = [
   { id: "status", label: "Status" },
   { id: "outcome", label: "Outcome" },
   { id: "submission", label: "Submission" },
+  { id: "experiment", label: "Experiment" },
   { id: "task", label: "Task" },
   { id: "criteria", label: "Criteria" },
   { id: "worker", label: "Worker" },
@@ -339,18 +342,19 @@ const COLUMN_IDS = COLUMN_OPTIONS.map((o) => o.id);
 
 // Segmented toggle used in the list header for the Group By control. Kept
 // inline because it is only used here.
-const GROUP_BY_OPTIONS: ReadonlyArray<{ value: "profile" | "task" | "submissionId"; label: string }> = [
+const GROUP_BY_OPTIONS: ReadonlyArray<{ value: "profile" | "task" | "submissionId" | "experiment"; label: string }> = [
   { value: "profile", label: "Profile" },
   { value: "task", label: "Task" },
   { value: "submissionId", label: "Submission" },
+  { value: "experiment", label: "Experiment" },
 ];
 
 function GroupByToggle({
   value,
   onChange,
 }: {
-  value: "none" | "profile" | "task" | "submissionId";
-  onChange: (next: "none" | "profile" | "task" | "submissionId") => void;
+  value: "none" | "profile" | "task" | "submissionId" | "experiment";
+  onChange: (next: "none" | "profile" | "task" | "submissionId" | "experiment") => void;
 }) {
   return (
     <div
@@ -502,7 +506,7 @@ export function RunsList() {
   const [groupMemberPages, setGroupMemberPages] = useState<Record<string, number>>({});
   
   // Get groupBy from URL state
-  const groupBy = (state.getFilter("groupBy") ?? "none") as "none" | "profile" | "task" | "submissionId";
+  const groupBy = (state.getFilter("groupBy") ?? "none") as "none" | "profile" | "task" | "submissionId" | "experiment";
 
   // Cursor pagination — keep a stack of cursors that map a virtual page number
   // to a fetch instruction. Each entry describes how to fetch that page:
@@ -535,6 +539,7 @@ export function RunsList() {
         outcome: state.getFilterList("outcome"),
         taskPromptId: state.getFilter("taskPromptId"),
         submissionId: state.getFilter("submissionId"),
+        experimentId: state.getFilter("experimentId"),
         criteria: state.getFilter("criteria"),
         model: state.getFilterList("model"),
         profile: state.getFilterList("profile"),
@@ -580,6 +585,7 @@ export function RunsList() {
   const versions = state.getFilterList("version");
   const taskPromptId = state.getFilter("taskPromptId") ?? undefined;
   const submissionId = state.getFilter("submissionId") ?? undefined;
+  const experimentId = state.getFilter("experimentId") ?? undefined;
   const criteria = state.getFilter("criteria") ?? undefined;
   const dateFrom = state.getFilter("dateFrom");
   const dateTo = state.getFilter("dateTo");
@@ -632,6 +638,7 @@ export function RunsList() {
       profileId: asArray(profiles),
       taskPromptId,
       submissionId,
+      experimentId,
       criteria,
       search: searchValue,
       createdAfter,
@@ -653,6 +660,7 @@ export function RunsList() {
       profiles.join(","),
       taskPromptId,
       submissionId,
+      experimentId,
       criteria,
       searchValue,
       createdAfter,
@@ -741,7 +749,7 @@ export function RunsList() {
     enabled: groupBy !== "none",
     queryFn: () =>
       api.listRunGroups({
-        groupBy: groupBy as "task" | "submissionId" | "profile",
+        groupBy: groupBy as "task" | "submissionId" | "profile" | "experiment",
         ...runFilterArgs,
         sortBy,
         sortDir,
@@ -776,7 +784,7 @@ export function RunsList() {
     // Keep the already-loaded member rows visible while a "Load more" refetch runs.
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const gb = groupBy as "task" | "submissionId" | "profile";
+      const gb = groupBy as "task" | "submissionId" | "profile" | "experiment";
       const entries = await Promise.all(
         expandedKeyList.map(async (key) => {
           // Walk the list cursor up to the group's requested page count. The list
@@ -1351,6 +1359,18 @@ export function RunsList() {
       cell: (r) =>
         r.submissionId ? (
           <ShortId id={r.submissionId} label="submission ID" />
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "experiment",
+      header: "Experiment",
+      width: "140px",
+      hidden: columnVisibility.isHidden("experiment"),
+      cell: (r) =>
+        r.experimentId ? (
+          <span className="font-mono text-xs">{r.experimentId}</span>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         ),
@@ -2243,6 +2263,8 @@ export function RunsList() {
                       return run.taskPromptId ?? "";
                     case "submissionId":
                       return run.submissionId ?? "no-submission";
+                    case "experiment":
+                      return run.experimentId ?? "no-experiment";
                     default:
                       return "";
                   }
@@ -2507,6 +2529,8 @@ export function RunsList() {
                   switch (column.id) {
                     case "submission":
                       return distinct("submissions", (r) => r.submissionId);
+                    case "experiment":
+                      return distinct("experiments", (r) => r.experimentId);
                     case "task":
                       return distinct("tasks", (r) => r.scenario?.task);
                     case "worker":
@@ -2660,7 +2684,14 @@ export function RunsList() {
                   return runs[0] ? column.cell(runs[0]) : null;
                 },
                 renderGroupHeader: (groupKey, runs, expanded) => {
-                  const groupLabel = groupBy === "submissionId" ? "Submission ID" : groupBy === "profile" ? "Profile" : "Task";
+                  const groupLabel =
+                    groupBy === "submissionId"
+                      ? "Submission ID"
+                      : groupBy === "profile"
+                        ? "Profile"
+                        : groupBy === "experiment"
+                          ? "Experiment"
+                          : "Task";
                   const groupDisplayKey =
                     groupBy === "profile" && groupKey !== "no-profile"
                       ? (profileNameById.get(groupKey) ?? formatId(groupKey))
