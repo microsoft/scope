@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { RetryConfirmDialog } from "@/components/RetryConfirmDialog";
 import { Button } from "@/components/ui/button";
+import { ArtifactDownloadButton } from "@/components/ArtifactDownloadButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -285,10 +286,10 @@ export function RunDetail() {
 
   // Fetch all attempts when this request has been retried
   const hasMultipleAttempts = (run?.run?.attemptNumber ?? 1) > 1;
-  const { data: rawAttempts } = useQuery({
+  const { data: rawAttempts, isPending: loadingAttempts, error: attemptsError } = useQuery({
     queryKey: ["run-attempts", id],
     queryFn: () => api.listRunAttempts(id!),
-    enabled: !!id && hasMultipleAttempts,
+    enabled: !!id && !!run && (hasMultipleAttempts || (!!selectedRunId && selectedRunId !== run.run?._id)),
   });
 
   // Merge the live run.run into the attempts list so the latest attempt
@@ -302,10 +303,10 @@ export function RunDetail() {
 
   // When viewing a historical attempt via ?runId=xxx, use that RunState
   // instead of the current one. The selected attempt may come from the
-  // attempts list or fall back to the current run.
+  // attempts list. Never substitute the latest run for missing historical data.
   const activeRun: RunState | undefined = useMemo(() => {
     if (!selectedRunId || selectedRunId === run?.run?._id) return run?.run;
-    return attempts?.find((a) => a._id === selectedRunId) ?? run?.run;
+    return attempts?.find((a) => a._id === selectedRunId);
   }, [selectedRunId, run?.run, attempts]);
   const isViewingHistorical = !!selectedRunId && selectedRunId !== run?.run?._id;
 
@@ -328,7 +329,7 @@ export function RunDetail() {
 
   const logStream = useLogStream({
     id: run?._id ?? "",
-    enabled: !!run,
+    enabled: !!run && !!activeRun,
     fromStart: true,
     attemptNumber: activeRun?.attemptNumber,
     urlBuilder: logStreamUrlBuilder,
@@ -518,6 +519,20 @@ export function RunDetail() {
         <div className="text-center py-12 text-destructive">
           {error instanceof Error ? error.message : "Run not found"}
         </div>
+      </div>
+    );
+  }
+
+  if (isViewingHistorical && !activeRun) {
+    return (
+      <div className="space-y-4">
+        <Link to={`/runs/${run._id}`}><Button variant="ghost" className="gap-1.5">
+          <ArrowLeft className="h-4 w-4" /> Back to latest attempt
+        </Button></Link>
+        {loadingAttempts ? <p role="status">Loading selected run attempt...</p> :
+          <p role="alert" className="text-destructive">
+            {attemptsError ? `Unable to load selected run attempt: ${attemptsError.message}` : "Selected run attempt not found."}
+          </p>}
       </div>
     );
   }
@@ -832,15 +847,16 @@ export function RunDetail() {
             </div>
           )}
           {activeRun?.turns && activeRun?.turns.some(t => t.snapshotUrl) && (
-            <Button
+            <ArtifactDownloadButton
               variant="outline"
               size="sm"
               className="gap-1.5"
-              onClick={() => window.open(isViewingHistorical && activeRun?._id ? api.runArchiveUrl(run._id, activeRun._id) : api.archiveUrl(run._id), "_blank")}
+              url={activeRun?._id ? api.runArchiveUrl(run._id, activeRun._id) : api.archiveUrl(run._id)}
+              filename={`${run._id}.tar.gz`}
             >
               <Archive className="h-4 w-4" />
               Download Archive
-            </Button>
+            </ArtifactDownloadButton>
           )}
           {canShowRetry && (
             <Button
@@ -997,7 +1013,7 @@ export function RunDetail() {
                     </div>
                     <div className="py-3 pl-5 pr-4">
                       {turns.length > 0 ? (
-                        <TurnTimeline turns={turns} runId={run._id} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
+                        <TurnTimeline key={activeRun?._id} turns={turns} runId={run._id} attemptRunId={activeRun?._id} />
                       ) : (
                         <p className="py-1 text-sm italic text-muted-foreground">
                           {phase === "running" ? "Running — first iteration in progress…" : phase === "pending" ? "Waiting for earlier gates to finish…" : "No iterations recorded."}
@@ -1009,14 +1025,14 @@ export function RunDetail() {
               })}
             </div>
           ) : (
-            <TurnTimeline turns={activeRun?.turns ?? []} runId={run._id} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
+            <TurnTimeline key={activeRun?._id} turns={activeRun?.turns ?? []} runId={run._id} attemptRunId={activeRun?._id} />
           )}
         </TabsContent>
 
         {/* Conversation tab — chat-style view of agent/judge exchanges */}
         {activeRun?.turns && activeRun?.turns.length > 0 && (
           <TabsContent value="conversation" className="mt-4">
-            <ConversationView turns={activeRun?.turns} task={run.scenario?.task} runId={run._id} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
+            <ConversationView key={activeRun?._id} turns={activeRun?.turns} task={run.scenario?.task} runId={run._id} attemptRunId={activeRun?._id} />
           </TabsContent>
         )}
 
@@ -1025,9 +1041,9 @@ export function RunDetail() {
           <TabsContent value="network" className="mt-4">
             {/* If multi-turn, show per-iteration selector; otherwise one viewer */}
             {activeRun?.turns && activeRun?.turns.some(t => t.harUrl) ? (
-              <HarIterationTabs runId={run._id} turns={activeRun?.turns} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
+              <HarIterationTabs key={activeRun?._id} runId={run._id} turns={activeRun?.turns} attemptRunId={activeRun?._id} />
             ) : (
-              <HarNetworkViewer runId={run._id} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
+              <HarNetworkViewer runId={run._id} attemptRunId={activeRun?._id} />
             )}
           </TabsContent>
         )}
@@ -1036,17 +1052,17 @@ export function RunDetail() {
         {hasVideoData && (
           <TabsContent value="video" className="mt-4">
             {activeRun?.turns && activeRun?.turns.some(t => t.videoUrls?.length) ? (
-              <VideoIterationTabs runId={run._id} turns={activeRun?.turns} setupVideoUrls={activeRun?.setupVideoUrls} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
+              <VideoIterationTabs key={activeRun?._id} runId={run._id} turns={activeRun?.turns} setupVideoUrls={activeRun?.setupVideoUrls} attemptRunId={activeRun?._id} />
             ) : (
               <div className="space-y-4">
                 {activeRun?.setupVideoUrls && activeRun?.setupVideoUrls.length > 0 && (
                   activeRun?.setupVideoUrls.map((_, i) => (
-                    <VideoPlayer key={`setup-${i}`} src={isViewingHistorical && activeRun?._id ? api.runVideoUrl(run._id, activeRun._id, undefined, i, "setup") : api.videoUrl(run._id, undefined, i, "setup")} label="Setup" />
+                    <VideoPlayer key={`${activeRun?._id}-setup-${i}`} src={activeRun?._id ? api.runVideoUrl(run._id, activeRun._id, undefined, i, "setup") : api.videoUrl(run._id, undefined, i, "setup")} label="Setup" />
                   ))
                 )}
                 {activeRun?.videoUrls && activeRun?.videoUrls.length > 0 && (
                   activeRun?.videoUrls.map((_, i) => (
-                    <VideoPlayer key={i} src={isViewingHistorical && activeRun?._id ? api.runVideoUrl(run._id, activeRun._id, undefined, i) : api.videoUrl(run._id, undefined, i)} label={(activeRun?.videoUrls?.length ?? 0) > 1 ? `Video ${i + 1}` : undefined} />
+                    <VideoPlayer key={`${activeRun?._id}-${i}`} src={activeRun?._id ? api.runVideoUrl(run._id, activeRun._id, undefined, i) : api.videoUrl(run._id, undefined, i)} label={(activeRun?.videoUrls?.length ?? 0) > 1 ? `Video ${i + 1}` : undefined} />
                   ))
                 )}
               </div>
@@ -1688,7 +1704,7 @@ export function RunDetail() {
         {/* Tool Calls tab — HAR captures & tool calls summary */}
         {hasHarData && (
           <TabsContent value="tool-calls" className="mt-4 space-y-4">
-            <ToolCallsTab runId={run._id} turns={activeRun?.turns} harUrl={activeRun?.harUrl} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
+            <ToolCallsTab runId={run._id} turns={activeRun?.turns} harUrl={activeRun?.harUrl} attemptRunId={activeRun?._id} />
           </TabsContent>
         )}
       </Tabs>
@@ -1831,7 +1847,7 @@ function ExpandableCell({ children, className = "" }: { children: React.ReactNod
 }
 
 function ToolCallsTab({ runId, turns, harUrl, attemptRunId }: { runId: string; turns?: ConversationTurn[]; harUrl?: string; attemptRunId?: string }) {
-  const { allToolCalls, isLoading } = useAllTurnsToolCalls(runId, turns, harUrl, attemptRunId);
+  const { allToolCalls, isLoading, error } = useAllTurnsToolCalls(runId, turns, harUrl, attemptRunId);
 
   // Group by tool name for summary
   const byName = new Map<string, number>();
@@ -1855,15 +1871,16 @@ function ToolCallsTab({ runId, turns, harUrl, attemptRunId }: { runId: string; t
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium">Network Captures</h3>
         {harUrl && (
-          <Button
+          <ArtifactDownloadButton
             variant="outline"
             size="sm"
             className="gap-1.5"
-            onClick={() => window.open(harDownloadUrl, "_blank")}
+            url={harDownloadUrl}
+            filename={`${runId}.har`}
           >
             <Download className="h-4 w-4" />
             Download HAR
-          </Button>
+          </ArtifactDownloadButton>
         )}
       </div>
 
@@ -1874,7 +1891,10 @@ function ToolCallsTab({ runId, turns, harUrl, attemptRunId }: { runId: string; t
         </div>
       )}
 
-      {!isLoading && allToolCalls.length === 0 && (
+      {error && <p role="alert" className="text-sm text-destructive">
+        Unable to load tool calls: {error.message}
+      </p>}
+      {!isLoading && !error && allToolCalls.length === 0 && (
         <div className="text-center py-8 text-muted-foreground">
           <p>No tool calls captured. HAR file may still be available for download.</p>
         </div>
@@ -1979,16 +1999,17 @@ function ToolCallsTab({ runId, turns, harUrl, attemptRunId }: { runId: string; t
               <h4 className="text-sm font-medium mb-2">Per-Turn HAR Files</h4>
               <div className="flex flex-wrap gap-2">
                 {turns.filter(t => t.harUrl).map(t => (
-                  <Button
+                  <ArtifactDownloadButton
                     key={t.iteration}
                     variant="outline"
                     size="sm"
                     className="gap-1 font-mono text-xs"
-                    onClick={() => window.open(harIterationUrl(t.iteration), "_blank")}
+                    url={harIterationUrl(t.iteration)}
+                    filename={`${runId}-iteration-${t.iteration}.har`}
                   >
                     <Download className="h-3 w-3" />
                     {t.gate ? `${GATE_METADATA[t.gate].label} · ` : ""}Iteration {t.iteration}
-                  </Button>
+                  </ArtifactDownloadButton>
                 ))}
               </div>
             </div>

@@ -3,7 +3,16 @@
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { http, HttpResponse } from "msw";
+import { useEffect } from "react";
+import { expect, type within } from "storybook/test";
+import { useProjectContext } from "@/contexts/ProjectContext";
 import { HarNetworkViewer } from "./HarNetworkViewer";
+
+function ProjectSelection({ children }: { children: React.ReactNode }) {
+  const { setSelectedProjectId } = useProjectContext();
+  useEffect(() => setSelectedProjectId("demo-project"), [setSelectedProjectId]);
+  return <>{children}</>;
+}
 
 const base = new Date("2026-06-21T12:00:00Z").getTime();
 const methods = ["GET", "POST", "GET", "PUT", "GET", "DELETE"];
@@ -53,14 +62,14 @@ const meta = {
   // detail panel's sticky offset renders the way it does in the portal.
   decorators: [
     (Story) => (
-      <>
+      <ProjectSelection>
         <div className="sticky top-0 z-50 flex h-12 items-center border-b border-border/60 bg-background px-3 text-sm text-muted-foreground">
           App header
         </div>
         <div className="w-full px-6 py-6 lg:px-8">
           <Story />
         </div>
-      </>
+      </ProjectSelection>
     ),
   ],
 } satisfies Meta<typeof HarNetworkViewer>;
@@ -72,3 +81,22 @@ type Story = StoryObj<typeof meta>;
 export const LongList: Story = {
   args: { runId: "demo-run" },
 };
+
+export const HistoricalAttempt: Story = {
+  args: { runId: "demo-run", attemptRunId: "attempt-1", iteration: 2 },
+  parameters: { msw: { handlers: [
+    http.get("*/api/v1/requests/demo-run/runs/attempt-1/har", () => HttpResponse.json(sampleHar)),
+  ] } },
+};
+
+export const AccessDenied = {
+  args: { runId: "denied-run" },
+  parameters: { msw: { handlers: [
+    http.get("*/api/v1/requests/denied-run/har", () => HttpResponse.json(
+      { error: "Project access was removed." }, { status: 403 },
+    )),
+  ] } },
+  play: async ({ canvas }: { canvas: ReturnType<typeof within> }) => {
+    await expect(await canvas.findByRole("alert")).toHaveTextContent("HTTP 403");
+  },
+} satisfies Story;
