@@ -1294,3 +1294,28 @@ describe("countAiCallsFromTelemetry", () => {
     expect(countAiCallsFromTelemetry(har)).toBe(0);
   });
 });
+
+describe("extractToolCalls malformed input", () => {
+  it("tolerates a null entry in the choices array without aborting extraction", () => {
+    const har = makeHar([
+      makeEntry({
+        responseBody: {
+          choices: [
+            null,
+            {
+              message: {
+                role: "assistant",
+                tool_calls: [
+                  { id: "call_ok", function: { name: "read_file", arguments: '{"path":"a.ts"}' } },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    ]);
+    const calls = extractToolCalls(har);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].name).toBe("read_file");
+  });
+});
