@@ -151,6 +151,23 @@ describe("Step 2 — Skill selection", () => {
     expect(screen.getByText(/3 skills found/)).toBeDefined();
   });
 
+  it("shows the full description instead of truncating it (#1285)", async () => {
+    const longDescription = "A very long description that should wrap onto several lines ".repeat(4).trim();
+    mockDiscoverSkills.mockResolvedValue([{ ...fakeSkills[0], description: longDescription }]);
+    await goToStep2();
+
+    const description = screen.getByText(new RegExp(longDescription));
+    expect(description.className).not.toContain("truncate");
+    expect(description.className).toContain("break-words");
+  });
+
+  it("lets long unbroken skill names and paths wrap (#1285)", async () => {
+    await goToStep2();
+
+    expect(screen.getByText("skill-a").className).toContain("break-all");
+    expect(screen.getByText("skills/skill-a/SKILL.md").className).toContain("break-all");
+  });
+
   it("shows library status badges", async () => {
     await goToStep2();
     expect(screen.getByText("New")).toBeDefined();

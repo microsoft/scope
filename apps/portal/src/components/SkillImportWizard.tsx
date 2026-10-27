@@ -242,9 +242,11 @@ export function SkillImportWizard({ onClose }: SkillImportWizardProps) {
       {/* ───────── Step 2: Select & import ───────── */}
       {step === 2 && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-muted-foreground">
-              <span className="font-mono">{source.trim()}</span> · {discovered.length} skill{discovered.length === 1 ? "" : "s"} found
+          {/* Wraps on narrow widths so a long repository never pushes the
+              selection controls out of view. */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0 text-xs text-muted-foreground break-words">
+              <span className="font-mono break-all">{source.trim()}</span> · {discovered.length} skill{discovered.length === 1 ? "" : "s"} found
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -292,17 +294,17 @@ export function SkillImportWizard({ onClose }: SkillImportWizardProps) {
                         className="flex-1 min-w-0 cursor-pointer"
                       >
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-mono text-xs font-medium">{skill.skillName}</span>
-                          <span className="text-[10px] text-muted-foreground font-mono">{skill.skillPath}</span>
+                          <span className="font-mono text-xs font-medium break-all">{skill.skillName}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono break-all">{skill.skillPath}</span>
                           <LibraryStatusBadge skill={skill} />
                         </div>
                         {(skill.name || skill.description) && (
-                          <p className="text-xs text-muted-foreground truncate">
+                          <p className="text-xs text-muted-foreground break-words">
                             {skill.name}{skill.description ? ` — ${skill.description}` : ""}
                           </p>
                         )}
                         {prog?.status === "failed" && prog.error && (
-                          <p className="text-[11px] text-destructive mt-0.5">{prog.error}</p>
+                          <p className="text-[11px] text-destructive mt-0.5 break-words">{prog.error}</p>
                         )}
                       </label>
                       <ImportStatusBadge status={prog?.status} />
@@ -327,7 +329,7 @@ export function SkillImportWizard({ onClose }: SkillImportWizardProps) {
             </div>
           )}
 
-          <div className="flex justify-between gap-2">
+          <div className="flex flex-wrap justify-between gap-2">
             <Button
               variant="ghost"
               size="sm"
@@ -338,7 +340,7 @@ export function SkillImportWizard({ onClose }: SkillImportWizardProps) {
               <ArrowLeft className="h-3.5 w-3.5" />
               Back
             </Button>
-            <div className="flex gap-2">
+            <div className="ml-auto flex flex-wrap justify-end gap-2">
               {allFinished && failedCount > 0 && (
                 <Button
                   variant="outline"
