@@ -94,6 +94,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       },
       "delete": {
         "options": [
+          "--project",
           "--url",
         ],
       },
@@ -107,6 +108,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       "resolve": {
         "options": [
           "--output",
+          "--project",
           "--ref",
           "--url",
         ],
@@ -115,12 +117,14 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
         "options": [
           "--limit",
           "--output",
+          "--project",
           "--url",
         ],
       },
       "upload": {
         "options": [
           "--output",
+          "--project",
           "--url",
         ],
       },
@@ -190,6 +194,35 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--project",
           "--prompt",
           "--url",
+        ],
+      },
+    },
+  },
+  "env": {
+    "subcommands": {
+      "add": {
+        "options": [
+          "--force",
+          "--token",
+          "--url",
+        ],
+      },
+      "list": {
+        "options": [
+          "--output",
+        ],
+      },
+      "remove": {},
+      "set": {},
+      "show": {
+        "options": [
+          "--output",
+        ],
+      },
+      "unset": {},
+      "use": {
+        "options": [
+          "--clear",
         ],
       },
     },

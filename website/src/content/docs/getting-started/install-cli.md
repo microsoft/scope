@@ -72,6 +72,8 @@ above without GitHub authentication.
 
 ## What's next
 
+- [Configure the CLI](/getting-started/configure-cli/): point it at
+  your deployment with `scope env` or `SCOPE_API_URL`.
 - [Submitting requests (CLI)](/guides/submitting-requests-cli/) —
   the full CLI workflow guide.
 - [Submitting requests (REST API)](/guides/submitting-requests-api/)
