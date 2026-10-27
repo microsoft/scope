@@ -140,4 +140,28 @@ describe("ExperimentReportCard", () => {
     expect(screen.getByRole("link", { name: "Direct link" })).toBeTruthy();
     expect(screen.getByText("Report generation failed")).toBeTruthy();
   });
+
+  it("offers retry for the latest configurable report", () => {
+    const configurableReport: Report = {
+      ...completedReport,
+      _id: "report-quality",
+      id: "report-quality",
+      templateId: "quality-summary",
+      reporter: {
+        id: "quality-summary",
+        name: "Quality Summary",
+        gitHash: "abc",
+        model: "gpt-5.4",
+        agentId: "copilot-sdk",
+        agentVersion: "1.0.0",
+      },
+    };
+
+    renderCard({
+      ...reportProps(configurableReport),
+      onRetry: () => undefined,
+    });
+
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
 });

@@ -24,7 +24,23 @@ const currentExecution = {
       model: "gpt-5.6-sol",
     },
   ],
-  handlerProgress: {},
+  handlerProgress: {
+    "pp-readout": { status: "done" },
+  },
+  reportTemplates: {
+    "quality-summary": {
+      templateId: "quality-summary",
+      source: "selected",
+      status: "done",
+      matchingRunCount: 0,
+    },
+    "risk-summary": {
+      templateId: "risk-summary",
+      source: "linked",
+      status: "waiting",
+      matchingRunCount: 1,
+    },
+  },
   blockers: [],
   createdAt: "2026-10-16T10:00:00.000Z",
 };
@@ -46,6 +62,7 @@ const historicalExecution = {
     },
   ],
   handlerProgress: {},
+  reportTemplates: {},
   blockers: [],
   createdAt: "2026-10-15T10:00:00.000Z",
   supersededReason: "retry",
@@ -62,6 +79,7 @@ const experiment = {
     experimentRevisionId: "revision-demo",
     revisionNumber: 1,
     memberCount: 1,
+    reportTemplateIds: ["quality-summary"],
   },
   execution: currentExecution,
   readiness: "done",
@@ -179,6 +197,40 @@ const meta = {
                 : [],
             ),
         ),
+        http.get("/api/v1/report-templates", () =>
+          HttpResponse.json([
+            {
+              _id: "quality-summary",
+              id: "quality-summary",
+              projectId: "demo-project",
+              subject: "experiment",
+              name: "Quality summary",
+              userPrompt: "Summarize quality.",
+              enabled: true,
+              currentVersionId: "quality-summary:v2",
+              currentVersion: 2,
+              contentFingerprint: "quality-v2",
+              createdAt: "2026-10-16T08:00:00.000Z",
+            },
+            {
+              _id: "risk-summary",
+              id: "risk-summary",
+              projectId: "demo-project",
+              subject: "experiment",
+              name: "Risk summary",
+              userPrompt: "Summarize risks.",
+              trigger: {
+                type: "run-report-templates",
+                reportTemplateIds: ["security"],
+              },
+              enabled: true,
+              currentVersionId: "risk-summary:v1",
+              currentVersion: 1,
+              contentFingerprint: "risk-v1",
+              createdAt: "2026-10-16T08:00:00.000Z",
+            },
+          ]),
+        ),
       ],
     },
   },
@@ -240,5 +292,27 @@ export const AttemptSelectionAndRunsTable: Story = {
     await expect(
       canvas.getByRole("complementary", { name: "Customize columns" }),
     ).toBeVisible();
+  },
+};
+
+export const ReportTemplateConfiguration: Story = {
+  play: async ({ canvas }) => {
+    await expect(
+      await screen.findByRole("heading", { name: "Current readout" }),
+    ).toBeVisible();
+    await userEvent.click(canvas.getByRole("tab", { name: "Processing" }));
+    await expect(
+      await screen.findByText("Selectable manual reports"),
+    ).toBeVisible();
+    await expect(screen.getByText("Automatic always")).toBeVisible();
+    await expect(screen.getByText("Automatic linked-run")).toBeVisible();
+    await expect(
+      screen.getByRole("checkbox", { name: /Quality summary/ }),
+    ).toBeChecked();
+    await expect(screen.getByText("1 matching run")).toBeVisible();
+    await expect(
+      screen.getByRole("button", { name: "Publish report configuration" }),
+    ).toBeVisible();
+
   },
 };

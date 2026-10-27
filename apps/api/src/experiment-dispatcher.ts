@@ -14,6 +14,7 @@ import { ExperimentStore } from "shared";
 import {
   ExperimentCoordinator,
   type ExperimentDispatchMessage,
+  type ExperimentTemplateDispatchMessage,
 } from "./experiment-coordinator.js";
 
 export class ExperimentDispatcher {
@@ -40,6 +41,9 @@ export class ExperimentDispatcher {
         executions,
         chunks,
         services: db.collection<ServiceHandlerDocument>("services"),
+        reportTemplates: db.collection("report-templates"),
+        reportTemplateVersions: db.collection("report-template-versions"),
+        reports: db.collection("reports"),
       },
       (service, message) => this.enqueue(service, message),
     );
@@ -155,7 +159,7 @@ export class ExperimentDispatcher {
 
   private async enqueue(
     service: ExperimentHandlerServiceDocument,
-    message: ExperimentDispatchMessage,
+    message: ExperimentDispatchMessage | ExperimentTemplateDispatchMessage,
   ): Promise<void> {
     let client = this.queueClients.get(service.queue);
     if (!client) {

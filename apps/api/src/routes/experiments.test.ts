@@ -274,6 +274,8 @@ describe("Experiment API contract", () => {
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}/logs",
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports",
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports/{reportId}/structured",
+      "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports/{templateId}/retry",
+      "/api/v1/experiments/{id}/report-templates",
       "/api/v1/experiments/{id}/requests",
       "/api/v1/experiments/{id}/retry",
     ]);
@@ -294,6 +296,7 @@ describe("Experiment API contract", () => {
         readiness: expect.any(Object),
         blockers: expect.any(Object),
         progress: expect.any(Object),
+        reportTemplates: expect.any(Object),
         report: expect.any(Object),
         supersededByExperimentExecutionId: { type: "string" },
       },

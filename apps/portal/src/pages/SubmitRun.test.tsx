@@ -279,6 +279,7 @@ describe("SubmitRun Experiment composition", () => {
     await waitFor(() => {
       expect(api.createExperiment).toHaveBeenCalledWith({
         metadata: { name: "Reserved benchmark" },
+        reportTemplateIds: [],
         empty: true,
       });
     });

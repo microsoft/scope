@@ -427,7 +427,10 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
   });
 
   it("throws when templateId points to a non-existent template", async () => {
-    const doc = makeReportDoc({ templateId: "nonexistent-template" });
+    const doc = makeReportDoc({
+      templateId: "nonexistent-template",
+      templateVersionId: "nonexistent-template:v1",
+    });
 
     // Mock fetch to return 404 (fetchReportTemplate returns null)
     const fetchMock = vi.fn().mockResolvedValue({
@@ -443,7 +446,9 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
     // Template lookup must be scoped to the report's project (templates are
     // project-scoped; a slug-only lookup is rejected by the API).
     const requestedUrl = String(fetchMock.mock.calls[0][0]);
-    expect(requestedUrl).toContain("/report-templates/nonexistent-template");
+    expect(requestedUrl).toContain(
+      "/report-templates/nonexistent-template/versions/nonexistent-template%3Av1",
+    );
     expect(requestedUrl).toContain("projectId=proj-1");
   });
 });

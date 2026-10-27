@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Collection, Document } from "mongodb";
 import {
   DependencyGraph,
@@ -14,8 +14,12 @@ import {
   type ExperimentHandlerServiceDocument,
   type ExperimentQueueMessagePayload,
   type ExperimentRequestState,
+  type ExperimentTemplateReportSummary,
   type HandlerRunStatus,
   type HandlerServiceDocument,
+  type ReportDocument,
+  type ReportTemplateDocument,
+  type ReportTemplateVersionDocument,
   type RequestDocument,
   type ServiceHandlerDocument,
 } from "shared";
@@ -27,6 +31,9 @@ export interface ExperimentCoordinatorCollections {
   executions: Collection<ExperimentExecutionHistoryDocument>;
   chunks: Collection;
   services: Collection<ServiceHandlerDocument>;
+  reportTemplates?: Collection<ReportTemplateDocument>;
+  reportTemplateVersions?: Collection<ReportTemplateVersionDocument>;
+  reports?: Collection<ReportDocument>;
 }
 
 export interface ExperimentDispatchMessage
@@ -38,9 +45,21 @@ export interface ExperimentDispatchMessage
   executionVersion: number;
 }
 
+export interface ExperimentTemplateDispatchMessage {
+  type: "experiment-report";
+  projectId: string;
+  experimentId: string;
+  experimentExecutionId: string;
+  templateId: string;
+  templateVersionId: string;
+  claimToken: string;
+  executionVersion: number;
+  reportId: string;
+}
+
 export type EnqueueExperiment = (
   service: ExperimentHandlerServiceDocument,
-  message: ExperimentDispatchMessage,
+  message: ExperimentDispatchMessage | ExperimentTemplateDispatchMessage,
 ) => Promise<void>;
 
 export type ExperimentReadiness =
@@ -92,6 +111,7 @@ function currentReadiness(
   ) {
     return "failed";
   }
+
   if (
     experiment.execution.blocking.length > 0 &&
     experiment.execution.blocking.every(
@@ -118,6 +138,22 @@ function currentReadiness(
     return "done";
   }
   return statuses.length === 0 ? "ready" : "waiting";
+}
+
+function initialExperimentReportId(input: {
+  experimentExecutionId: string;
+  templateId: string;
+  templateVersionId: string;
+}): string {
+  return `experiment-report-${createHash("sha256")
+    .update(
+      JSON.stringify([
+        input.experimentExecutionId,
+        input.templateId,
+        input.templateVersionId,
+      ]),
+    )
+    .digest("base64url")}`;
 }
 
 function sameProjection(
@@ -298,14 +334,23 @@ export class ExperimentCoordinator {
         experiment = updated;
       }
 
-      const dispatch = await this.dispatchReadyHandlers(experiment, projected);
-      const latest =
+      const handlerDispatch = await this.dispatchReadyHandlers(
+        experiment,
+        projected,
+      );
+      let latest =
         (await this.store.get(projectId, experimentId)) ?? experiment;
+      const templateDispatch = await this.dispatchReadyReportTemplates(
+        latest,
+        projected,
+        byId,
+      );
+      latest = (await this.store.get(projectId, experimentId)) ?? latest;
       return {
         experiment: latest,
         readiness: currentReadiness(latest),
         rolled,
-        dispatched: dispatch,
+        dispatched: handlerDispatch || templateDispatch,
       };
     }
     throw new Error(
@@ -544,6 +589,274 @@ export class ExperimentCoordinator {
         handlerVersion: service.version,
         claimToken,
         executionVersion: current.execution.version,
+      });
+      dispatched = true;
+    }
+    return dispatched;
+  }
+
+  private async dispatchReadyReportTemplates(
+    experiment: ExperimentDocument,
+    requests: readonly ExperimentRequestState[],
+    requestById: ReadonlyMap<string, RequestDocument>,
+  ): Promise<boolean> {
+    if (
+      !this.enqueue ||
+      !this.collections.reportTemplates ||
+      !this.collections.reportTemplateVersions ||
+      !this.collections.reports ||
+      experiment.execution.handlerSummary["pp-readout"]?.status !== "done" ||
+      !experiment.execution.report
+    ) {
+      return false;
+    }
+    const services = await this.loadExperimentHandlers();
+    const readoutService = services.find((service) => service._id === "pp-readout");
+    if (!readoutService) return false;
+
+    const selectedIds = experiment.revision.reportTemplateIds;
+    const activeAutomatic = await this.collections.reportTemplates
+      .find({
+        projectId: experiment.projectId,
+        subject: "experiment",
+        enabled: true,
+        deletedAt: { $exists: false },
+        "trigger.type": { $in: ["always", "run-report-templates"] },
+      } as Document)
+      .toArray();
+    const selected = selectedIds.length > 0
+      ? await this.collections.reportTemplates
+        .find({
+          projectId: experiment.projectId,
+          id: { $in: selectedIds },
+        } as Document)
+        .toArray()
+      : [];
+    const candidates = new Map(
+      [...activeAutomatic, ...selected].map((template) => [template.id, template]),
+    );
+    const summaries = { ...experiment.execution.reportTemplates };
+    const newlyQueued = new Set<string>();
+    const now = new Date();
+
+    for (const templateId of selectedIds) {
+      if (candidates.has(templateId)) continue;
+      summaries[templateId] = {
+        templateId,
+        source: "selected",
+        status: "unavailable",
+        matchingRunCount: 0,
+        blockers: [{ reason: "template-unavailable" }],
+        updatedAt: now,
+      };
+    }
+
+    for (const template of [...candidates.values()].sort((left, right) =>
+      left.id.localeCompare(right.id)
+    )) {
+      const source = template.trigger?.type === "always"
+        ? "always"
+        : template.trigger?.type === "run-report-templates"
+          ? "linked"
+          : "selected";
+      const existing = summaries[template.id];
+      if (
+        existing &&
+        existing.status !== "waiting" &&
+        !(existing.status === "failed" && existing.blockers.length > 0)
+      ) {
+        continue;
+      }
+      const selectable =
+        template.subject === "experiment" &&
+        template.enabled &&
+        !template.deletedAt &&
+        (source !== "selected" || !template.trigger);
+      if (!selectable) {
+        summaries[template.id] = {
+          templateId: template.id,
+          templateVersionId: template.currentVersionId,
+          templateVersion: template.currentVersion,
+          templateContentFingerprint: template.contentFingerprint,
+          source,
+          status: "unavailable",
+          matchingRunCount: 0,
+          blockers: [{ reason: "template-unavailable" }],
+          updatedAt: now,
+        };
+        continue;
+      }
+
+      const blockers: ExperimentTemplateReportSummary["blockers"] = [];
+      let matchingRunCount = 0;
+      if (template.trigger?.type === "run-report-templates") {
+        for (const runTemplateId of template.trigger.reportTemplateIds) {
+          const matching = requests.filter((request) =>
+            requestById
+              .get(request.requestId)
+              ?.run?.reportTemplateIds?.includes(runTemplateId)
+          );
+          if (matching.length === 0) {
+            blockers.push({
+              runTemplateId,
+              reason: "run-template-unused",
+            });
+            continue;
+          }
+          matchingRunCount += matching.length;
+          for (const request of matching) {
+            const report = await this.collections.reports.findOne(
+              {
+                projectId: experiment.projectId,
+                requestId: request.requestId,
+                runId: request.runId,
+                templateId: runTemplateId,
+              } as Document,
+              { sort: { reportVersion: -1, createdAt: -1 } },
+            );
+            if (!report || report.status === "pending" || report.status === "generating") {
+              blockers.push({
+                requestId: request.requestId,
+                runId: request.runId,
+                runTemplateId,
+                reason: "run-report-pending",
+              });
+            } else if (report.status === "failed") {
+              blockers.push({
+                requestId: request.requestId,
+                runId: request.runId,
+                runTemplateId,
+                reason: "run-report-failed",
+                ...(report.error ? { error: report.error } : {}),
+              });
+            }
+          }
+        }
+      }
+      const unused = blockers.some(
+        (blocker) => blocker.reason === "run-template-unused",
+      );
+      const failed = blockers.some(
+        (blocker) => blocker.reason === "run-report-failed",
+      );
+      const waiting = blockers.some(
+        (blocker) => blocker.reason === "run-report-pending",
+      );
+      if (unused || failed || waiting) {
+        summaries[template.id] = {
+          templateId: template.id,
+          templateVersionId: template.currentVersionId,
+          templateVersion: template.currentVersion,
+          templateContentFingerprint: template.contentFingerprint,
+          source,
+          status: unused
+            ? "not-applicable"
+            : failed
+              ? "failed"
+              : "waiting",
+          matchingRunCount,
+          blockers,
+          updatedAt: now,
+        };
+        continue;
+      }
+
+      const reportId = initialExperimentReportId({
+        experimentExecutionId:
+          experiment.execution.experimentExecutionId,
+        templateId: template.id,
+        templateVersionId: template.currentVersionId,
+      });
+      const claimToken = randomUUID();
+      const report: ReportDocument = {
+        _id: reportId,
+        projectId: experiment.projectId,
+        experimentId: experiment.experimentId,
+        experimentExecutionId:
+          experiment.execution.experimentExecutionId,
+        templateId: template.id,
+        templateVersionId: template.currentVersionId,
+        templateVersion: template.currentVersion,
+        templateContentFingerprint: template.contentFingerprint,
+        reportVersion: 1,
+        status: "pending",
+        createdAt: now,
+        updatedAt: now,
+      };
+      try {
+        await this.collections.reports.insertOne(report);
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !error.message.includes("duplicate")
+        ) {
+          throw error;
+        }
+      }
+      summaries[template.id] = {
+        templateId: template.id,
+        templateVersionId: template.currentVersionId,
+        templateVersion: template.currentVersion,
+        templateContentFingerprint: template.contentFingerprint,
+        source,
+        status: "queued",
+        claimToken,
+        matchingRunCount,
+        blockers: [],
+        report: {
+          reportId,
+          url: `/api/v1/reports/${reportId}`,
+          updatedAt: now,
+        },
+        updatedAt: now,
+      };
+      newlyQueued.add(template.id);
+    }
+
+    if (
+      fingerprintExperimentPayload(summaries) !==
+      fingerprintExperimentPayload(experiment.execution.reportTemplates)
+    ) {
+      const updated = await this.store.updateReportTemplateSummaries({
+        projectId: experiment.projectId,
+        experimentId: experiment.experimentId,
+        experimentExecutionId:
+          experiment.execution.experimentExecutionId,
+        expectedExecutionVersion: experiment.execution.version,
+        summaries,
+        now,
+      });
+      if (!updated) return false;
+      experiment = updated;
+    }
+
+    let dispatched = false;
+    for (const summary of Object.values(experiment.execution.reportTemplates)) {
+      if (
+        summary.status !== "queued" ||
+        !summary.claimToken ||
+        !summary.templateVersionId ||
+        !summary.report
+      ) {
+        continue;
+      }
+      if (
+        !newlyQueued.has(summary.templateId) &&
+        Date.now() - summary.updatedAt.getTime() < 30_000
+      ) {
+        continue;
+      }
+      await this.enqueue(readoutService, {
+        type: "experiment-report",
+        projectId: experiment.projectId,
+        experimentId: experiment.experimentId,
+        experimentExecutionId:
+          experiment.execution.experimentExecutionId,
+        templateId: summary.templateId,
+        templateVersionId: summary.templateVersionId,
+        claimToken: summary.claimToken,
+        executionVersion: experiment.execution.version,
+        reportId: summary.report.reportId,
       });
       dispatched = true;
     }
