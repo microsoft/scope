@@ -110,6 +110,68 @@ describe("TaskPromptBadge is type-agnostic", () => {
   });
 });
 
+describe("TaskPromptBadge legacy run tooltip", () => {
+  it.each(["hover", "keyboard"])("reveals the full inline task on %s without fetching or linking", async (interaction) => {
+    const fullTask = `Build an accessible dashboard.\n${"Preserve all evaluation details and project filters. ".repeat(10)}`;
+    renderBadge(
+      <TaskPromptBadge fallbackText={fullTask}>
+        <span>Build an accessible dashboard…</span>
+      </TaskPromptBadge>,
+    );
+    const trigger = screen.getByText("Build an accessible dashboard…");
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    if (interaction === "hover") {
+      await userEvent.hover(trigger);
+    } else {
+      await userEvent.tab();
+    }
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toBe(fullTask);
+    expect(getTaskPrompt).not.toHaveBeenCalled();
+    expect(getTaskPromptContent).not.toHaveBeenCalled();
+
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+  });
+
+  it("preserves the parent row's click action", async () => {
+    const onRowClick = vi.fn();
+    renderBadge(
+      <div onClick={onRowClick}>
+        <TaskPromptBadge fallbackText="Full task text">
+          <span>Task…</span>
+        </TaskPromptBadge>
+      </div>,
+    );
+    await userEvent.click(screen.getByText("Task…"));
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves the linked prompt preview when fallback text is also supplied", async () => {
+    const fallbackText = "Inline task from the run";
+    renderBadge(
+      <TaskPromptBadge
+        taskPromptId={basePrompt._id}
+        prompt={basePrompt}
+        fallbackText={fallbackText}
+      />,
+    );
+
+    const link = screen.getByRole("link");
+    expect(link.getAttribute("href")).toBe(`/task-prompts/${basePrompt._id}`);
+    await userEvent.hover(link);
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toContain(basePrompt.text);
+    expect(tooltip.textContent).not.toContain(fallbackText);
+    expect(getTaskPrompt).not.toHaveBeenCalled();
+    expect(getTaskPromptContent).not.toHaveBeenCalled();
+  });
+});
+
 describe("TaskPromptBadge lazy fetch (no request fan-out)", () => {
   it("never fetches when a preloaded prompt is supplied", async () => {
     renderBadge(<TaskPromptBadge taskPromptId="abcdef1234567890" prompt={basePrompt} />);
