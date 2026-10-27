@@ -128,6 +128,23 @@ entirely in WebSocket frames produced an **empty** tool-call history even though
 payloads were present in the HAR. See
 [`docs/design/gates.md`](../design/gates.md) for how tool-call evidence feeds the gates.
 
+### Downstream consumers (Portal Network tab)
+
+The Portal's Network tab (`apps/portal/src/components/HarNetworkViewer.tsx`) shows
+WebSocket connections alongside HTTP requests:
+
+- An entry is treated as a WebSocket connection when it has `_resourceType: "websocket"`,
+  a `101` status, or a `_webSocketMessages` array. Its **Type** column reads `ws`, and the
+  summary bar adds the total WebSocket message count.
+- Selecting a connection opens a **Messages** tab (`HarWebSocketMessages.tsx`) listing every
+  frame with its direction, offset from the first frame, payload size and payload. JSON
+  payloads are pretty-printed. A **Sent / Received** filter narrows the list.
+- Binary frames (`opcode 2`) are decoded as UTF-8 when valid and otherwise shown as their
+  base64 payload, labelled `binary · base64`. Malformed frames are dropped rather than
+  breaking the viewer.
+
+Decoding lives in `apps/portal/src/lib/har-websocket.ts`.
+
 ## Plugin API Mapping
 
 The gateway's plugin system receives WebSocket connections as `HttpExchange`:

@@ -9,6 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Download, Search, X, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getWebSocketMessages, type HarWebSocketMessage } from "@/lib/har-websocket";
+import { HarWebSocketMessages } from "./HarWebSocketMessages";
 
 // ---------------------------------------------------------------------------
 // Types (inline HAR 1.2 subset — no shared dep needed for the portal)
@@ -31,6 +33,10 @@ interface HarEntry {
   time: number;
   request: HarRequest;
   response: HarResponse;
+  /** Frames of a WebSocket connection (Chrome DevTools HAR extension). */
+  _webSocketMessages?: HarWebSocketMessage[];
+  /** Chrome DevTools resource type; the gateway sets `"websocket"` on WS entries. */
+  _resourceType?: string;
 }
 interface HarFile {
   log: { entries: HarEntry[] };
@@ -110,6 +116,7 @@ function hostFromUrl(url: string): string {
 
 /** Get content type category for the "Type" column. */
 function contentCategory(entry: HarEntry): string {
+  if (isWebSocketEntry(entry)) return "ws";
   const ct = entry.response.content.mimeType || "";
   if (ct.includes("json")) return "json";
   if (ct.includes("html")) return "html";
@@ -121,6 +128,18 @@ function contentCategory(entry: HarEntry): string {
   if (ct.includes("text/event-stream")) return "sse";
   if (ct.includes("text")) return "text";
   return ct.split("/").pop()?.split(";")[0] ?? "other";
+}
+
+/**
+ * True when the entry is a WebSocket connection: tagged as one, answered with
+ * `101 Switching Protocols`, or carrying recorded frames.
+ */
+function isWebSocketEntry(entry: HarEntry): boolean {
+  return (
+    entry._resourceType === "websocket" ||
+    entry.response.status === 101 ||
+    getWebSocketMessages(entry).length > 0
+  );
 }
 
 /**
@@ -181,6 +200,10 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
     () => entries.reduce((sum, e) => sum + (e.response.content.size || 0), 0),
     [entries],
   );
+  const webSocketMessageCount = useMemo(
+    () => entries.reduce((sum, e) => sum + getWebSocketMessages(e).length, 0),
+    [entries],
+  );
 
   if (isLoading) {
     return (
@@ -214,6 +237,9 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
       {/* Summary bar */}
       <div className="flex items-center gap-4 text-sm">
         <span className="font-medium">{entries.length} requests</span>
+        {webSocketMessageCount > 0 && (
+          <span className="text-muted-foreground">{webSocketMessageCount} WebSocket messages</span>
+        )}
         <span className="text-muted-foreground">{formatBytes(totalSize)} transferred</span>
         <span className="text-muted-foreground">{formatMs(totalTime)} total</span>
         <div className="flex-1" />
@@ -322,8 +348,27 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
 // Detail Panel
 // ---------------------------------------------------------------------------
 
+type DetailTab = "headers" | "messages" | "request" | "response";
+
+const DETAIL_TAB_LABELS: Record<DetailTab, string> = {
+  headers: "Headers",
+  messages: "Messages",
+  request: "Request Body",
+  response: "Response Body",
+};
+
 function DetailPanel({ entry, onClose }: { entry: HarEntry; onClose: () => void }) {
-  const [tab, setTab] = useState<"headers" | "request" | "response">("headers");
+  const webSocketMessages = getWebSocketMessages(entry);
+  const isWebSocket = isWebSocketEntry(entry);
+
+  // WebSocket connections open on their frames, the part worth inspecting.
+  const [selectedTab, setTab] = useState<DetailTab>(isWebSocket ? "messages" : "headers");
+  const tabs: DetailTab[] = isWebSocket
+    ? ["messages", "headers", "request", "response"]
+    : ["headers", "request", "response"];
+  // The chosen tab persists across row selection; fall back when the newly
+  // selected entry has no Messages tab.
+  const tab = tabs.includes(selectedTab) ? selectedTab : "headers";
 
   const requestBody = entry.request.postData?.text ?? null;
   const responseBody = decodeBody(entry.response.content);
@@ -352,7 +397,7 @@ function DetailPanel({ entry, onClose }: { entry: HarEntry; onClose: () => void 
 
       {/* Sub-tabs */}
       <div className="flex border-b text-xs">
-        {(["headers", "request", "response"] as const).map((t) => (
+        {tabs.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -363,7 +408,7 @@ function DetailPanel({ entry, onClose }: { entry: HarEntry; onClose: () => void 
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {t === "request" ? "Request Body" : t === "response" ? "Response Body" : "Headers"}
+            {DETAIL_TAB_LABELS[t]}
           </button>
         ))}
       </div>
@@ -371,6 +416,7 @@ function DetailPanel({ entry, onClose }: { entry: HarEntry; onClose: () => void 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-3 text-xs">
         {tab === "headers" && <HeadersTab entry={entry} />}
+        {tab === "messages" && <HarWebSocketMessages messages={webSocketMessages} />}
         {tab === "request" && <BodyTab body={requestBody} mimeType={entry.request.postData?.mimeType} />}
         {tab === "response" && <BodyTab body={responseBody} mimeType={entry.response.content.mimeType} />}
       </div>
