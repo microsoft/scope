@@ -128,3 +128,47 @@ export const ActiveNotFound: Story = {
     await expect(trigger).not.toHaveTextContent("p-ghost");
   },
 };
+
+/** Enough projects to cross the search threshold (#1311). */
+const MANY_PROJECTS: Project[] = Array.from({ length: 24 }, (_, i) => ({
+  _id: `p-${i}`,
+  id: `p-${i}`,
+  name: i === 17 ? "Zulu benchmarks" : `Project ${String(i).padStart(2, "0")}`,
+})) as Project[];
+
+export const ManyProjects: Story = {
+  render: () => <SwitcherHarness projects={MANY_PROJECTS} initialActive="p-0" />,
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: /switch project/i }));
+    const search = await screen.findByRole("textbox", { name: /search projects/i });
+
+    // Typing filters the list instead of jumping between menu items.
+    await userEvent.type(search, "zulu");
+    await expect(search).toHaveValue("zulu");
+    await expect(screen.getByText("Zulu benchmarks")).toBeVisible();
+    await expect(screen.queryByText("Project 03")).toBeNull();
+
+    // Picking a filtered result switches the active project.
+    await userEvent.click(screen.getByText("Zulu benchmarks"));
+    const reopened = await canvas.findByRole("button", { name: /switch project/i });
+    await expect(reopened).toHaveTextContent("Zulu benchmarks");
+  },
+};
+
+export const ManyProjectsNoMatch: Story = {
+  render: () => <SwitcherHarness projects={MANY_PROJECTS} initialActive="p-0" />,
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: /switch project/i }));
+    await userEvent.type(await screen.findByRole("textbox", { name: /search projects/i }), "nothing-like-this");
+    await expect(screen.getByText(/no matching projects/i)).toBeVisible();
+  },
+};
+
+export const FewProjectsHaveNoSearch: Story = {
+  render: () => <SwitcherHarness projects={PROJECTS} initialActive="p-alpha" />,
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: /switch project/i }));
+    await screen.findByRole("menu");
+    await expect(screen.queryByRole("textbox", { name: /search projects/i })).toBeNull();
+  },
+};

@@ -71,3 +71,35 @@ export const Loading: Story = {
     await expect(canvas.getByText(/loading projects/i)).toBeVisible();
   },
 };
+
+/** Enough projects to cross the search threshold (#1311). */
+const MANY_PROJECTS: Project[] = Array.from({ length: 24 }, (_, i) => ({
+  _id: `p-${i}`,
+  id: `p-${i}`,
+  name: `Project ${String(i).padStart(2, "0")}`,
+  description: i === 5 ? "Customer onboarding experiments" : undefined,
+})) as Project[];
+
+export const ManyProjects: Story = {
+  render: () => <FirstRunHarness projects={MANY_PROJECTS} />,
+  play: async ({ canvas }) => {
+    const search = canvas.getByRole("textbox", { name: /search projects/i });
+
+    // Descriptions are searchable too.
+    await userEvent.type(search, "onboarding");
+    await expect(canvas.queryByRole("button", { name: /project 04/i })).toBeNull();
+    await userEvent.click(canvas.getByRole("button", { name: /project 05/i }));
+    await expect(canvas.getByTestId("selected")).toHaveTextContent("p-5");
+
+    await userEvent.clear(search);
+    await userEvent.type(search, "nothing-like-this");
+    await expect(canvas.getByText(/no matching projects/i)).toBeVisible();
+  },
+};
+
+export const FewProjectsHaveNoSearch: Story = {
+  render: () => <FirstRunHarness projects={PROJECTS} />,
+  play: async ({ canvas }) => {
+    await expect(canvas.queryByRole("textbox", { name: /search projects/i })).toBeNull();
+  },
+};
