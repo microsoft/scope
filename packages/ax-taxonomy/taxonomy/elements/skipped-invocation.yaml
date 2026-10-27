@@ -1,0 +1,74 @@
+schema_version: scope/taxonomy/v1
+id: beh-skipped-invocation
+label: Skipped Invocation
+description: The agent discovers a task-relevant extension point but never uses it.
+category_id: behavior-category-invocation
+implementation:
+  type: prompt
+  prompt: >-
+    Assess Skipped Invocation: the agent discovers a task-relevant extension
+    point but never uses it before the run ends. Include referenced files whose
+    reading instructions apply to the task. A configured or available source is
+    not discovered unless the Scope ATIF extension records a discovery event.
+evidence:
+  requires_discovery_event: true
+  complete_for_negative: true
+  requires_task: true
+output_schema:
+  oneOf:
+    - type: object
+      additionalProperties: false
+      required: [state, observed, occurrences]
+      properties:
+        state:
+          const: completed
+        observed:
+          const: true
+        occurrences:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [extension_point, source, discovery_turn]
+            properties:
+              extension_point:
+                type: string
+              source:
+                type: object
+                additionalProperties: false
+                required: [id, label, surface_id]
+                properties:
+                  id:
+                    type: string
+                  label:
+                    type: string
+                  surface_id:
+                    type: string
+              discovery_turn:
+                type: integer
+                minimum: 1
+    - type: object
+      additionalProperties: false
+      required: [state, observed]
+      properties:
+        state:
+          const: completed
+        observed:
+          const: false
+    - type: object
+      additionalProperties: false
+      required: [state, reason]
+      properties:
+        state:
+          enum: [indeterminate, inapplicable]
+        reason:
+          type: string
+    - type: object
+      additionalProperties: false
+      required: [state, error]
+      properties:
+        state:
+          const: error
+        error:
+          type: string

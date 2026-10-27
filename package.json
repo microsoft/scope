@@ -6,6 +6,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "cli": "pnpm --filter cli exec tsx src/index.ts",
+    "taxonome": "node --conditions=source --import tsx apps/taxonome/src/index.ts",
     "build:cli": "pnpm --filter shared build && pnpm --filter cli build",
     "dev:api": "pnpm --filter api dev",
     "dev:portal": "pnpm --filter portal dev",

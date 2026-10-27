@@ -1,0 +1,53 @@
+{
+  "case-01": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "related_turns": [1, 2]
+        }
+      ]
+    }
+  },
+  "case-02": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "case-03": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "related_turns": [1, 2]
+        }
+      ]
+    }
+  },
+  "case-04": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "case-05": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "related_turns": [1, 2]
+        }
+      ]
+    }
+  },
+  "case-06": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  }
+}

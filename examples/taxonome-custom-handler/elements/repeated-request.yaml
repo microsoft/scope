@@ -1,0 +1,65 @@
+schema_version: scope/taxonomy/v1
+id: acme-repeated-request
+label: Repeated Information Request
+description: The agent asks for a concrete fact that the user already supplied.
+category_id: behavior-category-communication
+implementation:
+  type: prompt
+  prompt: >-
+    Assess Repeated Information Request. Mark observed only when the agent asks
+    the user to provide a concrete fact that an earlier user turn already
+    supplied clearly and completely. Cite the supplying user turn and the later
+    agent request in related_turns. Do not count confirmation, paraphrasing,
+    requests for different details, or genuinely ambiguous requirements.
+evidence:
+  requires_discovery_event: false
+  complete_for_negative: true
+  requires_task: true
+output_schema:
+  oneOf:
+    - type: object
+      additionalProperties: false
+      required: [state, observed, occurrences]
+      properties:
+        state:
+          const: completed
+        observed:
+          const: true
+        occurrences:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [related_turns]
+            properties:
+              related_turns:
+                type: array
+                minItems: 2
+                items:
+                  type: integer
+                  minimum: 1
+    - type: object
+      additionalProperties: false
+      required: [state, observed]
+      properties:
+        state:
+          const: completed
+        observed:
+          const: false
+    - type: object
+      additionalProperties: false
+      required: [state, reason]
+      properties:
+        state:
+          enum: [indeterminate, inapplicable]
+        reason:
+          type: string
+    - type: object
+      additionalProperties: false
+      required: [state, error]
+      properties:
+        state:
+          const: error
+        error:
+          type: string

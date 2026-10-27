@@ -1,0 +1,91 @@
+schema_version: scope/taxonomy/v1
+id: acme-retry-loop
+label: Recovered Retry Loop
+description: A tool operation succeeds after an explicit multi-attempt retry.
+category_id: behavior-category-recovery
+implementation:
+  type: deterministic
+  handler: acme/retry-loop-v1
+  config:
+    min_attempts: 2
+evidence:
+  requires_discovery_event: false
+  complete_for_negative: true
+  requires_task: false
+output_schema:
+  oneOf:
+    - type: object
+      additionalProperties: false
+      required: [state, observed, occurrences]
+      properties:
+        state:
+          const: completed
+        observed:
+          const: true
+        occurrences:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [source, related_turns, tool_call_id, attempts]
+            properties:
+              source:
+                type: object
+                additionalProperties: false
+                required: [id, label, surface_id]
+                properties:
+                  id:
+                    type: string
+                  label:
+                    type: string
+                  surface_id:
+                    type: string
+              related_turns:
+                type: array
+                minItems: 1
+                items:
+                  type: integer
+                  minimum: 1
+              tool_call_id:
+                type: string
+              origin:
+                type: object
+                additionalProperties: false
+                required: [iteration, step_id, tool_call_id]
+                properties:
+                  iteration:
+                    type: integer
+                    minimum: 1
+                  step_id:
+                    type: integer
+                    minimum: 1
+                  tool_call_id:
+                    type: string
+              attempts:
+                type: integer
+                minimum: 2
+    - type: object
+      additionalProperties: false
+      required: [state, observed]
+      properties:
+        state:
+          const: completed
+        observed:
+          const: false
+    - type: object
+      additionalProperties: false
+      required: [state, reason]
+      properties:
+        state:
+          const: indeterminate
+        reason:
+          type: string
+    - type: object
+      additionalProperties: false
+      required: [state, error]
+      properties:
+        state:
+          const: error
+        error:
+          type: string

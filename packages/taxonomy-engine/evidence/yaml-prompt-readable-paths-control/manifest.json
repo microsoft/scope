@@ -1,0 +1,134 @@
+{
+  "format": "scope/taxonome-readable-paths-control/v1",
+  "date": "2026-10-22",
+  "capture": {
+    "head": "dec7cc8f6d0e26b8f99197c29fa9e200107dcf05",
+    "first_reserved_at": "2026-10-22T22:16:38.337Z",
+    "last_reserved_at": "2026-10-22T22:17:59.537Z",
+    "model_call_ids": [
+      279,
+      280,
+      281,
+      282,
+      283,
+      284,
+      285,
+      286,
+      287,
+      288,
+      289
+    ],
+    "runtime_note": "All model calls used the committed dec7cc8f source and compiled runtime before the later Timeout file move."
+  },
+  "post_capture_validation": {
+    "timeout_organization_commit": "1788683d7ea1715c462f1f6444b550e8c26f49e9",
+    "evidence_commit": "0e2967fb470b0fcc2ae20bbb6a098ee026102826",
+    "provenance_commit": "f22130174c566d98a04daecab44a55bc1703a8b8",
+    "model_visible_inputs_changed": false,
+    "handler_behavior_changed": false,
+    "additional_model_calls": 0
+  },
+  "previous_cumulative_used": 278,
+  "new_calls": 11,
+  "cumulative_used": 289,
+  "cap": 500,
+  "remaining": 211,
+  "usage": {
+    "input_tokens": 13691,
+    "output_tokens": 275,
+    "model_attempts": 11,
+    "failed_calls": 0,
+    "latency_ms": 12370,
+    "usd_cost": null
+  },
+  "purpose_counts": {
+    "run": 2,
+    "eval": 4,
+    "optimize_teacher": 3,
+    "optimize_student": 2
+  },
+  "clear_current_paths": {
+    "trajectory_dataset": "datasets/repeated-request/trajectory-cases.jsonl",
+    "expected_judgments": "datasets/repeated-request/expected-judgments.json",
+    "example_trajectory": "inputs/repeated-request/example-run.atif.json",
+    "original_prompt_results": "results/repeated-request/held-out/original-prompt-results.json",
+    "optimized_prompt_artifact": "artifacts/repeated-request/optimized-prompt.ax.json",
+    "optimized_prompt_results": "results/repeated-request/held-out/optimized-prompt-results.json",
+    "built_in_results": "results/built-in/agent-behavior-results.json",
+    "deterministic_plain_result": "results/retry-loop/plain-atif-result.json",
+    "deterministic_archive_result": "results/retry-loop/scope-archive-result.json"
+  },
+  "code_handler_tests": {
+    "custom_retry_loop": {
+      "file": "examples/taxonome-custom-handler/tests/retry-loop-handler.test.ts",
+      "passed": 2,
+      "total": 2,
+      "model_calls": 0
+    },
+    "built_in_timeout": {
+      "folder": "packages/taxonomy-evaluation/src/handlers/timeout",
+      "implementation": "handler.ts",
+      "test": "handler.test.ts",
+      "passed": 15,
+      "total": 15,
+      "model_calls": 0
+    }
+  },
+  "evaluation_semantics": {
+    "pass_meaning": "Detector output matched the reviewed expected judgment.",
+    "false_or_indeterminate_can_pass": true,
+    "passed_total_unit": "case executions including samples",
+    "passed_total_is_not": [
+      "agent task success",
+      "SDK call count"
+    ],
+    "fresh_calls_when_model_invoked": true,
+    "authoritative_preflight_can_avoid_call": true,
+    "artifact_restore_caches_answers": false
+  },
+  "results": {
+    "example_run_observed": true,
+    "heldout_original_prompt": {
+      "passed": 2,
+      "total": 2,
+      "pass_rate": 1
+    },
+    "optimization": {
+      "best_score": 1,
+      "learned_traces": 3,
+      "examples": 2,
+      "metric_entries": 5,
+      "instruction_proposals": 0,
+      "early_stopped": false
+    },
+    "heldout_optimized_prompt": {
+      "passed": 2,
+      "total": 2,
+      "pass_rate": 1,
+      "accuracy_gain": false
+    },
+    "built_in_taxonomy_elements": 2
+  },
+  "historical_packets_rewritten": false,
+  "source_sha256": {
+    "datasets/repeated-request/trajectory-cases.jsonl": "9d7adef679325414a20a6e89635f32ea547807ed3d6b15968925d5bde6d831f7",
+    "datasets/repeated-request/expected-judgments.json": "4fae12fb1d62e19d848fdc3e385aa5731f84c49ae47de7223721946737ecf0b6",
+    "inputs/repeated-request/example-run.atif.json": "5b762feb519865dca56c0456d3ee2a660b9759c154069d097b4f7a1fd4857838",
+    "tests/retry-loop-handler.test.ts": "b1c3db84ca4c6f85066060078c6c31875407b8f54de6c783d0e678adad20006b",
+    "vitest.config.ts": "93ed50ca70b88e72efab0cf95a017598edb680f2615b664a72ad83c8623fbf40",
+    "packages/taxonomy-evaluation/src/handlers/timeout/handler.ts (post-capture organization)": "31185f8bb072fca577e5bb4524455ac4e6461eebfa9599a2239d517a53167af3",
+    "packages/taxonomy-evaluation/src/handlers/timeout/handler.test.ts (post-capture organization)": "58176598581f42a0ce63d7c8ed277f3ab9c340c4963780fecd87d5caa1624e7d"
+  },
+  "artifact_sha256": {
+    "artifacts/repeated-request/optimized-prompt.ax.json": "0737a0a043b360a9d25ff7ae943fbdf666c1ee7d8653412d561692f4877b40a0",
+    "results/repeated-request/example-run/original-prompt-result.json": "2039421dad807c194e7ab3b2a49beea07961818f70603ffd389575c835c352df",
+    "results/repeated-request/held-out/original-prompt-results.json": "b9222df08e0776172b8c7e6971ce71a8dbdcaac95ae92ebbb0974c0934af16db",
+    "results/repeated-request/held-out/optimized-prompt-results.json": "4794f816aab8d7f9a35576b5cd506cfd63b2e84f0fb1950abcf6f05199dd3367",
+    "results/repeated-request/optimization/optimization-summary.json": "146900a105d307943b2476c8bbdb3788eab5ef8323113436f9dd4a41d9ce53a5",
+    "results/built-in/agent-behavior-results.json": "3124683ac08089496f8510db45688accffd7d2458ab2bfc3e240f5db5eefecdd",
+    "results/retry-loop/readout.json": "8d1be55a67c87977286c940e4a33494754f61e90a1da2afc46a52d607cbec6ef",
+    "results/retry-loop/readout.md": "091b3ad152fcbcef75669cbb4865bc7599ca95ecf62b5319f4008c0aee1ab285",
+    "code-handler-test-results.json": "9d21e0c2be0ea5d6f7f59a6f485bd3d4f5a1e3f1f18a74bd875fe787203ca352",
+    "call-ledger-delta.jsonl": "f4b6a61a16686a58fe2f0d6cb9aeb2593a6233ae52080d5d52641fdafbd819b3"
+  }
+}

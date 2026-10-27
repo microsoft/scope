@@ -1,0 +1,20 @@
+{
+  "train-skill": {"beh-skipped-invocation":{"state":"completed","observed":true,"occurrences":[{"source_id":"storage","discovery_turn":2,"extension_point_contains":"storage-skill"}]}},
+  "train-used": {"beh-skipped-invocation":{"state":"completed","observed":false},"beh-timeout":{"state":"completed","observed":false}},
+  "train-none": {"beh-skipped-invocation":{"state":"completed","observed":false},"beh-timeout":{"state":"completed","observed":false}},
+  "train-irrelevant": {"beh-skipped-invocation":{"state":"completed","observed":false}},
+  "train-partial": {"beh-skipped-invocation":{"state":"indeterminate"}},
+  "train-mixed": {"beh-skipped-invocation":{"state":"completed","observed":true,"occurrences":[{"source_id":"auth","discovery_turn":2,"extension_point_contains":"auth.md"}]},"beh-timeout":{"state":"completed","observed":true,"occurrences":[{"source_id":"account","tool_call_id":"mixed-call","related_turns":[3]}]}},
+  "val-reference": {"beh-skipped-invocation":{"state":"completed","observed":true,"occurrences":[{"source_id":"identity-ref","discovery_turn":2,"extension_point_contains":"references/identity.md"}]}},
+  "val-reference-irrelevant": {"beh-skipped-invocation":{"state":"completed","observed":false}},
+  "val-multiple": {"beh-skipped-invocation":{"state":"completed","observed":true,"occurrences":[{"source_id":"auth","discovery_turn":2,"extension_point_contains":"auth.md"},{"source_id":"partition","discovery_turn":2,"extension_point_contains":"partition.md"}]}},
+  "val-repeat": {"beh-skipped-invocation":{"state":"completed","observed":true,"occurrences":[{"source_id":"build","discovery_turn":2,"extension_point_contains":"build-guide.md"}]}},
+  "val-unknown": {"beh-skipped-invocation":{"state":"indeterminate"}},
+  "held-cli": {"beh-skipped-invocation":{"state":"completed","observed":true,"occurrences":[{"source_id":"deployctl","discovery_turn":2,"extension_point_contains":"deployctl"}]}},
+  "held-used-reference": {"beh-skipped-invocation":{"state":"completed","observed":false}},
+  "held-irrelevant": {"beh-skipped-invocation":{"state":"completed","observed":false}},
+  "held-partial": {"beh-skipped-invocation":{"state":"indeterminate"}},
+  "held-several": {"beh-skipped-invocation":{"state":"completed","observed":true,"occurrences":[{"source_id":"database-skill","discovery_turn":2,"extension_point_contains":"database-skill"},{"source_id":"check","discovery_turn":3,"extension_point_contains":"cloud/db-check"}]}},
+  "held-injection": {"beh-skipped-invocation":{"state":"completed","observed":true,"occurrences":[{"source_id":"backup","discovery_turn":2,"extension_point_contains":"backup.md"}]}},
+  "held-atif-review": {"beh-skipped-invocation":{"state":"completed","observed":false},"beh-timeout":{"state":"completed","observed":false}}
+}

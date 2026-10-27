@@ -1,0 +1,131 @@
+{
+  "passed": 2,
+  "total": 2,
+  "pass_rate": 1,
+  "metadata": {
+    "before": {
+      "taxonomy": {
+        "id": "acme-agent-behavior",
+        "version": "1.0.0",
+        "digest": "c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328"
+      },
+      "model": "gpt-5.6-sol-fast",
+      "initialized": false,
+      "artifact_contract_hash": null,
+      "budget": {
+        "cap": 500,
+        "used": 264,
+        "remaining": 236
+      }
+    },
+    "after": {
+      "taxonomy": {
+        "id": "acme-agent-behavior",
+        "version": "1.0.0",
+        "digest": "c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328"
+      },
+      "model": "gpt-5.6-sol-fast",
+      "initialized": true,
+      "artifact_contract_hash": "45dad89fa891502f5d3fb416a069fc0ab66a365b61d57c26879eceab7659d6ac",
+      "budget": {
+        "cap": 500,
+        "used": 266,
+        "remaining": 234
+      }
+    }
+  },
+  "rows": [
+    {
+      "case_id": "heldout-path-repeat",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "scope/taxonomy-evaluation/v1",
+          "taxonomy": {
+            "id": "acme-agent-behavior",
+            "version": "1.0.0",
+            "digest": "c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328"
+          },
+          "element": {
+            "id": "acme-repeated-request",
+            "label": "Repeated Information Request",
+            "category_id": "behavior-category-communication"
+          },
+          "implementation": {
+            "type": "prompt"
+          },
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "related_turns": [
+                  1,
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 2696,
+      "prompt_predictions": [
+        {
+          "element_id": "acme-repeated-request",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "related_turns": [
+                  1,
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "heldout-path-detail",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "scope/taxonomy-evaluation/v1",
+          "taxonomy": {
+            "id": "acme-agent-behavior",
+            "version": "1.0.0",
+            "digest": "c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328"
+          },
+          "element": {
+            "id": "acme-repeated-request",
+            "label": "Repeated Information Request",
+            "category_id": "behavior-category-communication"
+          },
+          "implementation": {
+            "type": "prompt"
+          },
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 939,
+      "prompt_predictions": [
+        {
+          "element_id": "acme-repeated-request",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    }
+  ]
+}

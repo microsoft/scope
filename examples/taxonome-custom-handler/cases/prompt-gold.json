@@ -1,0 +1,53 @@
+{
+  "train-port-repeat": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "related_turns": [1, 2]
+        }
+      ]
+    }
+  },
+  "train-port-choice": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "validation-format-repeat": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "related_turns": [1, 2]
+        }
+      ]
+    }
+  },
+  "validation-format-confirm": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "heldout-path-repeat": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "related_turns": [1, 2]
+        }
+      ]
+    }
+  },
+  "heldout-path-detail": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  }
+}

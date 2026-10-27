@@ -1,0 +1,141 @@
+{
+  "format": "scope/taxonome-neutral-control/v1",
+  "date": "2026-10-22",
+  "source_commit": "a2486f842901cc06ec813edfb636d3b5e870981b",
+  "supersedes_quality_claim_from": "packages/taxonomy-evaluation/evidence/yaml-prompt-demo",
+  "historical_evidence_preserved": {
+    "original_snapshot_calls": 256,
+    "first_yaml_demo_calls": 11,
+    "files_rewritten": false
+  },
+  "neutral_control_budget": {
+    "cap": 500,
+    "starting_used": 267,
+    "new_calls": 11,
+    "cumulative_used": 278,
+    "remaining": 222
+  },
+  "neutral_control_usage": {
+    "calls": 11,
+    "input_tokens": 13691,
+    "output_tokens": 252,
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "model_attempts": 11,
+    "failed_calls": 0,
+    "latency_ms": 13259,
+    "usd_cost": null
+  },
+  "purpose_counts": {
+    "run": 2,
+    "eval": 4,
+    "optimize_teacher": 3,
+    "optimize_student": 2
+  },
+  "identity_control": {
+    "case_ids": [
+      "case-01",
+      "case-02",
+      "case-03",
+      "case-04",
+      "case-05",
+      "case-06"
+    ],
+    "model_visible_session_ids": [
+      "session-a13f",
+      "session-c248",
+      "session-e572",
+      "session-f684",
+      "session-b795",
+      "session-d8a6"
+    ],
+    "case_metadata_forwarded_by_production_projection": false,
+    "outcome_coded_identifiers": false,
+    "semantic_gold_changed": false,
+    "families_disjoint": true,
+    "originating_runs_disjoint": true
+  },
+  "settings": {
+    "model": "gpt-5.6-sol-fast",
+    "reasoning_effort": "low",
+    "sampling": "sdk-managed",
+    "ax_version": "25.3.2",
+    "sdk_version": "1.0.1",
+    "max_metric_calls": 12,
+    "seed": 42
+  },
+  "contracts": {
+    "taxonomy_schema": "scope/taxonomy/v1",
+    "evaluation_schema": "scope/taxonomy-evaluation/v1",
+    "artifact_format": "scope/taxonome-ax/v2",
+    "taxonomy_digest": "c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328",
+    "prompt_contract_hash": "45dad89fa891502f5d3fb416a069fc0ab66a365b61d57c26879eceab7659d6ac",
+    "corpus_hash": "563face0f8e6792caa2563a89ecf3a97469b33f8695711380d40bbcc632361f1"
+  },
+  "results": {
+    "custom_prompt_run": {
+      "state": "completed",
+      "observed": true,
+      "related_turns": [
+        1,
+        2
+      ]
+    },
+    "heldout_baseline": {
+      "case_ids": [
+        "case-05",
+        "case-06"
+      ],
+      "passed": 2,
+      "total": 2,
+      "pass_rate": 1
+    },
+    "optimization": {
+      "best_score": 1,
+      "components": 2,
+      "learned_traces": 3,
+      "examples": 2,
+      "metric_entries": 5,
+      "instruction_proposals": 0,
+      "early_stopped": false
+    },
+    "heldout_replay": {
+      "case_ids": [
+        "case-05",
+        "case-06"
+      ],
+      "passed": 2,
+      "total": 2,
+      "pass_rate": 1,
+      "accuracy_gain": false
+    },
+    "built_in_taxonomy_run": {
+      "taxonomy_id": "agent-behavior",
+      "prompt_element": {
+        "id": "beh-skipped-invocation",
+        "observed": false
+      },
+      "deterministic_element": {
+        "id": "beh-timeout",
+        "observed": true
+      }
+    }
+  },
+  "optimizer_interpretation": "Ax selected learned demos and converged without instruction proposals. Baseline and replay both passed 2/2; no accuracy improvement is claimed.",
+  "source_sha256": {
+    "examples/taxonome-custom-handler/cases/neutral-prompt-cases.jsonl": "9d7adef679325414a20a6e89635f32ea547807ed3d6b15968925d5bde6d831f7",
+    "examples/taxonome-custom-handler/cases/neutral-prompt-gold.json": "4fae12fb1d62e19d848fdc3e385aa5731f84c49ae47de7223721946737ecf0b6",
+    "examples/taxonome-custom-handler/inputs/repeated-request.atif.json": "5b762feb519865dca56c0456d3ee2a660b9759c154069d097b4f7a1fd4857838",
+    "apps/taxonome/src/custom-handler-example.test.ts": "d3ffd46238600bfcbce52eb96c5c5ff6183ab521b167700a5a14c6c0a0f6464d"
+  },
+  "artifact_sha256": {
+    "prompt-run.json": "7a5376eb3f40b28d653036e7d4d130885b00f66deb0c4ffc205f48dcfb357fa7",
+    "baseline.json": "bf14f586f38a41341831136572313d568a17228500c33149cf7b7a3831ec1756",
+    "optimized.ax.json": "a4624b21e5f7b3094a0158af429c18a2a519e93ab3afb19f290a73934613ad50",
+    "replay.json": "835daa7b0e3685ae0254d0f36f882ba71f11b41e1788787f9a292361a3c90977",
+    "built-in-run.json": "a7a2d62e36dd68dc419a823e02f9bbe0ad81616da0b00ac9844977e79319d1e3",
+    "readout.json": "8d1be55a67c87977286c940e4a33494754f61e90a1da2afc46a52d607cbec6ef",
+    "readout.md": "091b3ad152fcbcef75669cbb4865bc7599ca95ecf62b5319f4008c0aee1ab285",
+    "call-ledger-delta.jsonl": "b2db641a8cb604dd45292c2a370f2c5ee7e969646882d3fa56de2492378e164d"
+  }
+}

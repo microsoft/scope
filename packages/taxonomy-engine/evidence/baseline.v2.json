@@ -1,0 +1,1919 @@
+{
+  "passed": 36,
+  "total": 36,
+  "pass_rate": 1,
+  "metadata": {
+    "before": {
+      "model": "gpt-5.6-sol-fast",
+      "initialized": false,
+      "budget": {
+        "cap": 500,
+        "used": 124,
+        "remaining": 376
+      }
+    },
+    "after": {
+      "model": "gpt-5.6-sol-fast",
+      "initialized": true,
+      "contract_hash": "a15b45bcb8bff0a82e7c1745f3155a543d0040b8c27b484c7ce7676b2581aa60",
+      "artifact_hash": null,
+      "budget": {
+        "cap": 500,
+        "used": 154,
+        "remaining": 346
+      }
+    }
+  },
+  "rows": [
+    {
+      "case_id": "train-skill",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "storage-skill",
+                "source": {
+                  "id": "storage",
+                  "label": "storage-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 5256,
+      "context": {
+        "run_id": "run-0001",
+        "scenario": {
+          "id": "storage",
+          "label": "Storage app",
+          "task": "Build a storage app"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "storage",
+            "label": "storage-skill",
+            "surface_id": "surface-skills"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "storage-skill",
+                "source": {
+                  "id": "storage",
+                  "label": "storage-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "train-used",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1635,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "db",
+            "label": "db/query",
+            "surface_id": "surface-mcp"
+          }
+        ],
+        "timeout_policy": {
+          "threshold_ms": 1000
+        }
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "train-none",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1535,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "db",
+            "label": "db/query",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "train-irrelevant",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1507,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "weather",
+            "label": "weather-forecast",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "train-partial",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "Skipped Invocation requires complete post-discovery run evidence to establish non-use."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1,
+      "context": {
+        "completeness": "partial",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      },
+      "prompt_predictions": []
+    },
+    {
+      "case_id": "train-mixed",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "source": {
+                  "id": "account",
+                  "label": "account/query",
+                  "surface_id": "surface-mcp"
+                },
+                "related_turns": [
+                  3
+                ],
+                "tool_call_id": "mixed-call"
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 2124,
+      "context": {
+        "run_id": "run-0006",
+        "scenario": {
+          "id": "auth",
+          "label": "Authentication",
+          "task": "Configure auth and query account"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          },
+          {
+            "id": "account",
+            "label": "account/query",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "val-reference",
+      "split": "validation",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "references/identity.md",
+                "source": {
+                  "id": "identity-ref",
+                  "label": "references/identity.md",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 2090,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "identity-ref",
+            "label": "references/identity.md",
+            "surface_id": "surface-skills"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "references/identity.md",
+                "source": {
+                  "id": "identity-ref",
+                  "label": "references/identity.md",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "val-reference-irrelevant",
+      "split": "validation",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 2200,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "identity-ref",
+            "label": "references/identity.md",
+            "surface_id": "surface-skills"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "val-multiple",
+      "split": "validation",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "partition.md",
+                "source": {
+                  "id": "partition",
+                  "label": "partition.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1629,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          },
+          {
+            "id": "partition",
+            "label": "partition.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "partition.md",
+                "source": {
+                  "id": "partition",
+                  "label": "partition.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "val-repeat",
+      "split": "validation",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "build-guide.md",
+                "source": {
+                  "id": "build",
+                  "label": "build-guide.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1928,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "build",
+            "label": "build-guide.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "build-guide.md",
+                "source": {
+                  "id": "build",
+                  "label": "build-guide.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "val-unknown",
+      "split": "validation",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "Skipped Invocation requires complete post-discovery run evidence to establish non-use."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 0,
+      "context": {
+        "completeness": "unknown",
+        "sources": [
+          {
+            "id": "deploy",
+            "label": "deploy.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      },
+      "prompt_predictions": []
+    },
+    {
+      "case_id": "held-cli",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "deployctl",
+                "source": {
+                  "id": "deployctl",
+                  "label": "deployctl",
+                  "surface_id": "surface-cli"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 2348,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "deployctl",
+            "label": "deployctl",
+            "surface_id": "surface-cli"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "deployctl",
+                "source": {
+                  "id": "deployctl",
+                  "label": "deployctl",
+                  "surface_id": "surface-cli"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "held-used-reference",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1646,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "creds",
+            "label": "credentials.md",
+            "surface_id": "surface-instructions"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "held-irrelevant",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1399,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "image",
+            "label": "image/render",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "held-partial",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "Skipped Invocation requires complete post-discovery run evidence to establish non-use."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 0,
+      "context": {
+        "completeness": "partial",
+        "sources": [
+          {
+            "id": "deploy-skill",
+            "label": "deploy-skill",
+            "surface_id": "surface-skills"
+          }
+        ]
+      },
+      "prompt_predictions": []
+    },
+    {
+      "case_id": "held-several",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "database-skill",
+                "source": {
+                  "id": "database-skill",
+                  "label": "database-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "cloud/db-check",
+                "source": {
+                  "id": "check",
+                  "label": "cloud/db-check",
+                  "surface_id": "surface-mcp"
+                },
+                "discovery_turn": 3
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 3095,
+      "context": {
+        "run_id": "run-0016",
+        "scenario": {
+          "id": "db",
+          "label": "Cloud database",
+          "task": "Create and verify database"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "database-skill",
+            "label": "database-skill",
+            "surface_id": "surface-skills"
+          },
+          {
+            "id": "check",
+            "label": "cloud/db-check",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "database-skill",
+                "source": {
+                  "id": "database-skill",
+                  "label": "database-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "cloud/db-check",
+                "source": {
+                  "id": "check",
+                  "label": "cloud/db-check",
+                  "surface_id": "surface-mcp"
+                },
+                "discovery_turn": 3
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "held-injection",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "backup.md",
+                "source": {
+                  "id": "backup",
+                  "label": "backup.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 2090,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "backup",
+            "label": "backup.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "backup.md",
+                "source": {
+                  "id": "backup",
+                  "label": "backup.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "held-atif-review",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1437,
+      "context": {
+        "completeness": "complete",
+        "sources": []
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "train-skill",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "storage-skill",
+                "source": {
+                  "id": "storage",
+                  "label": "storage-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1235,
+      "context": {
+        "run_id": "run-0001",
+        "scenario": {
+          "id": "storage",
+          "label": "Storage app",
+          "task": "Build a storage app"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "storage",
+            "label": "storage-skill",
+            "surface_id": "surface-skills"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "storage-skill",
+                "source": {
+                  "id": "storage",
+                  "label": "storage-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "train-used",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1027,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "db",
+            "label": "db/query",
+            "surface_id": "surface-mcp"
+          }
+        ],
+        "timeout_policy": {
+          "threshold_ms": 1000
+        }
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "train-none",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1096,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "db",
+            "label": "db/query",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "train-irrelevant",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1279,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "weather",
+            "label": "weather-forecast",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "train-partial",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "Skipped Invocation requires complete post-discovery run evidence to establish non-use."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 0,
+      "context": {
+        "completeness": "partial",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      },
+      "prompt_predictions": []
+    },
+    {
+      "case_id": "train-mixed",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "source": {
+                  "id": "account",
+                  "label": "account/query",
+                  "surface_id": "surface-mcp"
+                },
+                "related_turns": [
+                  3
+                ],
+                "tool_call_id": "mixed-call"
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1869,
+      "context": {
+        "run_id": "run-0006",
+        "scenario": {
+          "id": "auth",
+          "label": "Authentication",
+          "task": "Configure auth and query account"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          },
+          {
+            "id": "account",
+            "label": "account/query",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "val-reference",
+      "split": "validation",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "references/identity.md",
+                "source": {
+                  "id": "identity-ref",
+                  "label": "references/identity.md",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1832,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "identity-ref",
+            "label": "references/identity.md",
+            "surface_id": "surface-skills"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "references/identity.md",
+                "source": {
+                  "id": "identity-ref",
+                  "label": "references/identity.md",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "val-reference-irrelevant",
+      "split": "validation",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1280,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "identity-ref",
+            "label": "references/identity.md",
+            "surface_id": "surface-skills"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "val-multiple",
+      "split": "validation",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "partition.md",
+                "source": {
+                  "id": "partition",
+                  "label": "partition.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 2182,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          },
+          {
+            "id": "partition",
+            "label": "partition.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "partition.md",
+                "source": {
+                  "id": "partition",
+                  "label": "partition.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "val-repeat",
+      "split": "validation",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "build-guide.md",
+                "source": {
+                  "id": "build",
+                  "label": "build-guide.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1897,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "build",
+            "label": "build-guide.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "build-guide.md",
+                "source": {
+                  "id": "build",
+                  "label": "build-guide.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "val-unknown",
+      "split": "validation",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "Skipped Invocation requires complete post-discovery run evidence to establish non-use."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 0,
+      "context": {
+        "completeness": "unknown",
+        "sources": [
+          {
+            "id": "deploy",
+            "label": "deploy.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      },
+      "prompt_predictions": []
+    },
+    {
+      "case_id": "held-cli",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "deployctl CLI",
+                "source": {
+                  "id": "deployctl",
+                  "label": "deployctl",
+                  "surface_id": "surface-cli"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1525,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "deployctl",
+            "label": "deployctl",
+            "surface_id": "surface-cli"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "deployctl CLI",
+                "source": {
+                  "id": "deployctl",
+                  "label": "deployctl",
+                  "surface_id": "surface-cli"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "held-used-reference",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 2220,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "creds",
+            "label": "credentials.md",
+            "surface_id": "surface-instructions"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "held-irrelevant",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1550,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "image",
+            "label": "image/render",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "held-partial",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "Skipped Invocation requires complete post-discovery run evidence to establish non-use."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 0,
+      "context": {
+        "completeness": "partial",
+        "sources": [
+          {
+            "id": "deploy-skill",
+            "label": "deploy-skill",
+            "surface_id": "surface-skills"
+          }
+        ]
+      },
+      "prompt_predictions": []
+    },
+    {
+      "case_id": "held-several",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "database-skill",
+                "source": {
+                  "id": "database-skill",
+                  "label": "database-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "cloud/db-check",
+                "source": {
+                  "id": "check",
+                  "label": "cloud/db-check",
+                  "surface_id": "surface-mcp"
+                },
+                "discovery_turn": 3
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1753,
+      "context": {
+        "run_id": "run-0016",
+        "scenario": {
+          "id": "db",
+          "label": "Cloud database",
+          "task": "Create and verify database"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "database-skill",
+            "label": "database-skill",
+            "surface_id": "surface-skills"
+          },
+          {
+            "id": "check",
+            "label": "cloud/db-check",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "database-skill",
+                "source": {
+                  "id": "database-skill",
+                  "label": "database-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "cloud/db-check",
+                "source": {
+                  "id": "check",
+                  "label": "cloud/db-check",
+                  "surface_id": "surface-mcp"
+                },
+                "discovery_turn": 3
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "held-injection",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "backup.md",
+                "source": {
+                  "id": "backup",
+                  "label": "backup.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 6961,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "backup",
+            "label": "backup.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "backup.md",
+                "source": {
+                  "id": "backup",
+                  "label": "backup.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "held-atif-review",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 973,
+      "context": {
+        "completeness": "complete",
+        "sources": []
+      },
+      "prompt_predictions": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "prediction": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "acme-retry-run",
+  "agent": { "name": "fixture" },
+  "steps": [
+    {
+      "step_id": 1,
+      "source": "user",
+      "message": "Query the account service with retry."
+    },
+    {
+      "step_id": 2,
+      "source": "agent",
+      "message": "The retry recovered.",
+      "tool_calls": [
+        {
+          "tool_call_id": "retry-1",
+          "function_name": "account/query",
+          "arguments": {},
+          "extra": {
+            "scope": {
+              "source_id": "account/query",
+              "outcome": "completed",
+              "response": {
+                "attempts": 3,
+                "recovered": true
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "extra": {
+    "scope": {
+      "schema_version": "scope.atif-extension.v1",
+      "trajectory_state": "complete",
+      "task": "Query the account service with retry.",
+      "run": {
+        "id": "acme-run-1",
+        "scenario_id": "retry",
+        "scenario_label": "Recovered retry",
+        "profile_id": "custom",
+        "profile_label": "Custom handler"
+      },
+      "available_sources": [
+        {
+          "id": "account/query",
+          "label": "account/query",
+          "surface_id": "surface-mcp"
+        }
+      ]
+    }
+  }
+}
