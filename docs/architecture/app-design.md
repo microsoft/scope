@@ -609,6 +609,15 @@ Workers publish log events to Redis Pub/Sub channels keyed by run ID. The API su
 
 The Portal desktop shell uses a persistent left navigation sidebar. It defaults to the compact icon rail, and users can expand it to show navigation labels; the choice is stored in `localStorage` under `scope:layout:sidebar-expanded`. Mobile navigation remains a sheet-based menu with labels always visible.
 
+`components/navigation-icons.ts` owns the shared section icons used by `Layout`
+and the compact `ListLayout` header's **Open filters** trigger. `ListLayout`
+resolves its section from the existing `railStorageKey`; report templates share
+the Reports icon, while keys and accounts share Secrets. Missing or unregistered
+storage keys retain the generic sliders icon. Desktop rail toggles, persisted
+collapse state, navigation routes, feature flags, and project gating are unchanged.
+When adding a list section, register its storage key here to keep its header and
+sidebar icons aligned.
+
 The Keys list and its nested `/secrets/keys/:id/preview` route use the same
 full-bleed shell. Opening or closing the preview keeps the tabs and filter rail
 aligned with the navigation. Key registration and full-detail routes retain the
