@@ -31,3 +31,22 @@ export const Default: Story = {
     });
   },
 };
+
+export const NoMatchingReportTemplates: Story = {
+  render: () => (
+    <div>
+      <Button onClick={() => toast.info("No report templates matched this run", {
+        description: "No report was queued. Check the active report templates and their triggers.",
+      })}>
+        Show no-match feedback
+      </Button>
+      <Toaster />
+    </div>
+  ),
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Show no-match feedback" }));
+    await waitFor(async () => {
+      await expect(screen.getByText("No report templates matched this run")).toBeVisible();
+    });
+  },
+};
