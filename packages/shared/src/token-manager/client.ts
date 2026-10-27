@@ -3,8 +3,10 @@
 
 import {
   AcquireAccountResponse,
+  AcquireEndpointResponse,
   AcquireKeyResponse,
   AccountType,
+  EndpointCapability,
   KEY_CAPABILITY_ENV_VARS,
   KeyCapability,
   KeyType,
@@ -137,6 +139,60 @@ export class TokenManagerClient {
     }
 
     return result;
+  }
+
+  /**
+   * Acquire a structured endpoint for the given capability.
+   *
+   * Unlike acquireToken(), this method has no single-value environment
+   * fallback: endpoint credentials require both an endpoint and an API key.
+   * Callers that support environment configuration should resolve the pair
+   * before calling this method.
+   *
+   * @throws Error if no endpoint is available or the response is malformed.
+   */
+  async acquireEndpoint(capability: EndpointCapability): Promise<AcquireEndpointResponse> {
+    if (!this.baseUrl) {
+      throw new Error(
+        `No endpoint available for capability '${capability}': TOKEN_MANAGER_URL is not configured`
+      );
+    }
+
+    const url = `${this.baseUrl}/api/v1/endpoints/acquire`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ capability }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "unknown error");
+      throw new Error(
+        `Endpoint acquisition failed for capability '${capability}' (HTTP ${response.status}): ${errorBody}`
+      );
+    }
+
+    const result: unknown = await response.json();
+    if (
+      typeof result !== "object" ||
+      result === null ||
+      !("endpoint" in result) ||
+      typeof result.endpoint !== "string" ||
+      result.endpoint.trim() === "" ||
+      !("apiKey" in result) ||
+      typeof result.apiKey !== "string" ||
+      result.apiKey.trim() === "" ||
+      ("deployment" in result &&
+        result.deployment !== undefined &&
+        typeof result.deployment !== "string")
+    ) {
+      throw new Error(
+        `Invalid endpoint response for capability '${capability}': missing or invalid credentials`
+      );
+    }
+
+    return result as AcquireEndpointResponse;
   }
 
   /**
