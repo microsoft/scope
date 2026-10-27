@@ -28,6 +28,7 @@ import {
   RunFacetsResponseSchema,
   RunStateSchema,
   decodeCursor,
+  foldLegacyWorkerVersion,
   encodeCursor,
   runDurationMs,
   parseExtensionSpec,
@@ -2478,6 +2479,13 @@ async function finalizePendingRun(
     throw new ImportError(400, `Failed to parse run.yaml: ${parseErr}`);
   }
 
+  // Archives exported before issue #855 carry `run.workerVersion`; move it to
+  // `run.worker.version` so validation doesn't strip it as an unknown key.
+  if (runDocRaw && typeof runDocRaw === "object" && "run" in runDocRaw) {
+    const raw = runDocRaw as { run: unknown };
+    raw.run = foldLegacyWorkerVersion(raw.run);
+  }
+
   const ImportSchema = RequestResponseSchema.extend({ run: RunStateSchema });
   const parsed = ImportSchema.safeParse(runDocRaw);
   if (!parsed.success) {
@@ -2589,7 +2597,7 @@ async function finalizePendingRun(
   // stripped any unknown fields, so what's in `runDoc` is exactly the
   // optional surface we care to preserve (taskPromptId, model, agentVersion,
   // mcpServers, skillRevisions, extensions, profileId, profileVersionId,
-  // run.os, run.workerVersion, run.aiCallCount, run.startedAt,
+  // run.os, run.worker.version, run.aiCallCount, run.startedAt,
   // run.finishedAt, …). The previous allowlist construction silently
   // dropped all of these on round-trip.
   const docToInsert: RequestDocument = {

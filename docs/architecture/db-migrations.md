@@ -76,6 +76,7 @@ Defaults match the `docker-compose.yml` local dev environment, so no configurati
 ### Common patterns
 
 - **RU-paced backfill** — use `batchUpdate(col, filter, update, label)` from `../batch-update.js` (collects `_id`s, then `updateMany({_id:{$in:batch}}, update)` in small batches with 429 retry). Static update only.
+- **Per-document value copy** — when each document's new value comes from another of its own fields (e.g. 031 moving `run.workerVersion` → `run.worker.version`), iterate a projected cursor and write each doc with `updateOneWithRetry(col, filter, update, label)` from `../batch-update.js`, pacing with `sleep(INTER_BATCH_DELAY_MS)`. Avoid aggregation-pipeline updates (`$set: "$field"`) for Cosmos compatibility.
 - **Per-document backfill referencing `_id`** — when the new value derives from each doc's own `_id` (e.g. `keyId = _id`), `batchUpdate` can't express it. Use a paced `bulkWrite` loop of `updateOne` ops instead (mirror `025-create-projects`), reusing `BATCH_SIZE`/`sleep`/`getRetryAfterMs` for pacing and 429 handling.
 - **Idempotent index create** — wrap `createIndex` in try/catch and tolerate "already exists" codes (`85`/`86`/`68`); rethrow real failures so validation surfaces them.
 - **Unique-index swap** — before creating a composite **unique** index on a non-empty collection, `$group`/`$match` to assert no duplicate keys exist first (a pre-existing collision fails index creation on Cosmos). Drop the old index tolerating "not found" (`26`/`27`). `down()` for index ops is log-only by convention.
@@ -114,6 +115,7 @@ When you run a command:
 | `027-uuid-keys-mcp-profileversions` | Opaque UUID `_id` + reference key for `mcp-servers` (`slug`) and `profile-versions` (`ref`) with `{projectId,slug}` / `{projectId,ref}` indexes; drops dead `prompt-feature-extractions` (see [db.md](db.md#per-project-entity-keying-migration-027)) |
 | `028-isolate-mcp-secrets-per-project` | Reconciles the token-manager `mcp-secrets` unique index — drops the legacy global-unique `{mcpId,name}` and (re)creates the per-project `{projectId,mcpId,name}` (see [token-manager.md](token-manager.md#mcp-secrets)) |
 | `029-create-users-collection` | Creates the database-enforced unique identity index for authentication; uses Cosmos collection-creation extensions for continuous-backup accounts and preserves native MongoDB index creation (see below) |
+| `031-move-worker-version` | Moves the worker build into the worker sub-document: `requests.run.workerVersion` → `run.worker.version` and `runs.workerVersion` → `worker.version` (issue #855); never overwrites an existing `worker.version`; unsets the legacy field. Pre-#846 runs get a version-only `worker` (no `instanceId`). `down()` reverses the move |
 
 ### Migration 029: users identity uniqueness
 

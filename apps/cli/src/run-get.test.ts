@@ -228,6 +228,30 @@ describe('run get', () => {
     });
   });
 
+  describe('worker version (#855)', () => {
+    it('shows run.worker.version in table and JSON output', async () => {
+      const run = { ...fullRun, run: { ...fullRun.run, worker: { instanceId: 'i-1', version: 'claude-1.0-20260101T000000Z-abc' } } };
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(run) }));
+      const { runGetAction } = await import('./run-get-action.js');
+
+      const table = captureConsole();
+      try {
+        await runGetAction({ id: 'run-002', url: 'http://localhost:3100', output: 'table' });
+      } finally {
+        table.restore();
+      }
+      expect(table.lines.join('\n')).toMatch(/Worker Ver:.*claude-1\.0-20260101T000000Z-abc/);
+
+      const json = captureConsole();
+      try {
+        await runGetAction({ id: 'run-002', url: 'http://localhost:3100', output: 'json' });
+      } finally {
+        json.restore();
+      }
+      expect(JSON.parse(json.lines.join('\n'))[0].workerVersion).toBe('claude-1.0-20260101T000000Z-abc');
+    });
+  });
+
   describe('error handling', () => {
     it('exits with error on 404', async () => {
       const mockFetch = vi.fn().mockResolvedValue({

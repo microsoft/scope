@@ -27,7 +27,7 @@ describe("RunStateSchema", () => {
       startedAt: new Date("2026-04-20T00:00:01Z"),
       finishedAt: new Date("2026-04-20T00:01:00Z"),
       turns: [],
-      workerVersion: "copilot-0.0.415-20260420T000000Z-abcd",
+      worker: { instanceId: "inst-1", version: "copilot-0.0.415-20260420T000000Z-abcd" },
       harUrl: "https://example.com/run-2.har",
       videoUrls: ["https://example.com/run-2.webm"],
       tokenUsage: { promptTokens: 1, completionTokens: 2, totalTokens: 3 },
@@ -35,6 +35,17 @@ describe("RunStateSchema", () => {
     });
     expect(parsed.outcome).toBe("succeeded");
     expect(parsed.attemptNumber).toBe(2);
+    expect(parsed.worker?.version).toBe("copilot-0.0.415-20260420T000000Z-abcd");
+  });
+
+  it("accepts a legacy version-only worker sub-document (#855)", () => {
+    const parsed = RunStateSchema.parse({
+      _id: "run-legacy",
+      attemptNumber: 1,
+      status: "done",
+      worker: { version: "copilot-old-build" },
+    });
+    expect(parsed.worker).toEqual({ version: "copilot-old-build" });
   });
 
   it("rejects attemptNumber < 1", () => {

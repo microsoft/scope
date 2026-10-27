@@ -249,7 +249,7 @@ getComponentVersions(): Record<string, string> {
 }
 ```
 
-The queue processor uses `getAgentVersion()` to build the `workerVersion` field stamped on each run: `{agentVersion}-{buildTime}-{gitCommit}`.
+The queue processor uses `getAgentVersion()` to build the worker build version stamped on each run as `run.worker.version` (alongside `run.worker.instanceId` / `podName`): `{agentVersion}-{buildTime}-{gitCommit}`. It was a top-level `run.workerVersion` before issue #855; migration `031-move-worker-version` moves existing documents. (The `workerVersion` field of an agent-version registration payload, below, is a separate catalog field and is unchanged.)
 
 **Naming convention:** Agent version is `{agent}-{semver}` (e.g., `copilot-0.0.415`, `claude-agent-acp-0.1.2-sdk-1.0.0`).
 

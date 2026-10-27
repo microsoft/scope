@@ -221,7 +221,6 @@ export const RunStateSchema = z
     durationMs: z.number().optional(),                   // Denormalized finishedAt − startedAt (ms); enables server-side sort by duration
 
     turns: z.array(ConversationTurnSchema).optional(),
-    workerVersion: z.string().optional(),
     os: z.object({
       platform: z.string(),
       release: z.string(),
@@ -229,8 +228,9 @@ export const RunStateSchema = z
     }).optional(),
     lastHeartbeatAt: z.coerce.date().optional(),
     worker: z.object({
-      instanceId: z.string(),
+      instanceId: z.string().optional(),               // Absent only on legacy (pre-#846) runs
       podName: z.string().optional(),
+      version: z.string().optional(),                  // <agentVersion>-<buildTime>-<gitCommit> (was run.workerVersion, #855)
     }).optional(),
     harUrl: z.string().optional(),
     videoUrls: z.array(z.string()).optional(),
@@ -249,6 +249,28 @@ export const RunStateSchema = z
     resumedAt: z.coerce.date().optional(),
   })
   .openapi("RunState");
+
+/**
+ * Fold a legacy `workerVersion` field on a raw (unvalidated) run-state object
+ * into `worker.version` (issue #855). Used before validating documents written
+ * by older code — e.g. `run.yaml` in archives exported before the move — so the
+ * version is preserved instead of being stripped as an unknown key.
+ *
+ * Returns the input unchanged when it is not an object or has no legacy field.
+ * An existing `worker.version` always wins over the legacy value.
+ *
+ * @param run - Raw run-state value (typically `parsedYaml.run`).
+ * @returns A shallow copy without `workerVersion`, with `worker.version` set.
+ */
+export function foldLegacyWorkerVersion<T>(run: T): T {
+  if (!run || typeof run !== "object" || !("workerVersion" in run)) return run;
+
+  const { workerVersion, ...rest } = run as Record<string, unknown>;
+  if (typeof workerVersion !== "string") return rest as T;
+
+  const worker = (rest.worker && typeof rest.worker === "object" ? rest.worker : {}) as Record<string, unknown>;
+  return { ...rest, worker: { version: workerVersion, ...worker } } as T;
+}
 
 /**
  * RunHistoryDocumentSchema — a previously-completed attempt stored in the

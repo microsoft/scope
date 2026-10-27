@@ -57,6 +57,8 @@ export async function runGetAction(options: RunGetOptions): Promise<void> {
       { key: 'workerType', label: 'Worker' },
       { key: 'model', label: 'Model' },
       { key: 'profileId', label: 'Profile', formatter: (r: any) => r.profileId ?? '' },
+      { key: 'agentVersion', label: 'Agent Version' },
+      { key: 'workerVersion', label: 'Worker Version' },
       { key: 'status', label: 'Status' },
       { key: 'maxIterations', label: 'Max Iterations' },
       { key: 'gatesCount', label: 'Gates' },
@@ -74,6 +76,7 @@ export async function runGetAction(options: RunGetOptions): Promise<void> {
       status: rs?.status,
       outcome: rs?.outcome,
       error: rs?.error,
+      workerVersion: rs?.worker?.version,
       turnsCount: rs?.turns?.length ?? 0,
       gatesCount: run.gates?.length ?? run.gateSummaries?.length ?? 0,
       gateSummaries: (run.gateSummaries ?? []).map((g) => `${g.gate}:${g.status}`).join(', '),
@@ -91,6 +94,8 @@ export async function runGetAction(options: RunGetOptions): Promise<void> {
   if (run.model) console.log(`${label('Model:')}          ${value(run.model)}`);
   if (run.profileId) console.log(`${label('Profile:')}        ${value(run.profileId)}`);
   if (run.profileVersionId) console.log(`${label('Profile Ver:')}    ${dimTimestamp(run.profileVersionId)}`);
+  if (run.agentVersion) console.log(`${label('Agent Ver:')}      ${value(run.agentVersion)}`);
+  if (rs?.worker?.version) console.log(`${label('Worker Ver:')}     ${dimTimestamp(rs.worker.version)}`);
 
   const statusColor = rs?.outcome === 'succeeded' ? successText
     : (rs?.outcome === 'failed' || rs?.outcome === 'finished') ? errorText

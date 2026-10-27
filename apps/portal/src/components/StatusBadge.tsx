@@ -101,10 +101,12 @@ export function StatusBadge({
           <div className="space-y-0.5 text-xs">
             {worker && (
               <>
-                <div>
-                  <span className="text-muted-foreground">Worker: </span>
-                  <span className="font-mono">{worker.instanceId}</span>
-                </div>
+                {worker.instanceId && (
+                  <div>
+                    <span className="text-muted-foreground">Worker: </span>
+                    <span className="font-mono">{worker.instanceId}</span>
+                  </div>
+                )}
                 {worker.podName && (
                   <div>
                     <span className="text-muted-foreground">Pod: </span>
