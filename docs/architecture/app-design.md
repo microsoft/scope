@@ -614,6 +614,11 @@ full-bleed shell. Opening or closing the preview keeps the tabs and filter rail
 aligned with the navigation. Key registration and full-detail routes retain the
 standard page padding.
 
+The unscoped Models list keeps provider and agent filtering separate: Provider
+options use the exact `Model.provider` value for both their URL value and visible
+label, while Agent options use `Model.agentId`. Provider names must not be
+resolved through the agent registry or `AgentBadge`.
+
 ### Project scoping (selected project, no default)
 
 The Portal mirrors the API's fail-fast model: it holds a **selected project** (never a default) and injects it as `?projectId=` on every scoped request.
