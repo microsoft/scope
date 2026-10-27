@@ -107,6 +107,37 @@ describe("LogPublisher", () => {
     });
   });
 
+  describe("secret redaction (#1141)", () => {
+    // Assembled at runtime so the source never contains a literal token shape.
+    const githubToken = "gh" + "p_" + "a1B2".repeat(9);
+
+    it("redacts secrets in the message and data before both Redis and Blob", async () => {
+      const publisher = makePublisher();
+      await publisher.publish("run-abc", "attempt-1", "info", `cloning with ${githubToken}`, {
+        args: { command: `git push https://x:${githubToken}@github.com/o/r` },
+      });
+
+      const streamed = JSON.parse(mockRedis.publish.mock.calls[0][1]);
+      const persisted: LogEvent = mockAppendLogEvent.mock.calls[0][2];
+      for (const event of [streamed, persisted]) {
+        expect(event.message).toBe("cloning with [REDACTED:github-token]");
+        expect(event.data).toEqual({ args: { command: "git push https://x:[REDACTED:github-token]@github.com/o/r" } });
+      }
+    });
+
+    it("redacts secrets published through RedisLogPublisher", async () => {
+      const { RedisLogPublisher } = await import("./log-publisher.js");
+      const publisher = new RedisLogPublisher({ redisHost: "127.0.0.1", redisPort: 1, redisPassword: "" });
+      (publisher as any).redis?.disconnect?.();
+      (publisher as any).redis = mockRedis;
+      (publisher as any).redisBreaker = { execute: async (fn: () => Promise<unknown>) => fn() };
+
+      await publisher.publish("run-abc", "info", `token ${githubToken}`);
+
+      expect(JSON.parse(mockRedis.publish.mock.calls[0][1]).message).toBe("token [REDACTED:github-token]");
+    });
+  });
+
   describe("close()", () => {
     it("calls redis.quit()", async () => {
       const publisher = makePublisher();
