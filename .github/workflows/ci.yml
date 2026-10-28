@@ -668,6 +668,32 @@ jobs:
           name: ctrf-test-results-gateway
           path: ctrf/
 
+  gepa:
+    name: "GEPA Optimizer: test"
+    needs: [detect-changes]
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      needs.detect-changes.outputs.gepa == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/gepa-optimizer/uv.lock
+
+      - name: Install locked dependencies
+        working-directory: apps/gepa-optimizer
+        run: uv sync --locked
+
+      - name: Run tests
+        working-directory: apps/gepa-optimizer
+        run: uv run pytest
+
   notice-check:
     name: Third-party NOTICE
     # Runs on every PR with no detect-changes gate: the NOTICE / NOTICE-REVIEW
@@ -782,6 +808,7 @@ jobs:
       db-migrations: ${{ steps.changes.outputs.db-migrations }}
       shared: ${{ steps.changes.outputs.shared }}
       gateway: ${{ steps.changes.outputs.gateway }}
+      gepa: ${{ steps.changes.outputs.gepa }}
       coder-acp-copilot-windows: ${{ steps.changes.outputs.coder-acp-copilot-windows }}
       model-scanning: ${{ steps.changes.outputs.model-scanning }}
       typescript: ${{ steps.changes.outputs.typescript }}
@@ -834,6 +861,10 @@ jobs:
               - 'packages/db-migrations/**'
             gateway:
               - 'apps/gateway/**'
+            gepa:
+              - 'apps/gepa-optimizer/**'
+              - 'package.json'
+              - '.github/workflows/ci.yml'
             coder-acp-copilot-windows:
               - 'apps/workers/coder-acp-copilot-windows/**'
               - 'apps/workers/coder-acp-copilot/versions.env'
@@ -874,7 +905,7 @@ jobs:
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [test, integration-test, integration-test-queue, windows-build, lint, build, cli-bundle-test, gateway, llm-evals, notice-check, license-headers]
+    needs: [test, integration-test, integration-test-queue, windows-build, lint, build, cli-bundle-test, gateway, gepa, llm-evals, notice-check, license-headers]
     if: always()
 
     steps:
@@ -890,7 +921,8 @@ jobs:
              [ "${{ needs.llm-evals.result }}" = "success" -o "${{ needs.llm-evals.result }}" = "skipped" ] && \
              [ "${{ needs.notice-check.result }}" = "success" -o "${{ needs.notice-check.result }}" = "skipped" ] && \
              [ "${{ needs.license-headers.result }}" = "success" ] && \
-             [ "${{ needs.gateway.result }}" = "success" -o "${{ needs.gateway.result }}" = "skipped" ]; then
+             [ "${{ needs.gateway.result }}" = "success" -o "${{ needs.gateway.result }}" = "skipped" ] && \
+             [ "${{ needs.gepa.result }}" = "success" -o "${{ needs.gepa.result }}" = "skipped" ]; then
             echo "✅ All checks passed!"
             exit 0
           else
@@ -906,5 +938,6 @@ jobs:
             echo "  Third-party NOTICE: ${{ needs.notice-check.result }}"
             echo "  License Headers: ${{ needs.license-headers.result }}"
             echo "  Gateway: ${{ needs.gateway.result }}"
+            echo "  GEPA Optimizer: ${{ needs.gepa.result }}"
             exit 1
           fi
