@@ -5,6 +5,7 @@ import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { RetryConfirmDialog } from "@/components/RetryConfirmDialog";
+import { ShareRunButton } from "@/components/run-sharing/ShareRunDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -774,6 +775,9 @@ export function RunDetail() {
             )}
           </div>
           <div className="flex items-center gap-2">
+          {activeRun && (!selectedRunId || selectedRunId === activeRun._id) && (
+            <ShareRunButton key={activeRun._id} requestId={run._id} runId={activeRun._id} attemptNumber={activeRun.attemptNumber} />
+          )}
           {hasMultipleAttempts && attempts && attempts.length > 0 && (
             <div className="relative">
               <Button

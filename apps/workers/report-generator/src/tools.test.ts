@@ -353,4 +353,43 @@ describe("createReportTools - permissions", () => {
       expect(tool.skipPermission, `${tool.name} must skip the permission prompt`).toBe(true);
     }
   });
+
+  describe("createReportTools - pinned source attempt", () => {
+    it("uses historical state after a retry rather than mixing attempts in a report", async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(mockResponse({
+          _id: REQUEST_ID, scenario: { task: "task", criteria: ["c1"] },
+          run: { _id: "new-attempt", status: "processing", turns: [] },
+        }))
+        .mockResolvedValueOnce(mockResponse({
+          _id: "original-attempt", status: "done", outcome: "succeeded",
+          turns: [{ iteration: 1, passed: true, criteriaResults: [] }],
+        }));
+      vi.stubGlobal("fetch", fetchMock);
+      const tools = createReportTools(API_BASE, REQUEST_ID, SNAPSHOTS_DIR, REPORT_ID, "original-attempt");
+      const summary = await findTool(tools, "get_run_summary").handler({});
+      expect(summary.status).toBe("done");
+      expect(summary.turnCount).toBe(1);
+      expect(fetchMock).toHaveBeenLastCalledWith(`${API_BASE}/api/v1/requests/${REQUEST_ID}/runs/original-attempt`);
+    });
+
+    it("does not substitute another attempt if the pinned historical source is gone", async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(mockResponse({ _id: REQUEST_ID, run: { _id: "new-attempt" } }))
+        .mockResolvedValueOnce(mockResponse(null, false, 404));
+      vi.stubGlobal("fetch", fetchMock);
+      const tools = createReportTools(API_BASE, REQUEST_ID, SNAPSHOTS_DIR, REPORT_ID, "original-attempt");
+      const summary = await findTool(tools, "get_run_summary").handler({});
+      expect(summary.error).toContain("404");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("pins trajectory downloads to the selected attempt", async () => {
+      const fetchMock = vi.fn().mockResolvedValueOnce(mockResponse(null, false, 404));
+      vi.stubGlobal("fetch", fetchMock);
+      const tools = createReportTools(API_BASE, REQUEST_ID, SNAPSHOTS_DIR, REPORT_ID, "original-attempt");
+      await findTool(tools, "get_atif_trajectory").handler({ iteration: 1 });
+      expect(fetchMock).toHaveBeenCalledWith(`${API_BASE}/api/v1/requests/${REQUEST_ID}/runs/original-attempt/atif?iteration=1`);
+    });
+  });
 });

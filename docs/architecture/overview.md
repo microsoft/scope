@@ -105,6 +105,17 @@ stores tokens. DB-only role/disable changes can remain stale until expiry; Redis
 failure falls back to Mongo. See [Authentication & RBAC](auth-rbac.md) for the method
 walkthrough, failures, cache isolation, and implemented/deferred boundary.
 
+### Public run links
+
+With `SCOPE_RUN_SHARING_ENABLED=true`, active signed-in users can publish
+revocable read-only links to one run attempt. Recipients need no account.
+Summary is the default; detailed sections and raw artifacts require explicit
+publisher selection and confirmation. A separate public Portal bootstrap and
+capability-header API avoid IdP enrollment and private providers. This does not
+change existing anonymous rollout behavior or implement general RBAC. See
+[public run sharing](app-design.md#public-run-sharing) for the data and access
+contract.
+
 ### Benchmark execution
 
 1. **Submit** — A user submits a task via CLI or Portal, selecting a worker, model, criteria, and optionally an agent version. The API validates the selection (model must be in `supportedModels`, version must be active, at least one criterion required), resolves the agent version's queue, creates a run record in CosmosDB, and enqueues a message.

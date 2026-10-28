@@ -470,6 +470,112 @@ Profile fan-out mode is also supported for comparative runs:
 3. Each expanded request resolves configuration from its variation profile; unpinned specs resolve to `latestVersion`
 4. Expanded requests persist `profileId` and `profileVersionId` on each `RequestDocument` for indexing and traceability
 
+## Public run sharing
+
+Run sharing is opt-in (`SCOPE_RUN_SHARING_ENABLED=true` on the API; default
+false). Any active signed-in Scope user can publish a link for a specific
+request/attempt; only its creator can list, edit, revoke, or rotate it. This
+is a deliberately explicit publication permission, not run ownership or full
+RBAC. Existing anonymous/private API rollout behavior is not changed.
+
+### Storage and capability lifecycle
+
+`run-shares` stores a UUID `_id`, `requestId`, `runId`, `projectId`, creator Scope
+UUID (`createdBy`), label, content policy, creation/update times, nullable
+`expiresAt`/`revokedAt`, and `tokenHash`. A token combines the share UUID with
+32 cryptographically random bytes encoded as base64url. Only its SHA-256 hash
+is stored. Creation and rotation return the secret once; management listings
+never return it or its hash.
+
+Public links use `/shared/runs#<token>`. The fragment never reaches HTTP request
+URLs or referrers. A separate, cookie-free public transport sends the secret in
+`X-Scope-Run-Share` to fixed API paths. Private IdP credentials, user enrollment,
+and application access-cache resolution are not used on those routes.
+
+Every public read checks the current hash, revocation, expiry, parent request,
+attempt association, project association, and parent/project deletion. A retry
+does not move the link to the new attempt: historical state is resolved from
+`runs`. Expiry is checked on reads, not through eventual TTL cleanup. Rotation
+invalidates the old secret; revocation is permanent. Neither can retract
+downloaded data or an already-authorized response in flight.
+
+Migration 031 creates and verifies single-field equality indexes on the share
+collection and an attempt index on reports. Management pages contain 50 links,
+ordered by UUID with an exclusive `after` cursor; public report pages contain
+10 reports with the same seek model.
+
+### Content policy
+
+The canonical browser-safe contract is
+`packages/shared/src/schemas/run-share.ts` (`shared/run-sharing`).
+`projectSharedRun` builds version 1 public responses from an explicit allowlist;
+it does not serialize private run documents.
+
+Summary includes status/outcome, agent/model, timing, and structured iteration
+results, without free-text explanations, prompts, conversations, or artifact
+URLs. Full detail enables prompts, evaluation explanations, conversations,
+persisted logs, and reports. Source archives, network captures, and video
+remain separate opt-ins. Every additional category can be toggled independently.
+Any detailed policy requires explicit sensitive-content acknowledgment.
+
+Raw conversation downloads and inline tool calls additionally require prompts
+and evaluation explanations, because they can contain both. Source downloads
+are individual workspace snapshots, never the unrestricted full-run archive.
+Each blob is proxied from the pinned attempt's storage namespace; legacy
+request-wide paths are accepted only for attempt 1. No storage/SAS URL is
+returned. Public artifacts are limited to 128 MiB, support byte ranges, and are
+served as attachments with restrictive headers.
+
+Categories are access controls over fields and artifact types, not semantic
+redaction: logs, reports, source files, captures, recordings, and agent
+responses can quote other content or contain secrets. The publishing UI warns
+about this explicitly. Reports are rendered as inert Markdown without raw HTML,
+images, or active links.
+
+New reports store optional `runId` at creation, and report-generator tools pin
+their source state, snapshots, and ATIF downloads to that attempt. On successful
+completion the worker stamps `sourceRunId`. Public reads require both IDs to
+match the shared attempt, so a report processed by an older, unpinned worker
+during a rolling upgrade is not accidentally published. Legacy unbound reports
+are excluded rather than guessed from timestamps.
+
+### Routes and Portal/CLI surfaces
+
+| Route | Access |
+|-------|--------|
+| `POST /api/v1/requests/:id/runs/:runId/shares` | Active user; create Summary or confirmed custom policy, seven-day default expiry |
+| `GET /api/v1/requests/:id/runs/:runId/shares?after=` | Creator's links only |
+| `PATCH /api/v1/requests/:id/runs/:runId/shares/:shareId` | Creator; policy, label, or future/null expiry |
+| `DELETE /api/v1/requests/:id/runs/:runId/shares/:shareId` | Creator; permanently revoke |
+| `POST /api/v1/requests/:id/runs/:runId/shares/:shareId/rotate` | Creator; replace secret without changing scope |
+| `GET /api/v1/shared/runs/view` | Capability header; allowlisted view |
+| `GET /api/v1/shared/runs/logs` | Capability plus logs permission; up to the last 1 MiB of persisted entries |
+| `GET /api/v1/shared/runs/reports?after=` | Capability plus reports permission; attempt-bound reports only |
+| `GET /api/v1/shared/runs/artifacts/:artifactId` | Capability plus artifact permission; server-selected, attempt-scoped blob |
+
+The fixed public namespace is mounted before JSON parsing and IdP middleware.
+It rejects request bodies and unsupported routes/mutations. Anonymous readers
+receive no additional permissions on any other endpoint. Existing authenticated
+endpoints and service consumers retain their previous behavior.
+
+The Portal entrypoint lazy-loads a minimal public tree for `/shared/runs`,
+without importing MSAL or mounting eager project/feature providers. Its query
+cache is separate from private data. Public reads poll every 15 seconds while
+visible; failures hide previously displayed data and policy changes remove
+disabled sections. Public logs do not open private SSE streams. The Share
+dialog manages creation, content selection, expiry, copying, editing, rotation,
+and revocation for the selected attempt.
+
+`scope run share` provides create/list/update/revoke/rotate, anonymous
+`view --section view|logs|reports`, and raw artifact download. It supports JSON
+output, never attaches `SCOPE_TOKEN` to public reads, and redacts capability
+headers and secret-bearing management responses from debug logs.
+
+Public reads are rate-limited, no-store, no-referrer, and noindex. Custom
+ingress/telemetry must not capture the capability header or creation/rotation
+response bodies. This is unlisted access for anyone holding the link, not a
+confidential sharing mechanism or a substitute for full platform authorization.
+
 ## Runs List Query API
 
 `GET /api/v1/requests` powers the Portal **Runs** list and `scope run list`. All

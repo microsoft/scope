@@ -52,7 +52,21 @@ describe("OpenAPI spec snapshot", () => {
         }
       }
     }
-    expect(securedOperations).toEqual(["GET /api/v1/users/me", "POST /api/v1/users/me"]);
+    expect(securedOperations).toEqual([
+      "GET /api/v1/shared/runs/view",
+      "GET /api/v1/shared/runs/reports",
+      "GET /api/v1/shared/runs/logs",
+      "GET /api/v1/shared/runs/artifacts/{artifactId}",
+      "GET /api/v1/users/me",
+      "POST /api/v1/users/me",
+      "GET /api/v1/requests/{id}/runs/{runId}/shares",
+      "POST /api/v1/requests/{id}/runs/{runId}/shares",
+      "PATCH /api/v1/requests/{id}/runs/{runId}/shares/{shareId}",
+      "DELETE /api/v1/requests/{id}/runs/{runId}/shares/{shareId}",
+      "POST /api/v1/requests/{id}/runs/{runId}/shares/{shareId}/rotate",
+    ]);
+    expect(doc.paths?.["/api/v1/shared/runs/view"]?.get?.security).toEqual([{ runShareToken: [] }]);
+    expect(doc.paths?.["/api/v1/requests/{id}/runs/{runId}/shares"]?.post?.security).toEqual([{ bearerAuth: [] }]);
 
     // Snapshot the full spec — catches dropped routes, changed schemas, etc.
     expect(doc).toMatchSnapshot();
