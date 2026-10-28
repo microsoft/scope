@@ -79,7 +79,7 @@ flowchart TB
 | `workers/coder-acp-claude-code` | Claude Code agent via Agent Client Protocol (ACP) |
 | `workers/coder-acp-copilot` | GitHub Copilot agent via Agent Client Protocol (ACP) |
 | `workers/report-generator` | Copilot SDK worker that generates post-run markdown reports |
-| `workers/post-processor` | DAG-based post-run handlers: `pp-atif` (trajectory ATIF) and `pp-taxonomy` (boolean observations via the judge, per-iteration or whole-run by criterion `subject`) |
+| `workers/post-processor` | DAG-based post-run handlers: `pp-atif` (trajectory ATIF) and `pp-observations` (boolean observations via the judge, per-iteration or whole-run by criterion `subject`) |
 | `gateway` | AI Gateway — shared Rust TLS-intercepting proxy with plugin architecture (HAR capture, future: token refresh, rate limiting) |
 | `evaluations/static-prompts` | Developer-run static prompt quality and user-controlled prompt red-team suites |
 
@@ -114,6 +114,14 @@ walkthrough, failures, cache isolation, and implemented/deferred boundary.
 3. **Stream** — Workers publish real-time log events to Redis Pub/Sub. The API relays these as SSE streams to the CLI/Portal.
 4. **Judge** — After the agent completes, the worker invokes the Judge to evaluate output against criteria. Results (pass/fail per criterion, scores) are persisted to CosmosDB.
 5. **Snapshot** — Each iteration's workspace is snapshotted to Blob Storage for later inspection.
+
+Every native submit also creates a stable submission that owns the complete
+request set. Submission processing follows the requests' exact current run-id
+vector: request retries archive and supersede the previous submission attempt,
+run-level `pp-observations` completion feeds an all-runs dependency projection,
+and only the embedded current submission attempt may dispatch `pp-readout`.
+Portal and CLI users can inspect current/history attempts and retry current
+submission processing without mutating request execution history.
 
 > A run may execute as a sequence of **gates** (`Select → Build → Test → Run →
 > Deploy`), each with its own prompt, criteria subset, and iteration budget,

@@ -8,10 +8,16 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { RequestScheduler } from "./request-scheduler.js";
 import { PostProcessorDispatcher } from "./post-processor-dispatcher.js";
 import { HandlerDispatcher } from "./handler-dispatcher.js";
+import { SubmissionDispatcher } from "./submission-dispatcher.js";
 import { createHttpServer, type NotifyHandler } from "./notify-routes.js";
 import { StuckRunReaper } from "./stuck-run-reaper.js";
 import { RedisHeartbeatStore, type HeartbeatStore } from "shared";
-import type { CodingAgentDocument, RequestDocument } from "shared";
+import type {
+  CodingAgentDocument,
+  RequestDocument,
+  SubmissionDocument,
+  SubmissionRunHistoryDocument,
+} from "shared";
 import { initTelemetry, trackMetric, trackEvent, shutdownTelemetry } from "telemetry";
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -128,6 +134,9 @@ async function main(): Promise<void> {
   const db = mongoClient.db(MONGO_DATABASE);
   const collection = db.collection<RequestDocument>(MONGO_COLLECTION);
   const agentCollection = db.collection<CodingAgentDocument>("agents");
+  const submissionCollection = db.collection<SubmissionDocument>("submissions");
+  const submissionRunsCollection =
+    db.collection<SubmissionRunHistoryDocument>("submission-runs");
 
   // Start the scheduler
   const scheduler = new RequestScheduler(
@@ -191,6 +200,17 @@ async function main(): Promise<void> {
     `[Scheduler] Handler dispatcher (DAG) started (poll=${ppPollIntervalMs}ms, topologyCacheTtl=${handlerCacheTtlMs}ms)`,
   );
 
+  const submissionDispatcher = new SubmissionDispatcher(
+    collection,
+    submissionCollection,
+    submissionRunsCollection,
+    db,
+    createQueueClient,
+    ppPollIntervalMs,
+  );
+  submissionDispatcher.start();
+  console.log(`[Scheduler] Submission dispatcher started (poll=${ppPollIntervalMs}ms)`);
+
   // Start the stuck-run reaper (authoritative backstop). Redis is non-fatal:
   // on misconfig or connection failure the reaper self-disables (its sweeps
   // skip when ping() fails) while the dispatch loop above keeps running.
@@ -227,8 +247,25 @@ async function main(): Promise<void> {
     );
   }
 
-  // Wire notify handler to the HandlerDispatcher
-  const httpServer = createHttpServer(handlerDispatcher);
+  // Run notifications update the run DAG and immediately reconcile the parent
+  // submission. The polling loop remains the durable safety net.
+  const notifyHandler: NotifyHandler = {
+    onRunTerminal: async (requestId, runId) => {
+      await handlerDispatcher.onRunTerminal(requestId, runId);
+      await submissionDispatcher.onRequestChanged(requestId);
+    },
+    onHandlerComplete: async (requestId, runId, handlerId, status) => {
+      await handlerDispatcher.onHandlerComplete(
+        requestId,
+        runId,
+        handlerId,
+        status,
+      );
+      await submissionDispatcher.onRequestChanged(requestId);
+    },
+    registerHandler: (doc) => handlerDispatcher.registerHandler(doc),
+  };
+  const httpServer = createHttpServer(notifyHandler);
   httpServer.listen(HEALTH_PORT, () => {
     console.log(`[Scheduler] HTTP server listening on :${HEALTH_PORT}`);
   });
@@ -239,6 +276,7 @@ async function main(): Promise<void> {
     await scheduler.stop();
     await postProcessorDispatcher.stop();
     await handlerDispatcher.stop();
+    await submissionDispatcher.stop();
     if (stuckRunReaper) await stuckRunReaper.stop();
     if (heartbeatStore) await heartbeatStore.close();
     httpServer.close();

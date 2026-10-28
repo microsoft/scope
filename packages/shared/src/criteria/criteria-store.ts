@@ -439,7 +439,7 @@ export class CriteriaStore {
 
   /**
    * Resolve observation-criteria ids, asserting each is an active
-   * kind:"observation" criterion. Used by submit validation + pp-taxonomy.
+   * kind:"observation" criterion. Used by submit validation + pp-observations.
    * Throws CriteriaValidationError on a missing or non-observation id.
    */
   async resolveObservations(ids: string[]): Promise<CriteriaDocument[]> {

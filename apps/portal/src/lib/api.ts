@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Run, RunState, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ResourceDocument, ResourceRevisionDocument, ResourceBindingSpec, CreateResourceBody, CreateResourceRevisionBody, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir, CriterionKind, TaxonomyElementId, CriterionSubject } from "@/types";
+import type { Run, RunState, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ResourceDocument, ResourceRevisionDocument, ResourceBindingSpec, CreateResourceBody, CreateResourceRevisionBody, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir, CriterionKind, TaxonomyElementId, CriterionSubject, Submission } from "@/types";
 
 import type { Project, CreateProjectRequest, UpdateProjectRequest } from "@/types";
 import { qs } from "./url";
@@ -231,7 +231,7 @@ export const api = {
     gates?: GateConfig[];
     codebase?: string;
     codebaseRevisionId?: string;
-  }): Promise<(Run & { message: string }) | { ids: string[]; count: number; message: string }> => {
+  }): Promise<(Run & { message: string; submissionId: string }) | { ids: string[]; count: number; message: string; submissionId: string }> => {
     const { worker, ...payload } = body;
     const url = worker ? `/requests?worker=${encodeURIComponent(worker)}` : `/requests`;
     return request(url, {
@@ -239,6 +239,27 @@ export const api = {
       body: JSON.stringify(payload),
     }, { scoped: true });
   },
+
+  listSubmissions: (): Promise<{ submissions: Submission[] }> =>
+    request("/submissions", undefined, { scoped: true }),
+
+  getSubmission: (id: string): Promise<Submission> =>
+    request(`/submissions/${id}`),
+
+  retrySubmission: (
+    id: string,
+    submissionRunId: string,
+  ): Promise<{
+    submissionId: string;
+    submissionRunId: string;
+    attemptNumber: number;
+    readiness: Submission["readiness"];
+    blocking: Submission["blocking"];
+  }> =>
+    request(`/submissions/${id}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ submissionRunId }),
+    }),
 
   /** Soft-delete a run */
   deleteRun: (id: string): Promise<{ id: string; deleted: boolean }> => {
