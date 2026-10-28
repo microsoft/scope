@@ -53,7 +53,7 @@ async function handleArchive(
     }
   }
 
-  await packRunIntoTar(pack, archiveResource, containerClient, id, isBlobNotFound, logsContainerClient);
+  await packRunIntoTar(pack, archiveResource, containerClient, id, isBlobNotFound, logsContainerClient, { dot: true });
 
   pack.finalize();
 }
@@ -85,7 +85,7 @@ apiRoute(ctx.app, ctx.registry, {
     } catch (error) {
       if (!res.headersSent) {
         if (isBlobNotFound(error)) {
-          res.status(404).json({ error: "Snapshot not found — the blob may have been deleted or is no longer available" });
+          res.status(404).json({ error: "Snapshot not found - the blob may have been deleted or is no longer available" });
           return;
         }
         throw error;
@@ -121,7 +121,7 @@ apiRoute(ctx.app, ctx.registry, {
     } catch (error) {
       if (!res.headersSent) {
         if (isBlobNotFound(error)) {
-          res.status(404).json({ error: "Archive not found — the blob may have been deleted or is no longer available" });
+          res.status(404).json({ error: "Archive not found - the blob may have been deleted or is no longer available" });
           return;
         }
         throw error;
