@@ -91,3 +91,8 @@ export function useProjectContext(): ProjectContextValue {
 export function useSelectedProjectId(): string | undefined {
   return useProjectContext().selectedProjectId;
 }
+
+/** Like {@link useSelectedProjectId}, but returns undefined outside a ProjectProvider. */
+export function useOptionalSelectedProjectId(): string | undefined {
+  return useContext(ProjectContext)?.selectedProjectId;
+}
