@@ -11,7 +11,13 @@ import { HandlerDispatcher } from "./handler-dispatcher.js";
 import { createHttpServer, type NotifyHandler } from "./notify-routes.js";
 import { StuckRunReaper } from "./stuck-run-reaper.js";
 import { RedisHeartbeatStore, type HeartbeatStore } from "shared";
-import type { CodingAgentDocument, RequestDocument } from "shared";
+import { ExperimentStore } from "shared";
+import type {
+  CodingAgentDocument,
+  RequestDocument,
+  ExperimentDocument,
+  ExperimentExecutionHistoryDocument,
+} from "shared";
 import { initTelemetry, trackMetric, trackEvent, shutdownTelemetry } from "telemetry";
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -128,6 +134,13 @@ async function main(): Promise<void> {
   const db = mongoClient.db(MONGO_DATABASE);
   const collection = db.collection<RequestDocument>(MONGO_COLLECTION);
   const agentCollection = db.collection<CodingAgentDocument>("agents");
+  const experimentCollection =
+    db.collection<ExperimentDocument>("experiments");
+  const experimentExecutionsCollection =
+    db.collection<ExperimentExecutionHistoryDocument>(
+      "experiment-executions",
+    );
+  const experimentChunksCollection = db.collection("experiment-chunks");
 
   // Start the scheduler
   const scheduler = new RequestScheduler(
@@ -191,6 +204,12 @@ async function main(): Promise<void> {
     `[Scheduler] Handler dispatcher (DAG) started (poll=${ppPollIntervalMs}ms, topologyCacheTtl=${handlerCacheTtlMs}ms)`,
   );
 
+  const experimentStore = new ExperimentStore({
+    experiments: experimentCollection,
+    executions: experimentExecutionsCollection,
+    chunks: experimentChunksCollection,
+  });
+
   // Start the stuck-run reaper (authoritative backstop). Redis is non-fatal:
   // on misconfig or connection failure the reaper self-disables (its sweeps
   // skip when ping() fails) while the dispatch loop above keeps running.
@@ -227,8 +246,38 @@ async function main(): Promise<void> {
     );
   }
 
-  // Wire notify handler to the HandlerDispatcher
-  const httpServer = createHttpServer(handlerDispatcher);
+  // The API-owned ExperimentCoordinator projects run state and dispatches
+  // workflow handlers. The scheduler only applies exact handler claim and
+  // completion messages through the shared CAS store.
+  const notifyHandler: NotifyHandler = {
+    onRunTerminal: async (requestId, runId) => {
+      await handlerDispatcher.onRunTerminal(requestId, runId);
+    },
+    onHandlerComplete: async (requestId, runId, handlerId, status) => {
+      await handlerDispatcher.onHandlerComplete(
+        requestId,
+        runId,
+        handlerId,
+        status,
+      );
+    },
+    onExperimentHandlerClaim: async (input) => {
+      const updated = await experimentStore.claimHandler({
+        ...input,
+        expectedExecutionVersion: input.executionVersion,
+      });
+      return updated?.execution.version ?? null;
+    },
+    onExperimentHandlerComplete: async (input) => {
+      const updated = await experimentStore.completeHandler({
+        ...input,
+        expectedExecutionVersion: input.executionVersion,
+      });
+      return updated !== null;
+    },
+    registerHandler: (doc) => handlerDispatcher.registerHandler(doc),
+  };
+  const httpServer = createHttpServer(notifyHandler);
   httpServer.listen(HEALTH_PORT, () => {
     console.log(`[Scheduler] HTTP server listening on :${HEALTH_PORT}`);
   });

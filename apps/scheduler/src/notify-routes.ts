@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import http from "node:http";
-import type { HandlerServiceDocument } from "shared";
+import type { ServiceHandlerDocument } from "shared";
 
 /**
  * Maximum accepted request body size for the scheduler's HTTP endpoints.
@@ -28,7 +28,11 @@ export interface NotifyHandler {
     handlerId: string,
     status: "done" | "failed",
   ): Promise<void>;
-  registerHandler(doc: HandlerServiceDocument): Promise<void>;
+  registerHandler(doc: ServiceHandlerDocument): Promise<void>;
+  onExperimentHandlerClaim?(
+    input: ExperimentHandlerClaimRequest,
+  ): Promise<number | null>;
+  onExperimentHandlerComplete?(input: ExperimentHandlerCompleteRequest): Promise<boolean>;
 }
 
 interface RunTerminalRequest {
@@ -41,6 +45,22 @@ interface HandlerCompleteRequest {
   runId: string;
   handlerId: string;
   status: "done" | "failed";
+}
+
+export interface ExperimentHandlerClaimRequest {
+  projectId: string;
+  experimentId: string;
+  experimentExecutionId: string;
+  executionVersion: number;
+  handlerId: string;
+  handlerVersion: number;
+  claimToken: string;
+}
+
+export interface ExperimentHandlerCompleteRequest
+  extends ExperimentHandlerClaimRequest {
+  status: "done" | "failed";
+  error?: string;
 }
 
 function sendJson(
@@ -98,7 +118,51 @@ function parseHandlerCompleteRequest(body: unknown): HandlerCompleteRequest | nu
   };
 }
 
-function parseHandlerRegisterRequest(body: unknown): HandlerServiceDocument | null {
+function parseExperimentHandlerCompleteRequest(
+  body: unknown,
+): ExperimentHandlerCompleteRequest | null {
+  const claim = parseExperimentHandlerClaimRequest(body);
+  if (!claim || !isRecord(body)) return null;
+  if (
+    (body.status !== "done" && body.status !== "failed") ||
+    (body.error !== undefined && typeof body.error !== "string")
+  ) {
+    return null;
+  }
+  return {
+    ...claim,
+    status: body.status,
+    ...(typeof body.error === "string" ? { error: body.error } : {}),
+  };
+}
+
+function parseExperimentHandlerClaimRequest(
+  body: unknown,
+): ExperimentHandlerClaimRequest | null {
+  if (!isRecord(body)) return null;
+  if (
+    !isNonEmptyString(body.projectId) ||
+    !isNonEmptyString(body.experimentId) ||
+    !isNonEmptyString(body.experimentExecutionId) ||
+    !Number.isInteger(body.executionVersion) ||
+    !isNonEmptyString(body.handlerId) ||
+    !Number.isInteger(body.handlerVersion) ||
+    !isNonEmptyString(body.claimToken)
+  ) {
+    return null;
+  }
+  return {
+    projectId: body.projectId,
+    experimentId: body.experimentId,
+    experimentExecutionId: body.experimentExecutionId,
+    executionVersion: body.executionVersion as number,
+    handlerId: body.handlerId,
+    handlerVersion: body.handlerVersion as number,
+    claimToken: body.claimToken,
+  };
+}
+
+function parseHandlerRegisterRequest(body: unknown): ServiceHandlerDocument | null {
   if (!isRecord(body)) {
     return null;
   }
@@ -115,7 +179,7 @@ function parseHandlerRegisterRequest(body: unknown): HandlerServiceDocument | nu
 
   if (
     !isNonEmptyString(_id) ||
-    type !== "post-process-handler" ||
+    (type !== "post-process-handler" && type !== "experiment-handler") ||
     typeof version !== "number" ||
     !Number.isFinite(version) ||
     !isNonEmptyString(queue) ||
@@ -127,15 +191,23 @@ function parseHandlerRegisterRequest(body: unknown): HandlerServiceDocument | nu
     return null;
   }
 
-  return {
+  const common = {
     _id,
-    type,
     version,
     queue,
     selector,
     autoBackfill,
     dependsOn: dependsOn as string[],
   };
+  if (type === "experiment-handler") {
+    if (body.dependencyMode !== "all-runs") return null;
+    return {
+      ...common,
+      type,
+      dependencyMode: "all-runs",
+    };
+  }
+  return { ...common, type };
 }
 
 export function readJsonBody(
@@ -257,12 +329,64 @@ export function createHttpServer(
         return;
       }
 
+      if (
+        method === "POST" &&
+        url.pathname === "/notify/experiment-handler-claim"
+      ) {
+        const parsedBody = parseExperimentHandlerClaimRequest(
+          await readJsonBody(req, maxBodyBytes),
+        );
+        if (!parsedBody || !handler.onExperimentHandlerClaim) {
+          sendJson(res, 400, {
+            error:
+              "Exact experiment execution, handler version, and claim token are required",
+          });
+          return;
+        }
+        const executionVersion =
+          await handler.onExperimentHandlerClaim(parsedBody);
+        if (executionVersion === null) {
+          sendJson(res, 409, {
+            error: "Stale experiment handler claim discarded",
+          });
+          return;
+        }
+        sendJson(res, 200, { ok: true, executionVersion });
+        return;
+      }
+
+      if (
+        method === "POST" &&
+        url.pathname === "/notify/experiment-handler-complete"
+      ) {
+        const parsedBody = parseExperimentHandlerCompleteRequest(
+          await readJsonBody(req, maxBodyBytes),
+        );
+        if (!parsedBody || !handler.onExperimentHandlerComplete) {
+          sendJson(res, 400, {
+            error:
+              "Exact experiment execution, handler version, claim token, and terminal status are required",
+          });
+          return;
+        }
+        const completed =
+          await handler.onExperimentHandlerComplete(parsedBody);
+        if (!completed) {
+          sendJson(res, 409, {
+            error: "Stale experiment handler completion discarded",
+          });
+          return;
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
       if (method === "POST" && url.pathname === "/handlers/register") {
         const parsedBody = parseHandlerRegisterRequest(await readJsonBody(req, maxBodyBytes));
         if (!parsedBody) {
           sendJson(res, 400, {
             error:
-              "Invalid handler registration: _id, type='post-process-handler', version (number), queue, selector, autoBackfill (boolean), and dependsOn (string[]) are required",
+              "Invalid handler registration: _id, supported type, version, queue, selector, autoBackfill, dependsOn, and experiment dependencyMode when applicable are required",
           });
           return;
         }

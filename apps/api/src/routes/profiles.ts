@@ -107,7 +107,7 @@ apiRoute(ctx.app, ctx.registry, {
       const profileId = uuidv4();
       const versionRef = `${profileId}@1`;
 
-      // Resolve extension versions (same pattern as run submission)
+      // Resolve extension versions (same pattern as request creation)
       let resolvedExtensions: string[] | undefined;
       if (extensions && extensions.length > 0) {
         const extensionClient = new ExtensionClient("");

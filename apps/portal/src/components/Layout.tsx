@@ -1,11 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { useState, useMemo, useEffect, Fragment } from "react";
+import { useState, useMemo, useEffect, useRef, Fragment } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation, Outlet, matchPath } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   Activity,
+  Atom,
   Plus,
   List,
   FlaskConical,
@@ -94,6 +96,7 @@ const navGroups: NavGroup[] = [
     label: "Activity",
     scoped: true,
     items: [
+      { to: "/experiments", label: "Experiments", icon: Atom },
       { to: "/runs", label: "Runs", icon: List },
       { to: "/statistics", label: "Statistics", icon: BarChart3 },
       { to: "/reports", label: "Reports", icon: FileText },
@@ -155,6 +158,7 @@ const FULL_BLEED_ROUTE_PATTERNS = [
   "/agents/:id",
   "/models",
   "/models/:id",
+  "/experiments",
   "/runs",
   "/runs/:id/preview",
   "/task-prompts",
@@ -181,6 +185,7 @@ interface SidebarIconLinkProps {
   expanded: boolean;
   external?: boolean;
   emphasized?: boolean;
+  tooltip?: boolean;
 }
 
 function SidebarIconLink({
@@ -191,6 +196,7 @@ function SidebarIconLink({
   expanded,
   external,
   emphasized,
+  tooltip = true,
 }: SidebarIconLinkProps) {
   const className = cn(
     "relative flex h-10 items-center rounded-md transition-colors",
@@ -230,7 +236,7 @@ function SidebarIconLink({
     </Link>
   );
 
-  if (expanded) {
+  if (expanded || !tooltip) {
     return link;
   }
 
@@ -243,6 +249,331 @@ function SidebarIconLink({
         {label}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+interface NewWorkflowLauncherProps {
+  expanded: boolean;
+  pathname: string;
+}
+
+function NewWorkflowLauncher({
+  expanded,
+  pathname,
+}: NewWorkflowLauncherProps) {
+  const collapsedLauncherRef = useRef<HTMLDivElement>(null);
+  const collapsedTrayRef = useRef<HTMLDivElement>(null);
+  const pointerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trayAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trayAnimationFrameRef = useRef<number | null>(null);
+  const suppressNextFocusOpenRef = useRef(false);
+  const [pointerOpen, setPointerOpen] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
+  const [trayMounted, setTrayMounted] = useState(false);
+  const [trayExpanded, setTrayExpanded] = useState(false);
+  const [trayPosition, setTrayPosition] = useState({ left: 55, top: 108 });
+  const trayOpen = pointerOpen || focusOpen;
+  const prefersReducedMotion =
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+
+  useEffect(
+    () => () => {
+      if (pointerCloseTimerRef.current) {
+        clearTimeout(pointerCloseTimerRef.current);
+      }
+      if (trayAnimationTimerRef.current) {
+        clearTimeout(trayAnimationTimerRef.current);
+      }
+      if (trayAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(trayAnimationFrameRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (trayAnimationTimerRef.current) {
+      clearTimeout(trayAnimationTimerRef.current);
+      trayAnimationTimerRef.current = null;
+    }
+    if (trayAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(trayAnimationFrameRef.current);
+      trayAnimationFrameRef.current = null;
+    }
+
+    if (trayOpen) {
+      setTrayMounted(true);
+      if (prefersReducedMotion) {
+        setTrayExpanded(true);
+        return;
+      }
+      setTrayExpanded(false);
+      trayAnimationFrameRef.current = requestAnimationFrame(() => {
+        trayAnimationFrameRef.current = requestAnimationFrame(() => {
+          setTrayExpanded(true);
+          trayAnimationFrameRef.current = null;
+        });
+      });
+      return;
+    }
+
+    setTrayExpanded(false);
+    if (prefersReducedMotion) {
+      setTrayMounted(false);
+      return;
+    }
+    trayAnimationTimerRef.current = setTimeout(() => {
+      setTrayMounted(false);
+      trayAnimationTimerRef.current = null;
+    }, 150);
+  }, [prefersReducedMotion, trayOpen]);
+
+  useEffect(() => {
+    if (!pointerOpen) return;
+
+    const containsPoint = (
+      bounds: DOMRect,
+      clientX: number,
+      clientY: number,
+      tolerance = 0,
+    ) =>
+      clientX >= bounds.left - tolerance &&
+      clientX <= bounds.right + tolerance &&
+      clientY >= bounds.top - tolerance &&
+      clientY <= bounds.bottom + tolerance;
+
+    const handleDocumentPointerMove = (event: PointerEvent) => {
+      const trigger =
+        collapsedLauncherRef.current?.querySelector<HTMLAnchorElement>("a");
+      const tray = collapsedTrayRef.current;
+      if (!trigger || !tray) return;
+
+      const triggerBounds = trigger.getBoundingClientRect();
+      const trayBounds = tray.getBoundingClientRect();
+      const tolerance = 6;
+      const inBridge =
+        event.clientX >= triggerBounds.right - tolerance &&
+        event.clientX <= trayBounds.left + tolerance &&
+        event.clientY >= triggerBounds.top - tolerance &&
+        event.clientY <= triggerBounds.bottom + tolerance;
+      const inHoverRegion =
+        containsPoint(triggerBounds, event.clientX, event.clientY, tolerance) ||
+        containsPoint(trayBounds, event.clientX, event.clientY, tolerance) ||
+        inBridge;
+
+      if (inHoverRegion) {
+        if (pointerCloseTimerRef.current) {
+          clearTimeout(pointerCloseTimerRef.current);
+          pointerCloseTimerRef.current = null;
+        }
+        return;
+      }
+      if (pointerCloseTimerRef.current) return;
+      pointerCloseTimerRef.current = setTimeout(() => {
+        setPointerOpen(false);
+        pointerCloseTimerRef.current = null;
+      }, 120);
+    };
+
+    document.addEventListener("pointermove", handleDocumentPointerMove, true);
+    return () => {
+      document.removeEventListener("pointermove", handleDocumentPointerMove, true);
+    };
+  }, [pointerOpen]);
+
+  if (expanded) {
+    return (
+      <div
+        className="flex w-full items-center gap-1"
+        data-testid="new-workflow-launcher"
+      >
+        <Link
+          to="/runs/new"
+          className={cn(
+            "flex h-10 basis-[46%] items-center justify-center gap-1.5 rounded-md bg-action px-1.5 text-action-foreground shadow-sm transition-colors hover:bg-action/90",
+            pathname === "/runs/new" && "ring-2 ring-ring ring-offset-1",
+          )}
+        >
+          <Plus className="h-4 w-4 shrink-0" />
+          <span className="truncate text-xs font-medium">New Run</span>
+        </Link>
+        <Link
+          to="/experiments/new"
+          aria-label="New Experiment"
+          title="New Experiment"
+          className={cn(
+            "flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border border-border/60 px-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+            pathname === "/experiments/new" &&
+              "bg-accent text-foreground ring-2 ring-ring ring-offset-1",
+          )}
+        >
+          <Atom className="h-4 w-4 shrink-0" />
+          <span className="truncate text-xs font-medium">Experiment</span>
+        </Link>
+      </div>
+    );
+  }
+
+  const positionTray = () => {
+    const launcher = collapsedLauncherRef.current;
+    const bounds =
+      launcher?.querySelector("a")?.getBoundingClientRect() ??
+      launcher?.getBoundingClientRect();
+    if (!bounds) return;
+    setTrayPosition({
+      left: Math.min(bounds.left, window.innerWidth - 280),
+      top: bounds.top,
+    });
+  };
+  const cancelPointerClose = () => {
+    if (!pointerCloseTimerRef.current) return;
+    clearTimeout(pointerCloseTimerRef.current);
+    pointerCloseTimerRef.current = null;
+  };
+  const openFromTriggerPointer = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    const trigger =
+      collapsedLauncherRef.current?.querySelector<HTMLAnchorElement>("a");
+    const bounds = trigger?.getBoundingClientRect();
+    if (
+      !bounds ||
+      event.clientX < bounds.left ||
+      event.clientX > bounds.right ||
+      event.clientY < bounds.top ||
+      event.clientY > bounds.bottom
+    ) {
+      return;
+    }
+    cancelPointerClose();
+    positionTray();
+    setPointerOpen(true);
+  };
+  const containsFocusTarget = (target: EventTarget | null) =>
+    target instanceof Node &&
+    (collapsedLauncherRef.current?.contains(target) === true ||
+      collapsedTrayRef.current?.contains(target) === true);
+  const dismissTray = (returnFocus: boolean) => {
+    cancelPointerClose();
+    setPointerOpen(false);
+    setFocusOpen(false);
+    if (returnFocus) {
+      suppressNextFocusOpenRef.current = true;
+      collapsedLauncherRef.current
+        ?.querySelector<HTMLAnchorElement>("a")
+        ?.focus();
+    }
+  };
+  const tray = trayMounted ? (
+    <div
+      ref={collapsedTrayRef}
+      id="collapsed-workflow-tray"
+      className={cn(
+        "fixed z-[100] flex h-10 origin-left overflow-hidden rounded-md transition-[width] duration-150 ease-out motion-reduce:transition-none",
+        !trayOpen && "pointer-events-none",
+      )}
+      style={{
+        ...trayPosition,
+        width: trayExpanded ? 244 : 40,
+        transitionDuration: prefersReducedMotion ? "0ms" : undefined,
+      }}
+      role="group"
+      aria-label="New workflow choices"
+      aria-hidden={!trayOpen}
+      data-testid="collapsed-workflow-tray"
+      onFocusCapture={() => setFocusOpen(true)}
+      onBlurCapture={(event) => {
+        if (containsFocusTarget(event.relatedTarget)) return;
+        setFocusOpen(false);
+      }}
+    >
+      <Link
+        to="/runs/new"
+        className="flex h-10 items-center rounded-l-md bg-action text-sm font-medium text-action-foreground shadow-sm transition-colors hover:bg-action/90"
+      >
+        <span
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md"
+          data-testid="expanded-workflow-plus-tile"
+        >
+          <Plus className="h-5 w-5 shrink-0" />
+        </span>
+        <span
+          className="flex h-10 items-center border-l border-action-foreground/15 pl-2 pr-3 whitespace-nowrap"
+          data-testid="expanded-workflow-run-label"
+        >
+          New Run
+        </span>
+      </Link>
+      <Link
+        to="/experiments/new"
+        aria-label="New Experiment"
+        title="New Experiment"
+        className={cn(
+          "flex h-10 items-center gap-2 border-l border-border/40 bg-popover px-3 text-sm font-medium text-muted-foreground shadow-sm transition-colors hover:bg-accent/70 hover:text-foreground",
+          pathname === "/experiments/new" &&
+            "bg-accent text-foreground ring-2 ring-inset ring-ring",
+        )}
+      >
+        <Atom className="h-4 w-4 shrink-0" />
+        <span className="whitespace-nowrap">Experiment</span>
+      </Link>
+    </div>
+  ) : null;
+
+  return (
+    <div
+      ref={collapsedLauncherRef}
+      className="relative flex w-full flex-col items-center"
+      data-testid="new-workflow-launcher"
+      onPointerEnter={openFromTriggerPointer}
+      onPointerMove={openFromTriggerPointer}
+      onFocusCapture={() => {
+        if (suppressNextFocusOpenRef.current) {
+          suppressNextFocusOpenRef.current = false;
+          return;
+        }
+        positionTray();
+        setFocusOpen(true);
+      }}
+      onBlurCapture={(event) => {
+        if (containsFocusTarget(event.relatedTarget)) return;
+        setFocusOpen(false);
+      }}
+      onKeyDownCapture={(event) => {
+        const trigger =
+          collapsedLauncherRef.current?.querySelector<HTMLAnchorElement>("a");
+        if (
+          event.key === "Tab" &&
+          !event.shiftKey &&
+          trayOpen &&
+          event.target === trigger
+        ) {
+          event.preventDefault();
+          collapsedTrayRef.current
+            ?.querySelector<HTMLAnchorElement>("a")
+            ?.focus();
+          return;
+        }
+        if (event.key === "Escape" && trayOpen) {
+          event.preventDefault();
+          dismissTray(
+            event.target instanceof Node &&
+              collapsedTrayRef.current?.contains(event.target) === true,
+          );
+        }
+      }}
+    >
+      <SidebarIconLink
+        to="/runs/new"
+        label="New Run"
+        icon={Plus}
+        active={pathname === "/runs/new"}
+        expanded={false}
+        emphasized
+        tooltip={false}
+      />
+      {tray && createPortal(tray, document.body)}
+    </div>
   );
 }
 
@@ -371,18 +702,13 @@ export function Layout() {
                 sidebarExpanded ? "px-2" : "items-center",
               )}
             >
-              {/* New Run — emphasized primary CTA. Scoped (submitting a run needs
-                  a project), so it's hidden along with its divider until one is
-                  selected; Projects then becomes the first pinned item. */}
+              {/* Primary creation launcher. Scoped because both workflows need a
+                  selected project; hover and focus-within reveal Experiment. */}
               {hasProject && (
                 <>
-                  <SidebarIconLink
-                    to="/runs/new"
-                    label="New Run"
-                    icon={Plus}
-                    active={location.pathname === "/runs/new"}
+                  <NewWorkflowLauncher
                     expanded={sidebarExpanded}
-                    emphasized
+                    pathname={location.pathname}
                   />
                   <div
                     className={cn("my-1 h-px bg-border/60", sidebarExpanded ? "w-full" : "w-6")}
@@ -501,6 +827,27 @@ export function Layout() {
                 <SheetContent side="left" className="w-64 pt-10">
                   <SheetTitle className="sr-only">Navigation</SheetTitle>
                   <nav className="flex flex-col space-y-1">
+                    {hasProject && (
+                      <>
+                        <Link
+                          to="/runs/new"
+                          onClick={() => setMobileOpen(false)}
+                          className="flex items-center gap-2 rounded-md bg-action px-3 py-2 text-sm font-medium text-action-foreground shadow-sm transition-colors hover:bg-action/90"
+                        >
+                          <Plus className="h-4 w-4" />
+                          New Run
+                        </Link>
+                        <Link
+                          to="/experiments/new"
+                          onClick={() => setMobileOpen(false)}
+                          className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                        >
+                          <Atom className="h-4 w-4" />
+                          New Experiment
+                        </Link>
+                        <div className="my-2 h-px bg-border/60" aria-hidden />
+                      </>
+                    )}
                     {visibleGroups.map((group, groupIdx) => (
                       <Fragment key={group.id}>
                         <div
