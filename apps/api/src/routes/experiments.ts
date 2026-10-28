@@ -31,11 +31,16 @@ import {
   ExperimentMembershipError,
   type ReplaceMembershipResult,
 } from "../experiment-membership.js";
+import {
+  ExperimentLifecycleCoordinator,
+  ExperimentLifecycleError,
+} from "../experiment-lifecycle.js";
 
 const CursorSchema = z.string().min(1).optional();
 const PageQuerySchema = ProjectIdQuerySchema.extend({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   after: CursorSchema,
+  includeDeleted: z.enum(["true", "false"]).optional(),
 });
 
 const ExperimentMetadataInputSchema = z.object({
@@ -191,8 +196,61 @@ const ExperimentResponseSchema = z
     }),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
+    deletedAt: z.coerce.date().optional(),
+    lifecycle: z
+      .object({
+        operationId: z.string(),
+        phase: z.enum(["deleting", "deleted", "restoring", "restored"]),
+        stateVersion: z.number().int().positive(),
+        progress: z.object({
+          expectedRequests: z.number().int().nonnegative(),
+          completedRequests: z.number().int().nonnegative(),
+          expectedReports: z.number().int().nonnegative(),
+          completedReports: z.number().int().nonnegative(),
+        }),
+        blocking: z.array(z.object({
+          kind: z.enum(["request", "report", "experiment"]),
+          id: z.string(),
+          reason: z.enum([
+            "target-missing",
+            "target-conflict",
+            "reconciliation-failed",
+          ]),
+          error: z.string().optional(),
+        })),
+        deleteRequestedAt: z.coerce.date(),
+        deleteCompletedAt: z.coerce.date().optional(),
+        restoreRequestedAt: z.coerce.date().optional(),
+        restoreCompletedAt: z.coerce.date().optional(),
+      })
+      .optional(),
   })
   .openapi("ExperimentResponse");
+
+const ExperimentLifecycleResponseSchema = z
+  .object({
+    experimentId: z.string(),
+    operationId: z.string(),
+    phase: z.enum(["deleting", "deleted", "restoring", "restored"]),
+    stateVersion: z.number().int().positive(),
+    progress: z.object({
+      expectedRequests: z.number().int().nonnegative(),
+      completedRequests: z.number().int().nonnegative(),
+      expectedReports: z.number().int().nonnegative(),
+      completedReports: z.number().int().nonnegative(),
+    }),
+    blocking: z.array(z.object({
+      kind: z.enum(["request", "report", "experiment"]),
+      id: z.string(),
+      reason: z.string(),
+      error: z.string().optional(),
+    })),
+    deleteRequestedAt: z.coerce.date(),
+    deleteCompletedAt: z.coerce.date().optional(),
+    restoreRequestedAt: z.coerce.date().optional(),
+    restoreCompletedAt: z.coerce.date().optional(),
+  })
+  .openapi("ExperimentLifecycleResponse");
 
 const ExperimentListResponseSchema = z
   .object({
@@ -299,6 +357,57 @@ function membership(ctx: RouteContext): ExperimentMembershipCoordinator {
     executions: ctx.experimentExecutionsCollection,
     chunks: ctx.experimentChunksCollection,
   });
+}
+
+function lifecycle(ctx: RouteContext): ExperimentLifecycleCoordinator {
+  return new ExperimentLifecycleCoordinator({
+    requests: ctx.requestCollection,
+    reports: ctx.reportCollection,
+    experiments: ctx.experimentCollection,
+    executions: ctx.experimentExecutionsCollection,
+    chunks: ctx.experimentChunksCollection,
+  });
+}
+
+function lifecycleResponse(experiment: ExperimentDocument) {
+  if (!experiment.lifecycle) {
+    throw new Error(`Experiment ${experiment.experimentId} has no lifecycle operation`);
+  }
+  return {
+    experimentId: experiment.experimentId,
+    operationId: experiment.lifecycle.operationId,
+    phase: experiment.lifecycle.phase,
+    stateVersion: experiment.lifecycle.stateVersion,
+    progress: experiment.lifecycle.progress,
+    blocking: experiment.lifecycle.blocking,
+    deleteRequestedAt: experiment.lifecycle.deleteRequestedAt,
+    ...(experiment.lifecycle.deleteCompletedAt
+      ? { deleteCompletedAt: experiment.lifecycle.deleteCompletedAt }
+      : {}),
+    ...(experiment.lifecycle.restoreRequestedAt
+      ? { restoreRequestedAt: experiment.lifecycle.restoreRequestedAt }
+      : {}),
+    ...(experiment.lifecycle.restoreCompletedAt
+      ? { restoreCompletedAt: experiment.lifecycle.restoreCompletedAt }
+      : {}),
+  };
+}
+
+function sendLifecycleError(res: Response, error: unknown): boolean {
+  if (!(error instanceof ExperimentLifecycleError)) return false;
+  res.status(error.status).json({
+    error: error.message,
+    code: error.code,
+    ...(error.lifecycle
+      ? {
+          operationId: error.lifecycle.operationId,
+          phase: error.lifecycle.phase,
+          progress: error.lifecycle.progress,
+          blockers: error.lifecycle.blocking,
+        }
+      : {}),
+  });
+  return true;
 }
 
 function membershipResponse(result: ReplaceMembershipResult) {
@@ -579,6 +688,28 @@ function experimentResponse(experiment: ExperimentDocument) {
     currentExecution: executionResponse(experiment.execution),
     createdAt: experiment.createdAt,
     updatedAt: experiment.updatedAt,
+    ...(experiment.deletedAt ? { deletedAt: experiment.deletedAt } : {}),
+    ...(experiment.lifecycle
+      ? {
+          lifecycle: {
+            operationId: experiment.lifecycle.operationId,
+            phase: experiment.lifecycle.phase,
+            stateVersion: experiment.lifecycle.stateVersion,
+            progress: experiment.lifecycle.progress,
+            blocking: experiment.lifecycle.blocking,
+            deleteRequestedAt: experiment.lifecycle.deleteRequestedAt,
+            ...(experiment.lifecycle.deleteCompletedAt
+              ? { deleteCompletedAt: experiment.lifecycle.deleteCompletedAt }
+              : {}),
+            ...(experiment.lifecycle.restoreRequestedAt
+              ? { restoreRequestedAt: experiment.lifecycle.restoreRequestedAt }
+              : {}),
+            ...(experiment.lifecycle.restoreCompletedAt
+              ? { restoreCompletedAt: experiment.lifecycle.restoreCompletedAt }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -895,6 +1026,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         projectId: getQueryProjectId(req),
         limit: req.query.limit,
         afterExperimentId: req.query.after,
+        includeDeleted: req.query.includeDeleted === "true",
       });
       res.json({
         data: page.experiments.map(experimentResponse),
@@ -909,19 +1041,107 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
     tags: ["Experiments"],
     summary: "Get an experiment",
     params: z.object({ id: z.string().min(1) }),
-    query: ProjectIdQuerySchema,
+    query: ProjectIdQuerySchema.extend({
+      includeDeleted: z.enum(["true", "false"]).optional(),
+    }),
     response: ExperimentResponseSchema,
     errorResponses: { 404: { description: "Experiment not found" } },
     handler: async (req, res) => {
-      const experiment = await store(ctx).get(
-        getQueryProjectId(req),
-        req.params.id,
-      );
+      const experimentStore = store(ctx);
+      const experiment = req.query.includeDeleted === "true"
+        ? await experimentStore.getIncludingDeleted(
+            getQueryProjectId(req),
+            req.params.id,
+          )
+        : await experimentStore.get(
+            getQueryProjectId(req),
+            req.params.id,
+          );
       if (!experiment) {
         res.status(404).json({ error: "Experiment not found" });
         return;
       }
       res.json(experimentResponse(experiment));
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "delete",
+    path: "/api/v1/experiments/:id",
+    tags: ["Experiments"],
+    summary: "Start or resume cascading Experiment deletion",
+    description:
+      "Returns 202 with a stable lifecycle operation ID. Poll the lifecycle " +
+      "endpoint until phase is deleted or blockers require intervention.",
+    params: z.object({ id: z.string().min(1) }),
+    query: ProjectIdQuerySchema,
+    response: ExperimentLifecycleResponseSchema,
+    successStatus: 202,
+    errorResponses: {
+      404: { description: "Experiment not found" },
+      409: { description: "An incompatible Experiment mutation is active" },
+    },
+    handler: async (req, res) => {
+      try {
+        const experiment = await lifecycle(ctx).startDelete(
+          getQueryProjectId(req),
+          req.params.id,
+        );
+        res.status(202).json(lifecycleResponse(experiment));
+      } catch (error) {
+        if (!sendLifecycleError(res, error)) throw error;
+      }
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "post",
+    path: "/api/v1/experiments/:id/restore",
+    tags: ["Experiments"],
+    summary: "Start or resume cascading Experiment restore",
+    params: z.object({ id: z.string().min(1) }),
+    query: ProjectIdQuerySchema,
+    response: ExperimentLifecycleResponseSchema,
+    successStatus: 202,
+    errorResponses: {
+      404: { description: "Experiment not found" },
+      409: { description: "Experiment is not deleted or another intent is active" },
+    },
+    handler: async (req, res) => {
+      try {
+        const experiment = await lifecycle(ctx).startRestore(
+          getQueryProjectId(req),
+          req.params.id,
+        );
+        res.status(202).json(lifecycleResponse(experiment));
+      } catch (error) {
+        if (!sendLifecycleError(res, error)) throw error;
+      }
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/experiments/:id/lifecycle",
+    tags: ["Experiments"],
+    summary: "Get and repair Experiment lifecycle progress",
+    params: z.object({ id: z.string().min(1) }),
+    query: ProjectIdQuerySchema,
+    response: ExperimentLifecycleResponseSchema,
+    errorResponses: {
+      404: { description: "Experiment not found" },
+      409: { description: "Experiment has no lifecycle operation" },
+    },
+    handler: async (req, res) => {
+      try {
+        const experiment = await lifecycle(ctx).repair(
+          getQueryProjectId(req),
+          req.params.id,
+        );
+        res.json(lifecycleResponse(experiment));
+      } catch (error) {
+        if (!sendLifecycleError(res, error)) throw error;
+      }
     },
   });
 
@@ -1038,6 +1258,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
     query: ProjectIdQuerySchema.extend({
       limit: z.coerce.number().int().min(1).max(100).default(50),
       after: CursorSchema,
+      includeDeleted: z.enum(["true", "false"]).optional(),
     }),
     response: ExecutionListResponseSchema,
     errorResponses: { 404: { description: "Experiment not found" } },
@@ -1047,6 +1268,14 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         _id: req.params.id,
         projectId,
         finalizedAt: { $exists: true },
+        ...(req.query.includeDeleted === "true"
+          ? {}
+          : {
+              deletedAt: { $exists: false },
+              "lifecycle.phase": {
+                $nin: ["deleting", "deleted", "restoring"],
+              },
+            }),
       });
       if (!experiment) {
         res.status(404).json({ error: "Experiment not found" });
@@ -1101,7 +1330,9 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
       id: z.string().min(1),
       experimentExecutionId: z.string().min(1),
     }),
-    query: ProjectIdQuerySchema,
+    query: ProjectIdQuerySchema.extend({
+      includeDeleted: z.enum(["true", "false"]).optional(),
+    }),
     response: ExecutionResponseSchema,
     errorResponses: { 404: { description: "Experiment execution not found" } },
     handler: async (req, res) => {
@@ -1110,6 +1341,14 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         _id: req.params.id,
         projectId,
         finalizedAt: { $exists: true },
+        ...(req.query.includeDeleted === "true"
+          ? {}
+          : {
+              deletedAt: { $exists: false },
+              "lifecycle.phase": {
+                $nin: ["deleting", "deleted", "restoring"],
+              },
+            }),
       });
       if (!experiment) {
         res.status(404).json({ error: "Experiment execution not found" });
@@ -1137,16 +1376,24 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
       id: z.string().min(1),
       experimentExecutionId: z.string().min(1),
     }),
-    query: ProjectIdQuerySchema,
+    query: ProjectIdQuerySchema.extend({
+      includeDeleted: z.enum(["true", "false"]).optional(),
+    }),
     response: z.array(ReportResponseSchema),
     errorResponses: { 404: { description: "Experiment execution not found" } },
     handler: async (req, res) => {
       const projectId = getQueryProjectId(req);
-      const execution = await store(ctx).getExecution({
+      const parent = req.query.includeDeleted === "true"
+        ? await store(ctx).getIncludingDeleted(projectId, req.params.id)
+        : await store(ctx).get(projectId, req.params.id);
+      const execution = parent
+        ? await store(ctx).getExecution({
         projectId,
         experimentId: req.params.id,
         experimentExecutionId: req.params.experimentExecutionId,
-      });
+        includeDeleted: req.query.includeDeleted === "true",
+          })
+        : null;
       if (!execution) {
         res.status(404).json({ error: "Experiment execution not found" });
         return;
@@ -1156,6 +1403,9 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
           projectId,
           experimentId: req.params.id,
           experimentExecutionId: req.params.experimentExecutionId,
+          ...(req.query.includeDeleted === "true"
+            ? {}
+            : { deletedAt: { $exists: false } }),
         })
         .sort({ createdAt: -1 })
         .toArray();

@@ -104,3 +104,51 @@ export const SharedListInteractions: Story = {
     ).toBeVisible();
   },
 };
+
+export const DeletedVisibility: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        http.get("/api/v1/experiments", ({ request }) => {
+          const includeDeleted =
+            new URL(request.url).searchParams.get("includeDeleted") === "true";
+          return HttpResponse.json({
+            data: includeDeleted
+              ? [{
+                  ...experiment(
+                    "experiment-deleted",
+                    "Deleted benchmark",
+                    "done",
+                  ),
+                  deletedAt: "2026-10-16T12:00:00.000Z",
+                  lifecycle: {
+                    operationId: "operation-delete",
+                    phase: "deleted",
+                    stateVersion: 3,
+                    progress: {
+                      expectedRequests: 4,
+                      completedRequests: 4,
+                      expectedReports: 1,
+                      completedReports: 1,
+                    },
+                    blocking: [],
+                  },
+                }]
+              : [
+                  experiment("experiment-alpha", "Alpha benchmark", "done"),
+                ],
+          });
+        }),
+      ],
+    },
+  },
+  play: async ({ canvas }) => {
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Show deleted" }),
+    );
+    await expect(
+      (await screen.findAllByText("Deleted benchmark"))[0],
+    ).toBeVisible();
+    await expect(canvas.getByText("Hide deleted")).toBeVisible();
+  },
+};

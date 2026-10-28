@@ -88,6 +88,25 @@ const experiment = {
   createdAt: "2026-10-16T09:00:00.000Z",
 };
 
+const deletedExperiment = {
+  ...experiment,
+  deletedAt: "2026-10-16T12:00:00.000Z",
+  lifecycle: {
+    operationId: "operation-delete",
+    phase: "deleted",
+    stateVersion: 3,
+    progress: {
+      expectedRequests: 1,
+      completedRequests: 1,
+      expectedReports: 3,
+      completedReports: 3,
+    },
+    blocking: [],
+    deleteRequestedAt: "2026-10-16T11:55:00.000Z",
+    deleteCompletedAt: "2026-10-16T12:00:00.000Z",
+  },
+};
+
 const currentReports = [
   {
     _id: "report-current",
@@ -292,6 +311,38 @@ export const AttemptSelectionAndRunsTable: Story = {
     await expect(
       canvas.getByRole("complementary", { name: "Customize columns" }),
     ).toBeVisible();
+  },
+};
+
+export const DeletedLifecycleAndRestore: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        http.get("/api/v1/experiments/experiment-demo", () =>
+          HttpResponse.json(deletedExperiment),
+        ),
+        http.post("/api/v1/experiments/experiment-demo/restore", () =>
+          HttpResponse.json({
+            ...deletedExperiment.lifecycle,
+            operationId: "operation-restore",
+            phase: "restoring",
+            stateVersion: 4,
+            restoreRequestedAt: "2026-10-16T12:05:00.000Z",
+          }, { status: 202 }),
+        ),
+      ],
+    },
+  },
+  play: async ({ canvas }) => {
+    await expect(
+      await screen.findByRole("heading", {
+        name: "Lifecycle operation · deleted",
+      }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByText("Requests 1/1 · Reports 3/3"),
+    ).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Restore" }));
   },
 };
 

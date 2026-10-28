@@ -48,6 +48,7 @@ export const REQUIRED_MIGRATIONS: readonly string[] = [
   "033-backfill-handler-status.ts",
   "034-create-experiment-storage-indexes.ts",
   "035-version-report-templates.ts",
+  "036-add-experiment-lifecycle-indexes.ts",
   "021-backfill-criteria-kind.ts",
   "022-backfill-criteria-subject.ts",
 ];
