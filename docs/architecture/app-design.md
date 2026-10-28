@@ -460,7 +460,7 @@ registrations continue to require a non-empty queue.
 
 ### Run submission flow
 
-1. User submits via Portal or CLI with: **task**, **criteria** (required), **worker**, **model** (required), and optionally **agentVersion**, a **codebase** selection, and/or a per-gate **`gates`** configuration (see [Gates](#gates--multi-phase-evaluation-pipeline))
+1. User submits via Portal or CLI with: **task**, **criteria** (required), **worker**, **model** (required), and optionally **agentVersion**, a **codebase** selection, record-only **`observations`** criteria, and/or a per-gate **`gates`** configuration (see [Gates](#gates--multi-phase-evaluation-pipeline))
 2. API rejects unknown, deleted, unavailable, versionless, or explicitly inactive targets and resolves `agentVersion`: explicit selection → validate active; omitted → latest active by `createdAt`
 3. API resolves `model`: explicit → validate against `supportedModels`; omitted → `defaultModel`
 4. API validates requested reasoning effort, MCP servers, skills, and extensions when strict capability enforcement is enabled
@@ -702,6 +702,12 @@ Criteria are reusable evaluation rules stored in the database and optionally def
 - **AI-generated prompts** — natural language behavior descriptions can be converted to evaluation prompts via LLM
 - **Traits** — reusable labels for filtering and composition (e.g., `has_azure`, `has_node`)
 - **Gate compatibility** — a `gates: GateId[]` list controls which [gates](#gates--multi-phase-evaluation-pipeline) a criterion may be selected for (empty = all); the list is downward-closed along the DAG
+- **Criterion kind** — `kind: "gate" | "observation"` distinguishes criteria that gate the agent from record-only observations. Observation criteria can optionally set `taxonomyElementId` to one of the hard-coded observation dimensions and a `subject` (`run`|`iteration`) that selects whole-run vs per-iteration evaluation; run detail derives dimension grouping by joining each `observationResults[].criterionId` (per-turn or run-level) back to the criterion metadata.
+- **Kind** — `kind: "gate" | "observation"` (default `gate`). **Gate** criteria steer the coding agent through the gate DAG. **Observation** criteria (issue #1156) are record-only: they produce a boolean + evidence, never feed back to the agent, never pass/fail a gate, and never enter the gate DAG. Dependencies may only reference same-kind criteria.
+- **Taxonomy classification** — observation criteria carry an optional `taxonomyElementId` from a hard-coded enum of the three R&A Readout quality dimensions (`dimension:idiomatic-use`, `dimension:dependency-currency`, `dimension:configuration-correctness`). Classification is static/design-time, not per-run.
+- **Evaluation subject** — `subject: "run" | "iteration"` decides the evaluation granularity of an observation. **`run`** (the default for observations) is evaluated **once** against the final snapshot + the merged trajectory across all iterations and stored at run level (`run.observationResults`); **`iteration`** is evaluated per turn and stored on each turn (`turn.observationResults`). Gate criteria are always `iteration` (the API rejects `run` for gates); `subject` is honored only by the `pp-taxonomy` pipeline. The AI authoring assistant auto-detects the subject and the user can override it.
+
+Observation evaluation happens off the coding-agent critical path in the `pp-taxonomy` post-processor (see [post-processing](post-processing.md)). A run carries the chosen `observations: string[]` (observation-criteria ids); **iteration-subject** results are stored per turn as `turn.observationResults: CriterionResult[]`, while **run-subject** results are stored once at run level as `run.observationResults: CriterionResult[]` (both the same shape as gate `criteriaResults`). Dimension grouping is derived at read time by joining `criterionId` → criterion `taxonomyElementId`.
 
 See [`ENV_VARIABLES.md`](../../scope-mt-app/ENV_VARIABLES.md) for related configuration options.
 

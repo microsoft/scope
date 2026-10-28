@@ -4,7 +4,9 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GateCompatibilityPicker } from "@/components/GateCompatibilityPicker";
+import { ObservationTaxonomySelect } from "@/components/ObservationTaxonomySelect";
 import type { CriteriaWizardState } from "@/hooks/useCriteriaWizard";
 
 interface CriteriaWizardStep1Props {
@@ -26,6 +28,12 @@ export function CriteriaWizardStep1({ wizard, idPrefix = "" }: CriteriaWizardSte
     gates,
     setGates,
     lockedGates,
+    kind,
+    setKind,
+    taxonomyElementId,
+    setTaxonomyElementId,
+    subject,
+    setSubject,
   } = wizard;
 
   return (
@@ -89,15 +97,67 @@ export function CriteriaWizardStep1({ wizard, idPrefix = "" }: CriteriaWizardSte
         </p>
       </div>
 
-      {/* Gate compatibility */}
+      {/* Criteria kind */}
       <div className="space-y-2">
-        <Label className="text-sm font-semibold">Gate compatibility</Label>
-        <GateCompatibilityPicker value={gates} onChange={setGates} lockedGates={lockedGates} />
+        <Label htmlFor={`${idPrefix}criteria-kind`} className="text-sm font-semibold">
+          Criteria kind
+        </Label>
+        <Select value={kind} onValueChange={(value) => setKind(value as typeof kind)}>
+          <SelectTrigger id={`${idPrefix}criteria-kind`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="gate">Gate — steers the agent (pass/fail feedback shapes its next iteration)</SelectItem>
+            <SelectItem value="observation">Observation — records evidence; never shown to the agent</SelectItem>
+          </SelectContent>
+        </Select>
         <p className="text-xs text-muted-foreground">
-          Select the gates this criterion applies to. Parents must be compatible with every
-          selected gate. This drives the gate-aware parent/child suggestions on the next step.
+          Gate criteria steer the agent — their pass/fail verdict is fed back into the coding
+          session and shapes what it does next. Observations are recorded for analysis only:
+          never shown to the agent and never change its behavior.
         </p>
       </div>
+
+      {/* Gate compatibility */}
+      {kind === "gate" ? (
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">Gate compatibility</Label>
+          <GateCompatibilityPicker value={gates} onChange={setGates} lockedGates={lockedGates} />
+          <p className="text-xs text-muted-foreground">
+            Select the gates this criterion applies to. Parents must be compatible with every
+            selected gate. This drives the gate-aware parent/child suggestions on the next step.
+          </p>
+        </div>
+      ) : (
+        <>
+          <ObservationTaxonomySelect
+            id={`${idPrefix}taxonomy`}
+            value={taxonomyElementId}
+            onChange={setTaxonomyElementId}
+          />
+
+          {/* Evaluation subject (observations only) */}
+          <div className="space-y-2">
+            <Label htmlFor={`${idPrefix}criteria-subject`} className="text-sm font-semibold">
+              Evaluation subject
+            </Label>
+            <Select value={subject} onValueChange={(value) => setSubject(value as typeof subject)}>
+              <SelectTrigger id={`${idPrefix}criteria-subject`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="run">Whole run — evaluated once across all iterations</SelectItem>
+                <SelectItem value="iteration">Per iteration — evaluated on each iteration in isolation</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Whole-run observations span iterations (e.g. a dependency added then later removed),
+              evaluated once against the final snapshot plus the merged trajectory. Per-iteration
+              observations are judged independently on each iteration.
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }

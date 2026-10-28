@@ -16,6 +16,9 @@ export interface PostProcessorMessage {
 export interface HandlerContext {
   blobStorage: BlobStorage;
   collection: Collection;
+  /** The `criteria` collection — lets handlers resolve criterion metadata
+   *  (e.g. observation `subject`/`taxonomyElementId`) by id. #1156. */
+  criteriaCollection: Collection;
   log: (level: LogEvent["level"], msg: string, data?: Record<string, unknown>) => Promise<void>;
 }
 

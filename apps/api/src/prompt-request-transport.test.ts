@@ -66,6 +66,7 @@ const cases = [
     payload: {
       prompt: "Inspect captured build output.",
       suggestedId: "build_succeeds",
+      suggestedSubject: "run",
       suggestedParents: [],
       suggestedChildren: [],
     },

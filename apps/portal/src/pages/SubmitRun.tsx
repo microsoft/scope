@@ -201,6 +201,7 @@ export function SubmitRun() {
   // Form state
   const [task, setTask] = useState("");
   const [pickedCriteria, setPickedCriteria] = useState<string[]>([]);
+  const [pickedObservations, setPickedObservations] = useState<string[]>([]);
   const [worker, setWorker] = useState<string>("");
   const [model, setModel] = useState<string>("");
   const [reasoningEffort, setReasoningEffort] = useState<string>("");
@@ -234,6 +235,7 @@ export function SubmitRun() {
 
   // Inline criteria creation dialog
   const [createCriterionOpen, setCreateCriterionOpen] = useState(false);
+  const [createObservationOpen, setCreateObservationOpen] = useState(false);
   const [gateCriterionDialog, setGateCriterionDialog] = useState<Exclude<GateId, "select"> | null>(null);
   const [createProfileOpen, setCreateProfileOpen] = useState(false);
 
@@ -516,6 +518,7 @@ export function SubmitRun() {
   const applyRecentRun = (run: Run) => {
     if (run.scenario?.task) setTask(run.scenario.task);
     if (run.scenario?.criteria) setPickedCriteria(run.scenario.criteria);
+    setPickedObservations(run.observations ?? []);
     setWorker(run.workerType);
     if (run.model) setModel(run.model);
     if (run.agentVersion) setSelectedAgentVersion(run.agentVersion);
@@ -687,6 +690,7 @@ export function SubmitRun() {
 
     submitMutation.mutate({
       scenario: { task: task.trim(), criteria: pickedCriteria },
+      ...(pickedObservations.length > 0 ? { observations: pickedObservations } : {}),
       ...(inVariationMode ? {} : { ...(worker ? { worker } : {}) }),
       ...(inVariationMode ? {} : { ...(model ? { model } : {}) }),
       ...(inVariationMode ? {} : { ...(reasoningEffort ? { reasoningEffort } : {}) }),
@@ -803,6 +807,7 @@ export function SubmitRun() {
   const summaryChips: string[] = [
     `${maxIterations} iteration${maxIterations === 1 ? "" : "s"}`,
     `${pickedCriteria.length} requirements criteri${pickedCriteria.length === 1 ? "on" : "a"}`,
+    pickedObservations.length > 0 ? `${pickedObservations.length} observation${pickedObservations.length === 1 ? "" : "s"}` : "",
     gatesEnabled ? `${gateConfigs.length} configured gates` : "single-pass Requirements",
     occurrences > 1 ? `×${occurrences} runs` : "",
     worker,
@@ -1086,6 +1091,7 @@ export function SubmitRun() {
               onChange={setPickedCriteria}
               inputId="criteria"
               gate="select"
+              kind="gate"
               trailingAction={(
                 <Button
                   type="button"
@@ -1108,6 +1114,46 @@ export function SubmitRun() {
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Info className="h-3.5 w-3.5 shrink-0" />
               Required when max iterations &gt; 1. Optional for single-iteration runs (no judge evaluation).
+            </p>
+          </div>
+
+          <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="observations">
+                Observations{" "}
+                <span className="text-muted-foreground font-normal">(record-only criteria)</span>
+              </Label>
+              <HelpTooltip
+                text="Observation criteria are evaluated per iteration and record true/false plus evidence without gating the agent."
+                docs="criteria"
+              />
+            </div>
+            <CriteriaPicker
+              selected={pickedObservations}
+              onChange={setPickedObservations}
+              inputId="observations"
+              kind="observation"
+              trailingAction={(
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 gap-1.5 px-3"
+                  onClick={() => setCreateObservationOpen(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New…
+                </Button>
+              )}
+            />
+            <CreateCriterionDialog
+              open={createObservationOpen}
+              onOpenChange={setCreateObservationOpen}
+              defaultKind="observation"
+              onCreated={(id) => setPickedObservations((prev) => [...prev, id])}
+            />
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Info className="h-3.5 w-3.5 shrink-0" />
+              Observation results appear in the run detail observations tab grouped by dimension.
             </p>
           </div>
 
@@ -1301,6 +1347,7 @@ export function SubmitRun() {
                       <Label>{meta.label} criteria</Label>
                       <CriteriaPicker
                         gate={gate}
+                        kind="gate"
                         selected={draft.criteria}
                         onChange={(criteria) => updateGateDraft(gate, { criteria })}
                         trailingAction={(

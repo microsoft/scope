@@ -35,13 +35,20 @@ import {
   type CustomizeColumnsOption,
 } from "@/components/list-layout";
 import { HelpTooltip } from "@/components/HelpTooltip";
-import { CriteriaBadge } from "@/components/CriteriaBadge";
+import {
+  CriteriaBadge,
+  CriteriaKindBadge,
+  CriteriaSubjectBadge,
+} from "@/components/CriteriaBadge";
+import { TAXONOMY_ELEMENT_METADATA } from "@/types";
 
-const FILTER_KEYS = ["gate"] as const;
+const FILTER_KEYS = ["gate", "kind"] as const;
 
 const COLUMN_OPTIONS: CustomizeColumnsOption[] = [
   { id: "id", label: "ID", required: true },
   { id: "prompt", label: "Prompt" },
+  { id: "kind", label: "Kind" },
+  { id: "taxonomy", label: "Dimension" },
   { id: "gates", label: "Gates" },
   { id: "dependencies", label: "Dependencies" },
   { id: "actions", label: "Actions" },
@@ -88,12 +95,17 @@ export function CriteriaList() {
 
   const sortedCriteria = useMemo(() => {
     const selectedGates = state.getFilterList("gate") as GateId[];
+    const selectedKinds = state.getFilterList("kind");
     // A criterion matches if it is compatible with any selected gate (OR).
     // Criteria with no explicit gates are compatible with every gate.
-    const filtered =
+    const gateFiltered =
       selectedGates.length === 0
         ? criteria
-        : criteria.filter((c) => selectedGates.some((g) => isCriterionCompatibleWithGate(c.gates, g)));
+        : criteria.filter((c) => (c.kind ?? "gate") === "gate" && selectedGates.some((g) => isCriterionCompatibleWithGate(c.gates, g)));
+    const filtered =
+      selectedKinds.length === 0
+        ? gateFiltered
+        : gateFiltered.filter((c) => selectedKinds.includes(c.kind ?? "gate"));
     if (!state.sort) return filtered;
     const sorted = [...filtered];
     sorted.sort((a, b) => {
@@ -112,9 +124,17 @@ export function CriteriaList() {
       visibleGates.map((gate) => ({
         value: gate,
         label: GATE_METADATA[gate].label,
-        count: criteria.filter((c) => isCriterionCompatibleWithGate(c.gates, gate)).length,
+        count: criteria.filter((c) => (c.kind ?? "gate") === "gate" && isCriterionCompatibleWithGate(c.gates, gate)).length,
       })),
     [criteria, visibleGates],
+  );
+
+  const kindFilterOptions = useMemo(
+    () => [
+      { value: "gate", label: "Gate", count: criteria.filter((c) => (c.kind ?? "gate") === "gate").length },
+      { value: "observation", label: "Observation", count: criteria.filter((c) => c.kind === "observation").length },
+    ],
+    [criteria],
   );
 
   const total = sortedCriteria.length;
@@ -161,14 +181,45 @@ export function CriteriaList() {
       ),
     },
     {
+      id: "kind",
+      header: "Kind",
+      width: "180px",
+      hidden: visibility.isHidden("kind"),
+      cell: (c) => (
+        <div className="flex flex-wrap items-center gap-1">
+          <CriteriaKindBadge kind={c.kind} />
+          {c.kind === "observation" && <CriteriaSubjectBadge subject={c.subject} />}
+        </div>
+      ),
+    },
+    {
+      id: "taxonomy",
+      header: "Dimension",
+      width: "190px",
+      hidden: visibility.isHidden("taxonomy"),
+      cell: (c) => (
+        <span className="text-xs text-muted-foreground">
+          {c.kind === "observation" && c.taxonomyElementId
+            ? TAXONOMY_ELEMENT_METADATA[c.taxonomyElementId].label
+            : c.kind === "observation"
+              ? "Unclassified"
+              : "—"}
+        </span>
+      ),
+    },
+    {
       id: "gates",
       header: "Gates",
       width: "160px",
       hidden: visibility.isHidden("gates"),
       cell: (c) => (
-        <Badge variant="secondary" className="text-xs">
-          {formatGateList(c.gates)}
-        </Badge>
+        c.kind === "observation" ? (
+          <Badge variant="outline" className="text-xs">Record-only</Badge>
+        ) : (
+          <Badge variant="secondary" className="text-xs">
+            {formatGateList(c.gates)}
+          </Badge>
+        )
       ),
     },
     {
@@ -296,6 +347,13 @@ export function CriteriaList() {
               options={gateFilterOptions}
               selected={state.getFilterList("gate")}
               onToggle={(value) => state.toggleFilterValue("gate", value)}
+            />
+          </FilterSection>
+          <FilterSection title="Kind" storageKey="criteria-kind">
+            <CheckboxFilterGroup
+              options={kindFilterOptions}
+              selected={state.getFilterList("kind")}
+              onToggle={(value) => state.toggleFilterValue("kind", value)}
             />
           </FilterSection>
         </FilterRail>

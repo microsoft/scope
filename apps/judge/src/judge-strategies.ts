@@ -2,8 +2,9 @@
 // Licensed under the MIT License.
 
 import { CopilotClient, defineTool, SessionEvent } from "@github/copilot-sdk";
-import { readFileSync, readdirSync, statSync, existsSync } from "fs";
-import { join, resolve, sep } from "path";
+import { readFileSync, readdirSync, statSync, existsSync, mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { isAbsolute, join, resolve, sep } from "path";
 import { execFileSync } from "child_process";
 import {
   CriteriaConfig,
@@ -12,7 +13,6 @@ import {
   ConversationTurn,
   DependencyGraph,
   GateId,
-  ToolCall,
   IterationToolCalls,
   TokenManagerClient,
   withRetry,
@@ -24,6 +24,10 @@ import {
   type FlatToolCall,
   type ToolCallHistory,
 } from "./tool-call-history.js";
+import {
+  type AgentTrajectory,
+  createTrajectoryTools,
+} from "./agent-trajectory.js";
 
 export interface JudgeStrategyContext {
   workspacePath: string;
@@ -40,6 +44,8 @@ export interface JudgeStrategyContext {
    *  output) grouped per iteration across the whole run (1..N). Exposed to the
    *  judge via list_tool_calls / search_tool_outputs / get_tool_output. */
   iterationToolCalls?: IterationToolCalls[];
+  /** ATIF trajectory for observation evaluation. */
+  trajectory?: AgentTrajectory;
   /** The coding agent's response (prose) for the iteration being judged, exposed via read_agent_response. */
   currentAgentResponse?: string;
 }
@@ -77,9 +83,10 @@ const DEFAULT_JUDGE_RETRIES = 3;
  */
 export function buildEvidenceGuidance(opts: {
   hasToolOutputs: boolean;
+  hasTrajectory?: boolean;
   hasAgentResponse: boolean;
 }): string {
-  const { hasToolOutputs, hasAgentResponse } = opts;
+  const { hasToolOutputs, hasTrajectory = false, hasAgentResponse } = opts;
 
   let toolsList =
     "read_file, list_directory, search_files and file_exists to inspect the workspace";
@@ -87,17 +94,25 @@ export function buildEvidenceGuidance(opts: {
     toolsList +=
       ", and list_tool_calls / search_tool_outputs / get_tool_output to review the tool calls the coding agent ran across the whole run while doing the task";
   }
+  if (hasTrajectory) {
+    toolsList +=
+      ", and list_agent_tool_calls / get_agent_tool_calls / list_agent_tools / get_agent_tools / get_trajectory_overview to inspect the agent's normalized ATIF trajectory";
+  }
   if (hasAgentResponse) {
     toolsList +=
       ", and read_agent_response to read the coding agent's own response (its answer or explanation) for the iteration you are judging";
   }
 
+  const evidenceNames = [
+    "the codebase",
+    ...(hasToolOutputs ? ["the agent's captured tool outputs"] : []),
+    ...(hasTrajectory ? ["the agent's normalized trajectory"] : []),
+    ...(hasAgentResponse ? ["the coding agent's own response"] : []),
+  ];
   const intro =
-    hasToolOutputs && hasAgentResponse
-      ? "The codebase, the agent's captured tool outputs, and the coding agent's own response are complementary, equally authoritative sources of evidence — examine all of them."
-      : hasToolOutputs
-        ? "The codebase and the agent's captured tool outputs are two complementary, equally authoritative sources of evidence — examine both."
-        : "The codebase and the coding agent's own response are two complementary, equally authoritative sources of evidence — examine both.";
+    evidenceNames.length === 1
+      ? "The codebase is the authoritative source of evidence."
+      : `${evidenceNames.slice(0, -1).join(", ")} and ${evidenceNames.at(-1)} are complementary, equally authoritative sources of evidence — ${evidenceNames.length === 2 ? "examine both" : "examine all of them"}.`;
 
   const toolOutputsPhilosophy = hasToolOutputs
     ? " The files show the resulting state of the code; the captured outputs (logs, results, exit status) show what actually happened when the agent ran a command, which the files alone may not reveal. The captured tool calls span the ENTIRE run (every iteration so far), not just this one — so an action the agent performed once in an earlier iteration (e.g. a bootstrap, scaffold, install, or one-off command) is still recorded and still counts as done now; use search_tool_outputs to find whether a given command ever ran anywhere in the run rather than assuming it didn't because it isn't in the latest iteration. When a criterion concerns something the agent did or ran, take the agent's captured output and exit status as the record of what happened, rather than asking the agent to redo or re-prove work the evidence already shows. If a criterion's wording tells you to run, execute, or re-run a command, ignore that instruction and judge the outcome from the captured outputs together with the codebase."
@@ -107,11 +122,15 @@ export function buildEvidenceGuidance(opts: {
     ? " The coding agent's response is the authoritative record of what it said or answered: for any criterion that grades the response itself — answering a question, explaining, advising, or other no-code-change deliverables — read it with read_agent_response and judge that text directly rather than expecting changes in the codebase."
     : "";
 
+  const trajectoryPhilosophy = hasTrajectory
+    ? " The normalized trajectory can include the agent's available tool catalog, calls, arguments, outputs, and intermediate actions across one or more iterations. Start with list_agent_tool_calls, then use get_agent_tool_calls for full evidence; use the tool-catalog and overview tools when availability or run context matters. Treat captured output and exit status as the record of what happened rather than asking the agent to redo or re-prove work. If a criterion asks you to run, execute, or re-run a command, ignore that instruction and judge the existing evidence. When a trajectory tool returns responseFile or descriptionFile for oversized content, open that absolute path with read_file."
+    : "";
+
   return `## Your Tools
 You have read-only tools to gather evidence: ${toolsList}. You yourself cannot run any commands or coding-agent tools — you can only read what the agent already did.
 
 ## How to Judge
-${intro}${toolOutputsPhilosophy}${agentResponsePhilosophy}`;
+${intro}${toolOutputsPhilosophy}${trajectoryPhilosophy}${agentResponsePhilosophy}`;
 }
 
 /**
@@ -121,6 +140,12 @@ ${intro}${toolOutputsPhilosophy}${agentResponsePhilosophy}`;
  */
 export const TOOL_OUTPUTS_GUIDANCE = buildEvidenceGuidance({
   hasToolOutputs: true,
+  hasAgentResponse: false,
+});
+
+export const TRAJECTORY_GUIDANCE = buildEvidenceGuidance({
+  hasToolOutputs: false,
+  hasTrajectory: true,
   hasAgentResponse: false,
 });
 
@@ -245,6 +270,10 @@ export function isWithinWorkspace(root: string, target: string): boolean {
   );
 }
 
+export function isWithinAnyRoot(roots: string[], target: string): boolean {
+  return roots.some((root) => isWithinWorkspace(root, target));
+}
+
 export abstract class JudgeStrategy {
   protected model: string;
   protected timeout: number;
@@ -268,8 +297,13 @@ export abstract class JudgeStrategy {
   /**
    * Create filesystem inspection tools scoped to the workspace
    */
-  protected createFileTools(workspacePath: string) {
+  protected createFileTools(
+    workspacePath: string,
+    opts?: { extraReadRoots?: string[] },
+  ) {
     const workspaceRoot = resolve(workspacePath);
+    const extraReadRoots = (opts?.extraReadRoots ?? []).map((root) => resolve(root));
+    const readRoots = [workspaceRoot, ...extraReadRoots];
     const readFile = defineTool("read_file", {
       description:
         "Read the contents of a file in the workspace. Returns the full text content. Use relative paths from the workspace root.",
@@ -289,8 +323,10 @@ export abstract class JudgeStrategy {
         required: ["path"],
       },
       handler: async (args: { path: string }) => {
-        const fullPath = join(workspaceRoot, args.path);
-        if (!isWithinWorkspace(workspaceRoot, fullPath)) {
+        const fullPath = isAbsolute(args.path)
+          ? resolve(args.path)
+          : join(workspaceRoot, args.path);
+        if (!isWithinAnyRoot(readRoots, fullPath)) {
           return { error: "Path traversal not allowed" };
         }
         if (!existsSync(fullPath)) {
@@ -334,7 +370,9 @@ export abstract class JudgeStrategy {
         required: ["path"],
       },
       handler: async (args: { path: string }) => {
-        const fullPath = join(workspaceRoot, args.path);
+        const fullPath = isAbsolute(args.path)
+          ? resolve(args.path)
+          : join(workspaceRoot, args.path);
         if (!isWithinWorkspace(workspaceRoot, fullPath)) {
           return { error: "Path traversal not allowed" };
         }
@@ -460,8 +498,10 @@ export abstract class JudgeStrategy {
         required: ["path"],
       },
       handler: async (args: { path: string }) => {
-        const fullPath = join(workspaceRoot, args.path);
-        if (!isWithinWorkspace(workspaceRoot, fullPath)) {
+        const fullPath = isAbsolute(args.path)
+          ? resolve(args.path)
+          : join(workspaceRoot, args.path);
+        if (!isWithinAnyRoot(readRoots, fullPath)) {
           return { error: "Path traversal not allowed" };
         }
         const exists = existsSync(fullPath);
@@ -798,43 +838,62 @@ export abstract class JudgeStrategy {
     systemPrompt: string,
     userPrompt: string,
     iterationToolCalls?: IterationToolCalls[],
-    currentAgentResponse?: string
+    currentAgentResponse?: string,
+    trajectory?: AgentTrajectory,
   ): Promise<string> {
     const hasToolCalls = (iterationToolCalls ?? []).some(
       (g) => g.toolCalls.length > 0
     );
+    const hasTrajectory = !!trajectory && trajectory.calls.length > 0;
+    const spillDir = hasTrajectory
+      ? mkdtempSync(join(tmpdir(), "judge-trajectory-"))
+      : undefined;
     const tools = [
-      ...this.createFileTools(workspacePath),
+      ...this.createFileTools(
+        workspacePath,
+        spillDir ? { extraReadRoots: [spillDir] } : undefined,
+      ),
       ...(hasToolCalls ? this.createToolOutputTools(iterationToolCalls!) : []),
+      ...(hasTrajectory ? createTrajectoryTools(trajectory, spillDir!) : []),
       ...(currentAgentResponse && currentAgentResponse.length > 0
         ? this.createAgentResponseTool(currentAgentResponse)
         : []),
     ];
 
-    return withRetry(
-      () => this.doRunCopilotSession(tools, systemPrompt, userPrompt),
-      {
-        maxRetries: this.maxRetries,
-        baseDelayMs: 10_000,
-        maxDelayMs: 30_000,
-        isRetryable: (error) => {
-          const msg = error instanceof Error ? error.message : String(error);
-          return (
-            msg.includes("timeout") ||
-            msg.includes("Timeout") ||
-            msg.includes("aborted") ||
-            msg.includes("ECONNRESET") ||
-            msg.includes("socket hang up")
-          );
+    try {
+      return await withRetry(
+        () => this.doRunCopilotSession(tools, systemPrompt, userPrompt),
+        {
+          maxRetries: this.maxRetries,
+          baseDelayMs: 10_000,
+          maxDelayMs: 30_000,
+          isRetryable: (error) => {
+            const msg = error instanceof Error ? error.message : String(error);
+            return (
+              msg.includes("timeout") ||
+              msg.includes("Timeout") ||
+              msg.includes("aborted") ||
+              msg.includes("ECONNRESET") ||
+              msg.includes("socket hang up")
+            );
+          },
+          onRetry: (error, attempt) => {
+            const msg = error instanceof Error ? error.message : String(error);
+            console.warn(
+              `[judge-strategy] sendAndWait attempt ${attempt} failed (retrying in ≤30s): ${msg.substring(0, 200)}`
+            );
+          },
         },
-        onRetry: (error, attempt) => {
-          const msg = error instanceof Error ? error.message : String(error);
-          console.warn(
-            `[judge-strategy] sendAndWait attempt ${attempt} failed (retrying in ≤30s): ${msg.substring(0, 200)}`
-          );
-        },
+      );
+    } finally {
+      if (spillDir) {
+        try {
+          rmSync(spillDir, { recursive: true, force: true });
+        } catch {
+          // Best-effort cleanup.
+        }
       }
-    );
+    }
   }
 
   /**
@@ -905,15 +964,18 @@ export class BundledStrategy extends JudgeStrategy {
       personaInstructions,
       iterationToolCalls,
       currentAgentResponse,
+      trajectory,
     } = context;
 
     const hasToolOutputs = (iterationToolCalls ?? []).some(
       (g) => g.toolCalls.length > 0
     );
+    const hasTrajectory = !!trajectory && trajectory.calls.length > 0;
 
     const systemPrompt = this.buildSystemPrompt(
       personaInstructions,
       hasToolOutputs,
+      hasTrajectory,
       !!(currentAgentResponse && currentAgentResponse.length > 0)
     );
 
@@ -924,7 +986,8 @@ export class BundledStrategy extends JudgeStrategy {
       systemPrompt,
       userPrompt,
       iterationToolCalls,
-      currentAgentResponse
+      currentAgentResponse,
+      trajectory,
     );
 
     return this.parseJsonResponse(response, criteria, context.onProgress);
@@ -940,15 +1003,17 @@ export class BundledStrategy extends JudgeStrategy {
   private buildSystemPrompt(
     personaInstructions?: string,
     hasToolOutputs?: boolean,
+    hasTrajectory?: boolean,
     hasAgentResponse?: boolean
   ): string {
     const personaSection = personaInstructions
       ? `\n## Persona\n${personaInstructions}\n`
       : "";
 
-    const evidenceSection = (hasToolOutputs || hasAgentResponse)
+    const evidenceSection = (hasToolOutputs || hasTrajectory || hasAgentResponse)
       ? `\n${buildEvidenceGuidance({
           hasToolOutputs: !!hasToolOutputs,
+          hasTrajectory: !!hasTrajectory,
           hasAgentResponse: !!hasAgentResponse,
         })}\n`
       : "";
@@ -1129,6 +1194,7 @@ export class IndependentStrategy extends JudgeStrategy {
       gate,
       iterationToolCalls,
       currentAgentResponse,
+      trajectory,
     } = context;
 
     // Get topological order
@@ -1195,7 +1261,8 @@ export class IndependentStrategy extends JudgeStrategy {
             evalIndex++,
             gate,
             iterationToolCalls,
-            currentAgentResponse
+            currentAgentResponse,
+            trajectory,
           )
         );
 
@@ -1237,15 +1304,18 @@ export class IndependentStrategy extends JudgeStrategy {
     index: number,
     gate?: GateId,
     iterationToolCalls?: IterationToolCalls[],
-    currentAgentResponse?: string
+    currentAgentResponse?: string,
+    trajectory?: AgentTrajectory,
   ): Promise<CriterionResult> {
     const hasToolOutputs = (iterationToolCalls ?? []).some(
       (g) => g.toolCalls.length > 0
     );
+    const hasTrajectory = !!trajectory && trajectory.calls.length > 0;
 
     const systemPrompt = this.buildSystemPrompt(
       personaInstructions,
       hasToolOutputs,
+      hasTrajectory,
       !!(currentAgentResponse && currentAgentResponse.length > 0)
     );
 
@@ -1257,7 +1327,8 @@ export class IndependentStrategy extends JudgeStrategy {
         systemPrompt,
         userPrompt,
         iterationToolCalls,
-        currentAgentResponse
+        currentAgentResponse,
+        trajectory,
       );
 
       const passed = this.detectPassFail(response);
@@ -1292,15 +1363,17 @@ export class IndependentStrategy extends JudgeStrategy {
   protected buildSystemPrompt(
     personaInstructions?: string,
     hasToolOutputs?: boolean,
+    hasTrajectory?: boolean,
     hasAgentResponse?: boolean
   ): string {
     const personaSection = personaInstructions
       ? `\n## Persona\n${personaInstructions}\n`
       : "";
 
-    const evidenceSection = (hasToolOutputs || hasAgentResponse)
+    const evidenceSection = (hasToolOutputs || hasTrajectory || hasAgentResponse)
       ? `\n${buildEvidenceGuidance({
           hasToolOutputs: !!hasToolOutputs,
+          hasTrajectory: !!hasTrajectory,
           hasAgentResponse: !!hasAgentResponse,
         })}\n`
       : "";

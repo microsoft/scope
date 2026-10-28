@@ -24,7 +24,9 @@ import { mkdtempSync, writeFileSync, rmSync, realpathSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { resetCriteriaProvider } from "shared/criteria-provider-factory";
+import type { ToolCall } from "shared";
 import { evaluateWorkspace } from "./judge-agent.js";
+import { fromToolCalls } from "./agent-trajectory.js";
 
 const hasToken = !!process.env.GITHUB_TOKEN;
 
@@ -60,6 +62,26 @@ describe("judge end-to-end evaluation (integration)", () => {
         "prompt: |",
         "  The workspace contains a file named hello.txt whose contents are",
         "  exactly the text 'Hello, World!'.",
+        "",
+      ].join("\n")
+    );
+
+    // Gate-regression criterion (issue #1156 / P10): its verdict is derivable
+    // ONLY from the agent's captured tool output, NOT from the workspace files,
+    // so the judge must navigate the trajectory (list_agent_tool_calls /
+    // get_agent_tool_calls over a `fromToolCalls`-derived trajectory — the gate
+    // path) to decide. Guards that normalizing the HAR ToolCall[] and exposing it
+    // through the new tools yields the same boolean verdict the legacy
+    // read_tool_outputs/get_tool_output pair would.
+    writeFileSync(
+      join(criteriaDir, "build_succeeded.yaml"),
+      [
+        "id: build_succeeded",
+        "prompt: |",
+        "  The agent ran the project's build command and it completed",
+        "  successfully (exit code 0, no compiler errors). This is only derivable",
+        "  from the agent's captured tool calls — inspect them to confirm the",
+        "  build command's output reports success.",
         "",
       ].join("\n")
     );
@@ -117,6 +139,77 @@ describe("judge end-to-end evaluation (integration)", () => {
         `judge failed a trivially-true criterion (workspace inspection likely broken). Feedback: ${hello!.feedback}`
       ).toBe(true);
       expect(result.passed).toBe(true);
+    }
+  );
+
+  it.skipIf(!hasToken)(
+    "gate regression: a clear-PASS build gate built from a tool-call trajectory passes",
+    { timeout: 300_000 },
+    async () => {
+      // The gate path: normalize the HAR ToolCall[] via fromToolCalls and let the
+      // judge navigate it with the unified trajectory tools. The build output says
+      // success, so the gate must pass. Verdict comes from the trajectory, not the
+      // workspace (which has no build log).
+      const passTrajectory = fromToolCalls([
+        {
+          id: "tc-build-pass",
+          name: "bash",
+          arguments: { command: "npm run build" },
+          response:
+            "> demo@1.0.0 build\n> tsc\n\nBuild succeeded. 0 errors, 0 warnings.\nExit code: 0",
+          timestamp: "",
+        } as ToolCall,
+      ]);
+
+      const result = await evaluateWorkspace({
+        workspacePath: workspaceDir,
+        criteria: ["build_succeeded"],
+        conversationHistory: [],
+        trajectory: passTrajectory,
+      });
+
+      const gate = result.criteriaResults.find((r) => r.criterionId === "build_succeeded");
+      expect(gate, "build_succeeded result missing").toBeTruthy();
+      expect(gate!.evaluated).toBe(true);
+      expect(
+        gate!.passed,
+        `expected clear-PASS build gate to pass from tool output. Feedback: ${gate!.feedback}`
+      ).toBe(true);
+    }
+  );
+
+  it.skipIf(!hasToken)(
+    "gate regression: a clear-FAIL build gate built from a tool-call trajectory fails",
+    { timeout: 300_000 },
+    async () => {
+      // Same gate, opposite evidence: the build output reports a compiler error and
+      // a non-zero exit, so the gate must fail. Proves the trajectory drives the
+      // boolean verdict in both directions (no false positives).
+      const failTrajectory = fromToolCalls([
+        {
+          id: "tc-build-fail",
+          name: "bash",
+          arguments: { command: "npm run build" },
+          response:
+            "> demo@1.0.0 build\n> tsc\n\nsrc/index.ts(3,7): error TS2304: Cannot find name 'foo'.\n\nBuild failed. 1 error.\nExit code: 1",
+          timestamp: "",
+        } as ToolCall,
+      ]);
+
+      const result = await evaluateWorkspace({
+        workspacePath: workspaceDir,
+        criteria: ["build_succeeded"],
+        conversationHistory: [],
+        trajectory: failTrajectory,
+      });
+
+      const gate = result.criteriaResults.find((r) => r.criterionId === "build_succeeded");
+      expect(gate, "build_succeeded result missing").toBeTruthy();
+      expect(gate!.evaluated).toBe(true);
+      expect(
+        gate!.passed,
+        `expected clear-FAIL build gate to fail from tool output. Feedback: ${gate!.feedback}`
+      ).toBe(false);
     }
   );
 
