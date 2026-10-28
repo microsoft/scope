@@ -4,11 +4,9 @@
 import { Command, Option } from "commander";
 import EventSource from "eventsource";
 import { execSync } from "child_process";
-import { mkdtempSync, mkdirSync, createWriteStream, rmSync, readFileSync, readdirSync, existsSync, statSync } from "fs";
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, readdirSync, existsSync, statSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve, dirname, basename } from "path";
-import { pipeline } from "stream/promises";
-import { Readable } from "stream";
 import { resolveScenarioAndPersona } from "../config-loader.js";
 import { configureHelp } from "../utils/helpFormatter.js";
 import { colorLevel, dimTimestamp, errorText, successText, label, value, banner, warnBanner, criterionIcon, styleText } from "../utils/style.js";
@@ -20,6 +18,16 @@ import { requireProjectId } from "../utils/config.js";
 import { apiFetch, getApiBasePath } from "../utils/api-client.js";
 import { parseGatesOption } from "../utils/gates.js";
 import { buildResourceBindingSpecs, collectRepeatable } from "../utils/resources.js";
+import {
+  createArchiveProgressReporter,
+  downloadArchiveAtomic,
+} from "../utils/archive-download.js";
+import {
+  assertBatchArchiveLimit,
+  assertResolvedRequestIds,
+  resolvePaginatedRequestIds,
+  selectBatchIdSource,
+} from "./run-request-ids.js";
 
 /**
  * Resolve a CLI option that may be either a literal string or a `@path`
@@ -504,6 +512,7 @@ run
   .option("--search <text>", "Free-text search over id, task, model, and worker")
   .option("--created-after <iso>", "Only runs created at/after this ISO-8601 datetime")
   .option("--created-before <iso>", "Only runs created at/before this ISO-8601 datetime")
+  .option("--experiment-id <id>", "Filter by experiment ID")
   .option("--submission-id <id>", "Filter by submission ID")
   .option("--turns <expr>", "Filter by actual turns (e.g. '>=5', '<=10', '=3')")
   .option("--max-iterations <expr>", "Filter by configured maxIterations (e.g. '>=5', '<=10', '=3')")
@@ -544,6 +553,9 @@ run
       }
       if (options.createdBefore) {
         params.set("createdBefore", options.createdBefore);
+      }
+      if (options.experimentId) {
+        params.set("experimentId", options.experimentId);
       }
       if (options.submissionId) {
         params.set("submissionId", options.submissionId);
@@ -749,9 +761,11 @@ run
       }
 
       const outputPath = resolve(outputFile);
-      mkdirSync(dirname(outputPath), { recursive: true });
-      const fileStream = createWriteStream(outputPath);
-      await pipeline(Readable.fromWeb(archiveResp.body as any), fileStream);
+      await downloadArchiveAtomic({
+        response: archiveResp,
+        outputPath,
+        onProgress: createArchiveProgressReporter(),
+      });
       console.log(`${successText('Archive:')} ${value(outputPath)}`);
 
       // Step 3: Optionally extract
@@ -787,42 +801,46 @@ run
   .command("download-batch")
   .description("Download multiple runs at once into a single batch archive")
   .option("-i, --ids <ids...>", "One or more run IDs")
-  .option("--submission-id <id>", "Download all runs for a submission")
+  .option("--experiment-id <id>", "Download all runs for an experiment")
+  .option("--submission-id <id>", "Download all exact runs for a submission")
   .option("-o, --output <path>", "Output file path (default: batch-<timestamp>.tar.gz)")
   .option("-e, --extract", "Extract the archive after downloading")
   .option("-d, --dir <path>", "Extraction directory (implies --extract)")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
-  .option("--project <id>", "Project ID for scoped operations (required with --submission-id)")
+  .option("--project <id>", "Project ID for scoped operations (required with --experiment-id or --submission-id)")
   .action(async (options) => {
     const { url } = options;
     const shouldExtract = options.extract || !!options.dir;
 
     try {
-      // Resolve IDs: either from --ids or by querying --submission-id
-      let ids: string[] = options.ids || [];
+      const source = selectBatchIdSource({
+        ids: options.ids,
+        experimentId: options.experimentId,
+        submissionId: options.submissionId,
+      });
+      let ids: string[];
 
-      if (options.submissionId) {
-        console.log(`${label('Fetching runs for submission')} ${value(options.submissionId)}...`);
+      if (source.kind === "ids") {
+        ids = [...new Set(source.ids)];
+        assertBatchArchiveLimit(ids);
+      } else {
+        const sourceLabel = source.kind === "experiment"
+          ? "experiment"
+          : "submission";
+        console.log(
+          `${label(`Fetching runs for ${sourceLabel}`)} ${value(source.value)}...`,
+        );
         const projectId = requireProjectId(options.project);
-        const listResp = await apiFetch(url, `/requests?submissionId=${encodeURIComponent(options.submissionId)}&limit=1000`, { projectId });
-        if (!listResp.ok) {
-          const error = await listResp.json();
-          console.error(errorText("Error fetching runs:"), error);
-          process.exit(1);
-        }
-        const listData = await listResp.json();
-        const runs = listData.data || listData;
-        if (!Array.isArray(runs) || runs.length === 0) {
-          console.error(errorText("No runs found for this submission"));
-          process.exit(1);
-        }
-        ids = runs.map((r: { _id: string }) => r._id);
+        ids = await resolvePaginatedRequestIds({
+          baseUrl: url,
+          projectId,
+          filter: source.kind === "experiment"
+            ? "experimentId"
+            : "submissionId",
+          value: source.value,
+        });
+        assertResolvedRequestIds(ids, sourceLabel);
         console.log(`${label('Found')} ${value(String(ids.length))} runs`);
-      }
-
-      if (ids.length === 0) {
-        console.error(errorText("Error: provide --ids or --submission-id"));
-        process.exit(1);
       }
 
       // Determine output file
@@ -846,9 +864,11 @@ run
       }
 
       const outputPath = resolve(outputFile);
-      mkdirSync(dirname(outputPath), { recursive: true });
-      const fileStream = createWriteStream(outputPath);
-      await pipeline(Readable.fromWeb(archiveResp.body as any), fileStream);
+      await downloadArchiveAtomic({
+        response: archiveResp,
+        outputPath,
+        onProgress: createArchiveProgressReporter(),
+      });
       console.log(`${successText('Archive:')} ${value(outputPath)}`);
 
       // Optionally extract

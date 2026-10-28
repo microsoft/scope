@@ -175,6 +175,19 @@ describe("run list", () => {
     expect(output).toContain("status: done");
     expect(output).not.toContain("Found 1 request(s):");
   });
+
+  it("forwards an encoded submission filter with project scoping", async () => {
+    mockFetchWith({ data: [], cursors: { next: null, prev: null } });
+
+    await runListAndCaptureOutput([
+      "--submission-id",
+      "submission / value?",
+    ]);
+
+    const url = new URL(lastRequest!.url);
+    expect(url.searchParams.get("submissionId")).toBe("submission / value?");
+    expect(url.searchParams.get("projectId")).toBe("proj-test");
+  });
 });
 
 describe("run submit", () => {
