@@ -24,3 +24,11 @@ Start with [Getting started](https://microsoft.github.io/scope/getting-started/a
 or [Local development](https://microsoft.github.io/scope/getting-started/local-development/).
 To help improve Scope, read the [contributor guide](https://microsoft.github.io/scope/resources/contributing/).
 For help or vulnerability reporting, see [Support and security](https://microsoft.github.io/scope/resources/support/).
+
+## Deploy to Azure
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fmicrosoft%2Fscope%2Fmain%2Fdeploy%2Fazure%2Fazuredeploy.json)
+
+Provision the Azure infrastructure for Scope (AKS, Key Vault, Cosmos DB, Redis,
+Storage, ACR) with one click. See [deploy/azure/README.md](./deploy/azure/README.md)
+for prerequisites, the CLI equivalent, and what this does **not** automate.
