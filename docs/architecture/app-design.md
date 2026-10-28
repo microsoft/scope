@@ -383,6 +383,14 @@ feature definitions are inserted into their real judge/extraction user
 messages; persona text occupies the feedback system-instruction position; and
 report templates preserve default, append, and override system-prompt modes.
 
+Report templates are project-scoped roots with immutable content versions.
+`subject: run | experiment` determines where a template may be attached.
+Experiment templates support manual revision selection, automatic execution,
+or automatic linked-run dependencies. Lookup and mutation always include
+`projectId`; a slug alone is never sufficient. Generated reports persist the
+exact template version and content fingerprint so historical artifacts are
+never reinterpreted after a template edit.
+
 The package commits curated inputs and provenance, schemas, rubrics, profiles,
 attack configuration, and threshold policy. Per-run responses, SDK/cloud
 output, manifests, summaries, and findings stay in the ignored

@@ -26,6 +26,7 @@ const FAMILY_MINIMUMS: Record<QualityFamily, number> = {
   "judge-instructions": 25,
   "developer-feedback": 25,
   "run-report": 25,
+  "experiment-report": 3,
 };
 
 interface DatasetManifest {
@@ -192,6 +193,14 @@ function validateFamilyContract(row: DatasetCase, prefix: string, errors: string
         assert(stringField(input, "systemPromptContent"), `${prefix}: input.systemPromptContent is required for ${row.variant}`, errors);
       }
       break;
+    case "experiment-report":
+      assert(stringField(input, "userPrompt"), `${prefix}: input.userPrompt is required`, errors);
+      assert(isRecord(input.evidence), `${prefix}: input.evidence is required`, errors);
+      assert(arrayField(input, "linkedRunReports"), `${prefix}: input.linkedRunReports must be an array`, errors);
+      if (row.variant === "append" || row.variant === "override-control") {
+        assert(stringField(input, "systemPromptContent"), `${prefix}: input.systemPromptContent is required for ${row.variant}`, errors);
+      }
+      break;
   }
 }
 
@@ -354,8 +363,9 @@ export async function validateDataset(
         || row.variant === "override-control"
         || row.variant === "experiment-readout"
       ))
-      || (row.family === "developer-feedback" && row.variant === "persona")),
-    "synthetic cases are only permitted for unavailable judge evidence, feedback persona, report override controls, and experiment readouts",
+      || (row.family === "developer-feedback" && row.variant === "persona")
+      || row.family === "experiment-report"),
+    "synthetic cases are only permitted for unavailable judge evidence, feedback persona, report controls, experiment readouts, and Experiment reports",
     errors,
   );
   const hasTag = (family: QualityFamily, tag: string): boolean =>

@@ -16,6 +16,7 @@ import {
   ExperimentStore,
   type LogEvent,
   type ReportDocument,
+  type ReportTemplateVersionDocument,
   type RequestDocument,
   type RunHistoryDocument,
   type RunState,
@@ -29,6 +30,7 @@ import {
   type ExperimentEvidence,
 } from "./readout-builder.js";
 import { generateExperimentReadout } from "./readout-generator.js";
+import { generateExperimentTemplateReport } from "./experiment-report-generator.js";
 
 const HANDLER_ID = "pp-readout";
 const HANDLER_VERSION = 1;
@@ -48,6 +50,16 @@ interface ReadoutQueueMessage extends ExperimentQueueMessagePayload {
   executionVersion: number;
 }
 
+interface ExperimentReportQueueMessage extends ExperimentQueueMessagePayload {
+  type: "experiment-report";
+  projectId: string;
+  templateId: string;
+  templateVersionId: string;
+  claimToken: string;
+  executionVersion: number;
+  reportId: string;
+}
+
 function isReadoutMessage(
   payload: Record<string, unknown> | undefined,
 ): payload is Record<string, unknown> & ReadoutQueueMessage {
@@ -59,6 +71,20 @@ function isReadoutMessage(
     payload.handlerVersion === HANDLER_VERSION &&
     typeof payload.claimToken === "string" &&
     typeof payload.executionVersion === "number";
+}
+
+function isExperimentReportMessage(
+  payload: Record<string, unknown> | undefined,
+): payload is Record<string, unknown> & ExperimentReportQueueMessage {
+  return payload?.type === "experiment-report" &&
+    typeof payload.projectId === "string" &&
+    typeof payload.experimentId === "string" &&
+    typeof payload.experimentExecutionId === "string" &&
+    typeof payload.templateId === "string" &&
+    typeof payload.templateVersionId === "string" &&
+    typeof payload.claimToken === "string" &&
+    typeof payload.executionVersion === "number" &&
+    typeof payload.reportId === "string";
 }
 
 export class ReadoutQueueProcessor extends BaseQueueProcessor<ExperimentDocument> {
@@ -91,6 +117,239 @@ export class ReadoutQueueProcessor extends BaseQueueProcessor<ExperimentDocument
     ) => Promise<void>,
     payload?: Record<string, unknown>,
   ): Promise<void> {
+    const handleExperimentReport = async (
+      payload: ExperimentReportQueueMessage,
+      message: DequeuedMessageItem,
+      heartbeat: VisibilityHeartbeat,
+      log: (
+        level: LogEvent["level"],
+        message: string,
+        data?: Record<string, unknown>,
+      ) => Promise<void>,
+    ): Promise<void> => {
+      const store = this.experimentStore();
+      const claimed = await withRetry(() =>
+        store.claimReportTemplate({
+          projectId: payload.projectId,
+          experimentId: payload.experimentId,
+          experimentExecutionId: payload.experimentExecutionId,
+          expectedExecutionVersion: payload.executionVersion,
+          templateId: payload.templateId,
+          templateVersionId: payload.templateVersionId,
+          claimToken: payload.claimToken,
+        })
+      );
+      if (!claimed) {
+        await log("info", "Discarding stale or duplicate Experiment report", {
+          experimentId: payload.experimentId,
+          experimentExecutionId: payload.experimentExecutionId,
+          templateId: payload.templateId,
+        });
+        await this.safeDeleteMessage(message.messageId, heartbeat.stop());
+        return;
+      }
+
+      try {
+        let completionVersion = await this.currentTemplateClaimVersion(payload);
+        if (completionVersion === null) return;
+        const root = await withRetry(() =>
+          this.db.collection("report-templates").findOne({
+            projectId: payload.projectId,
+            id: payload.templateId,
+            subject: "experiment",
+            enabled: true,
+            deletedAt: { $exists: false },
+          })
+        );
+        if (!root) {
+          await withRetry(() =>
+            this.db.collection<ReportDocument>("reports").updateOne(
+              {
+                _id: payload.reportId,
+                projectId: payload.projectId,
+                experimentExecutionId: payload.experimentExecutionId,
+                templateVersionId: payload.templateVersionId,
+              },
+              {
+                $set: {
+                  status: "failed",
+                  error: "Experiment report template became unavailable",
+                  updatedAt: new Date(),
+                },
+              },
+            )
+          );
+          completionVersion = await this.currentTemplateClaimVersion(payload);
+          if (completionVersion !== null) {
+            const unavailableVersion = completionVersion;
+            await withRetry(() =>
+              store.completeReportTemplate({
+                projectId: payload.projectId,
+                experimentId: payload.experimentId,
+                experimentExecutionId: payload.experimentExecutionId,
+                expectedExecutionVersion: unavailableVersion,
+                templateId: payload.templateId,
+                templateVersionId: payload.templateVersionId,
+                claimToken: payload.claimToken,
+                status: "unavailable",
+                error: "Experiment report template became unavailable",
+              })
+            );
+          }
+          return;
+        }
+        const template = await withRetry(() =>
+          this.db
+            .collection<ReportTemplateVersionDocument>(
+              "report-template-versions",
+            )
+            .findOne({
+              _id: payload.templateVersionId,
+              projectId: payload.projectId,
+              templateId: payload.templateId,
+            })
+        );
+        if (!template) {
+          throw new Error(
+            `Frozen template version ${payload.templateVersionId} was not found`,
+          );
+        }
+        const evidence = await this.loadEvidence(payload);
+        const linkedRunReports = await this.loadLinkedRunReports(
+          payload,
+          template,
+        );
+        const githubToken = await this.tokenClient.acquireToken("copilot-sdk");
+        completionVersion = await this.currentTemplateClaimVersion(payload);
+        if (completionVersion === null) return;
+        const model = template.model ?? this.readoutConfig.model;
+        const content = await generateExperimentTemplateReport({
+          template,
+          evidence,
+          linkedRunReports,
+          model,
+          githubToken,
+          timeoutMs:
+            template.timeoutMs ?? this.readoutConfig.sessionTimeoutMs,
+          log,
+        });
+        completionVersion = await this.currentTemplateClaimVersion(payload);
+        if (completionVersion === null) return;
+        const now = new Date();
+        const persisted = await withRetry(() =>
+          this.db.collection<ReportDocument>("reports").updateOne(
+            {
+              _id: payload.reportId,
+              projectId: payload.projectId,
+              experimentId: payload.experimentId,
+              experimentExecutionId: payload.experimentExecutionId,
+              templateId: payload.templateId,
+              templateVersionId: payload.templateVersionId,
+              status: { $in: ["pending", "generating"] },
+            },
+            {
+              $set: {
+                status: "completed",
+                content,
+                reporter: {
+                  id: "experiment-report-generator",
+                  name: "Experiment Report Generator",
+                  gitHash: process.env.GIT_COMMIT || "unknown",
+                  model,
+                  agentId: "copilot-sdk",
+                  agentVersion:
+                    process.env.COPILOT_SDK_VERSION || "unknown",
+                },
+                updatedAt: now,
+              },
+            },
+          )
+        );
+        if (persisted.matchedCount === 0) {
+          throw new Error(`Experiment report ${payload.reportId} is stale`);
+        }
+        completionVersion = await this.currentTemplateClaimVersion(payload);
+        const completed = completionVersion === null
+          ? null
+          : await withRetry(() =>
+            store.completeReportTemplate({
+              projectId: payload.projectId,
+              experimentId: payload.experimentId,
+              experimentExecutionId: payload.experimentExecutionId,
+              expectedExecutionVersion: completionVersion,
+              templateId: payload.templateId,
+              templateVersionId: payload.templateVersionId,
+              claimToken: payload.claimToken,
+              status: "done",
+              report: {
+                reportId: payload.reportId,
+                url: `/api/v1/reports/${payload.reportId}`,
+                updatedAt: now,
+              },
+            })
+          );
+        await log(
+          completed ? "info" : "warn",
+          completed
+            ? "Experiment report completed"
+            : "Experiment report remained historical after supersession",
+          {
+            experimentId: payload.experimentId,
+            experimentExecutionId: payload.experimentExecutionId,
+            templateId: payload.templateId,
+            reportId: payload.reportId,
+          },
+        );
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        await withRetry(() =>
+          this.db.collection<ReportDocument>("reports").updateOne(
+            {
+              _id: payload.reportId,
+              projectId: payload.projectId,
+              experimentExecutionId: payload.experimentExecutionId,
+              templateVersionId: payload.templateVersionId,
+            },
+            {
+              $set: {
+                status: "failed",
+                error: errorMessage,
+                updatedAt: new Date(),
+              },
+            },
+          )
+        );
+        const completionVersion = await this.currentTemplateClaimVersion(payload);
+        if (completionVersion !== null) {
+          await withRetry(() =>
+            store.completeReportTemplate({
+              projectId: payload.projectId,
+              experimentId: payload.experimentId,
+              experimentExecutionId: payload.experimentExecutionId,
+              expectedExecutionVersion: completionVersion,
+              templateId: payload.templateId,
+              templateVersionId: payload.templateVersionId,
+              claimToken: payload.claimToken,
+              status: "failed",
+              error: errorMessage,
+            })
+          );
+        }
+        await log("error", `Experiment report failed: ${errorMessage}`, {
+          experimentId: payload.experimentId,
+          experimentExecutionId: payload.experimentExecutionId,
+          templateId: payload.templateId,
+        });
+      } finally {
+        await this.safeDeleteMessage(message.messageId, heartbeat.stop());
+      }
+    };
+
+    if (isExperimentReportMessage(payload)) {
+      await handleExperimentReport(payload, message, heartbeat, log);
+      return;
+    }
     if (!isReadoutMessage(payload)) {
       await log("warn", "Discarding unsupported readout queue payload", {
         payload,
@@ -267,8 +526,90 @@ export class ReadoutQueueProcessor extends BaseQueueProcessor<ExperimentDocument
       : null;
   }
 
+  private async currentTemplateClaimVersion(
+    payload: ExperimentReportQueueMessage,
+  ): Promise<number | null> {
+    const experiment = await withRetry(() =>
+      this.experimentStore().get(payload.projectId, payload.experimentId)
+    );
+    const execution = experiment?.execution;
+    const summary = execution?.reportTemplates[payload.templateId];
+    return execution?.experimentExecutionId === payload.experimentExecutionId &&
+        !execution.frozenAt &&
+        !execution.rollover &&
+        summary?.status === "processing" &&
+        summary.templateVersionId === payload.templateVersionId &&
+        summary.claimToken === payload.claimToken
+      ? execution.version
+      : null;
+  }
+
+  private async loadLinkedRunReports(
+    payload: ExperimentReportQueueMessage,
+    template: ReportTemplateVersionDocument,
+  ): Promise<Array<{
+    runTemplateId: string;
+    requestId: string;
+    runId: string;
+    reportId: string;
+    content: string;
+  }>> {
+    const trigger = template.trigger;
+    if (trigger?.type !== "run-report-templates") return [];
+    const linkedTemplateIds = trigger.reportTemplateIds;
+    const refs = await withRetry(() =>
+      this.experimentStore().readExecutionRequests({
+        projectId: payload.projectId,
+        experimentId: payload.experimentId,
+        experimentExecutionId: payload.experimentExecutionId,
+      })
+    );
+    if (!refs) return [];
+    const reports = await withRetry(() =>
+      this.db.collection<ReportDocument>("reports").find({
+        projectId: payload.projectId,
+        status: "completed",
+        requestId: { $in: refs.map(({ requestId }) => requestId) },
+        runId: { $in: refs.map(({ runId }) => runId) },
+        templateId: { $in: linkedTemplateIds },
+        content: { $exists: true },
+      }).toArray()
+    );
+    const exactPairs = new Set(
+      refs.map(({ requestId, runId }) => `${requestId}\0${runId}`),
+    );
+    return reports
+      .filter(
+        (report): report is ReportDocument & {
+          requestId: string;
+          runId: string;
+          templateId: string;
+          content: string;
+        } =>
+          Boolean(
+            report.requestId &&
+            report.runId &&
+            report.templateId &&
+            report.content &&
+            exactPairs.has(`${report.requestId}\0${report.runId}`),
+          ),
+      )
+      .sort((left, right) =>
+        left.templateId.localeCompare(right.templateId) ||
+        left.requestId.localeCompare(right.requestId) ||
+        left.runId.localeCompare(right.runId)
+      )
+      .map((report) => ({
+        runTemplateId: report.templateId,
+        requestId: report.requestId,
+        runId: report.runId,
+        reportId: report._id,
+        content: report.content,
+      }));
+  }
+
   private async loadEvidence(
-    payload: ReadoutQueueMessage,
+    payload: ReadoutQueueMessage | ExperimentReportQueueMessage,
   ): Promise<ExperimentEvidence> {
     const refs = await withRetry(() =>
       this.experimentStore().readExecutionRequests({

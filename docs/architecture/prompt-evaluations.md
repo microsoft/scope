@@ -16,9 +16,9 @@ added to CI without a separate design decision.
 
 ### Static prompt quality inventory
 
-The committed evaluation manifest covers ten Scope-owned runtime prompt
-families in the Azure-backed quality runner, plus one isolated SDK-only spike
-family in `standaloneFamilies`:
+The committed evaluation manifest covers eleven Scope-owned runtime prompt
+families in the Azure-backed quality runner, plus three isolated SDK-only
+Taxonome targets in `standaloneFamilies`:
 
 | Family | Variants and important coverage |
 |--------|---------------------------------|
@@ -32,6 +32,7 @@ family in `standaloneFamilies`:
 | Judge instructions | Bundled and independent strategies; file, tool-history, response, conflicting, missing, and prior-pass evidence |
 | Developer feedback | Default persona, custom persona, descendant guard on/off, and multiple root failures |
 | Run reports and Experiment readouts | Default and appended run-report system prompts; override as a control where the default prompt is intentionally absent; exact-execution Experiment readout synthesis |
+| Experiment template reports | Default and appended `EXPERIMENT_REPORT_SYSTEM_PROMPT`; override as a control; configurable template request immediately before the explicit exact-execution evidence envelope |
 | Taxonome prompt elements (standalone) | Skipped Invocation, Wrong Discovery, and Content Misused shared assessments with typed evidence-role JSONPaths, positive/negative/unknown inputs, preflights, untrusted evidence, and the bounded Ax initial/correction production compositions; actual Copilot SDK only |
 
 The three Taxonome targets are registered in `adapter/standalone.ts`, which
@@ -61,6 +62,9 @@ User-authored criteria, task/gate prompts, `AGENTS.md`, prompt-feature
 definitions, persona instructions, and report-template prompts are not static
 Scope prompt families. They are data supplied to production flows; adversarial
 evaluation of those user-controlled boundaries belongs to the red-team follow-up.
+The Experiment template report family evaluates the Scope-owned wrapper and a
+benign composition fixture for the template prompt insertion point; it does not
+reclassify the user-authored template text as a static prompt.
 
 ## Architecture
 
@@ -164,6 +168,7 @@ The production compositions are:
 | Persona instructions | Feedback generation uses the persona text as the base system message in place of the default feedback instructions; when enabled, the trusted descendant guard and descendant criterion prompts are appended. The user message contains the selected root-failure feedback under `What needs work:` inside the fixed feedback request wrapper. |
 | Report user prompt | The resolved template `userPrompt` is the Copilot SDK user message after replacing `{requestId}` or `{{requestId}}` with the run ID. The real report tools and their schemas remain registered. |
 | Report system prompt | No custom value uses `REPORT_SYSTEM_PROMPT`; `append` uses `REPORT_SYSTEM_PROMPT + "\\n\\n" + content`; `override` uses only the user-controlled content. The result is installed with `systemMessage.mode = "replace"`, alongside the real report tools, before the resolved report user prompt is sent. |
+| Experiment template report | No custom system value uses `EXPERIMENT_REPORT_SYSTEM_PROMPT`; `append` adds the configured system text after it; `override` uses only the configured system text. The configured `template.userPrompt` is the first text in the user message, followed by a blank line and `<scope_experiment_evidence>`. The JSON envelope contains the exact immutable Experiment evidence and deterministically ordered linked run reports, then closes with `</scope_experiment_evidence>`. No tools are available. |
 
 Every profile has a benign contract fixture comparing its adapter output with
 the corresponding runtime composition. The comparison covers message roles,
@@ -556,7 +561,7 @@ The implementation loop is:
 
 Completion requires all of the following:
 
-- all ten static families are present in the
+- all eleven static families are present in the
   machine-checked manifest with no missing or orphaned adapter, dataset,
   assertion, or rubric;
 - the curated dataset is redacted, approved, reproducible, balanced, and

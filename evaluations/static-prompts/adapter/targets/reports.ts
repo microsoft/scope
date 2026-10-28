@@ -8,6 +8,9 @@ import {
   READOUT_SYSTEM_PROMPT,
   composeReadoutUserPrompt,
 } from "../../../../apps/workers/readout/src/prompt.js";
+import {
+  composeExperimentTemplateReportPrompts,
+} from "../../../../apps/workers/readout/src/experiment-report-generator.js";
 import type {
   CompletionOptions,
   ComposedPromptRequest,
@@ -270,6 +273,134 @@ export const reportAdapter: PromptTargetAdapter<string> = {
       request,
       createFixtureToolOptions(parsed.evidenceContext),
     );
+    return {
+      request,
+      rawResponse: completion.content,
+      output: completion.content.trim(),
+      invocationMetadata: completion.metadata,
+    };
+  },
+};
+
+interface ExperimentReportInput {
+  userPrompt: string;
+  systemPrompt?: ReportTemplateSystemPrompt;
+  evidence: Record<string, unknown>;
+  linkedRunReports: Array<{
+    runTemplateId: string;
+    requestId: string;
+    runId: string;
+    reportId: string;
+    content: string;
+  }>;
+  model?: string;
+}
+
+function parseExperimentReportInput(
+  input: unknown,
+  variant: string,
+): ExperimentReportInput {
+  const value = record(input);
+  const requestedMode = optionalString(
+    value.systemPromptMode,
+    "input.systemPromptMode",
+  );
+  const systemPromptContent = optionalString(
+    value.systemPromptContent,
+    "input.systemPromptContent",
+  );
+  const mode: ReportTemplateSystemPrompt["mode"] | undefined =
+    variant === "append"
+      ? "append"
+      : variant === "override-control"
+        ? "override"
+        : requestedMode === "append" || requestedMode === "override"
+          ? requestedMode
+          : undefined;
+  if (requestedMode && !mode) {
+    throw new Error("input.systemPromptMode must be 'append' or 'override'");
+  }
+  if (mode && !systemPromptContent) {
+    throw new Error(
+      `input.systemPromptContent is required for experiment-report variant '${variant}'`,
+    );
+  }
+  const linkedRunReportsValue = value.linkedRunReports ?? [];
+  if (!Array.isArray(linkedRunReportsValue)) {
+    throw new Error("input.linkedRunReports must be an array");
+  }
+  const linkedRunReports = linkedRunReportsValue.map((entry, index) => {
+    const report = record(entry, `input.linkedRunReports[${index}]`);
+    return {
+      runTemplateId: requiredString(
+        report.runTemplateId,
+        `input.linkedRunReports[${index}].runTemplateId`,
+      ),
+      requestId: requiredString(
+        report.requestId,
+        `input.linkedRunReports[${index}].requestId`,
+      ),
+      runId: requiredString(
+        report.runId,
+        `input.linkedRunReports[${index}].runId`,
+      ),
+      reportId: requiredString(
+        report.reportId,
+        `input.linkedRunReports[${index}].reportId`,
+      ),
+      content: requiredString(
+        report.content,
+        `input.linkedRunReports[${index}].content`,
+      ),
+    };
+  });
+  return {
+    userPrompt: requiredString(value.userPrompt, "input.userPrompt"),
+    evidence: record(value.evidence, "input.evidence"),
+    linkedRunReports,
+    ...(mode && systemPromptContent
+      ? { systemPrompt: { mode, content: systemPromptContent } }
+      : {}),
+    ...(optionalString(value.model, "input.model")
+      ? { model: optionalString(value.model, "input.model") }
+      : {}),
+  };
+}
+
+export const experimentReportAdapter: PromptTargetAdapter<string> = {
+  family: "experiment-report",
+  variants: ["default", "append", "override-control"],
+  async run(input, variant, context) {
+    const parsed = parseExperimentReportInput(input, variant);
+    const prompts = composeExperimentTemplateReportPrompts({
+      template: {
+        userPrompt: parsed.userPrompt,
+        systemPrompt: parsed.systemPrompt,
+      },
+      evidence: parsed.evidence as unknown as Parameters<
+        typeof composeExperimentTemplateReportPrompts
+      >[0]["evidence"],
+      linkedRunReports: parsed.linkedRunReports,
+    });
+    const request: ComposedPromptRequest = {
+      messages: [
+        { role: "system", content: prompts.systemPrompt },
+        { role: "user", content: prompts.userPrompt },
+      ],
+      model: parsed.model ?? context.model,
+      tools: [],
+      metadata: {
+        adapterId: `experiment-report/${variant}`,
+        productionSources: [
+          "apps/workers/readout/src/experiment-report-generator.ts#EXPERIMENT_REPORT_SYSTEM_PROMPT",
+          "apps/workers/readout/src/experiment-report-generator.ts#composeExperimentTemplateReportPrompts",
+        ],
+        insertionPoint:
+          "template.userPrompt immediately before <scope_experiment_evidence>",
+        fidelity: "exact",
+      },
+    };
+    const completion = await context.complete(request);
     return {
       request,
       rawResponse: completion.content,

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Download, ExternalLink } from "lucide-react";
+import { Download, ExternalLink, RotateCcw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
@@ -140,6 +140,12 @@ export function ExperimentReportCard({
                   {selection?.isLatest ? "Latest" : "Historical"}
                 </Badge>
                 <ReportStatusBadge status={report.status} />
+                {report.templateId && selection?.isLatest && onRetry && (
+                  <Button variant="outline" size="sm" onClick={onRetry}>
+                    <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                    Retry
+                  </Button>
+                )}
                 {structuredUrl ? (
                   <Button variant="outline" size="sm" asChild>
                     <a href={structuredUrl} download>

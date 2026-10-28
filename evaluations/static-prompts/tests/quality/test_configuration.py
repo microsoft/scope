@@ -31,6 +31,7 @@ def test_rubrics_cover_all_manifest_families() -> None:
         "judge-instructions",
         "developer-feedback",
         "run-report",
+        "experiment-report",
     }
     assert all(configuration.evaluator_specs(family) for family in configuration.families)
     assert len(configuration.sha256) == 64

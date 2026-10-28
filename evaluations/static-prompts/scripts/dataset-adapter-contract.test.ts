@@ -70,6 +70,12 @@ function fakeResponse(row: QualityCaseRow, request: ComposedPromptRequest): stri
       }
       expect(request.tools?.length).toBeGreaterThan(0);
       return "# Run report\n\nThe run evidence was reviewed.";
+    case "experiment-report":
+      expect(request.tools).toEqual([]);
+      expect(request.messages[1].content).toContain(
+        "<scope_experiment_evidence>",
+      );
+      return "# Experiment report\n\nThe exact execution evidence was reviewed.";
   }
 }
 

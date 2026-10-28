@@ -76,9 +76,11 @@ export class ExperimentMembershipCoordinator {
     experimentExecutionId: string;
     metadata: ExperimentMetadata;
     requestIds: readonly string[];
+    reportTemplateIds?: readonly string[];
     now?: Date;
   }): Promise<ReplaceMembershipResult> {
     const requestIds = uniqueCanonicalRequestIds(input.requestIds);
+    const reportTemplateIds = [...new Set(input.reportTemplateIds ?? [])].sort();
     const documents = await this.loadRequestDocuments(
       input.projectId,
       requestIds,
@@ -156,9 +158,11 @@ export class ExperimentMembershipCoordinator {
               runId,
             })),
           ),
+        reportTemplateIds,
         definitionFingerprint: fingerprintExperimentPayload({
           metadata: input.metadata,
           requestIds,
+          reportTemplateIds,
         }),
         createdAt: now,
       },

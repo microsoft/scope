@@ -504,6 +504,7 @@ export interface Report {
   _id: string;
   id: string;
   requestId?: string;
+  runId?: string;
   experimentId?: string;
   experimentExecutionId?: string;
   task?: string;
@@ -519,6 +520,11 @@ export interface Report {
   error?: string;
   insightReferences?: InsightReference[];
   templateId?: string;
+  templateVersionId?: string;
+  templateVersion?: number;
+  templateContentFingerprint?: string;
+  reportVersion?: number;
+  supersedesReportId?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -550,7 +556,7 @@ export interface BulkReportSummary {
 // Report Template types
 // =============================================================================
 
-export type ReportTriggerType = "always" | "criteria" | "taskPrompt" | "promptFeature";
+export type ReportTriggerType = "always" | "criteria" | "taskPrompt" | "promptFeature" | "run-report-templates";
 
 export interface AlwaysTrigger {
   type: "always";
@@ -573,11 +579,17 @@ export interface PromptFeatureTrigger {
   match?: "any" | "all";
 }
 
+export interface RunReportTemplatesTrigger {
+  type: "run-report-templates";
+  reportTemplateIds: string[];
+}
+
 export type ReportTrigger =
   | AlwaysTrigger
   | CriteriaTrigger
   | TaskPromptTrigger
-  | PromptFeatureTrigger;
+  | PromptFeatureTrigger
+  | RunReportTemplatesTrigger;
 
 export interface ReportTemplateSystemPrompt {
   mode: "append" | "override";
@@ -587,6 +599,9 @@ export interface ReportTemplateSystemPrompt {
 export interface ReportTemplate {
   _id: string;
   id: string;
+  projectId: string;
+  subject: "run" | "experiment";
+  enabled: boolean;
   name: string;
   description?: string;
   userPrompt: string;
@@ -594,9 +609,26 @@ export interface ReportTemplate {
   trigger?: ReportTrigger;
   model?: string;
   timeoutMs?: number;
+  currentVersionId: string;
+  currentVersion: number;
+  contentFingerprint: string;
   createdAt: string;
   updatedAt?: string;
   deletedAt?: string;
+}
+
+export interface ReportTemplateVersion {
+  _id: string;
+  projectId: string;
+  templateId: string;
+  version: number;
+  contentFingerprint: string;
+  userPrompt: string;
+  systemPrompt?: ReportTemplateSystemPrompt;
+  trigger?: ReportTrigger;
+  model?: string;
+  timeoutMs?: number;
+  createdAt: string;
 }
 
 // =============================================================================

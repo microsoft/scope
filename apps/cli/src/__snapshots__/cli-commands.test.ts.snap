@@ -234,6 +234,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--profile-variations-file",
           "--project",
           "--reasoning-effort",
+          "--report-template",
           "--request-id",
           "--resource-param",
           "--resources",
@@ -284,12 +285,29 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--url",
         ],
       },
+      "report-retry": {
+        "options": [
+          "--execution",
+          "--project",
+          "--template",
+          "--url",
+        ],
+      },
+      "report-templates": {
+        "options": [
+          "--project",
+          "--revision",
+          "--template",
+          "--url",
+        ],
+      },
       "reports": {
         "options": [
           "--output",
           "--project",
           "--report",
           "--structured",
+          "--template",
           "--url",
         ],
       },
@@ -705,10 +723,12 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       "create": {
         "options": [
           "--description",
+          "--disabled",
           "--id",
           "--model",
           "--name",
           "--project",
+          "--subject",
           "--system-prompt-content",
           "--system-prompt-mode",
           "--timeout-ms",
@@ -743,8 +763,10 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       },
       "list": {
         "options": [
+          "--include-disabled",
           "--output",
           "--project",
+          "--subject",
           "--url",
         ],
       },
@@ -756,6 +778,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       "update": {
         "options": [
           "--description",
+          "--enabled",
           "--id",
           "--model",
           "--name",
@@ -768,6 +791,15 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--trigger-type",
           "--url",
           "--user-prompt",
+        ],
+      },
+      "versions": {
+        "options": [
+          "--id",
+          "--output",
+          "--project",
+          "--url",
+          "--version",
         ],
       },
     },

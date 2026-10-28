@@ -14,6 +14,7 @@ export interface ExperimentRevisionView {
   experimentRevisionId: string;
   revisionNumber: number;
   memberCount: number;
+  reportTemplateIds?: string[];
   membershipFingerprint?: string;
   definitionFingerprint?: string;
   createdAt?: string;
@@ -63,6 +64,7 @@ export interface ExperimentExecutionView {
   requestCount: number;
   requests: ExperimentRequestSummaryView[];
   handlerProgress: Record<string, unknown>;
+  reportTemplates?: Record<string, unknown>;
   blocking: ExperimentBlockerView[];
   report?: { reportId: string; url: string; updatedAt: string };
   createdAt: string;
@@ -73,7 +75,7 @@ export interface ExperimentExecutionView {
   discardReason?: string;
   supersededAt?: string;
   supersededByExperimentExecutionId?: string;
-  supersededReason?: "rollover" | "retry";
+  supersededReason?: "rollover" | "retry" | "membership" | "templates";
   archivedAt?: string;
 }
 
@@ -200,6 +202,10 @@ export function parseExperimentExecution(
     execution.handlerSummary ??
     {};
   const handlerProgress = record(progressValue, "experiment handler progress");
+  const reportTemplates = record(
+    execution.reportTemplates ?? {},
+    "experiment report templates",
+  );
   const reportValue = execution.report;
   const report =
     reportValue === undefined
@@ -230,6 +236,7 @@ export function parseExperimentExecution(
     requestCount: vector.requestCount,
     requests: vector.requests,
     handlerProgress,
+    reportTemplates,
     blocking,
     report,
     createdAt: requiredString(execution, "createdAt", "experiment execution"),
@@ -245,7 +252,9 @@ export function parseExperimentExecution(
     ),
     supersededReason:
       execution.supersededReason === "rollover" ||
-      execution.supersededReason === "retry"
+      execution.supersededReason === "retry" ||
+      execution.supersededReason === "membership" ||
+      execution.supersededReason === "templates"
         ? execution.supersededReason
         : undefined,
     archivedAt: optionalString(execution, "archivedAt"),
@@ -294,6 +303,11 @@ export function parseExperiment(value: unknown): ExperimentView {
         typeof revision.memberCount === "number"
           ? revision.memberCount
           : execution.requestCount,
+      reportTemplateIds: Array.isArray(revision.reportTemplateIds)
+        ? revision.reportTemplateIds.filter(
+            (id): id is string => typeof id === "string",
+          )
+        : [],
       membershipFingerprint: optionalString(revision, "membershipFingerprint"),
       definitionFingerprint: optionalString(revision, "definitionFingerprint"),
       createdAt: optionalString(revision, "createdAt"),

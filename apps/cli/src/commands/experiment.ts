@@ -35,6 +35,7 @@ interface ExperimentExecution {
   requestCount: number;
   requests: ExperimentRequestSummary[];
   handlerProgress: JsonRecord;
+  reportTemplates: JsonRecord;
   blocking: ExperimentBlocker[];
   report?: {
     reportId: string;
@@ -49,7 +50,7 @@ interface ExperimentExecution {
   discardReason?: string;
   supersededAt?: string;
   supersededByExperimentExecutionId?: string;
-  supersededReason?: "rollover" | "retry";
+  supersededReason?: "rollover" | "retry" | "membership" | "templates";
   archivedAt?: string;
 }
 
@@ -80,6 +81,7 @@ interface ExperimentView {
     experimentRevisionId: string;
     revisionNumber: number;
     memberCount: number;
+    reportTemplateIds: string[];
     membershipFingerprint?: string;
     definitionFingerprint?: string;
     createdAt?: string;
@@ -215,6 +217,10 @@ function parseExecution(value: unknown): ExperimentExecution {
     requestCount: requestVector.requestCount,
     requests: requestVector.requests,
     handlerProgress: progress,
+    reportTemplates: asRecord(
+      execution.reportTemplates ?? {},
+      "experiment report templates",
+    ),
     blocking,
     report: report
       ? {
@@ -242,7 +248,9 @@ function parseExecution(value: unknown): ExperimentExecution {
     ),
     supersededReason:
       execution.supersededReason === "rollover" ||
-      execution.supersededReason === "retry"
+      execution.supersededReason === "retry" ||
+      execution.supersededReason === "membership" ||
+      execution.supersededReason === "templates"
         ? execution.supersededReason
         : undefined,
     archivedAt: stringField(execution, "archivedAt", "experiment execution", true),
@@ -295,6 +303,11 @@ function parseExperiment(value: unknown): ExperimentView {
         typeof revision.memberCount === "number"
           ? revision.memberCount
           : execution.requestCount,
+      reportTemplateIds: Array.isArray(revision.reportTemplateIds)
+        ? revision.reportTemplateIds.filter(
+            (id): id is string => typeof id === "string",
+          )
+        : [],
       membershipFingerprint: stringField(
         revision,
         "membershipFingerprint",
@@ -565,6 +578,12 @@ export function registerExperimentCommands(program: Command): void {
           .description("Create an experiment from a run configuration")
           .requiredOption("--name <name>", "Experiment name")
           .option("--description <text>", "Experiment description")
+          .option(
+            "--report-template <id>",
+            "Select a manual Experiment report template (repeatable)",
+            collectRepeatable,
+            [],
+          )
           .option("--empty", "Create an explicit empty experiment")
           .option(
             "--request-id <id>",
@@ -631,19 +650,27 @@ export function registerExperimentCommands(program: Command): void {
           ? undefined
           : buildRequest(options);
       const body = options.empty
-        ? { mode: "empty" as const, metadata, requests: [], requestIds: [] }
+        ? {
+            mode: "empty" as const,
+            metadata,
+            requests: [],
+            requestIds: [],
+            reportTemplateIds: options.reportTemplate as string[],
+          }
         : requestIds.length > 0
           ? {
               mode: "existing" as const,
               metadata,
               requests: [],
               requestIds,
+              reportTemplateIds: options.reportTemplate as string[],
             }
           : {
             mode: "compose" as const,
             metadata,
             requests: [built!.request],
             requestIds: [],
+            reportTemplateIds: options.reportTemplate as string[],
           };
       const expandedRunCount = built
         ? built.profileCount * built.occurrences
@@ -796,6 +823,61 @@ export function registerExperimentCommands(program: Command): void {
     "DELETE",
     "removed",
   );
+
+  withProjectOption(
+    experiment
+      .command("report-templates")
+      .description(
+        "Replace manual report-template selection (creates a revision when changed)",
+      )
+      .argument("<id>", "Experiment ID")
+      .requiredOption(
+        "--revision <id>",
+        "Expected current Experiment revision ID",
+      )
+      .option(
+        "--template <id>",
+        "Manual Experiment report template ID (repeatable; omit all to detach)",
+        collectRepeatable,
+        [],
+      )
+      .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
+  ).action(async (id: string, options) => {
+    try {
+      const projectId = requireProjectId(options.project);
+      const response = await apiFetch(
+        options.url,
+        `/experiments/${encodeURIComponent(id)}/report-templates`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            expectedExperimentRevisionId: options.revision,
+            reportTemplateIds: options.template as string[],
+          }),
+          projectId,
+        },
+      );
+      if (!response.ok) await throwApiError(response);
+      const updated = parseExperiment(await json(response));
+      console.log(
+        `${successText("Experiment report templates updated:")} ${value(
+          updated.revision.reportTemplateIds.join(", ") || "none",
+        )}`,
+      );
+      console.log(
+        `${label("Revision:")} ${value(
+          updated.revision.experimentRevisionId,
+        )} (${value(`r${updated.revision.revisionNumber}`)})`,
+      );
+    } catch (error) {
+      console.error(
+        errorText("Error:"),
+        error instanceof Error ? error.message : error,
+      );
+      process.exitCode = 1;
+    }
+  });
 
   withProjectOption(
     withOutputOption(
@@ -965,6 +1047,7 @@ export function registerExperimentCommands(program: Command): void {
         .argument("<id>", "Experiment ID")
         .argument("<executionId>", "Experiment execution ID")
         .option("--report <reportId>", "Select one report")
+        .option("--template <templateId>", "Filter by report template/type")
         .option("--structured", "Print the selected report's structured JSON artifact")
         .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
       ["markdown"],
@@ -982,6 +1065,8 @@ export function registerExperimentCommands(program: Command): void {
       }
       const reports = reportsValue.map((item) =>
         asRecord(item, "experiment report"),
+      ).filter((item) =>
+        options.template ? item.templateId === options.template : true
       );
       const selected = options.report
         ? reports.find((item) => item.id === options.report)
@@ -1013,6 +1098,8 @@ export function registerExperimentCommands(program: Command): void {
           options.report && selected ? [selected] : reports,
           [
             { key: "id", label: "Report" },
+            { key: "templateId", label: "Type" },
+            { key: "reportVersion", label: "Version" },
             { key: "status", label: "Status" },
             {
               key: "reporter",
@@ -1025,6 +1112,40 @@ export function registerExperimentCommands(program: Command): void {
           ],
           format,
         ),
+      );
+    } catch (error) {
+      console.error(
+        errorText("Error:"),
+        error instanceof Error ? error.message : error,
+      );
+      process.exitCode = 1;
+    }
+  });
+
+  withProjectOption(
+    experiment
+      .command("report-retry")
+      .description(
+        "Retry one template report in the same exact Experiment execution",
+      )
+      .argument("<id>", "Experiment ID")
+      .requiredOption("--execution <id>", "Exact Experiment execution ID")
+      .requiredOption("--template <id>", "Experiment report template ID")
+      .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
+  ).action(async (id: string, options) => {
+    try {
+      const projectId = requireProjectId(options.project);
+      const response = await apiFetch(
+        options.url,
+        `/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(options.execution)}/reports/${encodeURIComponent(options.template)}/retry`,
+        { method: "POST", projectId },
+      );
+      if (!response.ok) await throwApiError(response);
+      const report = asRecord(await json(response), "experiment report retry");
+      console.log(
+        `${successText("Experiment report retry queued:")} ${value(
+          stringField(report, "id", "experiment report retry")!,
+        )}`,
       );
     } catch (error) {
       console.error(
