@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Bot, Scale, CheckCircle2, AlertCircle, Brain, Wrench, ChevronRight, ChevronDown, Loader2 } from "lucide-react";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { GATE_METADATA } from "@/lib/gates";
+import { getMcpToolIdentity } from "@/lib/tool-call-identity";
 import type { ConversationTurn, ToolCall } from "@/types";
 import { useHarExtraction, type ConversationSegment } from "@/hooks/useHarExtraction";
 
@@ -19,6 +20,8 @@ interface ConversationViewProps {
   runId: string;
   /** If provided, uses per-run URL for a specific historical attempt */
   attemptRunId?: string;
+  /** Recorded MCP server identifiers; used only for exact flattened-name matches. */
+  mcpServers?: string[];
 }
 
 /**
@@ -32,7 +35,7 @@ interface ConversationViewProps {
  *   - Tool calls (inline, collapsible)
  *   - Judge feedback (left-aligned, amber tint)
  */
-export function ConversationView({ turns, task, runId, attemptRunId }: ConversationViewProps) {
+export function ConversationView({ turns, task, runId, attemptRunId, mcpServers }: ConversationViewProps) {
   if (turns.length === 0 && !task) {
     return (
       <div className="text-sm text-muted-foreground italic py-4 text-center">
@@ -69,6 +72,7 @@ export function ConversationView({ turns, task, runId, attemptRunId }: Conversat
           scopedIteration={turn.iteration}
           runId={runId}
           attemptRunId={attemptRunId}
+          mcpServers={mcpServers}
         />
       ))}
     </div>
@@ -127,11 +131,12 @@ function CollapsibleSection({
 }
 
 /** Inline tool call display */
-function ToolCallInline({ tc }: { tc: ToolCall }) {
+function ToolCallInline({ tc, mcpServers }: { tc: ToolCall; mcpServers?: string[] }) {
   const [expanded, setExpanded] = useState(false);
   const hasResponse = !!tc.response;
   const argsStr = JSON.stringify(tc.arguments, null, 2);
   const argsOneLine = JSON.stringify(tc.arguments);
+  const mcp = getMcpToolIdentity(tc.name, mcpServers);
 
   return (
     <div className="rounded border border-border/50 bg-muted/30 text-xs font-mono">
@@ -142,12 +147,21 @@ function ToolCallInline({ tc }: { tc: ToolCall }) {
       >
         {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
         <Wrench className="h-3 w-3 text-blue-500 shrink-0" />
-        <span className="font-semibold text-foreground shrink-0">{tc.name}</span>
-        {!expanded && argsOneLine !== "{}" && (
-          <span className="text-muted-foreground truncate ml-1 min-w-0">
-            {argsOneLine}
+        <span className="flex flex-1 flex-wrap items-center gap-x-1.5 min-w-0">
+          <span className="min-w-0 max-w-full break-all shrink-0" title={tc.name}>
+            {mcp && (
+              <Badge variant="secondary" className="text-[10px] mr-1.5 font-sans">
+                MCP: {mcp.server}
+              </Badge>
+            )}
+            <span className="font-semibold text-foreground">{mcp?.tool ?? tc.name}</span>
           </span>
-        )}
+          {!expanded && argsOneLine !== "{}" && (
+            <span className="text-muted-foreground truncate min-w-0 flex-1">
+              {argsOneLine}
+            </span>
+          )}
+        </span>
         <span className="flex items-center gap-1.5 ml-auto shrink-0">
           {!hasResponse && (
             <Badge variant="outline" className="text-[10px] px-1 py-0 text-amber-600 border-amber-300">
@@ -163,6 +177,11 @@ function ToolCallInline({ tc }: { tc: ToolCall }) {
       </button>
       {expanded && (
         <div className="px-2 pb-2 space-y-1.5 border-t border-border/30">
+          {mcp && (
+            <div className="mt-1.5 text-muted-foreground break-all">
+              Recorded tool name: <span className="text-foreground">{tc.name}</span>
+            </div>
+          )}
           {argsStr !== "{}" && (
             <div className="mt-1.5">
               <span className="text-muted-foreground text-[10px] uppercase tracking-wider">Arguments</span>
@@ -181,7 +200,7 @@ function ToolCallInline({ tc }: { tc: ToolCall }) {
   );
 }
 
-function TurnMessages({ turn, scopedIteration, runId, attemptRunId }: { turn: ConversationTurn; scopedIteration: number; runId: string; attemptRunId?: string }) {
+function TurnMessages({ turn, scopedIteration, runId, attemptRunId, mcpServers }: { turn: ConversationTurn; scopedIteration: number; runId: string; attemptRunId?: string; mcpServers?: string[] }) {
   const hasHar = !!turn.harUrl;
   const { data: harData, isLoading: harLoading } = useHarExtraction(runId, turn.iteration, hasHar, attemptRunId);
 
@@ -215,7 +234,7 @@ function TurnMessages({ turn, scopedIteration, runId, attemptRunId }: { turn: Co
 
       {/* Chronological segments from HAR */}
       {segments.map((segment, idx) => (
-        <SegmentBlock key={`seg-${idx}`} segment={segment} turn={turn} />
+        <SegmentBlock key={`seg-${idx}`} segment={segment} turn={turn} mcpServers={mcpServers} />
       ))}
 
       {/* Fallback: show DB agent response if no content segments from HAR */}
@@ -267,7 +286,7 @@ function TurnMessages({ turn, scopedIteration, runId, attemptRunId }: { turn: Co
 }
 
 /** Render a single chronological segment */
-function SegmentBlock({ segment, turn }: { segment: ConversationSegment; turn: ConversationTurn }) {
+function SegmentBlock({ segment, turn, mcpServers }: { segment: ConversationSegment; turn: ConversationTurn; mcpServers?: string[] }) {
   switch (segment.type) {
     case "thinking":
       return (
@@ -309,7 +328,7 @@ function SegmentBlock({ segment, turn }: { segment: ConversationSegment; turn: C
             >
               <div className="space-y-1">
                 {segment.toolCalls.map((tc, idx) => (
-                  <ToolCallInline key={tc.id || idx} tc={tc} />
+                  <ToolCallInline key={tc.id || idx} tc={tc} mcpServers={mcpServers} />
                 ))}
               </div>
             </CollapsibleSection>

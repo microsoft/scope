@@ -1016,7 +1016,7 @@ export function RunDetail() {
         {/* Conversation tab — chat-style view of agent/judge exchanges */}
         {activeRun?.turns && activeRun?.turns.length > 0 && (
           <TabsContent value="conversation" className="mt-4">
-            <ConversationView turns={activeRun?.turns} task={run.scenario?.task} runId={run._id} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
+            <ConversationView turns={activeRun?.turns} task={run.scenario?.task} runId={run._id} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} mcpServers={run.mcpServers} />
           </TabsContent>
         )}
 
