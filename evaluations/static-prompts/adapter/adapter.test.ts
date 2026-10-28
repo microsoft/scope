@@ -41,7 +41,7 @@ function fakeContext(
 }
 
 describe("static prompt adapter registry", () => {
-  it("registers all ten approved prompt families and their variants", () => {
+  it("registers all approved prompt families and their variants", () => {
     expect(listPromptTargets()).toEqual([
       { family: "criteria-authoring", variants: ["default"] },
       {
@@ -68,6 +68,7 @@ describe("static prompt adapter registry", () => {
         family: "run-report",
         variants: ["default", "append", "override-control"],
       },
+      { family: "external-contribution-triage", variants: ["default"] },
     ]);
     expect(listPromptTargets().map(({ family }) => family)).toEqual([
       ...QUALITY_FAMILIES,

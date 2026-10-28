@@ -26,6 +26,7 @@ const FAMILY_MINIMUMS: Record<QualityFamily, number> = {
   "judge-instructions": 25,
   "developer-feedback": 25,
   "run-report": 25,
+  "external-contribution-triage": 5,
 };
 
 interface DatasetManifest {
@@ -114,6 +115,11 @@ function validateFamilyContract(row: DatasetCase, prefix: string, errors: string
     Array.isArray(record[key]);
 
   switch (row.family) {
+    case "external-contribution-triage":
+      assert(stringField(input, "evidence"), `${prefix}: input.evidence is required`, errors);
+      assert(arrayField(input, "allowedLabels"), `${prefix}: input.allowedLabels must be an array`, errors);
+      assert(stringField(expected, "behavior"), `${prefix}: expected.behavior is required`, errors);
+      break;
     case "criteria-authoring":
     case "parent-dependency-suggestion":
     case "child-dependency-suggestion":
@@ -346,8 +352,9 @@ export async function validateDataset(
     syntheticCases.every((row) =>
       row.family === "judge-instructions"
       || (row.family === "run-report" && (row.variant === "default" || row.variant === "override-control"))
-      || (row.family === "developer-feedback" && row.variant === "persona")),
-    "synthetic cases are only permitted for unavailable judge evidence, feedback persona, and report override controls",
+      || (row.family === "developer-feedback" && row.variant === "persona")
+      || row.family === "external-contribution-triage"),
+    "synthetic cases are only permitted for unavailable judge evidence, feedback persona, report controls, and contribution triage",
     errors,
   );
   const hasTag = (family: QualityFamily, tag: string): boolean =>

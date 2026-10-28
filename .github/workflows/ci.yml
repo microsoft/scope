@@ -16,6 +16,8 @@ on:
       - "vitest.integration.config.ts"
       - ".github/workflows/ci.yml"
       - ".github/workflows/publish-cli.yml"
+      - ".github/workflows/external-contribution-triage.md"
+      - ".github/workflows/external-contribution-triage.lock.yml"
       - ".dockerignore"
       - "install-cli.sh"
       - "website/install-cli.sh"
@@ -34,6 +36,8 @@ on:
       - "vitest.integration.config.ts"
       - ".github/workflows/ci.yml"
       - ".github/workflows/publish-cli.yml"
+      - ".github/workflows/external-contribution-triage.md"
+      - ".github/workflows/external-contribution-triage.lock.yml"
       - ".dockerignore"
       - "install-cli.sh"
       - "website/install-cli.sh"
@@ -845,6 +849,10 @@ jobs:
             typescript:
               - '.github/workflows/ci.yml'
               - '.github/workflows/publish-cli.yml'
+              - '.github/workflows/external-contribution-triage.md'
+              - '.github/workflows/external-contribution-triage.lock.yml'
+              - 'scripts/external-contribution-triage.cjs'
+              - 'scripts/external-contribution-triage.test.ts'
               - 'scripts/ci-workflow.test.ts'
               - 'scripts/install-cli.test.ts'
               - 'scripts/build-windows-worker.test.ts'

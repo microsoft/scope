@@ -16,7 +16,7 @@ added to CI without a separate design decision.
 
 ### Static prompt quality inventory
 
-The committed evaluation manifest covers ten Scope-owned runtime prompt
+The committed evaluation manifest covers eleven Scope-owned runtime prompt
 families:
 
 | Family | Variants and important coverage |
@@ -31,10 +31,19 @@ families:
 | Judge instructions | Bundled and independent strategies; file, tool-history, response, conflicting, missing, and prior-pass evidence |
 | Developer feedback | Default persona, custom persona, descendant guard on/off, and multiple root failures |
 | Run reports | Default and appended system prompts; override as a control where the default prompt is intentionally absent |
+| External contribution triage | Issue, PR, ambiguous evidence, disclosure routing, instruction-like contributor text; partial-fidelity AW source/publisher adapter |
 
 Judge and report tool descriptions are static AI-facing instructions, but they
 are evaluated through their owning end-to-end judge and report families rather
 than counted as extra families.
+
+The contribution-triage adapter reads the production AW Markdown and safe-output
+schema and validates proposals with the production publisher. It explicitly
+uses partial fidelity: fixture evidence substitutes for hosted GitHub reads,
+and AW's engine envelope, file mount, and threat-detection execution remain
+outside the adapter. Five synthetic policy fixtures are preserved when
+harvesting integration data. See [contribution triage](./contribution-triage.md)
+for the hosted-preview requirement and focused evaluation commands.
 
 User-authored criteria, task/gate prompts, `AGENTS.md`, prompt-feature
 definitions, persona instructions, and report-template prompts are not static
