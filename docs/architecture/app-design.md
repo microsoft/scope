@@ -709,6 +709,22 @@ Criteria are reusable evaluation rules stored in the database and optionally def
 
 Observation evaluation happens off the coding-agent critical path in the `pp-taxonomy` post-processor (see [post-processing](post-processing.md)). A run carries the chosen `observations: string[]` (observation-criteria ids); **iteration-subject** results are stored per turn as `turn.observationResults: CriterionResult[]`, while **run-subject** results are stored once at run level as `run.observationResults: CriterionResult[]` (both the same shape as gate `criteriaResults`). Dimension grouping is derived at read time by joining `criterionId` → criterion `taxonomyElementId`.
 
+### Inline Observation authoring
+
+The Portal's **New Run** form opens the shared `CreateCriterionDialog` with
+`mode="observation"` from **New Observation**. This fixes the kind to observation,
+uses Observation labels throughout both wizard steps and notifications, and limits
+parent/child pickers to observations. The existing optional dimension selector and
+evaluation subject remain available: the subject defaults to whole-run, accepts the
+AI suggestion, and can be overridden by the user. Creation omits gate compatibility
+and adds the new ID to the run's selected observations, not its gate criteria.
+
+Omitting `mode` retains generic **New Criteria** authoring, including the kind
+selector, `defaultKind`, and gate defaults/locks. This is a presentation-only
+specialization; API payloads, prompt generation, and Observation result contracts
+are unchanged. The CLI already supports observation creation through criterion
+kind/subject options and run selection through observation IDs.
+
 See [`ENV_VARIABLES.md`](../../scope-mt-app/ENV_VARIABLES.md) for related configuration options.
 
 ## Statistics Analysis
