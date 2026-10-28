@@ -2329,6 +2329,37 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
         "type": "object",
       },
+      "ReportEligibilityResponse": {
+        "properties": {
+          "activeTemplateCount": {
+            "minimum": 0,
+            "type": "integer",
+          },
+          "templates": {
+            "items": {
+              "properties": {
+                "id": {
+                  "type": "string",
+                },
+                "name": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "id",
+                "name",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "activeTemplateCount",
+          "templates",
+        ],
+        "type": "object",
+      },
       "ReportResponse": {
         "properties": {
           "_id": {
@@ -8418,6 +8449,40 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "summary": "Bulk trigger reports",
+        "tags": [
+          "Reports",
+        ],
+      },
+    },
+    "/api/v1/reports/eligibility": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportEligibilityResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Run not found",
+          },
+        },
+        "summary": "Preview applicable report templates for a run",
         "tags": [
           "Reports",
         ],
