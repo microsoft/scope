@@ -31,7 +31,7 @@ family in `standaloneFamilies`:
 | Prompt-feature extraction | Positive, negative, ambiguous, ancestor/descendant, and empty-feature cases |
 | Judge instructions | Bundled and independent strategies; file, tool-history, response, conflicting, missing, and prior-pass evidence |
 | Developer feedback | Default persona, custom persona, descendant guard on/off, and multiple root failures |
-| Run reports | Default and appended system prompts; override as a control where the default prompt is intentionally absent |
+| Run reports and Experiment readouts | Default and appended run-report system prompts; override as a control where the default prompt is intentionally absent; exact-execution Experiment readout synthesis |
 | Taxonome prompt elements (standalone) | Skipped Invocation, Wrong Discovery, and Content Misused shared assessments with typed evidence-role JSONPaths, positive/negative/unknown inputs, preflights, untrusted evidence, and the bounded Ax initial/correction production compositions; actual Copilot SDK only |
 
 The three Taxonome targets are registered in `adapter/standalone.ts`, which

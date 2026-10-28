@@ -242,8 +242,13 @@ export abstract class BaseQueueProcessor<TDocument extends { _id: string } = any
       // the runId currently on the document, then to the documentId itself
       // (legacy / pre-migration safety).
       const payloadRunId = typeof payload?.runId === "string" ? payload.runId : undefined;
+      const payloadExperimentExecutionId =
+        typeof payload?.experimentExecutionId === "string"
+          ? payload.experimentExecutionId
+          : undefined;
       const docRunId = typeof (doc as any)?.run?._id === "string" ? (doc as any).run._id : undefined;
-      const logRunId = payloadRunId ?? docRunId ?? documentId!;
+      const logRunId =
+        payloadExperimentExecutionId ?? payloadRunId ?? docRunId ?? documentId!;
       runId = logRunId;
       // Capture this attempt's startedAt so the error-path failure write can
       // denormalize run.durationMs in a single $set (doc is out of scope there).
@@ -316,9 +321,13 @@ export abstract class BaseQueueProcessor<TDocument extends { _id: string } = any
           // Best-effort runId resolution for the failure log line. Same
           // resolution order as the success path above.
           const payloadRunId = typeof payload?.runId === "string" ? payload.runId : undefined;
+          const payloadExperimentExecutionId =
+            typeof payload?.experimentExecutionId === "string"
+              ? payload.experimentExecutionId
+              : undefined;
           await this.logPublisher.publish(
             documentId,
-            payloadRunId ?? documentId,
+            payloadRunId ?? payloadExperimentExecutionId ?? documentId,
             "error",
             `Processing failed: ${error instanceof Error ? error.message : String(error)}`,
             { final: true }

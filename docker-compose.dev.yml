@@ -217,11 +217,31 @@ services:
         - action: rebuild
           path: ./pnpm-lock.yaml
 
+  readout-handler:
+    build:
+      target: dev
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/workers/readout/src
+          target: /app/apps/workers/readout/src
+        - action: sync
+          path: ./packages/shared/src
+          target: /app/packages/shared/src
+        - action: rebuild
+          path: ./apps/workers/readout/package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+
   register-handler-post-processor:
     build:
       target: dev
 
   register-handler-taxonomy:
+    build:
+      target: dev
+
+  register-handler-readout:
     build:
       target: dev
 

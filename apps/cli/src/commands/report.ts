@@ -16,7 +16,7 @@ export function registerReportCommands(program: Command): void {
 
 const report = program
   .command("report")
-  .description("Generate, view, and monitor run reports")
+  .description("Generate, view, and monitor reports")
   .action(() => {
     report.help();
   });
@@ -106,11 +106,26 @@ report
   .command("get")
   .description("Get a report by ID")
   .requiredOption("-i, --id <reportId>", "Report ID")
+  .option("--structured", "Get the report's Structured JSON artifact")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
 , ['markdown'])
   .action(async (options) => {
     const format = (options.output || 'table') as OutputFormat;
     try {
+      if (options.structured) {
+        const structuredResponse = await apiFetch(
+          options.url,
+          `/reports/${encodeURIComponent(options.id)}/structured`,
+        );
+        if (!structuredResponse.ok) {
+          const error = await structuredResponse.json();
+          console.error(errorText("Error:"), error.error || JSON.stringify(error));
+          process.exitCode = 1;
+          return;
+        }
+        console.log(JSON.stringify(await structuredResponse.json(), null, 2));
+        return;
+      }
       const response = await apiFetch(options.url, `/reports/${options.id}`);
 
       if (!response.ok) {
@@ -121,7 +136,9 @@ report
 
       const report = await response.json() as {
         id: string;
-        requestId: string;
+        requestId?: string;
+        experimentId?: string;
+        experimentExecutionId?: string;
         status: string;
         reporter?: { id: string; name: string; model: string; agentId: string; agentVersion: string };
         content?: string;
@@ -139,6 +156,8 @@ report
         const fields: DisplayField[] = [
           { key: 'id', label: 'ID' },
           { key: 'requestId', label: 'Run' },
+          { key: 'experimentId', label: 'Experiment' },
+          { key: 'experimentExecutionId', label: 'Experiment Execution' },
           { key: 'status', label: 'Status' },
           { key: 'reporter', label: 'Reporter', formatter: (r: any) => r.reporter ? `${r.reporter.name} (${r.reporter.agentId}@${r.reporter.agentVersion})` : '' },
           { key: 'model', label: 'Model', formatter: (r: any) => r.reporter?.model || '' },
@@ -152,7 +171,15 @@ report
       }
 
       console.log(`${label('Report:')}    ${value(report.id)}`);
-      console.log(`${label('Run:')}       ${value(report.requestId)}`);
+      if (report.requestId) {
+        console.log(`${label('Run:')}       ${value(report.requestId)}`);
+      }
+      if (report.experimentId) {
+        console.log(`${label('Experiment:')} ${value(report.experimentId)}`);
+      }
+      if (report.experimentExecutionId) {
+        console.log(`${label('Execution:')}  ${value(report.experimentExecutionId)}`);
+      }
       console.log(`${label('Status:')}    ${colorLevel(report.status === "completed" ? "info" : report.status === "failed" ? "error" : "warn")} ${report.status}`);
       console.log(`${label('Created:')}   ${dimTimestamp(new Date(report.createdAt).toLocaleString())}`);
       if (report.updatedAt) {
@@ -181,8 +208,10 @@ report
 withProjectOption(withOutputOption(
 report
   .command("list")
-  .description("List all reports (optionally filter by run)")
+  .description("List all reports")
   .option("-r, --run <requestId>", "Filter by run ID")
+  .option("-e, --experiment <experimentId>", "Filter by experiment ID")
+  .option("--experiment-execution <experimentExecutionId>", "Filter by experiment execution ID")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
 ))
   .action(async (options) => {
@@ -191,6 +220,10 @@ report
     try {
       const params = new URLSearchParams();
       if (options.run) params.set("requestId", options.run);
+      if (options.experiment) params.set("experimentId", options.experiment);
+      if (options.experimentExecution) {
+        params.set("experimentExecutionId", options.experimentExecution);
+      }
       const qs = params.toString();
       const response = await apiFetch(options.url, `/reports${qs ? `?${qs}` : ""}`, { projectId });
 
@@ -202,7 +235,9 @@ report
 
       const reports = await response.json() as Array<{
         id: string;
-        requestId: string;
+        requestId?: string;
+        experimentId?: string;
+        experimentExecutionId?: string;
         status: string;
         reporter?: { model: string };
         createdAt: string;
@@ -222,7 +257,13 @@ report
           tableFormatter: (r: any) => value(r.id),
         },
         { key: 'requestId', label: 'Run ID',
-          tableFormatter: (r: any) => dimTimestamp(r.requestId),
+          tableFormatter: (r: any) => r.requestId ? dimTimestamp(r.requestId) : 'N/A',
+        },
+        { key: 'experimentId', label: 'Experiment',
+          tableFormatter: (r: any) => r.experimentId ? dimTimestamp(r.experimentId) : 'N/A',
+        },
+        { key: 'experimentExecutionId', label: 'Experiment Execution',
+          tableFormatter: (r: any) => r.experimentExecutionId ? dimTimestamp(r.experimentExecutionId) : 'N/A',
         },
         { key: 'status', label: 'Status',
           tableFormatter: (r: any) => {

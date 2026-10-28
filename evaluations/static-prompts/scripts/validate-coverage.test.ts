@@ -6,7 +6,7 @@ import { validateCoverage } from "./validate-coverage.js";
 
 it("covers every quality manifest family and variant", async () => {
   await expect(validateCoverage()).resolves.toEqual({
-    qualityTargets: 15,
+    qualityTargets: 16,
     standaloneTargets: 3,
   });
 });
