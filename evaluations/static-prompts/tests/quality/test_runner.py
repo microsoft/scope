@@ -119,3 +119,50 @@ def test_quality_engine_writes_rows_findings_and_summary(tmp_path: Path) -> None
     assert (track_dir / "summary.json").is_file()
     assert (track_dir / "decision-summary.json").is_file()
     assert not (track_dir / "decision.json").exists()
+
+
+def test_decision_only_engine_requires_no_azure_grader_or_chat_inference(tmp_path: Path, monkeypatch) -> None:
+    case = next(
+        json.loads(line)
+        for line in (PACKAGE_ROOT / "datasets/v1/contribution-decision.jsonl").read_text().splitlines()
+        if "truncated-evidence" in json.loads(line)["tags"]
+    )
+    dataset_path = tmp_path / "decision-cases.jsonl"
+    dataset_path.write_text(json.dumps(case) + "\n")
+    config = RunConfig(
+        package_root=PACKAGE_ROOT, repo_root=PACKAGE_ROOT.parents[1], run_dir=tmp_path,
+        manifest_path=PACKAGE_ROOT / "evaluation-manifest.yaml", dataset_path=dataset_path,
+        surface_profiles_path=tmp_path / "unused-profiles.yaml",
+        red_team_config_path=tmp_path / "unused-red-team.yaml", samples=1, smoke=False,
+    )
+
+    def unexpected_azure_setup():
+        raise AssertionError("Non-generative classification needs no Azure grader")
+
+    monkeypatch.setattr("static_prompt_evals.quality.runner.load_azure_runtime", unexpected_azure_setup)
+
+    def generator(input_path, output_path, samples, smoke):
+        del input_path, samples, smoke
+        completion = {
+            "status": "completed", "provider": "Microsoft-Decision-1", "action": "manual-review-required",
+            "model": "microsoft-decision-1", "probabilities": {
+                "prioritize-review": 0, "request-clarification": 0, "request-contributor-changes": 0,
+                "maintainer-scope-decision": 0, "manual-review-required": 1,
+            },
+            "confidence": None, "inputTokens": 0, "outputTokens": 0,
+            "questionVersion": "unit-test-fake", "inputSha256": "a" * 64, "durationMs": 0,
+        }
+        output_path.write_text(json.dumps({
+            "caseId": case["id"], "family": "contribution-decision", "output": {"decision": completion},
+            "rawResponse": json.dumps({"fake": True, "note": "Offline fixed abstention for a runner contract test."}),
+        }) + "\n")
+
+    summary = run_quality_engine(config, tmp_path / "quality", generator=generator)
+
+    assert summary["status"] == "succeeded"
+    assert summary["azureObservationCount"] == 0
+    assert summary["authenticationMode"] == "not-required"
+    assert {item["evaluator"] for item in summary["caseResults"]} == {
+        "generation_success", "output_schema", "decision_accuracy",
+    }
+    assert all(item["casePassed"] is True for item in summary["caseResults"])

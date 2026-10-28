@@ -237,6 +237,8 @@ def render_response(family: str, output: Any, raw_response: str) -> str:
         "judge-instructions": ("results", "verdicts", "evaluation"),
         "developer-feedback": ("feedback", "text", "message"),
         "run-report": ("markdown", "report", "content"),
+        "contribution-insights": ("markdown",),
+        "contribution-decision": ("decision.action",),
     }
     for path in preferred_paths.get(family, ()):
         candidate = get_path(output, path)
@@ -440,6 +442,10 @@ def normalize_rows(
                     ("responseMessages", "response_messages", "messages"),
                 )
             )
+            decision_request = (
+                as_mapping(first_path(generated, ("request.decisionRequest", "decision_request")))
+                if family == "contribution-decision" else None
+            )
             response = render_response(family, output, raw_response)
             if family in {"parent-dependency-suggestion", "child-dependency-suggestion", "developer-feedback"}:
                 # Production-composed instructions define the task; reviewed answers
@@ -447,10 +453,17 @@ def normalize_rows(
                 query = stable_text(query_messages) if query_messages else stable_text(case_input)
             if family == "developer-feedback" and query_messages:
                 context = stable_text(query_messages)
+            if family == "contribution-decision":
+                query = stable_text(decision_request or case_input)
+                context = stable_text((decision_request or {}).get("state", case_input))
+                expected_behavior = stable_text((decision_request or {}).get("questions", {}))
             if not query_messages:
                 query_messages = [{"role": "user", "content": query}]
             if not response_messages:
-                response_messages = [{"role": "assistant", "content": raw_response or response}]
+                response_messages = [{
+                    "role": "assistant",
+                    "content": response if family == "contribution-decision" else raw_response or response,
+                }]
 
             expected_labels = _expected_labels(case, expected)
             tool_definitions = as_object_list(
@@ -492,6 +505,17 @@ def normalize_rows(
                     default="unspecified",
                 )
             )
+            metadata = as_mapping(
+                first_path(
+                    generated,
+                    ("metadata", "invocationMetadata", "invocation_metadata"),
+                    default={},
+                )
+            )
+            if family == "contribution-decision":
+                metadata["requestFidelity"] = first_path(
+                    generated, ("request.metadata.fidelity",), default="partial"
+                )
             normalized.append(
                 NormalizedRow(
                     row_id=f"{case_id}::sample-{sample_index}",
@@ -514,15 +538,10 @@ def normalize_rows(
                     response_messages=response_messages,
                     tool_definitions=tool_definitions,
                     tool_calls=tool_calls,
+                    decision_request=decision_request,
                     generation_error=generation_error,
                     infrastructure_error=infrastructure_error,
-                    metadata=as_mapping(
-                        first_path(
-                            generated,
-                            ("metadata", "invocationMetadata", "invocation_metadata"),
-                            default={},
-                        )
-                    ),
+                    metadata=metadata,
                 )
             )
     return normalized

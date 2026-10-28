@@ -1,8 +1,9 @@
 # Static Prompt Evaluations
 
 This workspace runs Scope-owned static prompt families through production
-TypeScript adapters and grades the generated JSONL with the Azure AI Evaluation
-SDK. Cloud red teaming is extracted into a separate dependent contribution.
+TypeScript adapters and grades the output JSONL with deterministic checks and,
+for generative families, the Azure AI Evaluation SDK. Cloud red teaming is
+extracted into a separate dependent contribution.
 The extraction does not change the normal evaluations or the evidence shared
 with OneRAI; no historical review findings are fixed by this scope change.
 
@@ -32,11 +33,14 @@ Set the prompt-evaluation environment variables described in
 [`ENV_VARIABLES.md`](../../ENV_VARIABLES.md#prompt-evaluation-configuration).
 Do not put credentials or project/model endpoints in committed files.
 
-Quality generation uses `PROMPT_EVAL_MODEL` plus the existing inference
-credentials. Quality grading requires
+Generative quality targets use `PROMPT_EVAL_MODEL` plus the existing inference
+credentials. AI-assisted quality grading requires
 `SCOPE_EVAL_AZURE_OPENAI_ENDPOINT` and
 `SCOPE_EVAL_AZURE_OPENAI_DEPLOYMENT` (or their `AZURE_OPENAI_*` fallbacks);
 an API key is optional because `DefaultAzureCredential` is supported.
+The non-generative `contribution-decision` target uses a separate, explicitly
+configured Microsoft-Decision-1 deployment and no Azure grader. Setting
+`PROMPT_EVAL_MODEL` to a decision-model name does not configure that transport.
 
 ## Commands
 
@@ -180,13 +184,148 @@ When that file is absent, the quality loader follows the ordered file list in
 `datasets/manifest.json` and verifies every SHA-256 and row count. It does not
 discover inputs by globbing `datasets/v1/`.
 
+## Community contribution families
+
+Two independent families cover the report-only P0 community-PR pipeline:
+
+| Family | Responsibility | Evaluation |
+| --- | --- | --- |
+| `contribution-insights/default` | Copilot supplies all insights, evidence, limitations, reviewer brief, and feedback drafts | Production schema/Markdown checks and insight-quality graders |
+| `contribution-decision/default` | Microsoft-Decision-1 alone selects the authoritative final review-action classification from captured facts and fixed Copilot insights | Production response parsing, generation/schema checks, and deterministic `decision_accuracy` |
+
+Neither stage approves or rejects a PR, posts feedback, or establishes merge
+readiness. Human approval requirements remain unchanged.
+
+### Copilot insights only
+
+`contribution-insights/default` evaluates schema-version-2 Copilot assessments.
+The production validator rejects both `recommendation` and `decision` fields
+from Copilot. This family's rubric rewards complete, evidence-grounded insights
+across all six P0 scenarios, not a final action; the former
+`contribution_decision` label grader is no longer assigned to it.
+
+Its adapter reads the actual workflow instructions and report-tool contract,
+loads trusted repository policies through the production helper, and uses the
+production validator and renderer. The gh-aw engine wrapper, sandbox, and
+native file transport are not reproduced; request fidelity is explicitly
+`partial`.
+
+For a real local assessment before deploying the Actions workflow:
+
+```bash
+pnpm contribution-insights:local --pr 1492
+```
+
+This runs the installed Copilot CLI through a restricted, isolated SDK session,
+using `gh` authentication (or `COPILOT_GITHUB_TOKEN` for inference). It reuses the
+same prompt/collector/report contract and saves local-only artifacts in
+`results/contribution-insights-local/`. It never dispatches Actions or posts
+feedback. The native run is not the hosted gh-aw sandbox or threat-detection
+pipeline, and is separate from the static-prompt evaluation baseline.
+Without an enabled Decision-1 stage, the local command preserves the Copilot
+insights but reports no final decision; Copilot never becomes a fallback
+decision-maker. After securely configuring an existing deployment, `--decision`
+requires that stage, or `CONTRIBUTION_DECISION_ENABLED=true` enables it by
+environment.
+
+Eight synthetic contract fixtures cover documentation-only changes, Portal/CLI
+parity, skipped fork checks and CLA, overlapping work, authentication/project
+isolation, truncated evidence, product decisions, and dependency notices.
+They are not assessments of real PRs at their example URLs. The repository
+workflow has no Scope integration endpoint, so harvesting retains these
+explicit synthetic fixtures alongside the integration-derived families.
+Expectations remain subject to normal human review before merge.
+
+Run the focused insights plumbing smoke from the repository root:
+
+```bash
+pnpm --filter static-prompt-evals evaluate:quality -- \
+  --smoke --offline --samples 1 \
+  --dataset datasets/v1/contribution-insights.jsonl
+```
+
+Smoke mode selects one case per family; the dataset adapter-contract suite
+parses all eight fixtures. Fake-model output verifies plumbing and deterministic
+contracts, not AI triage quality. A real model-quality baseline requires
+explicit approval. See
+[Contribution Insights](../../docs/architecture/contribution-insights.md)
+for workflow operation and the separate hosted rollout.
+
+### Authoritative Decision-1 classification
+
+The decision adapter validates the fixed Copilot assessment with the production
+schema-version-2 report parser, binds it to exactly one captured PR/head SHA,
+and calls the production `buildDecisionInput`. Every Copilot insight is retained;
+previous decisions and expected classifications are not model input. Trusted
+questions come from the production helper, never an evaluation-only prompt copy.
+
+The optional typed `AdapterContext.decide` seam calls production `callDecision`
+at the Foundry resource's `/providers/microsoft/v1/systemone` route with
+`{model: deployment, state, questions}`. It never sends the decision through
+chat completions, Copilot, another service, or a locally trained substitute.
+`request.decisionRequest` retains the actual state/questions payload. Any
+chat-role messages are only a grader projection with `fidelity: partial`;
+Python normalization retains the native request separately as `decision_request`.
+
+Protocol grounding:
+
+- The [Foundry Decision-1 how-to](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision)
+  defines the typed `choice` request and selected option with per-option probabilities.
+- Microsoft's [Azure Databricks System One reference](https://learn.microsoft.com/en-us/azure/databricks/machine-learning/model-serving/query-systemone-models#response-format)
+  documents the concrete `answers`, `confidence`, `probabilities`, and token-usage
+  response structure. It is a format reference, not an alternative deployment or
+  backend for this integration.
+
+The production parser preserves confidence independently of the selected
+option's probability, accepts small rounding error in the probability
+distribution, and validates all five configured labels. The actual API JSON is
+retained unchanged in `rawResponse`; normalized output also retains the returned
+model, token usage, question version, input hash, and duration.
+
+Real decision generation requires `CONTRIBUTION_DECISION_ENDPOINT` (an HTTPS
+Foundry resource root), `CONTRIBUTION_DECISION_DEPLOYMENT`, and exactly one of
+`CONTRIBUTION_DECISION_API_KEY` or `CONTRIBUTION_DECISION_ENTRA_TOKEN`. Selecting
+this evaluation family explicitly requests Decision-1; missing or invalid
+configuration fails closed as infrastructure, without an inference call or
+fallback. The full committed dataset includes this family, so a real full run
+requires its configuration as well as the generative targets' configuration.
+No resources are provisioned by these commands. Only explicit HTTP 429s are
+retried by the production client; timeouts, network failures, and 5xx responses
+are not automatically repeated.
+
+`datasets/v1/contribution-decision.jsonl` contains eight fixed hand-authored
+Copilot insight fixtures plus captured synthetic facts, spanning the same eight
+categories as the insights family. The truncation case tests
+`manual-review-required` abstention; all five review-action classes have
+reviewed expectations. Expected actions exist only in `expected.action`.
+`decision_accuracy` compares the selected class exactly, including abstention;
+it is not feature precision/recall, a prose-quality score, or a second LLM's
+choice. No relevance, fluency, or Azure-assisted grader runs for this family.
+Other families' historical thresholds and cases are unchanged.
+
+Offline validation needs no deployment or credentials:
+
+```bash
+pnpm --filter static-prompt-evals evaluate:quality -- \
+  --offline --samples 1 \
+  --dataset datasets/v1/contribution-decision.jsonl
+```
+
+The fake decision transport always returns a production-parsed,
+`manual-review-required` fixture with an explicit `fake: true` raw-response
+marker and fake invocation source. It never reads expected labels or predicts
+the desired answer. This verifies plumbing for all eight cases, not accuracy,
+calibration, hosted operation, or a live Decision-1 quality baseline. A real
+endpoint compatibility and quality run requires separate approval and an
+existing deployment; none is implied by offline success.
+
 ## Authoring quality cases
 
 Curated JSONL is input, not generated output. Each reviewed row must include:
 
 - a stable case ID, `family`, and `variant`;
 - JSON-serializable adapter input;
-- deterministic and AI-assisted evaluator names;
+- deterministic and, where applicable, AI-assisted evaluator names;
 - reviewed expectations or labels;
 - a source category and human-approved state; and
 - provenance: source endpoint, project ID, source entity IDs, harvest time,

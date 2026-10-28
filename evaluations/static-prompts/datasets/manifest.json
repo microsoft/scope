@@ -36,10 +36,28 @@
       "prompt-feature-extraction": 30,
       "judge-instructions": 30,
       "developer-feedback": 25,
-      "run-report": 30
+      "run-report": 30,
+      "contribution-insights": 8,
+      "contribution-decision": 8
     }
   },
   "files": [
+    {
+      "path": "v1/contribution-decision.jsonl",
+      "sha256": "f186326c51bd73a29fb8df25e8116a381a78ae3365c5a4709631b65345af2f99",
+      "rows": 8,
+      "families": [
+        "contribution-decision"
+      ]
+    },
+    {
+      "path": "v1/contribution-insights.jsonl",
+      "sha256": "a70d1bf719d96780187cf7d385e018bb3a2730b6df41da7e3feb9e22272ac1d0",
+      "rows": 8,
+      "families": [
+        "contribution-insights"
+      ]
+    },
     {
       "path": "v1/criteria-authoring.jsonl",
       "sha256": "0aa535c259d7d6fa36433ac88017919432f92f2c50dd6278f5740330105055c5",

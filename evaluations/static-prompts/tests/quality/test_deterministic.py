@@ -1,5 +1,12 @@
+import pytest
+
 from static_prompt_evals.quality.data import normalize_rows
 from static_prompt_evals.quality.deterministic import evaluate_deterministic
+
+DECISION_LABELS = [
+    "prioritize-review", "request-clarification", "request-contributor-changes",
+    "maintainer-scope-decision", "manual-review-required",
+]
 
 
 def _observations(cases, generated, family_config, samples=1):
@@ -209,3 +216,70 @@ def test_feature_result_coverage_requires_every_feature_once() -> None:
     )
 
     assert observations[0].passed is False
+
+
+@pytest.mark.parametrize("label", DECISION_LABELS)
+def test_decision_accuracy_matches_each_supported_class_exactly(label) -> None:
+    observations = _observations(
+        [{"id": "decision", "family": "contribution-decision", "expected": {"action": label}}],
+        [{"caseId": "decision", "output": {"decision": {"action": label}}}],
+        {"deterministic": [{
+            "check": "decision_accuracy", "predictedPaths": ["output.decision.action"],
+            "expectedPaths": ["expected.action"], "labels": DECISION_LABELS,
+        }]},
+    )
+    assert len(observations) == 1
+    assert observations[0].evaluator == "decision_accuracy"
+    assert observations[0].passed is True
+    assert observations[0].score == 1
+    assert observations[0].label == label
+
+
+@pytest.mark.parametrize("actual,expected", [
+    ("manual-review-required", "prioritize-review"),
+    ("prioritize-review", "manual-review-required"),
+    ("PRIORITIZE-REVIEW", "prioritize-review"),
+    ("prioritize-review ", "prioritize-review"),
+    ("unsupported", "unsupported"),
+    (None, None),
+    (["prioritize-review"], "prioritize-review"),
+])
+def test_decision_accuracy_does_not_guess_or_coerce_a_label(actual, expected) -> None:
+    observations = _observations(
+        [{"id": "decision", "family": "contribution-decision", "expected": {"action": expected}}],
+        [{"caseId": "decision", "output": {"decision": {"action": actual}}}],
+        {"deterministic": [{
+            "check": "decision_accuracy", "predictedPaths": ["output.decision.action"],
+            "expectedPaths": ["expected.action"], "labels": DECISION_LABELS,
+        }]},
+    )
+    assert observations[0].evaluator == "decision_accuracy"
+    assert observations[0].passed is False
+    assert observations[0].score == 0
+
+
+def test_decision_transport_failures_remain_infrastructure_errors_not_wrong_labels() -> None:
+    observations = _observations(
+        [{"id": "decision", "family": "contribution-decision", "expected": {"action": "manual-review-required"}}],
+        [{"caseId": "decision", "error": {"classification": "transport", "message": "Decision-1 unavailable"}}],
+        {"deterministic": [{
+            "check": "decision_accuracy", "predictedPaths": ["output.decision.action"],
+            "expectedPaths": ["expected.action"], "labels": DECISION_LABELS,
+        }]},
+    )
+    assert observations[0].passed is None
+    assert observations[0].score is None
+    assert observations[0].infrastructure_error is True
+
+
+def test_output_schema_enforces_configured_values_without_changing_historical_presence_checks() -> None:
+    cases = [{"id": "insights", "family": "contribution-insights"}]
+    generated = [{"caseId": "insights", "output": {"report": {"schemaVersion": 1, "assessments": []}}}]
+    presence_only = {"check": "output_schema", "requiredAny": ["output.report.assessments"], "allowEmpty": True}
+    historical = _observations(cases, generated, {"deterministic": [presence_only]})
+    current = _observations(cases, generated, {"deterministic": [{
+        **presence_only, "equals": {"output.report.schemaVersion": 2},
+    }]})
+    assert historical[0].passed is True
+    assert current[0].passed is False
+    assert "schemaVersion" in current[0].reason

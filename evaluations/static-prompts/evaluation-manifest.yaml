@@ -20,3 +20,7 @@ qualityFamilies:
     variants: [default, persona, descendant-guard]
   - id: run-report
     variants: [default, append, override-control]
+  - id: contribution-insights
+    variants: [default]
+  - id: contribution-decision
+    variants: [default]

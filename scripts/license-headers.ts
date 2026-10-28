@@ -29,7 +29,7 @@ const HEADER_LINES = [
 ] as const;
 
 /** Extensions that use `//` line comments. */
-const LINE_COMMENT_EXTS = new Set(["ts", "tsx", "js", "mjs", "rs", "bicep"]);
+const LINE_COMMENT_EXTS = new Set(["ts", "tsx", "mts", "js", "mjs", "rs", "bicep"]);
 /** Extensions that use a `/* ... *\/` block comment. */
 const BLOCK_COMMENT_EXTS = new Set(["css"]);
 const IN_SCOPE_EXTS = new Set([...LINE_COMMENT_EXTS, ...BLOCK_COMMENT_EXTS]);

@@ -29,6 +29,7 @@ def _observation(
     passed: bool | None,
     *,
     score: float | None = None,
+    label: str | None = None,
     reason: str = "",
     infrastructure_error: bool = False,
     details: Mapping[str, Any] | None = None,
@@ -43,6 +44,7 @@ def _observation(
         evaluator=evaluator,
         passed=passed,
         score=score,
+        label=label,
         reason=reason,
         infrastructure_error=infrastructure_error,
         details=dict(details or {}),
@@ -134,7 +136,15 @@ def check_output_schema(
         present(first_path(row_dict, (path,)))
         for path in required_any
     )
-    passed = row.output is not None and not missing_all and any_present
+    equal_fields = config.get("equals", {})
+    if not isinstance(equal_fields, Mapping):
+        raise ValueError("output_schema.equals must map field paths to exact values")
+    mismatches = [
+        str(path)
+        for path, expected in equal_fields.items()
+        if first_path(row_dict, (str(path),)) != expected
+    ]
+    passed = row.output is not None and not missing_all and any_present and not mismatches
     reason = ""
     if row.output is None:
         reason = "structured output is missing"
@@ -142,6 +152,8 @@ def check_output_schema(
         reason = f"required output fields are missing: {', '.join(missing_all)}"
     elif not any_present:
         reason = "none of the accepted output fields is present"
+    elif mismatches:
+        reason = f"output fields differ from the required contract: {', '.join(mismatches)}"
     return [_observation(row, "output_schema", passed, score=float(passed), reason=reason)]
 
 
@@ -363,6 +375,37 @@ def check_label_metrics(
     return observations
 
 
+def check_decision_accuracy(
+    row: NormalizedRow, config: Mapping[str, Any]
+) -> list[MetricObservation]:
+    predicted = _selected(row, _paths(config, "predictedPaths"))
+    expected = _selected(row, _paths(config, "expectedPaths"))
+    labels = set(as_string_list(config.get("labels")))
+    passed = (
+        row.generation_error is None
+        and isinstance(predicted, str)
+        and isinstance(expected, str)
+        and predicted in labels
+        and expected in labels
+        and predicted == expected
+    )
+    infrastructure_error = bool(row.generation_error and row.infrastructure_error)
+    return [
+        _observation(
+            row,
+            "decision_accuracy",
+            None if infrastructure_error else passed,
+            score=None if infrastructure_error else float(passed),
+            label=predicted if isinstance(predicted, str) else None,
+            reason=row.generation_error or (
+                "" if passed else "Decision-1 action does not exactly match the reviewed supported class"
+            ),
+            infrastructure_error=infrastructure_error,
+            details={"predicted": predicted, "expected": expected},
+        )
+    ]
+
+
 def _detected_feature_ids(value: Any) -> set[str]:
     if not isinstance(value, Sequence) or isinstance(value, str):
         return set()
@@ -482,6 +525,7 @@ _CHECKS: dict[str, Check] = {
     "markdown": check_markdown,
     "no_fabricated_references": check_no_fabricated_references,
     "label_metrics": check_label_metrics,
+    "decision_accuracy": check_decision_accuracy,
     "feature_result_coverage": check_feature_result_coverage,
     "criterion_coverage": check_criterion_coverage,
     "descendant_leakage": check_descendant_leakage,

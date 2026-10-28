@@ -3,6 +3,9 @@
 
 import { acquireInferenceClient } from "../../../apps/api/src/llm-token.js";
 import { withRetry } from "../../../packages/shared/src/utils/retry.js";
+import { callDecision, DecisionError, readDecisionConfig } from "../../../scripts/contribution-insights/decision.mjs";
+import { fakeContributionReport } from "./targets/contribution-insights.js";
+import { AdapterTransportError, AdapterValidationError } from "./validation.js";
 import type {
   AdapterContext,
   CompletionOptions,
@@ -50,10 +53,33 @@ export function createProductionAdapterContext(
 
   return {
     model: configuredModel || process.env.PROMPT_EVAL_MODEL || process.env.LLM_MODEL || "gpt-4.1",
+    async decide(input) {
+      let config: ReturnType<typeof readDecisionConfig>;
+      try {
+        config = readDecisionConfig(process.env, true);
+      } catch (error: unknown) {
+        throw new AdapterTransportError(
+          error instanceof Error ? error.message : "Microsoft-Decision-1 configuration is unavailable",
+          { cause: error },
+        );
+      }
+      if (!config) throw new AdapterTransportError("Microsoft-Decision-1 requires explicit contribution decision configuration");
+      try {
+        return await callDecision(config, input);
+      } catch (error: unknown) {
+        if (error instanceof DecisionError && /request failed|transport failed|timed out|rate.limit/i.test(error.message)) {
+          throw new AdapterTransportError(error.message, { cause: error });
+        }
+        throw error;
+      }
+    },
     async complete(
       request: ComposedPromptRequest,
       options?: CompletionOptions,
     ): Promise<CompletionResult> {
+      if (request.decisionRequest || request.metadata.adapterId.startsWith("contribution-decision/")) {
+        throw new AdapterValidationError("Microsoft-Decision-1 requests must use decide, never chat completions");
+      }
       const azure = azureOpenAIConfiguration(configuredModel);
       if (azure) {
         return completeWithAzureOpenAI(request, azure, options);
@@ -108,7 +134,39 @@ export function createFakeAdapterContext(
 ): AdapterContext {
   return {
     model,
+    async decide(input) {
+      return callDecision(
+        {
+          endpoint: "https://offline-fake.invalid",
+          deployment: "offline-fake-decision-1",
+          auth: { kind: "api-key", value: "offline-fake-not-a-credential" },
+        },
+        input,
+        async () => new Response(JSON.stringify({
+          fake: true,
+          note: "Offline fixed abstention fixture; not a Microsoft-Decision-1 inference or a production fallback.",
+          model: "microsoft-decision-1",
+          answers: {
+            review_action: {
+              type: "choice",
+              choice: "manual-review-required",
+              probabilities: {
+                "prioritize-review": 0,
+                "request-clarification": 0,
+                "request-contributor-changes": 0,
+                "maintainer-scope-decision": 0,
+                "manual-review-required": 1,
+              },
+            },
+          },
+          usage: { input_tokens: 0, output_tokens: 0 },
+        })),
+      );
+    },
     async complete(request): Promise<CompletionResult> {
+      if (request.decisionRequest || request.metadata.adapterId.startsWith("contribution-decision/")) {
+        throw new AdapterValidationError("Microsoft-Decision-1 requests must use decide, never chat completions");
+      }
       const adapterId = request.metadata.adapterId;
       let content: string;
       if (adapterId.startsWith("criteria-authoring/")) {
@@ -146,6 +204,8 @@ export function createFakeAdapterContext(
         content = "Apply the requested correction.";
       } else if (adapterId.startsWith("run-report/")) {
         content = "# Fake report";
+      } else if (adapterId.startsWith("contribution-insights/")) {
+        content = fakeContributionReport(request);
       } else {
         throw new Error(
           `Fake transport has no response for adapter '${adapterId}'`,

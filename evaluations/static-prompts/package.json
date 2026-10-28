@@ -12,6 +12,7 @@
     "check:uv": "tsx scripts/check-uv.ts",
     "setup:python": "pnpm check:uv && uv sync --frozen",
     "generate": "tsx adapter/runner.ts",
+    "contribution-insights:local": "tsx scripts/contribution-insights-local.ts",
     "harvest": "tsx scripts/harvest.ts",
     "validate-data": "tsx scripts/validate-dataset.ts && tsx scripts/validate-coverage.ts",
     "evaluate": "pnpm check:uv && uv run python -m static_prompt_evals.cli",
@@ -24,6 +25,7 @@
     "yaml": "^2.8.1"
   },
   "devDependencies": {
+    "@github/copilot-sdk": "1.0.1",
     "@types/node": "^22.18.6",
     "tsx": "^4.21.0",
     "typescript": "^5.9.2",

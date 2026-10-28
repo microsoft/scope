@@ -12,6 +12,8 @@ import type {
   QualityCaseRow,
 } from "../adapter/protocol.js";
 import { validateDataset } from "./validate-dataset.js";
+import { fakeContributionReport } from "../adapter/targets/contribution-insights.js";
+import { createFakeAdapterContext } from "../adapter/transport.js";
 
 const DATASET_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -59,6 +61,10 @@ function fakeResponse(row: QualityCaseRow, request: ComposedPromptRequest): stri
     case "run-report":
       expect(request.tools?.length).toBeGreaterThan(0);
       return "# Run report\n\nThe run evidence was reviewed.";
+    case "contribution-insights":
+      return fakeContributionReport(request);
+    case "contribution-decision":
+      throw new Error("Decision-1 must not be called through a chat completion");
   }
 }
 
@@ -67,6 +73,7 @@ describe("curated dataset adapter contract", () => {
     const { cases } = await validateDataset(DATASET_ROOT);
     const context: AdapterContext = {
       model: "fake-model",
+      decide: createFakeAdapterContext().decide,
       async complete(request) {
         const row = currentRow;
         return { content: fakeResponse(row, request), metadata: { transport: "fake" } };
