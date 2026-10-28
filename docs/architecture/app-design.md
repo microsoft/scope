@@ -598,8 +598,12 @@ applying them.
 `scope run list` exposes every Portal filter and the sort controls, forwarding them to the
 same API params: `--worker` (multi), `--status`, `--outcome`, `--task`, `--profile`,
 `--criteria`, `--model`, `--os`, `--priority`, `--agent-version`, `--search`,
-`--created-after`, `--created-before`, `--sort-by`, `--sort-dir`. (The CLI list stays flat;
-grouping is a Portal view.)
+`--created-after`, `--created-before`, `--submission-id`, `--experiment-id`,
+`--sort-by`, `--sort-dir`. (The CLI list stays flat; grouping is a Portal view.)
+
+The CLI also forwards `--experiment-id` for compatibility with Experiment-capable
+API deployments. The standalone request-list API described here does not yet
+implement that filter; the CLI option does not introduce an Experiment dependency.
 
 ## Real-Time Log Streaming
 

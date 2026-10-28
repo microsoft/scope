@@ -107,6 +107,17 @@ modules. Coverage includes the extensionless installed `scope` executable, mock
 API commands, missing-URL failures, explicit URL precedence, offline help/version,
 and update checks; no release is published by these tests.
 
+### Archive download integrity
+
+`scope run download` and `scope run download-batch` share one atomic archive
+downloader. It streams compressed bytes to an exclusive temporary file in the
+destination directory, reports progress on stderr, verifies response
+`Content-Length` when present, and reads the full gzip stream through Node's
+gunzip implementation to validate framing and checksum. Only a validated
+temporary file is atomically renamed to the final destination. Failures remove
+the temporary file and preserve any existing destination; extraction starts
+only after validation succeeds.
+
 ## Versioning
 
 The release workflow sorts valid `cli/v*` tags in `microsoft/scope` semantically
