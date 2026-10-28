@@ -25,6 +25,11 @@ import {
 } from "../utils/project-scope.js";
 import { subscribeClient, unsubscribeClient } from "../utils/sse.js";
 import type { SSEClient } from "../utils/sse.js";
+import {
+  ExperimentMembershipCoordinator,
+  ExperimentMembershipError,
+  type ReplaceMembershipResult,
+} from "../experiment-membership.js";
 
 const CursorSchema = z.string().min(1).optional();
 const PageQuerySchema = ProjectIdQuerySchema.extend({
@@ -45,23 +50,40 @@ const ExperimentRequestInputSchema = CreateRequestInputSchema.omit({
 
 const CreateExperimentInputSchema = z
   .object({
-    mode: z.enum(["compose", "empty"]),
+    mode: z.enum(["compose", "empty", "existing"]),
     metadata: ExperimentMetadataInputSchema,
     requests: z.array(ExperimentRequestInputSchema).max(250_000).default([]),
+    requestIds: z.array(z.string().min(1)).max(250_000).default([]),
   })
   .superRefine((value, ctx) => {
-    if (value.mode === "empty" && value.requests.length !== 0) {
+    if (
+      value.mode === "empty" &&
+      (value.requests.length !== 0 || value.requestIds.length !== 0)
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["requests"],
-        message: "empty mode requires an empty requests array",
+        message: "empty mode requires no requests or requestIds",
       });
     }
-    if (value.mode === "compose" && value.requests.length === 0) {
+    if (
+      value.mode === "compose" &&
+      (value.requests.length === 0 || value.requestIds.length !== 0)
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["requests"],
-        message: "compose mode requires at least one request",
+        message: "compose mode requires new requests and no requestIds",
+      });
+    }
+    if (
+      value.mode === "existing" &&
+      (value.requestIds.length === 0 || value.requests.length !== 0)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["requestIds"],
+        message: "existing mode requires requestIds and no new requests",
       });
     }
   })
@@ -195,6 +217,22 @@ const RetryExperimentResponseSchema = z
   })
   .openapi("RetryExperimentResponse");
 
+const MembershipInputSchema = z
+  .object({
+    expectedExperimentRevisionId: z.string().min(1),
+    requestIds: z.array(z.string().min(1)).min(1).max(250_000),
+  })
+  .strict()
+  .openapi("ExperimentMembershipInput");
+
+const MembershipResponseSchema = z
+  .object({
+    experiment: ExperimentResponseSchema,
+    attachedRequestIds: z.array(z.string()),
+    detachedRequestIds: z.array(z.string()),
+  })
+  .openapi("ExperimentMembershipResponse");
+
 type Readiness = z.infer<typeof ReadinessSchema>;
 
 function store(ctx: RouteContext): ExperimentStore {
@@ -203,6 +241,36 @@ function store(ctx: RouteContext): ExperimentStore {
     executions: ctx.experimentExecutionsCollection,
     chunks: ctx.experimentChunksCollection,
   });
+}
+
+function membership(ctx: RouteContext): ExperimentMembershipCoordinator {
+  return new ExperimentMembershipCoordinator({
+    requests: ctx.requestCollection,
+    experiments: ctx.experimentCollection,
+    executions: ctx.experimentExecutionsCollection,
+    chunks: ctx.experimentChunksCollection,
+  });
+}
+
+function membershipResponse(result: ReplaceMembershipResult) {
+  return {
+    experiment: experimentResponse(result.experiment),
+    attachedRequestIds: result.attachedRequestIds,
+    detachedRequestIds: result.detachedRequestIds,
+  };
+}
+
+function sendMembershipError(
+  res: Response,
+  error: unknown,
+): boolean {
+  if (!(error instanceof ExperimentMembershipError)) return false;
+  res.status(error.status).json({
+    error: error.message,
+    code: error.code,
+    ...(error.conflicts ? { conflicts: error.conflicts } : {}),
+  });
+  return true;
 }
 
 function readiness(execution: ExperimentExecution): Readiness {
@@ -536,6 +604,8 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
     body: CreateExperimentInputSchema,
     response: CreateExperimentResponseSchema,
     errorResponses: {
+      400: { description: "Invalid request selection" },
+      404: { description: "Request not found" },
       409: { description: "Experiment identity conflict" },
     },
     handler: async (req, res) => {
@@ -544,6 +614,26 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
       const experimentExecutionId = uuidv4();
       const experimentRevisionId = uuidv4();
       const now = new Date();
+      if (req.body.mode === "existing") {
+        try {
+          const result = await membership(ctx).createFromExisting({
+            projectId,
+            experimentId,
+            experimentExecutionId,
+            experimentRevisionId,
+            metadata: req.body.metadata,
+            requestIds: req.body.requestIds,
+            now,
+          });
+          res.status(201).json({
+            experiment: experimentResponse(result.experiment),
+            requestIds: result.attachedRequestIds,
+          });
+        } catch (error) {
+          if (!sendMembershipError(res, error)) throw error;
+        }
+        return;
+      }
       const identities = req.body.requests.map(() => ({
         requestId: uuidv4(),
         runId: uuidv4(),
@@ -630,6 +720,64 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         experiment: experimentResponse(finalized),
         requestIds: requestDocs.map((doc) => doc._id),
       });
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "post",
+    path: "/api/v1/experiments/:id/requests",
+    tags: ["Experiments"],
+    summary: "Move standalone requests into an Experiment",
+    params: z.object({ id: z.string().min(1) }),
+    query: ProjectIdQuerySchema,
+    body: MembershipInputSchema,
+    response: MembershipResponseSchema,
+    errorResponses: {
+      404: { description: "Experiment or request not found" },
+      409: { description: "Stale revision or membership conflict" },
+    },
+    handler: async (req, res) => {
+      try {
+        const result = await membership(ctx).add({
+          projectId: getQueryProjectId(req),
+          experimentId: req.params.id,
+          expectedExperimentRevisionId:
+            req.body.expectedExperimentRevisionId,
+          requestIds: req.body.requestIds,
+        });
+        res.status(201).json(membershipResponse(result));
+      } catch (error) {
+        if (!sendMembershipError(res, error)) throw error;
+      }
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "delete",
+    path: "/api/v1/experiments/:id/requests",
+    tags: ["Experiments"],
+    summary: "Remove requests from an Experiment",
+    params: z.object({ id: z.string().min(1) }),
+    query: ProjectIdQuerySchema,
+    body: MembershipInputSchema,
+    response: MembershipResponseSchema,
+    errorResponses: {
+      404: { description: "Experiment or request not found" },
+      409: { description: "Stale revision or membership conflict" },
+    },
+    handler: async (req, res) => {
+      try {
+        const result = await membership(ctx).remove({
+          projectId: getQueryProjectId(req),
+          experimentId: req.params.id,
+          expectedExperimentRevisionId:
+            req.body.expectedExperimentRevisionId,
+          requestIds: req.body.requestIds,
+        });
+        res.status(201).json(membershipResponse(result));
+      } catch (error) {
+        if (!sendMembershipError(res, error)) throw error;
+      }
     },
   });
 

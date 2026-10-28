@@ -122,6 +122,7 @@ export class ExperimentDispatcher {
     this.dispatching = true;
     try {
       await this.coordinator.recoverInterruptedCreations(this.batchSize);
+      await this.coordinator.recoverInterruptedMemberships(this.batchSize);
       const candidates = await this.experiments
         .find(
           this.scanAfterExperimentId

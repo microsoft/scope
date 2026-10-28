@@ -37,6 +37,7 @@ import {
   isCriterionCompatibleWithGate,
   orderGates,
   computeTaskPromptId,
+  ExperimentStore,
   LEGACY_REQUEST_COMPOSITION_DEPRECATION_ID,
 } from "shared";
 import { trackMetric } from "telemetry";
@@ -85,6 +86,10 @@ import {
   requestedAgentCapabilities,
   validateAgentTarget,
 } from "../../utils/agent-helpers.js";
+import {
+  ExperimentMembershipCoordinator,
+  ExperimentMembershipError,
+} from "../../experiment-membership.js";
 
 type RequestCollection = RouteContext["requestCollection"];
 type RunFacetsResponse = z.infer<typeof RunFacetsResponseSchema>;
@@ -217,6 +222,83 @@ export function planResubmitResources(
 }
 
 export function registerRequestsRoutes(ctx: RouteContext): void {
+
+const experimentStore = new ExperimentStore({
+  experiments: ctx.experimentCollection,
+  executions: ctx.experimentExecutionsCollection,
+  chunks: ctx.experimentChunksCollection,
+});
+const experimentMembership = new ExperimentMembershipCoordinator({
+  requests: ctx.requestCollection,
+  experiments: ctx.experimentCollection,
+  executions: ctx.experimentExecutionsCollection,
+  chunks: ctx.experimentChunksCollection,
+});
+
+const coordinatedDeletionRevision = async (
+  documents: RequestDocument[],
+): Promise<
+  | {
+      experimentId: string;
+      experimentRevisionId: string;
+      revisionNumber: number;
+    }
+  | undefined
+> => {
+  const assigned = documents.filter(
+    (document): document is RequestDocument & { experimentId: string } =>
+      typeof document.experimentId === "string",
+  );
+  if (assigned.length === 0) return undefined;
+  const experimentIds = [...new Set(assigned.map(({ experimentId }) => experimentId))];
+  if (experimentIds.length !== 1) {
+    throw new ExperimentMembershipError(
+      "Bulk deletion cannot coordinate members from multiple Experiments; delete one Experiment selection at a time",
+      409,
+      "multiple-experiment-delete-conflict",
+      assigned.map(({ _id, experimentId }) => ({
+        requestId: _id,
+        experimentId,
+      })),
+    );
+  }
+  const experimentId = experimentIds[0]!;
+  const projectIds = [...new Set(assigned.map(({ projectId }) => projectId))];
+  if (projectIds.length !== 1) {
+    throw new ExperimentMembershipError(
+      "Experiment members must belong to one project",
+      409,
+      "cross-project-membership-conflict",
+      assigned.map(({ _id, experimentId: owner }) => ({
+        requestId: _id,
+        experimentId: owner,
+      })),
+    );
+  }
+  const projectId = projectIds[0]!;
+  const experiment = await experimentStore.get(projectId, experimentId);
+  if (!experiment) {
+    throw new ExperimentMembershipError(
+      `Owning Experiment ${experimentId} was not found`,
+      409,
+      "experiment-membership-owner-missing",
+      assigned.map(({ _id }) => ({ requestId: _id, experimentId })),
+    );
+  }
+  const result = await experimentMembership.remove({
+    projectId,
+    experimentId,
+    expectedExperimentRevisionId:
+      experiment.revision.experimentRevisionId,
+    requestIds: assigned.map(({ _id }) => _id),
+  });
+  return {
+    experimentId,
+    experimentRevisionId:
+      result.experiment.revision.experimentRevisionId,
+    revisionNumber: result.experiment.revision.revisionNumber,
+  };
+};
 
 const upload = multer({ dest: tmpdir() });
 
@@ -2287,7 +2369,18 @@ apiRoute(ctx.app, ctx.registry, {
   tags: ["Requests"],
   summary: "Bulk soft-delete requests",
   body: z.object({ ids: z.array(z.string()) }),
-  response: z.object({ deleted: z.number() }),
+  response: z.object({
+    deleted: z.number(),
+    notFound: z.array(z.string()),
+    membershipRevision: z.object({
+      experimentId: z.string(),
+      experimentRevisionId: z.string(),
+      revisionNumber: z.number().int(),
+    }).optional(),
+  }),
+  errorResponses: {
+    409: { description: "Deletion spans Experiments or membership changed" },
+  },
   handler: async (req, res) => {
     const { ids } = req.body as { ids?: string[] };
 
@@ -2297,24 +2390,48 @@ apiRoute(ctx.app, ctx.registry, {
     }
 
     // Find which IDs exist and are not already deleted
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length !== ids.length) {
+      res.status(400).json({ error: "Request IDs must be unique" });
+      return;
+    }
     const existingDocs = await ctx.requestCollection.find(
-      { _id: { $in: ids }, deletedAt: { $exists: false } },
-      { projection: { _id: 1 } }
+      { _id: { $in: uniqueIds }, deletedAt: { $exists: false } },
     ).toArray();
     const existingIds = new Set(existingDocs.map(d => d._id));
 
+    let membershipRevision;
+    try {
+      membershipRevision = await coordinatedDeletionRevision(existingDocs);
+    } catch (error) {
+      if (error instanceof ExperimentMembershipError) {
+        res.status(error.status).json({
+          error: error.message,
+          code: error.code,
+          ...(error.conflicts ? { conflicts: error.conflicts } : {}),
+        });
+        return;
+      }
+      throw error;
+    }
+
     // Soft-delete all matching documents
     const result = await ctx.requestCollection.updateMany(
-      { _id: { $in: ids }, deletedAt: { $exists: false } },
+      {
+        _id: { $in: uniqueIds },
+        deletedAt: { $exists: false },
+        experimentId: { $exists: false },
+      },
       { $set: { deletedAt: new Date() } }
     );
 
     // Determine which IDs were not found or already deleted
-    const notFound = ids.filter(id => !existingIds.has(id));
+    const notFound = uniqueIds.filter(id => !existingIds.has(id));
 
     res.json({
       deleted: result.modifiedCount,
       notFound,
+      ...(membershipRevision ? { membershipRevision } : {}),
     });
   },
 });
@@ -2326,27 +2443,68 @@ apiRoute(ctx.app, ctx.registry, {
   tags: ["Requests"],
   summary: "Soft-delete request",
   params: z.object({ id: z.string() }),
-  response: z.object({ message: z.string() }),
-  errorResponses: { 404: { description: "Not found" } },
+  response: z.object({
+    id: z.string(),
+    deleted: z.literal(true),
+    membershipRevision: z.object({
+      experimentId: z.string(),
+      experimentRevisionId: z.string(),
+      revisionNumber: z.number().int(),
+    }).optional(),
+  }),
+  errorResponses: {
+    404: { description: "Not found" },
+    409: { description: "Membership changed" },
+    410: { description: "Already deleted" },
+  },
   handler: async (req, res) => {
     const { id } = req.params;
 
+    const document = await ctx.requestCollection.findOne({ _id: id });
+    if (!document) {
+      res.status(404).json({ error: "Request not found" });
+      return;
+    }
+    if (document.deletedAt) {
+      res.status(410).json({ error: "Request already deleted" });
+      return;
+    }
+    let membershipRevision;
+    try {
+      membershipRevision = await coordinatedDeletionRevision([document]);
+    } catch (error) {
+      if (error instanceof ExperimentMembershipError) {
+        res.status(error.status).json({
+          error: error.message,
+          code: error.code,
+          ...(error.conflicts ? { conflicts: error.conflicts } : {}),
+        });
+        return;
+      }
+      throw error;
+    }
     const result = await ctx.requestCollection.updateOne(
-      { _id: id, deletedAt: { $exists: false } },
+      {
+        _id: id,
+        deletedAt: { $exists: false },
+        experimentId: { $exists: false },
+      },
       { $set: { deletedAt: new Date() } }
     );
 
     if (result.matchedCount === 0) {
-      const exists = await ctx.requestCollection.findOne({ _id: id });
-      if (!exists) {
-        res.status(404).json({ error: "Request not found" });
-      } else {
-        res.status(410).json({ error: "Request already deleted" });
-      }
+      res.status(409).json({
+        error: "Request membership changed before deletion",
+        code: "request-membership-contention",
+      });
       return;
     }
 
-    res.json({ id, deleted: true });
+    res.json({
+      id,
+      deleted: true,
+      ...(membershipRevision ? { membershipRevision } : {}),
+    });
   },
 });
 
