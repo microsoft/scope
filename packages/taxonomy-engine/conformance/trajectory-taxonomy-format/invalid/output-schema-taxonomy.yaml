@@ -1,0 +1,13 @@
+schema_version: scope/taxonomy/v1
+id: stale
+version: 1.0.0
+surfaces: []
+elements:
+  - id: stale-element
+    label: Stale
+    implementation:
+      type: prompt
+      prompt: Stale shape.
+    preconditions: {}
+    output_schema:
+      type: object

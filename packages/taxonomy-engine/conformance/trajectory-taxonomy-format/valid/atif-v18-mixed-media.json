@@ -1,0 +1,69 @@
+{
+  "schema_version": "ATIF-v1.8",
+  "trajectory_id": "conformance-v18",
+  "session_id": "shared-run",
+  "agent": { "name": "fixture", "version": "1.0.0" },
+  "steps": [
+    {
+      "step_id": 1,
+      "source": "user",
+      "message": [
+        { "type": "text", "text": "Describe the attached evidence." },
+        {
+          "type": "image",
+          "source": { "media_type": "image/png", "path": "images/evidence.png" }
+        },
+        {
+          "type": "audio",
+          "source": {
+            "media_type": "audio/mp3",
+            "path": "audio/evidence.mp3",
+            "duration_sec": 1.5
+          }
+        }
+      ]
+    },
+    {
+      "step_id": 2,
+      "source": "agent",
+      "message": "Calling account/query.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call-1",
+          "function_name": "account/query",
+          "arguments": {},
+          "extra": {
+            "scope": {
+              "input_validation": {
+                "status": "invalid",
+                "issues": [{ "code": "missing_field" }]
+              }
+            }
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call-1",
+            "content": [
+              { "type": "text", "text": "Account 42." },
+              {
+                "type": "audio",
+                "source": {
+                  "media_type": "audio/x-wav",
+                  "path": "audio/result.wav"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 3,
+      "source": "agent",
+      "message": "I used account 24 instead."
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "deterministic-elements",
+  "agent": {
+    "name": "fixture",
+    "version": "1.0.0"
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "source": "user",
+      "message": "Query the database with a numeric limit."
+    },
+    {
+      "step_id": 2,
+      "source": "agent",
+      "message": "Discovered and invoked db/query.",
+      "extra": {
+        "scope": {
+          "discoveries": [
+            {
+              "source_id": "db",
+              "extension_point": "db/query"
+            }
+          ]
+        }
+      },
+      "tool_calls": [
+        {
+          "tool_call_id": "query-1",
+          "function_name": "db/query",
+          "arguments": {
+            "limit": "many"
+          },
+          "extra": {
+            "scope": {
+              "source_id": "db",
+              "outcome": "error",
+              "input_validation": {
+                "status": "invalid",
+                "issues": [
+                  {
+                    "code": "invalid_type",
+                    "path": "$.limit",
+                    "message": "Expected a number."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "extra": {
+    "scope": {
+      "schema_version": "scope.atif-extension.v1",
+      "trajectory_state": "complete",
+      "task": "Query the database with a numeric limit.",
+      "available_sources": [
+        {
+          "id": "db",
+          "label": "db/query",
+          "surface_id": "surface-mcp"
+        }
+      ]
+    }
+  }
+}

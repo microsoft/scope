@@ -3,6 +3,7 @@
 
 import {
   gatesSatisfyInvariant,
+  type CriterionSubject,
   type GateId,
 } from "shared";
 import {
@@ -31,6 +32,11 @@ Given a natural-language description of a behavior or pattern to detect, you mus
    - Contain only lowercase letters, digits, and underscores
    - Be concise but descriptive (e.g., has_unit_tests, uses_typescript, build_succeeds)
 
+3. Classify the evaluation SUBJECT — whether the behavior must be judged across the WHOLE run or within a SINGLE iteration in isolation:
+   - "run": the behavior spans multiple steps/iterations or describes a transition over the course of the session — phrasing like "at any point", "ever", "then later", "added then removed", "during the run", or anything only confirmable by viewing the entire run together.
+   - "iteration": the behavior is a single end-state fact or a per-step property judgeable from one iteration alone (e.g., "uses TypeScript", "has a Dockerfile", "ran the test suite this turn").
+   When unsure, prefer "run".
+
 Here are examples of good criteria prompts:
 - Codebase evidence: "The project uses the React framework. Look for a react dependency in package.json and .jsx or .tsx files containing React components."
 - Codebase evidence: "The project uses Azure Bicep for infrastructure as code. Look for *.bicep files, bicepconfig.json, or a main.bicep entry point."
@@ -39,7 +45,7 @@ Here are examples of good criteria prompts:
 - Tool-output evidence (non-gate command): "The agent verified the running server responds. The captured tool-call history contains a request to the local endpoint (e.g. a curl to http://localhost) that returned a 2xx status."
 
 Respond with ONLY a JSON object in this exact format (no markdown, no code fences):
-{"prompt": "your evaluation prompt here", "suggestedId": "your_suggested_id"}`;
+{"prompt": "your evaluation prompt here", "suggestedId": "your_suggested_id", "suggestedSubject": "run"}`;
 
 /**
  * Per-gate description of the evidence a criterion compatible with that gate is
@@ -165,6 +171,10 @@ export interface GenerateResult {
   suggestedId: string;
   suggestedParents: string[];
   suggestedChildren: string[];
+  /** Suggested evaluation granularity for observation criteria. Defaults to
+   *  "run"; "iteration" only when the model clearly detects an end-state /
+   *  per-step property. Ignored by gate criteria (always per-iteration). #1156. */
+  suggestedSubject: CriterionSubject;
 }
 
 export interface CriteriaPromptRequest {
@@ -190,6 +200,12 @@ function sanitizeId(suggestedId: unknown): string {
     .replace(/_+/g, "_")
     .replace(/_$/, "");
   return sanitized || "new_criterion";
+}
+
+/** Coerce a model-suggested subject. Defaults to "run" — "iteration" is only
+ *  honored when the model returns it exactly (matching "prefer run when unsure"). */
+function sanitizeSubject(value: unknown): CriterionSubject {
+  return value === "iteration" ? "iteration" : "run";
 }
 
 function parseJson(content: string): any {
@@ -222,7 +238,7 @@ export function buildCriteriaAuthoringRequest(
 
 export function parseCriteriaAuthoringResponse(
   content: string,
-): { prompt: string; suggestedId: string } {
+): { prompt: string; suggestedId: string; suggestedSubject: CriterionSubject } {
   const parsed: unknown = parseJson(content);
   if (
     !parsed ||
@@ -236,6 +252,9 @@ export function parseCriteriaAuthoringResponse(
   return {
     prompt: String(value.prompt).trim(),
     suggestedId: sanitizeId(value.suggestedId),
+    suggestedSubject: sanitizeSubject(
+      (parsed as { suggestedSubject?: unknown }).suggestedSubject,
+    ),
   };
 }
 
@@ -306,7 +325,7 @@ async function author(
   behavior: string,
   gates?: GateId[],
   explicitModel?: string,
-): Promise<{ prompt: string; suggestedId: string }> {
+): Promise<{ prompt: string; suggestedId: string; suggestedSubject: CriterionSubject }> {
   const content = await chat(
     buildCriteriaAuthoringRequest(behavior, gates, model),
     explicitModel,
@@ -431,5 +450,6 @@ export async function generateCriteriaPrompt(
     suggestedId: authored.suggestedId,
     suggestedParents,
     suggestedChildren,
+    suggestedSubject: authored.suggestedSubject,
   };
 }

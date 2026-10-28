@@ -1,0 +1,69 @@
+schema_version: scope/taxonomy/v1
+id: conformance
+version: 1.0.0
+surfaces:
+  - id: surface-mcp
+    label: MCP
+elements:
+  - schema_version: scope/taxonomy/v1
+    id: malformed
+    label: Malformed Invocation
+    implementation:
+      type: prompt
+      prompt: Assess malformed invocation.
+    preconditions: {}
+    output:
+      evidence_roles:
+        call:
+          type: atif.tool_call
+          max: 1
+          description: Invalid call.
+        issue:
+          type: scope.input_validation_issue
+          description: Issue owned by the call.
+      constraints:
+        - kind: descendant_of
+          role: issue
+          reference_role: call
+  - schema_version: scope/taxonomy/v1
+    id: content
+    label: Content Misused
+    implementation:
+      type: prompt
+      prompt: Assess content misuse.
+    preconditions: {}
+    output:
+      evidence_roles:
+        returned_content:
+          type: atif.observation_result
+          max: 1
+          description: Returned result.
+        misuse:
+          type: atif.step
+          description: Later misuse.
+      constraints:
+        - kind: after
+          role: misuse
+          reference_role: returned_content
+          within: $["steps"]
+  - schema_version: scope/taxonomy/v1
+    id: owned
+    label: Semantically Owned Result
+    implementation:
+      type: prompt
+      prompt: Assess semantic tool-call ownership.
+    preconditions: {}
+    output:
+      evidence_roles:
+        call:
+          type: atif.tool_call
+          max: 1
+          description: Owning call.
+        result:
+          type: atif.observation_result
+          max: 1
+          description: Result semantically linked to the call.
+      constraints:
+        - kind: owned_by
+          role: result
+          owner_role: call

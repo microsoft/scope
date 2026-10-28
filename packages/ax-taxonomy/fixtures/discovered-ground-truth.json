@@ -1,0 +1,18 @@
+{
+  "det-input-discovered": {
+    "beh-discovered": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

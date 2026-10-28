@@ -1,0 +1,15 @@
+{
+  "expected_code": "role_cardinality",
+  "element_id": "malformed",
+  "assessment": {
+    "state": "completed",
+    "observed": true,
+    "occurrences": [
+      {
+        "evidence": [
+          { "role": "call", "path": "$.steps[1].tool_calls[0]" }
+        ]
+      }
+    ]
+  }
+}

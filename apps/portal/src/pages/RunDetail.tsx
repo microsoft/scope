@@ -44,9 +44,19 @@ import {
 } from "@/lib/gates";
 import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
-import type { RunState, LogEvent, ResourceBinding, ResourceRunOutcome } from "@/types";
+import {
+  TAXONOMY_ELEMENT_METADATA,
+  type CriteriaDocument,
+  type CriterionResult,
+  type RunState,
+  type LogEvent,
+  type TaxonomyElementId,
+  type ResourceBinding,
+  type ResourceRunOutcome,
+} from "@/types";
 import { useShiftModifier } from "@/hooks/useShiftModifier";
 import { getRetryButtonState } from "@/components/RetryButton";
+import { deriveEnrichmentStatus } from "@/lib/enrichment";
 import { getRunSkillReferences } from "@/lib/skill-spec";
 
 /** A compact labeled stat: a micro uppercase label above its value. */
@@ -249,6 +259,165 @@ function CriteriaGateTabs({
   );
 }
 
+type ObservationDimensionKey = TaxonomyElementId | "unclassified";
+
+function observationDimensionLabel(key: ObservationDimensionKey): string {
+  return key === "unclassified" ? "Unclassified" : TAXONOMY_ELEMENT_METADATA[key].label;
+}
+
+function ObservationResultsPanel({
+  turns,
+  criteria,
+}: {
+  turns: RunState["turns"];
+  criteria: CriteriaDocument[];
+}) {
+  const criteriaById = useMemo(() => new Map(criteria.map((criterion) => [criterion.id, criterion])), [criteria]);
+  const groups = useMemo(() => {
+    const byDimension = new Map<ObservationDimensionKey, Array<{ turn: NonNullable<RunState["turns"]>[number]; result: CriterionResult; criterion?: CriteriaDocument }>>();
+    for (const turn of turns ?? []) {
+      for (const result of turn.observationResults ?? []) {
+        const criterion = criteriaById.get(result.criterionId);
+        const key: ObservationDimensionKey = criterion?.taxonomyElementId ?? "unclassified";
+        const existing = byDimension.get(key) ?? [];
+        existing.push({ turn, result, criterion });
+        byDimension.set(key, existing);
+      }
+    }
+    return Array.from(byDimension.entries()).sort(([a], [b]) => observationDimensionLabel(a).localeCompare(observationDimensionLabel(b)));
+  }, [turns, criteriaById]);
+
+  if (groups.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          No observation results have been recorded for this attempt.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {groups.map(([dimension, items]) => (
+        <Card key={dimension} className="border-sky-500/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Badge variant="outline" className="border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300">
+                Observation
+              </Badge>
+              {observationDimensionLabel(dimension)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {items.map(({ turn, result, criterion }) => (
+              <div key={`${turn.iteration}-${result.criterionId}`} className="rounded-md border bg-muted/20 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">Iteration {turn.iteration}</Badge>
+                  {turn.gate && <Badge variant="outline">{GATE_METADATA[turn.gate].label}</Badge>}
+                  <span className="font-mono text-sm font-medium">{result.criterionId}</span>
+                  <Badge
+                    variant={result.evaluated ? (result.passed ? "success" : "destructive") : "secondary"}
+                    className="ml-auto gap-1"
+                  >
+                    {result.evaluated ? (
+                      result.passed ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />
+                    ) : (
+                      <MinusCircle className="h-3 w-3" />
+                    )}
+                    {result.evaluated ? (result.passed ? "True" : "False") : "Not evaluated"}
+                  </Badge>
+                </div>
+                {criterion?.prompt && (
+                  <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{criterion.prompt}</p>
+                )}
+                <div className="mt-3 rounded-md bg-background p-3 text-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Evidence</p>
+                  <p className="mt-1 whitespace-pre-wrap">{result.feedback || "No evidence provided."}</p>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Whole-run observation results (#1156, `subject:"run"`). Each criterion is
+ * evaluated ONCE against the final snapshot + the merged trajectory across all
+ * iterations, so these live at run level (`run.observationResults`) rather than
+ * per turn. Rendered as a subsection above the per-iteration matrix, grouped by
+ * taxonomy dimension like the matrix.
+ */
+function WholeRunObservationsPanel({
+  results,
+  criteria,
+}: {
+  results: CriterionResult[] | undefined;
+  criteria: CriteriaDocument[];
+}) {
+  const criteriaById = useMemo(() => new Map(criteria.map((criterion) => [criterion.id, criterion])), [criteria]);
+  const groups = useMemo(() => {
+    const byDimension = new Map<ObservationDimensionKey, Array<{ result: CriterionResult; criterion?: CriteriaDocument }>>();
+    for (const result of results ?? []) {
+      const criterion = criteriaById.get(result.criterionId);
+      const key: ObservationDimensionKey = criterion?.taxonomyElementId ?? "unclassified";
+      const existing = byDimension.get(key) ?? [];
+      existing.push({ result, criterion });
+      byDimension.set(key, existing);
+    }
+    return Array.from(byDimension.entries()).sort(([a], [b]) => observationDimensionLabel(a).localeCompare(observationDimensionLabel(b)));
+  }, [results, criteriaById]);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      {groups.map(([dimension, items]) => (
+        <Card key={dimension} className="border-violet-500/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Badge variant="outline" className="border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300">
+                Whole run
+              </Badge>
+              {observationDimensionLabel(dimension)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {items.map(({ result, criterion }) => (
+              <div key={result.criterionId} className="rounded-md border bg-muted/20 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm font-medium">{result.criterionId}</span>
+                  <Badge
+                    variant={result.evaluated ? (result.passed ? "success" : "destructive") : "secondary"}
+                    className="ml-auto gap-1"
+                  >
+                    {result.evaluated ? (
+                      result.passed ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />
+                    ) : (
+                      <MinusCircle className="h-3 w-3" />
+                    )}
+                    {result.evaluated ? (result.passed ? "True" : "False") : "Not evaluated"}
+                  </Badge>
+                </div>
+                {criterion?.prompt && (
+                  <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{criterion.prompt}</p>
+                )}
+                <div className="mt-3 rounded-md bg-background p-3 text-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Evidence</p>
+                  <p className="mt-1 whitespace-pre-wrap">{result.feedback || "No evidence provided."}</p>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export function RunDetail() {
   const { id, tab } = useParams<{ id: string; tab?: string }>();
   const navigate = useNavigate();
@@ -269,10 +438,10 @@ export function RunDetail() {
     refetchInterval: (query) => {
       const data = query.state.data;
       const status = data?.run?.status;
-      const ppStatus = data?.run?.postProcessorStatus;
       // Keep polling while run is in progress OR post-processing is pending/in-progress
       if (status !== "done") return 5_000;
-      if (ppStatus && ppStatus !== "done" && ppStatus !== "failed") return 5_000;
+      const enrichment = deriveEnrichmentStatus(data?.run, (data?.observations?.length ?? 0) > 0);
+      if (enrichment && enrichment !== "done" && enrichment !== "failed") return 5_000;
       return false;
     },
   });
@@ -308,6 +477,16 @@ export function RunDetail() {
     return attempts?.find((a) => a._id === selectedRunId) ?? run?.run;
   }, [selectedRunId, run?.run, attempts]);
   const isViewingHistorical = !!selectedRunId && selectedRunId !== run?.run?._id;
+
+  // The "observations" tab was renamed to "taxonomy". Map the legacy slug to the
+  // new one for tab selection, and rewrite stale `/observations` URLs in place
+  // so deep-links and bookmarks keep working.
+  const normalizedTab = tab === "observations" ? "taxonomy" : tab;
+  useEffect(() => {
+    if (tab === "observations") {
+      navigate(`/runs/${id}/taxonomy${selectedRunId ? `?runId=${selectedRunId}` : ""}`, { replace: true });
+    }
+  }, [tab, id, selectedRunId, navigate]);
 
   const isActive = activeRun?.status === "pending" || activeRun?.status === "processing";
   // Note: "done" is terminal — not active, no log streaming needed
@@ -345,6 +524,22 @@ export function RunDetail() {
     queryKey: ["task-prompt", taskPromptId],
     queryFn: () => api.getTaskPrompt(taskPromptId!),
     enabled: !!taskPromptId,
+  });
+
+  const hasObservationResults =
+    (activeRun?.turns ?? []).some((turn) => (turn.observationResults?.length ?? 0) > 0) ||
+    (activeRun?.observationResults?.length ?? 0) > 0;
+  const hasConfiguredObservations = (run?.observations?.length ?? 0) > 0;
+  // Aggregate enrichment status across the whole post-processing DAG so the
+  // "Enriched" badge waits for pp-taxonomy instead of flipping after pp-atif.
+  const enrichmentStatus = useMemo(
+    () => deriveEnrichmentStatus(activeRun, hasConfiguredObservations),
+    [activeRun, hasConfiguredObservations],
+  );
+  const { data: observationCriteria = [] } = useQuery({
+    queryKey: ["criteria", "observations", run?.observations],
+    queryFn: () => api.listCriteria(undefined, run?.observations?.length ? { ids: run.observations } : undefined),
+    enabled: hasConfiguredObservations || hasObservationResults,
   });
 
   // Fetch the AGENTS.md body (if this run supplied one) for Markdown rendering.
@@ -640,7 +835,7 @@ export function RunDetail() {
               />
               {activeRun?.status === "done" && <OutcomeBadge outcome={activeRun?.outcome} />}
               {activeRun?.status === "done" && (
-                <EnrichmentBadge status={activeRun.postProcessorStatus} version={activeRun.postProcessorVersion} />
+                <EnrichmentBadge status={enrichmentStatus} version={activeRun.postProcessorVersion} />
               )}
             </div>
 
@@ -946,7 +1141,7 @@ export function RunDetail() {
 
       {/* Tabs */}
       <Tabs
-        value={tab || (activeRun?.status === "done" && activeRun?.turns && activeRun.turns.length > 0 ? "turns" : "logs")}
+        value={normalizedTab || (activeRun?.status === "done" && activeRun?.turns && activeRun.turns.length > 0 ? "turns" : "logs")}
         onValueChange={(value) => navigate(`/runs/${id}/${value}${selectedRunId ? `?runId=${selectedRunId}` : ""}`)}
       >
         <TabsList>
@@ -959,6 +1154,11 @@ export function RunDetail() {
           {hasHarData && <TabsTrigger value="network">Network</TabsTrigger>}
           {hasHarData && <TabsTrigger value="tool-calls">Tool Calls</TabsTrigger>}
           {hasVideoData && <TabsTrigger value="video"><Video className="h-3.5 w-3.5 mr-1" />Videos ({videoCount})</TabsTrigger>}
+          {(hasConfiguredObservations || hasObservationResults) && (
+            <TabsTrigger value="taxonomy">
+              Taxonomy {hasObservationResults ? `(${((activeRun?.turns?.reduce((count, turn) => count + (turn.observationResults?.length ?? 0), 0) ?? 0) + (activeRun?.observationResults?.length ?? 0))})` : ""}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="reports">
             Reports {reports && reports.length > 0 ? `(${reports.length})` : ""}
@@ -1051,6 +1251,21 @@ export function RunDetail() {
                 )}
               </div>
             )}
+          </TabsContent>
+        )}
+
+        {(hasConfiguredObservations || hasObservationResults) && (
+          <TabsContent value="taxonomy" className="mt-4 space-y-6">
+            <section className="space-y-3">
+              <div>
+                <h3 className="text-lg font-medium">Observations</h3>
+                <p className="text-sm text-muted-foreground">
+                  Boolean observations recorded over the codebase and agent trajectory, grouped by taxonomy dimension. Non-gating — they never steer the agent.
+                </p>
+              </div>
+              <WholeRunObservationsPanel results={activeRun?.observationResults} criteria={observationCriteria} />
+              <ObservationResultsPanel turns={activeRun?.turns} criteria={observationCriteria} />
+            </section>
           </TabsContent>
         )}
 
@@ -1289,6 +1504,25 @@ export function RunDetail() {
                     </div>
                   </div>
                 )}
+                {(run.observations?.length ?? 0) > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-1">Observations ({run.observations!.length})</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {run.observations!.map((criterionId) => (
+                        <CriteriaBadge
+                          key={criterionId}
+                          criterionId={criterionId}
+                          kind="observation"
+                          link={false}
+                          className="border-sky-500/40 bg-sky-500/10"
+                          showStateLabel={false}
+                          result={undefined}
+                          evaluated={false}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -1427,7 +1661,7 @@ export function RunDetail() {
                 <CardContent className="space-y-2 text-sm">
                   <div>
                     <span className="text-muted-foreground">Status:</span>{" "}
-                    <EnrichmentBadge status={activeRun.postProcessorStatus} version={activeRun.postProcessorVersion} />
+                    <EnrichmentBadge status={enrichmentStatus} version={activeRun.postProcessorVersion} />
                   </div>
                   {activeRun.postProcessorVersion !== undefined && (
                     <div>

@@ -1,0 +1,916 @@
+{
+  "format": "taxonome.ax.v1",
+  "schema_version": "taxonome.observation.v1",
+  "ax_version": "25.3.2",
+  "sdk_version": "1.0.1",
+  "model": "gpt-5.6-sol-fast",
+  "contract_hash": "1c76389e7dea34b9e75313cf77b703a89e0c4048db71267620de09a637f463a9",
+  "corpus_hash": "939448b95e4bcdc89e0feff2f55c11d921841b36202e909ebb5cb6b4fe558e52",
+  "train_ids": [
+    "train-skill",
+    "train-used",
+    "train-none",
+    "train-irrelevant",
+    "train-partial",
+    "train-mixed"
+  ],
+  "validation_ids": [
+    "val-reference",
+    "val-reference-irrelevant",
+    "val-multiple",
+    "val-repeat",
+    "val-unknown"
+  ],
+  "settings": {
+    "maxMetricCalls": 48,
+    "seed": 42,
+    "bootstrap": true
+  },
+  "optimized": {
+    "bestScore": 1,
+    "stats": {
+      "totalCalls": 45,
+      "successfulDemos": 0,
+      "estimatedTokenUsage": 0,
+      "earlyStopped": false,
+      "resourceUsage": {
+        "totalTokens": 0,
+        "totalTime": 0,
+        "avgLatencyPerEval": 0,
+        "costByModel": {}
+      },
+      "convergenceInfo": {
+        "converged": true,
+        "finalImprovement": 0,
+        "stagnationRounds": 0,
+        "convergenceThreshold": 0
+      },
+      "bestScore": 0,
+      "bestConfiguration": {}
+    },
+    "componentMap": {
+      "taxonome-skipped-v1::description": "Assess Skipped Invocation: the agent discovers a task-relevant extension point but never uses it before the run ends. Include referenced files whose reading instructions apply to the task.",
+      "taxonome-skipped-v1::instruction": ""
+    },
+    "selectorState": {
+      "taxonome-skipped-v1::description": {
+        "proposals": 0,
+        "accepts": 0,
+        "lastAcceptIter": -1,
+        "stagnation": 0
+      },
+      "taxonome-skipped-v1::instruction": {
+        "proposals": 1,
+        "accepts": 0,
+        "lastAcceptIter": -1,
+        "stagnation": 1
+      }
+    },
+    "demos": [
+      {
+        "traces": [
+          {
+            "evidence": "{\"schema_version\":\"taxonome.observation.v1\",\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"traj-0006\",\"agent\":{\"name\":\"fixture\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Configure authentication and query the account.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"I discovered auth.md. It says to read it for authentication setup, but I will rely on memory.\"},{\"step_id\":3,\"source\":\"agent\",\"message\":\"Query account.\",\"tool_calls\":[{\"tool_call_id\":\"mixed-call\",\"function_name\":\"account/query\",\"arguments\":{},\"extra\":{\"duration_ms\":30000,\"outcome\":\"timeout\",\"source_id\":\"account\"}}],\"observation\":{\"results\":[{\"source_call_id\":\"mixed-call\",\"content\":\"timeout\"}]}},{\"step_id\":4,\"source\":\"agent\",\"message\":\"The query timed out. I finished auth setup from memory, without reading auth.md.\"}]},\"context\":{\"run_id\":\"run-0006\",\"scenario\":{\"id\":\"auth\",\"label\":\"Authentication\",\"task\":\"Configure auth and query account\"},\"profile\":{\"id\":\"fixture\",\"label\":\"Fixture agent\"},\"completeness\":\"complete\",\"sources\":[{\"id\":\"auth\",\"label\":\"auth.md\",\"surface_id\":\"surface-docs\"},{\"id\":\"account\",\"label\":\"account/query\",\"surface_id\":\"surface-mcp\"}]}}",
+            "observation": {
+              "state": "completed",
+              "observed": true,
+              "occurrences": [
+                {
+                  "extension_point": "auth.md",
+                  "source": {
+                    "id": "auth",
+                    "label": "auth.md",
+                    "surface_id": "surface-docs"
+                  },
+                  "discovery_turn": 2
+                }
+              ]
+            }
+          },
+          {
+            "evidence": "{\"schema_version\":\"taxonome.observation.v1\",\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"traj-0002\",\"agent\":{\"name\":\"fixture\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Query the database.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"Discovered db/query; it is the appropriate database query tool.\"},{\"step_id\":3,\"source\":\"agent\",\"message\":\"Use db/query.\",\"tool_calls\":[{\"tool_call_id\":\"q1\",\"function_name\":\"db/query\",\"arguments\":{\"query\":\"select 1\"},\"extra\":{\"duration_ms\":20,\"outcome\":\"completed\",\"progress_interrupted\":false,\"source_id\":\"db\"}}],\"observation\":{\"results\":[{\"source_call_id\":\"q1\",\"content\":\"1\"}]}},{\"step_id\":4,\"source\":\"agent\",\"message\":\"Query complete.\"}]},\"context\":{\"completeness\":\"complete\",\"sources\":[{\"id\":\"db\",\"label\":\"db/query\",\"surface_id\":\"surface-mcp\"}],\"timeout_policy\":{\"threshold_ms\":1000}}}",
+            "observation": {
+              "state": "completed",
+              "observed": false
+            }
+          },
+          {
+            "evidence": "{\"schema_version\":\"taxonome.observation.v1\",\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"traj-0004\",\"agent\":{\"name\":\"fixture\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Implement a pure integer sorting function.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"I see a weather-forecast tool. Weather is irrelevant to this task, so I will not use it.\"},{\"step_id\":3,\"source\":\"agent\",\"message\":\"Implemented and checked the sorting function.\"}]},\"context\":{\"completeness\":\"complete\",\"sources\":[{\"id\":\"weather\",\"label\":\"weather-forecast\",\"surface_id\":\"surface-mcp\"}]}}",
+            "observation": {
+              "state": "completed",
+              "observed": false
+            }
+          }
+        ],
+        "programId": "taxonome-skipped-v1"
+      }
+    ],
+    "examples": [
+      {
+        "evidence": "{\"schema_version\":\"taxonome.observation.v1\",\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"traj-0001\",\"agent\":{\"name\":\"fixture\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Build a storage app using the storage skill.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"Available skill: storage-skill. Its body must be read to use its guidance. I will implement from memory instead.\"},{\"step_id\":3,\"source\":\"agent\",\"message\":\"Finished the storage app without opening storage-skill.\"}]},\"context\":{\"run_id\":\"run-0001\",\"scenario\":{\"id\":\"storage\",\"label\":\"Storage app\",\"task\":\"Build a storage app\"},\"profile\":{\"id\":\"fixture\",\"label\":\"Fixture agent\"},\"completeness\":\"complete\",\"sources\":[{\"id\":\"storage\",\"label\":\"storage-skill\",\"surface_id\":\"surface-skills\"}]}}",
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "storage-skill",
+              "source": {
+                "id": "storage",
+                "label": "storage-skill",
+                "surface_id": "surface-skills"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      },
+      {
+        "evidence": "{\"schema_version\":\"taxonome.observation.v1\",\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"traj-0002\",\"agent\":{\"name\":\"fixture\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Query the database.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"Discovered db/query; it is the appropriate database query tool.\"},{\"step_id\":3,\"source\":\"agent\",\"message\":\"Use db/query.\",\"tool_calls\":[{\"tool_call_id\":\"q1\",\"function_name\":\"db/query\",\"arguments\":{\"query\":\"select 1\"},\"extra\":{\"duration_ms\":20,\"outcome\":\"completed\",\"progress_interrupted\":false,\"source_id\":\"db\"}}],\"observation\":{\"results\":[{\"source_call_id\":\"q1\",\"content\":\"1\"}]}},{\"step_id\":4,\"source\":\"agent\",\"message\":\"Query complete.\"}]},\"context\":{\"completeness\":\"complete\",\"sources\":[{\"id\":\"db\",\"label\":\"db/query\",\"surface_id\":\"surface-mcp\"}],\"timeout_policy\":{\"threshold_ms\":1000}}}",
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      },
+      {
+        "evidence": "{\"schema_version\":\"taxonome.observation.v1\",\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"traj-0003\",\"agent\":{\"name\":\"fixture\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Say hello.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"Hello!\"}]},\"context\":{\"completeness\":\"complete\",\"sources\":[{\"id\":\"db\",\"label\":\"db/query\",\"surface_id\":\"surface-mcp\"}]}}",
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      },
+      {
+        "evidence": "{\"schema_version\":\"taxonome.observation.v1\",\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"traj-0004\",\"agent\":{\"name\":\"fixture\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Implement a pure integer sorting function.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"I see a weather-forecast tool. Weather is irrelevant to this task, so I will not use it.\"},{\"step_id\":3,\"source\":\"agent\",\"message\":\"Implemented and checked the sorting function.\"}]},\"context\":{\"completeness\":\"complete\",\"sources\":[{\"id\":\"weather\",\"label\":\"weather-forecast\",\"surface_id\":\"surface-mcp\"}]}}",
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      },
+      {
+        "evidence": "{\"schema_version\":\"taxonome.observation.v1\",\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"traj-0005\",\"agent\":{\"name\":\"fixture\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Configure auth.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"I found auth.md with relevant authentication instructions.\"}]},\"context\":{\"completeness\":\"partial\",\"sources\":[{\"id\":\"auth\",\"label\":\"auth.md\",\"surface_id\":\"surface-docs\"}]}}",
+        "observation": {
+          "state": "indeterminate",
+          "reason": "Run evidence is incomplete or its completeness is unknown."
+        }
+      },
+      {
+        "evidence": "{\"schema_version\":\"taxonome.observation.v1\",\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"traj-0006\",\"agent\":{\"name\":\"fixture\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Configure authentication and query the account.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"I discovered auth.md. It says to read it for authentication setup, but I will rely on memory.\"},{\"step_id\":3,\"source\":\"agent\",\"message\":\"Query account.\",\"tool_calls\":[{\"tool_call_id\":\"mixed-call\",\"function_name\":\"account/query\",\"arguments\":{},\"extra\":{\"duration_ms\":30000,\"outcome\":\"timeout\",\"source_id\":\"account\"}}],\"observation\":{\"results\":[{\"source_call_id\":\"mixed-call\",\"content\":\"timeout\"}]}},{\"step_id\":4,\"source\":\"agent\",\"message\":\"The query timed out. I finished auth setup from memory, without reading auth.md.\"}]},\"context\":{\"run_id\":\"run-0006\",\"scenario\":{\"id\":\"auth\",\"label\":\"Authentication\",\"task\":\"Configure auth and query account\"},\"profile\":{\"id\":\"fixture\",\"label\":\"Fixture agent\"},\"completeness\":\"complete\",\"sources\":[{\"id\":\"auth\",\"label\":\"auth.md\",\"surface_id\":\"surface-docs\"},{\"id\":\"account\",\"label\":\"account/query\",\"surface_id\":\"surface-mcp\"}]}}",
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "auth.md",
+              "source": {
+                "id": "auth",
+                "label": "auth.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    ],
+    "optimizerType": "GEPA",
+    "optimizationTime": 74578,
+    "totalRounds": 30,
+    "converged": true
+  },
+  "metric_trace": [
+    {
+      "case_id": "train-mixed",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "auth.md",
+              "source": {
+                "id": "auth",
+                "label": "auth.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-used",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-irrelevant",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "val-reference",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "references/identity.md",
+              "source": {
+                "id": "identity-ref",
+                "label": "references/identity.md",
+                "surface_id": "surface-skills"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "val-reference-irrelevant",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "val-multiple",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "auth.md",
+              "source": {
+                "id": "auth",
+                "label": "auth.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            },
+            {
+              "extension_point": "partition.md",
+              "source": {
+                "id": "partition",
+                "label": "partition.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "val-repeat",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "build-guide.md",
+              "source": {
+                "id": "build",
+                "label": "build-guide.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "val-unknown",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "indeterminate",
+          "reason": "deploy.md was discovered, but incomplete run evidence does not establish whether it was read or used."
+        }
+      }
+    },
+    {
+      "case_id": "train-used",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-partial",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "indeterminate",
+          "reason": "The run ends after discovery of task-relevant auth.md, with no post-discovery evidence showing whether it was used."
+        }
+      }
+    },
+    {
+      "case_id": "train-none",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-mixed",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "auth.md",
+              "source": {
+                "id": "auth",
+                "label": "auth.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-skill",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "storage-skill",
+              "source": {
+                "id": "storage",
+                "label": "storage-skill",
+                "surface_id": "surface-skills"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-irrelevant",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-skill",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "storage-skill",
+              "source": {
+                "id": "storage",
+                "label": "storage-skill",
+                "surface_id": "surface-skills"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-used",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-none",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-irrelevant",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-partial",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "indeterminate",
+          "reason": "The task-relevant auth.md was discovered at step_id 2, but the partial run provides no post-discovery evidence showing whether it was used."
+        }
+      }
+    },
+    {
+      "case_id": "train-mixed",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "auth.md",
+              "source": {
+                "id": "auth",
+                "label": "auth.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-skill",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "storage-skill",
+              "source": {
+                "id": "storage",
+                "label": "storage-skill",
+                "surface_id": "surface-skills"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-used",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-none",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-irrelevant",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-partial",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "indeterminate",
+          "reason": "The run is partial, so it is unknown whether the discovered auth.md was used after step_id 2."
+        }
+      }
+    },
+    {
+      "case_id": "train-mixed",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "auth.md",
+              "source": {
+                "id": "auth",
+                "label": "auth.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-skill",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "storage-skill",
+              "source": {
+                "id": "storage",
+                "label": "storage-skill",
+                "surface_id": "surface-skills"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-used",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-used",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-partial",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "indeterminate",
+          "reason": "The evidence ends after auth.md is discovered, so post-discovery use or skipping cannot be established."
+        }
+      }
+    },
+    {
+      "case_id": "train-none",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-mixed",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "auth.md",
+              "source": {
+                "id": "auth",
+                "label": "auth.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-skill",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "storage-skill",
+              "source": {
+                "id": "storage",
+                "label": "storage-skill",
+                "surface_id": "surface-skills"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-irrelevant",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-skill",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "storage-skill",
+              "source": {
+                "id": "storage",
+                "label": "storage-skill",
+                "surface_id": "surface-skills"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-used",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-none",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-irrelevant",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-partial",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "indeterminate",
+          "reason": "The evidence is partial and ends immediately after discovery of the relevant auth.md, so post-discovery use or deliberate skipping cannot be established."
+        }
+      }
+    },
+    {
+      "case_id": "train-mixed",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "auth.md",
+              "source": {
+                "id": "auth",
+                "label": "auth.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-skill",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "storage-skill",
+              "source": {
+                "id": "storage",
+                "label": "storage-skill",
+                "surface_id": "surface-skills"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-used",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-none",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-irrelevant",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "train-partial",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "indeterminate",
+          "reason": "The evidence ends after auth.md was discovered, so post-discovery use or omission is unknown."
+        }
+      }
+    },
+    {
+      "case_id": "train-mixed",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "auth.md",
+              "source": {
+                "id": "auth",
+                "label": "auth.md",
+                "surface_id": "surface-docs"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-skill",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "extension_point": "storage-skill",
+              "source": {
+                "id": "storage",
+                "label": "storage-skill",
+                "surface_id": "surface-skills"
+              },
+              "discovery_turn": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "train-used",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    }
+  ]
+}

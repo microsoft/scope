@@ -1,0 +1,18 @@
+schema_version: scope/taxonomy/v1
+id: stale-precondition-names
+version: 1.0.0
+surfaces: []
+elements:
+  - id: stale
+    label: Stale Precondition Names
+    implementation:
+      type: prompt
+      prompt: Stale.
+    preconditions:
+      complete_for_negative: true
+      requires_discovery_event: true
+    output:
+      evidence_roles:
+        step:
+          type: atif.step
+          description: Step.

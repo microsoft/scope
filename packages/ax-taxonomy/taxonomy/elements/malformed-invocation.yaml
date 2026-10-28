@@ -1,0 +1,26 @@
+schema_version: scope/taxonomy/v1
+id: beh-malformed-invocation
+label: Malformed Invocation
+description: A tool call has explicit machine-readable invalid-input evidence.
+category_id: behavior-category-invocation
+implementation:
+  type: deterministic
+  handler: scope/malformed-invocation-v1
+  config: {}
+preconditions:
+  requires_recorded_discovery: false
+  requires_complete_trajectory: false
+  requires_task: false
+output:
+  evidence_roles:
+    call:
+      type: atif.tool_call
+      max: 1
+      description: Tool call with explicitly invalid input.
+    issue:
+      type: scope.input_validation_issue
+      description: Recorded validation issue owned by the invalid call.
+  constraints:
+    - kind: descendant_of
+      role: issue
+      reference_role: call

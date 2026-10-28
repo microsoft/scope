@@ -1,0 +1,15 @@
+{
+  "custom_handler": {
+    "file": "tests/retry-loop-handler.test.ts",
+    "passed": 2,
+    "total": 2,
+    "model_calls": 0
+  },
+  "built_in_timeout": {
+    "folder": "packages/taxonomy-evaluation/src/handlers/timeout",
+    "file": "handler.test.ts",
+    "passed": 15,
+    "total": 15,
+    "model_calls": 0
+  }
+}

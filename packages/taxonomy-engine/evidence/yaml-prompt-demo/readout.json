@@ -1,0 +1,78 @@
+{
+  "schema_version": "scope/taxonomy-readout/v1",
+  "taxonomy_digest": "c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328",
+  "groups": [
+    {
+      "scenario": {
+        "id": "retry",
+        "label": "Recovered retry",
+        "task": "Query the account service with retry."
+      },
+      "profile": {
+        "id": "custom",
+        "label": "Custom handler"
+      },
+      "behaviors": [
+        {
+          "element_id": "acme-retry-loop",
+          "label": "Recovered Retry Loop",
+          "category_id": "behavior-category-recovery",
+          "coverage": {
+            "total": 2,
+            "assessed": 2,
+            "unknown": 0,
+            "inapplicable": 0,
+            "error": 0,
+            "missing": 0
+          },
+          "distinct_runs": 2,
+          "occurrences": 2,
+          "sources": [
+            {
+              "source": {
+                "id": "account/query",
+                "label": "account/query",
+                "surface_id": "surface-mcp"
+              },
+              "distinct_runs": 2,
+              "occurrences": 2,
+              "evidence": [
+                {
+                  "run_id": "acme-run-1",
+                  "source": {
+                    "id": "account/query",
+                    "label": "account/query",
+                    "surface_id": "surface-mcp"
+                  },
+                  "related_turns": [
+                    2
+                  ],
+                  "tool_call_id": "retry-1",
+                  "attempts": 3
+                },
+                {
+                  "run_id": "acme-run-archive",
+                  "source": {
+                    "id": "account/query",
+                    "label": "account/query",
+                    "surface_id": "surface-mcp"
+                  },
+                  "related_turns": [
+                    2
+                  ],
+                  "tool_call_id": "retry-1",
+                  "origin": {
+                    "iteration": 1,
+                    "step_id": 2,
+                    "tool_call_id": "retry-1"
+                  },
+                  "attempts": 3
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

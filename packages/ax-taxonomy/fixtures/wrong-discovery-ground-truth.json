@@ -1,0 +1,86 @@
+{
+  "wd-input-01": {
+    "beh-wrong-discovery": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "wd-input-02": {
+    "beh-wrong-discovery": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "wd-input-03": {
+    "beh-wrong-discovery": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "wd-input-04": {
+    "beh-wrong-discovery": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "wd-input-05": {
+    "beh-wrong-discovery": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "wd-input-06": {
+    "beh-wrong-discovery": {
+      "state": "indeterminate",
+      "reason": "Reviewed expected indeterminate assessment."
+    }
+  },
+  "wd-input-07": {
+    "beh-wrong-discovery": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "wd-input-08": {
+    "beh-wrong-discovery": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "wd-input-09": {
+    "beh-wrong-discovery": {
+      "state": "completed",
+      "observed": false
+    }
+  }
+}

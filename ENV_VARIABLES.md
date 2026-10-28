@@ -936,7 +936,13 @@ TTL for the DAG dispatcher's in-memory cache of handler topology (the `services`
 **Default:** `post-processor-queue`
 **Type:** string
 
-Azure Storage Queue name used by both the scheduler (to enqueue post-processing work) and the post-processor worker (to dequeue). Must match between the two services.
+Azure Storage Queue name used by both the scheduler (to enqueue post-processing work) and the post-processor worker (to dequeue). Must match between the two services. The `pp-taxonomy` observation handler shares this queue.
+
+### JUDGE_URL
+**Default:** falls back to `JUDGE_SERVICE_URL`, then `http://localhost:3002`
+**Type:** URL string
+
+Base URL of the judge service used by the `pp-taxonomy` post-process handler to evaluate observation criteria per iteration (snapshot + ATIF trajectory → boolean + evidence). The handler reuses the shared `JudgeClient`, so `JUDGE_CLIENT_TIMEOUT` / `JUDGE_CLIENT_RETRIES` apply. In K8s the post-processor reads `JUDGE_SERVICE_URL` from the `worker-config` ConfigMap (`envFrom`); in docker-compose the `post-processor` service sets `JUDGE_SERVICE_URL: http://judge:80` explicitly (it uses the `common-env` anchor, which — unlike `worker-env` — does not carry it). See issue #1156 and [docs/architecture/post-processing.md](docs/architecture/post-processing.md).
 
 ### SCHEDULER_URL
 **Default:** (not set)

@@ -1,0 +1,19 @@
+{
+  "expected_code": "unresolved_reference",
+  "element_id": "malformed",
+  "assessment": {
+    "state": "completed",
+    "observed": true,
+    "occurrences": [
+      {
+        "evidence": [
+          { "role": "call", "path": "$.steps[99].tool_calls[0]" },
+          {
+            "role": "issue",
+            "path": "$.steps[1].tool_calls[0].extra.scope.input_validation.issues[0]"
+          }
+        ]
+      }
+    ]
+  }
+}

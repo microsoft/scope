@@ -86,6 +86,7 @@ export const ConversationTurnSchema = z
     passed: z.boolean(),
     timestamp: z.coerce.date(),
     criteriaResults: z.array(CriterionResultSchema).optional(),
+    observationResults: z.array(CriterionResultSchema).optional(),
     harUrl: z.string().optional(),
     videoUrls: z.array(z.string()).optional(),
     tokenUsage: TokenUsageSchema.optional(),
@@ -151,6 +152,7 @@ export const CreateRequestInputSchema = z
     // [i, j] = merge of two parents.
     agentsMdParentIds: z.array(z.string()).optional(),
     gates: z.array(GateConfigSchema).optional(),
+    observations: z.array(z.string()).optional(),
   })
   .openapi("CreateRequestInput");
 
@@ -181,6 +183,7 @@ export const RequestResponseSchema = z
     submissionId: z.string().optional(),
     priority: z.number().int().default(0),
     gates: z.array(GateConfigSchema).optional(),
+    observations: z.array(z.string()).optional(),
     gateSummaries: z.array(GateRunSummarySchema).optional(),
     // Per-attempt state lives in the run sub-document.
     run: z
@@ -247,6 +250,10 @@ export const RunStateSchema = z
     rawChatFormat: z.string().optional(),
     pausedAt: z.coerce.date().optional(),
     resumedAt: z.coerce.date().optional(),
+    /** Whole-run observation results (one per selected subject:"run" observation
+     *  criterion), evaluated once against the merged trajectory. Per-iteration
+     *  observation results live on each turn's `observationResults`. #1156. */
+    observationResults: z.array(CriterionResultSchema).optional(),
   })
   .openapi("RunState");
 

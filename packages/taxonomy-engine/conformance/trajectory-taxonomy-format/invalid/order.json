@@ -1,0 +1,19 @@
+{
+  "expected_code": "reference_constraint_mismatch",
+  "element_id": "content",
+  "assessment": {
+    "state": "completed",
+    "observed": true,
+    "occurrences": [
+      {
+        "evidence": [
+          {
+            "role": "returned_content",
+            "path": "$.steps[1].observation.results[0]"
+          },
+          { "role": "misuse", "path": "$.steps[0]" }
+        ]
+      }
+    ]
+  }
+}
