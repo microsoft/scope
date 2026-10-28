@@ -35,6 +35,16 @@ Two paths trigger post-processing:
 4. On success, stamps `run.postProcessorVersion` and sets `run.postProcessorStatus: "done"`
 5. Triggers report generation via the API (best-effort, with retry)
 
+### Manual report triggering
+
+The Portal's **Generate Report** action calls `POST /api/v1/reports/trigger`,
+which evaluates active report template triggers against the run. A valid request
+can return `{ triggered: 0, reports: [] }` when there are no active templates or
+none of their triggers match; it does not create a fallback report. The Portal
+shows **No reports queued** as a warning in this case, explains that no active
+template trigger matched, and directs the user to review template triggers.
+Positive counts retain the queued-success notification; API failures remain errors.
+
 ### Blob Storage Layout
 
 ```javascript
