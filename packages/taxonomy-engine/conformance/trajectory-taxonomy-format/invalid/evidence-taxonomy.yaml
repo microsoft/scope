@@ -1,0 +1,19 @@
+schema_version: scope/taxonomy/v1
+id: stale-evidence
+version: 1.0.0
+surfaces: []
+elements:
+  - id: stale
+    label: Stale Element Preconditions
+    implementation:
+      type: prompt
+      prompt: Stale.
+    evidence:
+      requires_recorded_discovery: true
+      requires_complete_trajectory: true
+      requires_task: true
+    output:
+      evidence_roles:
+        step:
+          type: atif.step
+          description: Step.

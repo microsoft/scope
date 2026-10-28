@@ -20,6 +20,10 @@ flowchart LR
     prompt_evals["static-prompt-evals"] --> api
     prompt_evals --> judge
     prompt_evals --> workers
+    taxonome --> taxonomy_engine["taxonomy-engine"]
+    taxonome --> ax_taxonomy["ax-taxonomy"]
+    ax_taxonomy --> taxonomy_engine
+    taxonomy_engine --> request_schema["shared/schemas/request"]
 ```
 
 | Package | Responsibility |
@@ -31,7 +35,15 @@ flowchart LR
 | `shared` | Types, database models, queue/blob/redis clients, config loaders, codebase/skill stores and clients |
 | `workers/*` | Coding agent adapters — each implements the same interface for a different agent |
 | `test-utils` | Shared ACP worker integration-test harness and Docker helpers |
+| `taxonomy-engine` | Standalone YAML taxonomy loading, strict ATIF/archive ingestion, typed assessment validation, Ax execution, optimization, and deterministic readouts |
+| `ax-taxonomy` | Shipped taxonomy YAML, deterministic handlers, and catalog-owned fixtures; depends one-way on `taxonomy-engine` |
+| `taxonome` | Standalone CLI composing the engine and catalog without requiring Scope services |
 | `static-prompt-evals` | Mixed TypeScript/Python developer tooling for static prompt quality and user-controlled prompt red teaming |
+
+Taxonome's only shared runtime entry point is the existing run-state schema
+exported as `shared/schemas/request` for validating offline archives. It does
+not initialize Scope clients or require API/Judge/database/queue infrastructure.
+See [Taxonome](taxonome.md) for standalone usage and the extraction boundary.
 
 ## Data Model
 

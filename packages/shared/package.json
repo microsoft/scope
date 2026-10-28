@@ -44,6 +44,11 @@
       "source": "./src/criteria/criteria-provider-factory.ts",
       "types": "./dist/criteria/criteria-provider-factory.d.ts",
       "import": "./dist/criteria/criteria-provider-factory.js"
+    },
+    "./schemas/request": {
+      "source": "./src/schemas/request.ts",
+      "types": "./dist/schemas/request.d.ts",
+      "import": "./dist/schemas/request.js"
     }
   },
   "scripts": {

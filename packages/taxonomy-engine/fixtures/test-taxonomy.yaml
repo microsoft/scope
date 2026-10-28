@@ -1,0 +1,56 @@
+schema_version: scope/taxonomy/v1
+id: engine-test
+version: 1.0.0
+surfaces:
+  - id: surface-skills
+    label: Skills
+  - id: surface-mcp
+    label: MCP
+  - id: surface-docs
+    label: Documentation
+elements:
+  - id: test-observation
+    label: Test Observation
+    implementation:
+      type: prompt
+      prompt: Test-only generic engine fixture.
+    preconditions:
+      requires_recorded_discovery: false
+      requires_complete_trajectory: false
+      requires_task: false
+    output:
+      evidence_roles:
+        step:
+          type: atif.step
+          min: 0
+          description: Optional test step.
+  - id: discovery-required
+    label: Discovery Required
+    implementation:
+      type: prompt
+      prompt: Test-only discovery preflight fixture.
+    preconditions:
+      requires_recorded_discovery: true
+      requires_complete_trajectory: true
+      requires_task: true
+    output:
+      evidence_roles:
+        discovery:
+          type: scope.discovery
+          max: 1
+          description: Exact discovery.
+  - id: discovery-required-positive-only
+    label: Discovery Required Positive Only
+    implementation:
+      type: prompt
+      prompt: Test-only schema-validation fixture.
+    preconditions:
+      requires_recorded_discovery: true
+      requires_complete_trajectory: true
+      requires_task: true
+    output:
+      evidence_roles:
+        discovery:
+          type: scope.discovery
+          max: 1
+          description: Exact discovery.

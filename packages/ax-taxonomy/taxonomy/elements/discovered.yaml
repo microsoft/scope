@@ -1,0 +1,19 @@
+schema_version: scope/taxonomy/v1
+id: beh-discovered
+label: Discovered
+description: The trajectory records discovery of one or more extension points.
+category_id: behavior-category-invocation
+implementation:
+  type: deterministic
+  handler: scope/discovered-v1
+  config: {}
+preconditions:
+  requires_recorded_discovery: false
+  requires_complete_trajectory: false
+  requires_task: false
+output:
+  evidence_roles:
+    discovery:
+      type: scope.discovery
+      max: 1
+      description: Exact recorded discovery event.

@@ -1,0 +1,11 @@
+{
+  "schema_version":"ATIF-v1.7",
+  "session_id":"traj-9201",
+  "agent":{"name":"fixture"},
+  "steps":[
+    {"step_id":1,"source":"user","message":"Query the account service twice, then verify with authctl."},
+    {"step_id":2,"source":"agent","message":"First query.","tool_calls":[{"tool_call_id":"p-a1","function_name":"account/query","arguments":{},"extra":{"outcome":"timeout","duration_ms":5000,"source_id":"account"}}]},
+    {"step_id":3,"source":"agent","message":"Second query.","tool_calls":[{"tool_call_id":"p-a2","function_name":"account/query","arguments":{},"extra":{"outcome":"timeout","duration_ms":5000,"source_id":"account"}}]},
+    {"step_id":4,"source":"agent","message":"Verification.","tool_calls":[{"tool_call_id":"p-b1","function_name":"authctl","arguments":{},"extra":{"outcome":"timeout","duration_ms":5000,"source_id":"auth-cli"}}]}
+  ]
+}

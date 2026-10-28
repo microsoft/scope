@@ -1,0 +1,15 @@
+{
+  "expected_code": "unknown_role",
+  "element_id": "malformed",
+  "assessment": {
+    "state": "completed",
+    "observed": true,
+    "occurrences": [
+      {
+        "evidence": [
+          { "role": "unknown", "path": "$.steps[1].tool_calls[0]" }
+        ]
+      }
+    ]
+  }
+}

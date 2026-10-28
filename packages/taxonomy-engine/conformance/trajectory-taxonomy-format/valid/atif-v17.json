@@ -1,0 +1,79 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "trajectory_id": "conformance-v17",
+  "session_id": "shared-run",
+  "agent": { "name": "fixture", "version": "1.0.0" },
+  "steps": [
+    {
+      "step_id": 1,
+      "source": "user",
+      "message": "Look up the account."
+    },
+    {
+      "step_id": 7,
+      "source": "agent",
+      "message": "Calling account/query.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call-1",
+          "function_name": "account/query",
+          "arguments": {},
+          "extra": {
+            "scope": {
+              "source_id": "account",
+              "input_validation": {
+                "status": "invalid",
+                "issues": [
+                  { "code": "missing_field", "path": "$.accountId" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "tool_call_id": "call-2",
+          "function_name": "account/search",
+          "arguments": {},
+          "extra": {
+            "scope": {
+              "input_validation": {
+                "status": "invalid",
+                "issues": [
+                  { "code": "invalid_type", "path": "$.query" }
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          { "source_call_id": "call-1", "content": "Account 42." }
+        ]
+      },
+      "extra": {
+        "scope": {
+          "discoveries": [
+            { "source_id": "account", "extension_point": "account/query" },
+            { "source_id": "account", "extension_point": "account/search" }
+          ]
+        }
+      }
+    },
+    {
+      "step_id": 9,
+      "source": "agent",
+      "message": "I used account 24 instead."
+    }
+  ],
+  "extra": {
+    "scope": {
+      "schema_version": "scope.atif-extension.v1",
+      "trajectory_state": "complete",
+      "task": "Look up the account.",
+      "available_sources": [
+        { "id": "account", "label": "account/query", "surface_id": "surface-mcp" }
+      ]
+    }
+  }
+}

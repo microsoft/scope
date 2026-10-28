@@ -1,0 +1,23 @@
+schema_version: scope/taxonomy/v1
+id: stale-relationships
+version: 1.0.0
+surfaces: []
+elements:
+  - id: stale
+    label: Stale Relationships
+    implementation:
+      type: prompt
+      prompt: Stale.
+    preconditions: {}
+    output:
+      evidence_roles:
+        first:
+          type: atif.step
+          description: First.
+        second:
+          type: atif.step
+          description: Second.
+      relationships:
+        - kind: step_after
+          role: second
+          reference_role: first

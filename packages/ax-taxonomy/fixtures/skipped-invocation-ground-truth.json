@@ -1,0 +1,232 @@
+{
+  "train-skill": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "train-used": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": false
+    },
+    "beh-timeout": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "train-none": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": false
+    },
+    "beh-timeout": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "train-irrelevant": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "train-partial": {
+    "beh-skipped-invocation": {
+      "state": "indeterminate",
+      "reason": "Reviewed expected indeterminate assessment."
+    }
+  },
+  "train-mixed": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    },
+    "beh-timeout": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "call",
+              "path": "$.steps[2].tool_calls[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "val-reference": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "val-reference-irrelevant": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "val-multiple": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        },
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[1]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "val-repeat": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "val-unknown": {
+    "beh-skipped-invocation": {
+      "state": "indeterminate",
+      "reason": "Reviewed expected indeterminate assessment."
+    }
+  },
+  "held-cli": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "held-used-reference": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "held-irrelevant": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "held-partial": {
+    "beh-skipped-invocation": {
+      "state": "indeterminate",
+      "reason": "Reviewed expected indeterminate assessment."
+    }
+  },
+  "held-several": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        },
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[2].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "held-injection": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "held-atif-review": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": false
+    },
+    "beh-timeout": {
+      "state": "completed",
+      "observed": false
+    }
+  }
+}

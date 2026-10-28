@@ -1,0 +1,20 @@
+schema_version: scope/taxonomy/v1
+id: acme-retry-loop
+label: Recovered Retry Loop
+description: A tool operation succeeds after an explicit multi-attempt retry.
+category_id: behavior-category-recovery
+implementation:
+  type: deterministic
+  handler: acme/retry-loop-v1
+  config:
+    min_attempts: 2
+preconditions:
+  requires_recorded_discovery: false
+  requires_complete_trajectory: true
+  requires_task: false
+output:
+  evidence_roles:
+    call:
+      type: atif.tool_call
+      max: 1
+      description: Exact call whose recorded response shows a recovered retry.

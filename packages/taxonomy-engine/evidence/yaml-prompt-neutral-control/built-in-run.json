@@ -1,0 +1,86 @@
+{
+  "run": {
+    "id": "timeout-example-v2",
+    "scenario": {
+      "id": "unknown-scenario",
+      "label": "unknown-scenario",
+      "task": "Query the service."
+    },
+    "profile": {
+      "id": "unknown-profile",
+      "label": "unknown-profile"
+    }
+  },
+  "results": [
+    {
+      "schema_version": "scope/taxonomy-evaluation/v1",
+      "taxonomy": {
+        "id": "agent-behavior",
+        "version": "2.0.0",
+        "digest": "c894edeb182c56614756622e8604fd83ddb25c933a2a92f5723817e8cc043145"
+      },
+      "element": {
+        "id": "beh-skipped-invocation",
+        "label": "Skipped Invocation",
+        "category_id": "behavior-category-invocation"
+      },
+      "implementation": {
+        "type": "prompt"
+      },
+      "result": {
+        "state": "completed",
+        "observed": false
+      }
+    },
+    {
+      "schema_version": "scope/taxonomy-evaluation/v1",
+      "taxonomy": {
+        "id": "agent-behavior",
+        "version": "2.0.0",
+        "digest": "c894edeb182c56614756622e8604fd83ddb25c933a2a92f5723817e8cc043145"
+      },
+      "element": {
+        "id": "beh-timeout",
+        "label": "Timeout",
+        "category_id": "behavior-category-invocation"
+      },
+      "implementation": {
+        "type": "deterministic",
+        "handler": "scope/timeout-v1",
+        "provider": {
+          "name": "taxonomy-evaluation",
+          "version": "0.1.0",
+          "origin": "builtin",
+          "integrity": "8099bbcdd4f1837b30eb426f7feef4fe7e109da16a47b431ba35d593e0be46ef"
+        }
+      },
+      "result": {
+        "state": "completed",
+        "observed": true,
+        "occurrences": [
+          {
+            "related_turns": [
+              2
+            ],
+            "tool_call_id": "query-1"
+          }
+        ]
+      }
+    }
+  ],
+  "metadata": {
+    "taxonomy": {
+      "id": "agent-behavior",
+      "version": "2.0.0",
+      "digest": "c894edeb182c56614756622e8604fd83ddb25c933a2a92f5723817e8cc043145"
+    },
+    "model": "gpt-5.6-sol-fast",
+    "initialized": true,
+    "artifact_contract_hash": null,
+    "budget": {
+      "cap": 500,
+      "used": 278,
+      "remaining": 222
+    }
+  }
+}

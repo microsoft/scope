@@ -1,0 +1,16 @@
+schema_version: scope/taxonomy/v1
+id: invalid-type
+version: 1.0.0
+surfaces: []
+elements:
+  - id: invalid
+    label: Invalid
+    implementation:
+      type: prompt
+      prompt: Invalid type.
+    preconditions: {}
+    output:
+      evidence_roles:
+        evidence:
+          type: atif.lookalike
+          description: Unsupported type.
