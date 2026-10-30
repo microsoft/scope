@@ -122,6 +122,7 @@ ENV SERVICE_DIR=workers/coder-acp-claude-code
 ENV WORKER_NAME=coder-acp-claude-code
 COPY scripts/dev-entrypoint.sh /app/scripts/dev-entrypoint.sh
 COPY config /app/config/
+RUN chown -R node:node /app/packages/shared/dist /app/packages/telemetry/dist /app/packages/test-utils/dist /app/apps/workers/coder-acp-claude-code/dist
 USER node
 CMD ["/app/scripts/dev-entrypoint.sh"]
 

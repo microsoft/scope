@@ -40,5 +40,6 @@ onlyBuiltDependencies:
   - cpu-features
   - esbuild
   - keytar
+  - msw
   - protobufjs
   - ssh2

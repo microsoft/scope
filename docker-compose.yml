@@ -435,7 +435,7 @@ services:
       register-agents:
         condition: service_completed_successfully
       token-manager:
-        condition: service_started
+        condition: service_healthy
     restart: "no"
     environment:
       API_URL: http://api:80
@@ -459,7 +459,7 @@ services:
       register-agents:
         condition: service_completed_successfully
       token-manager:
-        condition: service_started
+        condition: service_healthy
     restart: "no"
     environment:
       API_URL: http://api:80
@@ -522,6 +522,14 @@ services:
         <<: *npm-build-args
     ports:
       - "${TOKEN_MANAGER_PORT:-3300}:80"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:80/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      # Dev startup runs tsx and tsc concurrently under the 0.2 CPU limit and
+      # only listens after connecting to MongoDB (~50s warm).
+      start_period: 120s
     environment:
       <<: *common-env
       PORT: "80"
