@@ -261,6 +261,7 @@ not open the PR against the fork unless the user explicitly asks you to.
 | Document | Description |
 |----------|-------------|
 | [docs/architecture/overview.md](docs/architecture/overview.md) | System architecture, component interactions, data flow |
+| [docs/architecture/devcontainer.md](docs/architecture/devcontainer.md) | Proposed local/Codespaces devcontainer, private-origin auth, debugging, and Kind implementation plan |
 | [docs/architecture/app-design.md](docs/architecture/app-design.md) | Data models, API design, package dependency graph |
 | [docs/architecture/prompt-evaluations.md](docs/architecture/prompt-evaluations.md) | Static prompt quality, datasets, commands, and maintenance rules |
 | [docs/architecture/data-organization-projects.md](docs/architecture/data-organization-projects.md) | Projects (a single container) to isolate/group data within a cluster; composes with data-tags and auth-rbac |
