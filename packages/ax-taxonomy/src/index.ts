@@ -18,7 +18,7 @@ export * from "./handlers/discovered/handler.js";
 export * from "./handlers/malformed-invocation/handler.js";
 export * from "./handlers/timeout/handler.js";
 
-/** Absolute path to the shipped agent-behavior taxonomy manifest. */
+/** Absolute path to the shipped Ax taxonomy manifest. */
 export const agentBehaviorTaxonomyPath = fileURLToPath(
   new URL("../taxonomy/taxonomy.yaml", import.meta.url),
 );
@@ -32,7 +32,7 @@ export function agentBehaviorFixturePath(name: string): string {
   return fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 }
 
-/** Registers reviewed agent-behavior deterministic handlers explicitly. */
+/** Registers the Ax taxonomy's reviewed deterministic handlers explicitly. */
 export function registerAgentBehaviorHandlers(
   registry: HandlerRegistry,
 ): HandlerRegistry {

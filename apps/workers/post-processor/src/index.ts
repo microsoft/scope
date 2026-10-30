@@ -9,6 +9,7 @@ initTelemetry("scope-post-processor");
 import { PostProcessor, type PostProcessorConfig } from "./post-processor.js";
 import { AtifHandler } from "./handlers/atif-handler.js";
 import { TaxonomyHandler } from "./handlers/taxonomy-handler.js";
+import { resolveTaxonomeModel } from "./taxonomy-config.js";
 
 const config: PostProcessorConfig = {
   mongoUri: process.env.MONGO_CONNECTION_STRING || process.env.AZURE_COSMOS_CONNECTION_STRING || "mongodb://localhost:27017",
@@ -28,6 +29,10 @@ const config: PostProcessorConfig = {
 const processor = new PostProcessor(config);
 
 // Register handlers
+console.log(
+  `[post-processor] Taxonome prompt model: ${resolveTaxonomeModel()}; ` +
+  "reasoning effort: provider default",
+);
 processor.registerHandler(new AtifHandler());
 processor.registerHandler(new TaxonomyHandler());
 

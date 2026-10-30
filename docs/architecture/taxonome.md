@@ -4,8 +4,9 @@ The normative interoperable authoring/result/reference contract is
 [Trajectory Taxonomy Format](trajectory-taxonomy-format.md). This guide covers
 the Taxonome implementation, CLI, experiments, and evidence.
 
-Taxonome is a **standalone, draft experimental slice**, not the production
-Observation model or a dependency on the Experiment stack. It loads authored
+Taxonome began as a standalone experimental slice and remains independently
+usable through its CLI. Scope now also integrates the same engine as the
+production taxonomy catalog and Experiment post-processor. It loads authored
 taxonomy definitions from YAML, validates/upcasts ATIF v1.6-v1.8 trajectories,
 and returns
 schema-validated structured observations. The current catalog slice contains:
@@ -18,9 +19,97 @@ schema-validated structured observations. The current catalog slice contains:
 - plain ATIF JSON and existing Scope run archive inputs;
 - deterministic JSON/Markdown readout previews.
 
-No Scope API, Judge, database, Redis, queue, or token manager is required.
-Production adoption, the remaining taxonomy, generated-code execution,
-sandboxed plugins, and narrative readout generation remain out of scope.
+The standalone CLI still requires no Scope API, Judge, database, Redis, queue,
+or token manager. The production integration uses the API, Cosmos-compatible
+MongoDB collections, post-processor queue, and Blob Storage, but invokes the
+Taxonome programmatic API directly; it never shells out to this CLI or parses
+CLI output.
+
+## Scope production integration
+
+The production catalog consists of exactly four project-scoped collections:
+`taxonomies`, `taxonomy-revisions`, `taxonomy-elements`, and
+`taxonomy-element-revisions`. Roots are mutable metadata records. Revisions
+are immutable, monotonically numbered, and addressed as `{id}@rN`.
+
+The canonical `packages/ax-taxonomy/taxonomy/taxonomy.yaml` and referenced
+element files seed a per-project **ax-taxonomy** root as `sourceType: builtin`.
+Built-ins are read-only. Copying an exact built-in revision creates a new user
+root at revision 1. User edits always append revisions.
+
+The API validates explicit element references and rejects ambiguous objects,
+bare IDs, malformed refs, absolute/traversing paths, missing YAML files,
+duplicate element IDs, cross-project refs, and implicit-latest resolution.
+Portable YAML contains the established top-level Taxonome schema without a
+database-only definition wrapper. Database revisions additionally carry
+`contentSha256` for latest-revision deduplication and integrity verification;
+exports omit it.
+
+### Experiment and exact-run flow
+
+```mermaid
+flowchart LR
+    Catalog[Exact taxonomy revision] --> Experiment[Experiment revision and execution pin]
+    Experiment --> Run[Exact request and run pair]
+    Run --> ATIF[pp-atif exact-run artifacts]
+    ATIF --> Handler[pp-taxonomy programmatic SDK]
+    Catalog --> Handler
+    Handler --> Blob[claim-specific result.json.gz]
+    Blob --> Ref[run.taxonomyEvaluation]
+    Ref --> Readout[Typed Experiment JSON and Markdown readout]
+```
+
+`pp-taxonomy` resolves every element by exact canonical ref and rechecks the
+taxonomy revision's database ID, project, ref, and content SHA. Deterministic
+taxonomies create no Copilot model transport. Prompt execution is injectable;
+tests use fake executors and make no paid or live calls. Production opens an
+isolated Copilot transport lazily only when at least one selected element is
+prompt-based. Scope's post-processor selects that transport through the
+dedicated `TAXONOME_MODEL` setting (`claude-haiku-4.5` by default), never
+through the originating coding run's model or reasoning effort. Explicit model
+IDs are validated against the Copilot SDK catalog (`auto` remains an explicit
+provider-resolved option), and the post-processor omits reasoning effort so
+models without configurable effort remain supported.
+
+Artifact paths are attempt/claim specific:
+
+```text
+{requestId}/runs/{runId}/taxonomy-evaluation/{claimId}/result.json.gz
+```
+
+The worker publishes the complete bounded run reference atomically only while
+the exact run and `pp-taxonomy` claim still match. Duplicate queue delivery,
+stale claims, and historical attempts therefore cannot overwrite one another.
+
+### Feature flag and product surfaces
+
+The DB-backed `taxonome` feature flag is seeded idempotently with label
+`Taxonome and Taxonomies` and `enabled: false`. It gates only user entry points:
+taxonomy APIs, taxonomy-bearing Experiment mutations, Portal navigation/routes/
+queries, and CLI calls through those APIs. Workers, schedulers, and internal
+pollers do not consult it, so disabling the flag does not interrupt accepted
+work. Portal behavior is fail-closed while flag state is unresolved.
+
+The API is the source of truth for taxonomy roots, revisions, copy, YAML
+import/export, elements, exact-run artifacts, and typed readouts. Portal and
+CLI clients use those routes and add no client-only capabilities.
+
+`GET /api/v1/taxonomies?projectId=...` returns scan-ready rows enriched from
+the latest revision in one bulk read: exact ref, portable semantic version,
+element count, source/read-only state, and root metadata. The project-scoped
+`GET /api/v1/taxonomies/:taxonomyId/detail?projectId=...&revisionId=...`
+returns the root, selected exact taxonomy revision, bounded revision summaries,
+and the selected revision's element refs resolved in authored order to exact
+element root/revision pairs. Resolution uses bulk `$in` reads and never expands
+the unrelated project element catalog.
+
+The Portal uses the shared list/table primitives for taxonomy discovery and a
+dedicated detail route for history and exact ordered elements. Prompt editing
+is available only for user-owned prompt elements on the latest active taxonomy
+revision; one edit appends an element revision and then a taxonomy revision
+that pins the new exact element ref. Built-in, deterministic, deleted, and
+historical rows remain read-only. `scope taxonomy show` consumes the same detail
+projection, including optional historical revision selection.
 
 ### Standalone foundation extraction
 
@@ -143,7 +232,7 @@ pnpm install --frozen-lockfile
 pnpm --filter taxonomy-engine build
 pnpm --filter ax-taxonomy build
 pnpm --filter taxonome build
-pnpm --silent taxonome run \
+taxonome run \
   packages/ax-taxonomy/fixtures/timeout.atif.json \
   --taxonomy packages/ax-taxonomy/taxonomy/taxonomy.yaml \
   --elements beh-timeout
@@ -155,7 +244,8 @@ taxonomy discovery. The exact authored schema identifier is
 archive content by gzip bytes, not filename. An archive can contain one run
 root or an ordered collection of run roots.
 
-Use `pnpm --silent taxonome ...` for repository development and demos.
+Use direct `taxonome ...` commands for repository development and demos after
+placing the built binary or wrapper on `PATH`.
 `run`, `eval`, and `optimize` write concise human-readable stdout by default,
 including when redirected. Pass `--json` for their complete machine-readable
 JSON shapes; this output is never styled. `readout` retains its existing JSON
@@ -281,11 +371,15 @@ not repeated after the dashboard. Non-TTY human output intentionally retains
 the detailed input/file summary; JSON fields and row ordering remain unchanged
 apart from the additive evaluation-level counts.
 
-`--artifact <path>` is repeatable. Each artifact's embedded `element_id`
-provides generic scoping; duplicate artifacts or artifacts for unselected or
-deterministic elements fail. Deterministic selections require no credentials;
-eligible prompt inputs still make fresh SDK calls and require separate
-live-call authorization.
+`--element-override <path>` is repeatable for `run` and `eval`. Each path is a
+complete standard Taxonome element YAML whose exact `id` replaces one authored
+taxonomy element before validation and digest calculation. Duplicate, unknown,
+or mismatched IDs fail before model initialization. The optional sibling
+optimization manifest is provenance only and is never required at runtime.
+`optimize --in-place --from-candidate <optimized.yaml>` publishes the exact
+selected YAML and matching provenance manifest without rerunning model
+selection. Candidate identity, taxonomy digest, contract hash, and semantic
+content hash must all match before the transactional write.
 
 ## Authored taxonomy contract
 
@@ -298,11 +392,11 @@ explicitly.
 
 ```yaml
 schema_version: scope/taxonomy/v1
-id: agent-behavior
-version: 2.0.0
-categories:
-  - id: behavior-category-invocation
-    label: Invocation behavior
+id: ax-taxonomy
+version: 1.0.0
+surfaces:
+  - id: surface-mcp
+    label: MCP
 elements:
   - path: elements/timeout.yaml
 ```
@@ -425,8 +519,9 @@ the TypeScript handler directly and makes no SDK calls.
 The same example also contains a custom prompt element and a small disjoint
 train/validation/test packet. From the example directory, a real
 `taxonome` executable can run the prompt, evaluate fixed test ground truth,
-perform one bounded Ax optimization, save the complete v2 artifact, and
-re-evaluate through normal artifact restore. The current neutral-control inputs
+perform one bounded Ax optimization, write complete optimized element YAML plus
+a provenance-only manifest, and re-evaluate with `--element-override`. The
+current neutral-control inputs
 use opaque model-visible session/run/scenario/profile identities, distinct
 families and originating runs, separate ground truth, and no element ID or
 label in trajectory text. A regression serializes each input with the
@@ -437,10 +532,9 @@ Current user-facing paths name the subject and role explicitly:
 `datasets/repeated-request/trajectory-inputs.jsonl`,
 `datasets/repeated-request/ground-truth.json`,
 `inputs/repeated-request/example-run.atif.json`,
-`results/repeated-request/test/original-prompt-results.json`,
-`artifacts/repeated-request/optimized-prompt.ax.json`, and
-`results/repeated-request/test/optimized-prompt-results.json`. Historical
-evidence files retain their original names and hashes.
+`optimized/acme-repeated-request.optimized.yaml`, and
+`optimized/acme-repeated-request.optimization.manifest.json`. Historical
+evidence/result files retain their original names and hashes.
 
 The first 11-call YAML prompt demo under `evidence/yaml-prompt-demo/` is retained
 as historical execution evidence but is **ID-confounded**: its model-visible
@@ -633,13 +727,26 @@ relevance and use. Deterministic handlers are never bypassed by this prompt-only
 preflight. Every preflight result is validated against the shared assessment,
 evidence-role, and constraint contract before it is returned.
 
-Optimization artifacts use `scope/taxonome-ax/v2` and bind the complete Ax
-serialization, including learned demos, to the exact taxonomy digest, element,
-model, prompt contract, and corpus. Historical `taxonome.ax.v1` artifacts fail
-clearly instead of being replayed under revised YAML semantics. The real Ax
-convenience optimizer remains bounded bootstrap plus GEPA. `maxMetricCalls`
-bounds optimizer scoring; it is not a cumulative SDK budget and does not apply
-to separate baseline or replay commands.
+Optimization emits `<element-id>.optimized.yaml`, a complete standard element
+whose only optimized runtime content is `implementation.prompt`, plus an
+optional `<element-id>.optimization.manifest.json` using
+`scope/taxonome-optimization-manifest/v1`. The manifest binds the taxonomy
+digest, element contract, Train and Validation IDs/hashes, model, settings, and
+aggregate metrics without storing complete ATIF, examples, demonstrations, or
+a serialized runtime program. Ax GEPA runs with `bootstrap: false`; Train
+inputs drive instruction proposals and Validation inputs drive scoring and
+selection. Final unseen Test evaluation is a separate `eval --split test`.
+`maxMetricCalls` is per element, not a cumulative SDK budget.
+GEPA minibatches are capped to the eligible Train row count so small corpora do
+not spend the entire bounded metric budget by padding a parent minibatch before
+the first proposal can be evaluated.
+Interactive optimization progress maps structured Ax events and measured
+candidate evaluations into stable per-element rows. It reports aggregate
+running/completed/waiting/failed/skipped counts and, only when Ax exposes them,
+trial/candidate numbers, consumed metric calls, latest/best scores, Pareto
+frontier size, and convergence or stop reason. It never fabricates percentages
+or infers missing optimizer state. Non-TTY progress is append-only and
+ANSI-free; `NO_COLOR` disables styling and `--json` suppresses the dashboard.
 
 Plain ATIF and a single archive root preserve the existing final human/JSON
 stdout contract while using the same run-centric stderr dashboard and
@@ -661,7 +768,7 @@ Taxonome deliberately does not discover files. Standard tools select literal
 local paths, then `run --files-from` executes them through one global batch:
 
 ```bash
-pnpm --silent taxonome run --files-from trajectories.txt \
+taxonome run --files-from trajectories.txt \
   --taxonomy packages/ax-taxonomy/taxonomy/taxonomy.yaml \
   --output-dir ./taxonome-results \
   --elements beh-discovered,beh-malformed-invocation,beh-timeout
@@ -671,7 +778,7 @@ pnpm --silent taxonome run --files-from trajectories.txt \
 profile='VSCode_with_GitHub_Copilot_Chat_Claude_Sonnet_46_anti-hallucination_skill_context7_MCP_no_extra_instructions'
 find docs/ax-playbook/assets -type f \
   -path "*/$profile/*/trajectory.json" -print0 |
-  pnpm --silent taxonome run --files-from - --null \
+  taxonome run --files-from - --null \
     --taxonomy packages/ax-taxonomy/taxonomy/taxonomy.yaml \
     --output-dir ./taxonome-results \
     --concurrency 4 \
@@ -767,7 +874,7 @@ The current private package boundary is intentionally explicit:
   assertions, prompt/SDK plumbing, optimization/artifact compatibility,
   deterministic readout, archive conversion, strict versioned ATIF validators,
   adjacent upcasters/source maps, and generic neutral tests.
-- `ax-taxonomy` owns only the shipped `agent-behavior` YAML, catalog fixtures,
+- `ax-taxonomy` owns only the shipped `ax-taxonomy` YAML, catalog fixtures,
   the reviewed `scope/discovered-v1`, `scope/malformed-invocation-v1`, and
   `scope/timeout-v1` handlers, focused definition/handler tests, and minimal
   asset/handler registration exports.
@@ -791,7 +898,7 @@ cd packages/ax-taxonomy && pnpm test
 ```
 
 The engine command runs only generic neutral-fixture tests; the catalog command
-runs only focused agent-behavior definitions, deterministic handlers, prompt
+runs only focused Ax taxonomy definitions, deterministic handlers, prompt
 corpus contracts, and package-script tests. Neither command requires model
 credentials or scans the rest of the monorepo.
 

@@ -625,6 +625,31 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
         "type": "object",
       },
+      "CopyBuiltinTaxonomyRevisionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "creator": {
+            "type": "string",
+          },
+          "description": {
+            "maxLength": 4096,
+            "type": "string",
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string",
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "name",
+        ],
+        "type": "object",
+      },
       "CreateAgentInput": {
         "properties": {
           "_id": {
@@ -771,6 +796,10 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "default": [],
             "items": {
               "properties": {
+                "agentVersion": {
+                  "minLength": 1,
+                  "type": "string",
+                },
                 "agentsMd": {
                   "type": "string",
                 },
@@ -865,6 +894,10 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             },
             "maxItems": 250000,
             "type": "array",
+          },
+          "taxonomyRevisionId": {
+            "minLength": 1,
+            "type": "string",
           },
         },
         "required": [
@@ -1314,6 +1347,110 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         },
         "required": [
           "text",
+        ],
+        "type": "object",
+      },
+      "CreateTaxonomyElementInput": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "$ref": "#/components/schemas/PortableTaxonomyElement",
+          },
+          "creator": {
+            "type": "string",
+          },
+          "description": {
+            "maxLength": 4096,
+            "type": "string",
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string",
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string",
+          },
+          "sourceType": {
+            "default": "user",
+            "enum": [
+              "builtin",
+              "user",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "name",
+          "content",
+        ],
+        "type": "object",
+      },
+      "CreateTaxonomyElementRevisionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "$ref": "#/components/schemas/PortableTaxonomyElement",
+          },
+          "creator": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "content",
+        ],
+        "type": "object",
+      },
+      "CreateTaxonomyInput": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "$ref": "#/components/schemas/PortableTaxonomy",
+          },
+          "creator": {
+            "type": "string",
+          },
+          "description": {
+            "maxLength": 4096,
+            "type": "string",
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string",
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string",
+          },
+          "sourceType": {
+            "default": "user",
+            "enum": [
+              "builtin",
+              "user",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "name",
+          "content",
+        ],
+        "type": "object",
+      },
+      "CreateTaxonomyRevisionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "$ref": "#/components/schemas/PortableTaxonomy",
+          },
+          "creator": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "content",
         ],
         "type": "object",
       },
@@ -1795,6 +1932,165 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             },
             "type": "object",
           },
+          "requestCount": {
+            "minimum": 0,
+            "type": "integer",
+          },
+          "requests": {
+            "items": {
+              "properties": {
+                "agentVersion": {
+                  "type": "string",
+                },
+                "attemptNumber": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer",
+                },
+                "criteria": {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+                "extensions": {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+                "lastHeartbeatAt": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "mcpServers": {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+                "model": {
+                  "type": "string",
+                },
+                "os": {
+                  "properties": {
+                    "arch": {
+                      "type": "string",
+                    },
+                    "platform": {
+                      "type": "string",
+                    },
+                    "release": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "platform",
+                    "release",
+                    "arch",
+                  ],
+                  "type": "object",
+                },
+                "outcome": {
+                  "type": "string",
+                },
+                "priority": {
+                  "type": "number",
+                },
+                "profileId": {
+                  "type": "string",
+                },
+                "reasoningEffort": {
+                  "type": "string",
+                },
+                "requestId": {
+                  "type": "string",
+                },
+                "runId": {
+                  "type": "string",
+                },
+                "skillRevisions": {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+                "startedAt": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+                "status": {
+                  "type": "string",
+                },
+                "task": {
+                  "type": "string",
+                },
+                "taskPromptId": {
+                  "type": "string",
+                },
+                "taxonomyHandler": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "resultAvailable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        "queued",
+                        "processing",
+                        "done",
+                        "failed",
+                      ],
+                      "type": "string",
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                  },
+                  "required": [
+                    "status",
+                    "resultAvailable",
+                  ],
+                  "type": "object",
+                },
+                "worker": {
+                  "properties": {
+                    "instanceId": {
+                      "type": "string",
+                    },
+                    "podName": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "instanceId",
+                  ],
+                  "type": "object",
+                },
+                "workerType": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "requestId",
+                "runId",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
           "startedAt": {
             "format": "date-time",
             "type": [
@@ -1828,11 +2124,16 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "null",
             ],
           },
+          "version": {
+            "type": "integer",
+          },
         },
         "required": [
           "experimentExecutionId",
           "attemptNumber",
           "readiness",
+          "requestCount",
+          "requests",
           "blockers",
           "progress",
           "reportTemplates",
@@ -2298,6 +2599,165 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                 },
                 "type": "object",
               },
+              "requestCount": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "requests": {
+                "items": {
+                  "properties": {
+                    "agentVersion": {
+                      "type": "string",
+                    },
+                    "attemptNumber": {
+                      "exclusiveMinimum": 0,
+                      "type": "integer",
+                    },
+                    "criteria": {
+                      "items": {
+                        "type": "string",
+                      },
+                      "type": "array",
+                    },
+                    "extensions": {
+                      "items": {
+                        "type": "string",
+                      },
+                      "type": "array",
+                    },
+                    "lastHeartbeatAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "mcpServers": {
+                      "items": {
+                        "type": "string",
+                      },
+                      "type": "array",
+                    },
+                    "model": {
+                      "type": "string",
+                    },
+                    "os": {
+                      "properties": {
+                        "arch": {
+                          "type": "string",
+                        },
+                        "platform": {
+                          "type": "string",
+                        },
+                        "release": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "platform",
+                        "release",
+                        "arch",
+                      ],
+                      "type": "object",
+                    },
+                    "outcome": {
+                      "type": "string",
+                    },
+                    "priority": {
+                      "type": "number",
+                    },
+                    "profileId": {
+                      "type": "string",
+                    },
+                    "reasoningEffort": {
+                      "type": "string",
+                    },
+                    "requestId": {
+                      "type": "string",
+                    },
+                    "runId": {
+                      "type": "string",
+                    },
+                    "skillRevisions": {
+                      "items": {
+                        "type": "string",
+                      },
+                      "type": "array",
+                    },
+                    "startedAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "status": {
+                      "type": "string",
+                    },
+                    "task": {
+                      "type": "string",
+                    },
+                    "taskPromptId": {
+                      "type": "string",
+                    },
+                    "taxonomyHandler": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "string",
+                        },
+                        "resultAvailable": {
+                          "type": "boolean",
+                        },
+                        "status": {
+                          "enum": [
+                            "queued",
+                            "processing",
+                            "done",
+                            "failed",
+                          ],
+                          "type": "string",
+                        },
+                        "updatedAt": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null",
+                          ],
+                        },
+                      },
+                      "required": [
+                        "status",
+                        "resultAvailable",
+                      ],
+                      "type": "object",
+                    },
+                    "worker": {
+                      "properties": {
+                        "instanceId": {
+                          "type": "string",
+                        },
+                        "podName": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "instanceId",
+                      ],
+                      "type": "object",
+                    },
+                    "workerType": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "requestId",
+                    "runId",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
               "startedAt": {
                 "format": "date-time",
                 "type": [
@@ -2312,11 +2772,16 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                   "null",
                 ],
               },
+              "version": {
+                "type": "integer",
+              },
             },
             "required": [
               "experimentExecutionId",
               "attemptNumber",
               "readiness",
+              "requestCount",
+              "requests",
               "blockers",
               "progress",
               "reportTemplates",
@@ -2501,6 +2966,25 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               },
               "revisionNumber": {
                 "type": "integer",
+              },
+              "taxonomy": {
+                "properties": {
+                  "contentSha256": {
+                    "type": "string",
+                  },
+                  "ref": {
+                    "type": "string",
+                  },
+                  "taxonomyRevisionId": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "taxonomyRevisionId",
+                  "ref",
+                  "contentSha256",
+                ],
+                "type": "object",
               },
             },
             "required": [
@@ -2830,6 +3314,39 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
         },
+        "type": "object",
+      },
+      "ImportTaxonomyYamlInput": {
+        "additionalProperties": false,
+        "properties": {
+          "creator": {
+            "type": "string",
+          },
+          "description": {
+            "maxLength": 4096,
+            "type": "string",
+          },
+          "elements": {
+            "additionalProperties": {
+              "type": "string",
+            },
+            "default": {},
+            "type": "object",
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string",
+          },
+          "taxonomyYaml": {
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "name",
+          "taxonomyYaml",
+        ],
         "type": "object",
       },
       "InsightReference": {
@@ -3260,6 +3777,196 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "experience",
           "verbosity",
           "type",
+        ],
+        "type": "object",
+      },
+      "PortableTaxonomy": {
+        "additionalProperties": false,
+        "properties": {
+          "elements": {
+            "items": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "path",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "ref": {
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*@r[1-9]\\d*$",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "ref",
+                  ],
+                  "type": "object",
+                },
+              ],
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "type": "array",
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string",
+          },
+          "schema_version": {
+            "enum": [
+              "scope/taxonomy/v1",
+            ],
+            "type": "string",
+          },
+          "surfaces": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "description": {
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "id": {
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+                  "type": "string",
+                },
+                "label": {
+                  "minLength": 1,
+                  "type": "string",
+                },
+              },
+              "required": [
+                "id",
+                "label",
+              ],
+              "type": "object",
+            },
+            "maxItems": 100,
+            "type": "array",
+          },
+          "version": {
+            "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "version",
+          "surfaces",
+          "elements",
+        ],
+        "type": "object",
+      },
+      "PortableTaxonomyElement": {
+        "additionalProperties": false,
+        "properties": {
+          "category_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string",
+          },
+          "description": {
+            "minLength": 1,
+            "type": "string",
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string",
+          },
+          "implementation": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "prompt": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "prompt",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "prompt",
+                ],
+                "type": "object",
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "config": {},
+                  "handler": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "deterministic",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "handler",
+                ],
+                "type": "object",
+              },
+            ],
+          },
+          "label": {
+            "minLength": 1,
+            "type": "string",
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "constraints": {
+                "items": {},
+                "type": "array",
+              },
+              "evidence_roles": {
+                "additionalProperties": {},
+                "type": "object",
+              },
+            },
+            "required": [
+              "evidence_roles",
+            ],
+            "type": "object",
+          },
+          "preconditions": {
+            "additionalProperties": {
+              "type": "boolean",
+            },
+            "type": "object",
+          },
+          "schema_version": {
+            "enum": [
+              "scope/taxonomy/v1",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+          "label",
+          "implementation",
+          "preconditions",
+          "output",
         ],
         "type": "object",
       },
@@ -4224,6 +4931,38 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "taskPromptId": {
             "type": "string",
           },
+          "taxonomyHandler": {
+            "additionalProperties": false,
+            "properties": {
+              "error": {
+                "type": "string",
+              },
+              "resultAvailable": {
+                "type": "boolean",
+              },
+              "status": {
+                "enum": [
+                  "queued",
+                  "processing",
+                  "done",
+                  "failed",
+                ],
+                "type": "string",
+              },
+              "updatedAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+            },
+            "required": [
+              "status",
+              "resultAvailable",
+            ],
+            "type": "object",
+          },
           "updatedAt": {
             "format": "date-time",
             "type": [
@@ -4253,6 +4992,27 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
         },
+        "type": "object",
+      },
+      "ResolvedTaxonomyElementResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "position": {
+            "minimum": 0,
+            "type": "integer",
+          },
+          "revision": {
+            "$ref": "#/components/schemas/TaxonomyElementRevisionResponse",
+          },
+          "root": {
+            "$ref": "#/components/schemas/TaxonomyElementResponse",
+          },
+        },
+        "required": [
+          "position",
+          "root",
+          "revision",
+        ],
         "type": "object",
       },
       "ResourceBinding": {
@@ -4826,6 +5586,34 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             ],
             "type": "string",
           },
+          "taxonomyEvaluation": {
+            "additionalProperties": false,
+            "properties": {
+              "contentSha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string",
+              },
+              "schemaVersion": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "sizeBytes": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "url": {
+                "minLength": 1,
+                "type": "string",
+              },
+            },
+            "required": [
+              "url",
+              "schemaVersion",
+              "contentSha256",
+              "sizeBytes",
+            ],
+            "type": "object",
+          },
           "tokenUsage": {
             "$ref": "#/components/schemas/TokenUsage",
           },
@@ -5224,6 +6012,1194 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
         "type": "object",
       },
+      "TaxonomyDetailResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "elements": {
+            "items": {
+              "$ref": "#/components/schemas/ResolvedTaxonomyElementResponse",
+            },
+            "type": "array",
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonomyRevisionSummaryResponse",
+            },
+            "type": "array",
+          },
+          "selectedRevision": {
+            "$ref": "#/components/schemas/TaxonomyRevisionResponse",
+          },
+          "taxonomy": {
+            "$ref": "#/components/schemas/TaxonomyResponse",
+          },
+        },
+        "required": [
+          "taxonomy",
+          "selectedRevision",
+          "revisions",
+          "elements",
+        ],
+        "type": "object",
+      },
+      "TaxonomyElementResponse": {
+        "properties": {
+          "_id": {
+            "type": "string",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "creator": {
+            "type": "string",
+          },
+          "deletedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "description": {
+            "type": "string",
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string",
+          },
+          "latestRevision": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+          },
+          "latestRevisionId": {
+            "type": "string",
+          },
+          "name": {
+            "type": "string",
+          },
+          "projectId": {
+            "type": "string",
+          },
+          "revisionCounter": {
+            "minimum": 0,
+            "type": "integer",
+          },
+          "sourceType": {
+            "enum": [
+              "builtin",
+              "user",
+            ],
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+        },
+        "required": [
+          "_id",
+          "projectId",
+          "id",
+          "name",
+          "sourceType",
+          "revisionCounter",
+          "createdAt",
+        ],
+        "type": "object",
+      },
+      "TaxonomyElementRevisionResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PortableTaxonomyElement",
+          },
+          {
+            "additionalProperties": false,
+            "default": undefined,
+            "properties": {
+              "_id": {
+                "type": "string",
+              },
+              "contentSha256": {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string",
+              },
+              "createdAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "creator": {
+                "type": "string",
+              },
+              "elementId": {
+                "type": "string",
+              },
+              "projectId": {
+                "type": "string",
+              },
+              "ref": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*@r[1-9]\\d*$",
+                "type": "string",
+              },
+              "revision": {
+                "exclusiveMinimum": 0,
+                "type": "integer",
+              },
+              "sourceType": {
+                "enum": [
+                  "builtin",
+                  "user",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [
+              "_id",
+              "elementId",
+              "projectId",
+              "sourceType",
+              "revision",
+              "ref",
+              "contentSha256",
+              "createdAt",
+            ],
+            "type": "object",
+          },
+        ],
+      },
+      "TaxonomyEvaluationReference": {
+        "properties": {
+          "contentSha256": {
+            "type": "string",
+          },
+          "schemaVersion": {
+            "type": "string",
+          },
+          "sizeBytes": {
+            "minimum": 0,
+            "type": "integer",
+          },
+          "url": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "url",
+          "schemaVersion",
+          "contentSha256",
+          "sizeBytes",
+        ],
+        "type": "object",
+      },
+      "TaxonomyListItemResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TaxonomyResponse",
+          },
+          {
+            "default": undefined,
+            "properties": {
+              "elementCount": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "ref": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*@r[1-9]\\d*$",
+                "type": "string",
+              },
+              "version": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "ref",
+              "version",
+              "elementCount",
+            ],
+            "type": "object",
+          },
+        ],
+      },
+      "TaxonomyReadoutReference": {
+        "properties": {
+          "error": {
+            "type": "string",
+          },
+          "experimentExecutionId": {
+            "type": "string",
+          },
+          "jsonUrl": {
+            "type": "string",
+          },
+          "markdownUrl": {
+            "type": "string",
+          },
+          "status": {
+            "enum": [
+              "processing",
+              "done",
+              "failed",
+            ],
+            "type": "string",
+          },
+          "taxonomyRevisionId": {
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+        },
+        "required": [
+          "status",
+          "experimentExecutionId",
+          "taxonomyRevisionId",
+          "updatedAt",
+        ],
+        "type": "object",
+      },
+      "TaxonomyResponse": {
+        "properties": {
+          "_id": {
+            "type": "string",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "creator": {
+            "type": "string",
+          },
+          "deletedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "description": {
+            "type": "string",
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string",
+          },
+          "latestRevision": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+          },
+          "latestRevisionId": {
+            "type": "string",
+          },
+          "name": {
+            "type": "string",
+          },
+          "projectId": {
+            "type": "string",
+          },
+          "revisionCounter": {
+            "minimum": 0,
+            "type": "integer",
+          },
+          "sourceType": {
+            "enum": [
+              "builtin",
+              "user",
+            ],
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+        },
+        "required": [
+          "_id",
+          "projectId",
+          "id",
+          "name",
+          "sourceType",
+          "revisionCounter",
+          "createdAt",
+        ],
+        "type": "object",
+      },
+      "TaxonomyRevisionResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PortableTaxonomy",
+          },
+          {
+            "additionalProperties": false,
+            "default": undefined,
+            "properties": {
+              "_id": {
+                "type": "string",
+              },
+              "contentSha256": {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string",
+              },
+              "createdAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "creator": {
+                "type": "string",
+              },
+              "projectId": {
+                "type": "string",
+              },
+              "ref": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*@r[1-9]\\d*$",
+                "type": "string",
+              },
+              "revision": {
+                "exclusiveMinimum": 0,
+                "type": "integer",
+              },
+              "sourceType": {
+                "enum": [
+                  "builtin",
+                  "user",
+                ],
+                "type": "string",
+              },
+              "taxonomyId": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "_id",
+              "taxonomyId",
+              "projectId",
+              "sourceType",
+              "revision",
+              "ref",
+              "contentSha256",
+              "createdAt",
+            ],
+            "type": "object",
+          },
+        ],
+      },
+      "TaxonomyRevisionSummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "_id": {
+            "type": "string",
+          },
+          "contentSha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "type": "string",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "creator": {
+            "type": "string",
+          },
+          "elementCount": {
+            "minimum": 0,
+            "type": "integer",
+          },
+          "isLatest": {
+            "type": "boolean",
+          },
+          "ref": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*@r[1-9]\\d*$",
+            "type": "string",
+          },
+          "revision": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+          },
+          "version": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "_id",
+          "revision",
+          "ref",
+          "version",
+          "elementCount",
+          "contentSha256",
+          "createdAt",
+          "isLatest",
+        ],
+        "type": "object",
+      },
+      "TaxonomyRunResultResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "metadata": {},
+          "results": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "element": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "category_id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "label": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                      ],
+                      "type": "object",
+                    },
+                    "implementation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "attempts": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "attempt": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      1,
+                                    ],
+                                    "type": "number",
+                                  },
+                                  {
+                                    "enum": [
+                                      2,
+                                    ],
+                                    "type": "number",
+                                  },
+                                ],
+                              },
+                              "kind": {
+                                "enum": [
+                                  "initial",
+                                  "repair",
+                                ],
+                                "type": "string",
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "succeeded",
+                                  "invalid_output",
+                                  "execution_failed",
+                                  "cancelled",
+                                ],
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "attempt",
+                              "kind",
+                              "outcome",
+                            ],
+                            "type": "object",
+                          },
+                          "maxItems": 2,
+                          "minItems": 1,
+                          "type": "array",
+                        },
+                        "handler": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "provider": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "entry": {
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "integrity": {
+                              "pattern": "^[a-f0-9]{64}$",
+                              "type": "string",
+                            },
+                            "name": {
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "origin": {
+                              "enum": [
+                                "builtin",
+                                "local",
+                                "package",
+                              ],
+                              "type": "string",
+                            },
+                            "version": {
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "name",
+                            "origin",
+                          ],
+                          "type": "object",
+                        },
+                        "type": {
+                          "enum": [
+                            "prompt",
+                            "deterministic",
+                          ],
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "type",
+                        "attempts",
+                      ],
+                      "type": "object",
+                    },
+                    "input": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "archive_root": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "normalization": {
+                          "enum": [
+                            "scope/taxonome-normalized-atif/v1",
+                          ],
+                          "type": "string",
+                        },
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "run_id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "session_id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "sha256": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string",
+                        },
+                        "trajectory_id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "normalization",
+                        "sha256",
+                      ],
+                      "type": "object",
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "observed": {
+                              "enum": [
+                                true,
+                              ],
+                              "type": "boolean",
+                            },
+                            "occurrences": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "evidence": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "path": {
+                                          "minLength": 1,
+                                          "type": "string",
+                                        },
+                                        "role": {
+                                          "minLength": 1,
+                                          "type": "string",
+                                        },
+                                      },
+                                      "required": [
+                                        "role",
+                                        "path",
+                                      ],
+                                      "type": "object",
+                                    },
+                                    "maxItems": 100,
+                                    "minItems": 1,
+                                    "type": "array",
+                                  },
+                                },
+                                "required": [
+                                  "evidence",
+                                ],
+                                "type": "object",
+                              },
+                              "maxItems": 100,
+                              "minItems": 1,
+                              "type": "array",
+                            },
+                            "state": {
+                              "enum": [
+                                "completed",
+                              ],
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "state",
+                            "observed",
+                            "occurrences",
+                          ],
+                          "type": "object",
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "observed": {
+                              "enum": [
+                                false,
+                              ],
+                              "type": "boolean",
+                            },
+                            "state": {
+                              "enum": [
+                                "completed",
+                              ],
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "state",
+                            "observed",
+                          ],
+                          "type": "object",
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "reason": {
+                              "maxLength": 2000,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "state": {
+                              "enum": [
+                                "indeterminate",
+                                "inapplicable",
+                              ],
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "state",
+                            "reason",
+                          ],
+                          "type": "object",
+                        },
+                      ],
+                    },
+                    "schema_version": {
+                      "enum": [
+                        "scope/taxonomy-evaluation/v1",
+                      ],
+                      "type": "string",
+                    },
+                    "status": {
+                      "enum": [
+                        "succeeded",
+                      ],
+                      "type": "string",
+                    },
+                    "taxonomy": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "digest": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string",
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "version": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "id",
+                        "version",
+                        "digest",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "schema_version",
+                    "taxonomy",
+                    "element",
+                    "implementation",
+                    "input",
+                    "status",
+                    "result",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "element": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "category_id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "label": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                      ],
+                      "type": "object",
+                    },
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "execution_failed",
+                            "cancelled",
+                            "invalid_output",
+                            "invalid_input_binding",
+                          ],
+                          "type": "string",
+                        },
+                        "message": {
+                          "maxLength": 2000,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "source_locations": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "archive_entry": {
+                                "type": "string",
+                              },
+                              "file": {
+                                "type": "string",
+                              },
+                              "generated_by": {
+                                "type": "string",
+                              },
+                              "jsonl_line": {
+                                "exclusiveMinimum": 0,
+                                "type": "integer",
+                              },
+                              "normalized_path": {
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "original_path": {
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "normalized_path",
+                              "original_path",
+                            ],
+                            "type": "object",
+                          },
+                          "maxItems": 100,
+                          "type": "array",
+                        },
+                        "validation_errors": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "actual_type": {
+                                "enum": [
+                                  "atif.step",
+                                  "atif.tool_call",
+                                  "atif.observation",
+                                  "atif.observation_result",
+                                  "atif.content_part",
+                                  "atif.image_source",
+                                  "atif.audio_source",
+                                  "scope.discovery",
+                                  "scope.input_validation_issue",
+                                ],
+                                "type": "string",
+                              },
+                              "code": {
+                                "enum": [
+                                  "invalid_json",
+                                  "schema_mismatch",
+                                  "unknown_role",
+                                  "role_cardinality",
+                                  "duplicate_reference",
+                                  "invalid_jsonpath",
+                                  "unresolved_reference",
+                                  "reference_type_mismatch",
+                                  "reference_constraint_mismatch",
+                                ],
+                                "type": "string",
+                              },
+                              "evidence_path": {
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "expected_type": {
+                                "enum": [
+                                  "atif.step",
+                                  "atif.tool_call",
+                                  "atif.observation",
+                                  "atif.observation_result",
+                                  "atif.content_part",
+                                  "atif.image_source",
+                                  "atif.audio_source",
+                                  "scope.discovery",
+                                  "scope.input_validation_issue",
+                                ],
+                                "type": "string",
+                              },
+                              "message": {
+                                "maxLength": 1000,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "output_path": {
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "role": {
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "code",
+                              "output_path",
+                            ],
+                            "type": "object",
+                          },
+                          "maxItems": 100,
+                          "type": "array",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                      ],
+                      "type": "object",
+                    },
+                    "implementation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "attempts": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "attempt": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      1,
+                                    ],
+                                    "type": "number",
+                                  },
+                                  {
+                                    "enum": [
+                                      2,
+                                    ],
+                                    "type": "number",
+                                  },
+                                ],
+                              },
+                              "kind": {
+                                "enum": [
+                                  "initial",
+                                  "repair",
+                                ],
+                                "type": "string",
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "succeeded",
+                                  "invalid_output",
+                                  "execution_failed",
+                                  "cancelled",
+                                ],
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "attempt",
+                              "kind",
+                              "outcome",
+                            ],
+                            "type": "object",
+                          },
+                          "maxItems": 2,
+                          "minItems": 1,
+                          "type": "array",
+                        },
+                        "handler": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "provider": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "entry": {
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "integrity": {
+                              "pattern": "^[a-f0-9]{64}$",
+                              "type": "string",
+                            },
+                            "name": {
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "origin": {
+                              "enum": [
+                                "builtin",
+                                "local",
+                                "package",
+                              ],
+                              "type": "string",
+                            },
+                            "version": {
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "name",
+                            "origin",
+                          ],
+                          "type": "object",
+                        },
+                        "type": {
+                          "enum": [
+                            "prompt",
+                            "deterministic",
+                          ],
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "type",
+                        "attempts",
+                      ],
+                      "type": "object",
+                    },
+                    "input": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "archive_root": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "normalization": {
+                          "enum": [
+                            "scope/taxonome-normalized-atif/v1",
+                          ],
+                          "type": "string",
+                        },
+                        "request_id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "run_id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "session_id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "sha256": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string",
+                        },
+                        "trajectory_id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "normalization",
+                        "sha256",
+                      ],
+                      "type": "object",
+                    },
+                    "schema_version": {
+                      "enum": [
+                        "scope/taxonomy-evaluation/v1",
+                      ],
+                      "type": "string",
+                    },
+                    "status": {
+                      "enum": [
+                        "failed",
+                      ],
+                      "type": "string",
+                    },
+                    "taxonomy": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "digest": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string",
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "version": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "id",
+                        "version",
+                        "digest",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "schema_version",
+                    "taxonomy",
+                    "element",
+                    "implementation",
+                    "input",
+                    "status",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              ],
+            },
+            "type": "array",
+          },
+          "run": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "profile": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "label": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "id",
+                  "label",
+                ],
+                "type": "object",
+              },
+              "scenario": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "label": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "task": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "id",
+                  "label",
+                ],
+                "type": "object",
+              },
+            },
+            "required": [
+              "id",
+              "scenario",
+              "profile",
+            ],
+            "type": "object",
+          },
+        },
+        "required": [
+          "run",
+          "results",
+        ],
+        "type": "object",
+      },
       "TokenUsage": {
         "properties": {
           "completionTokens": {
@@ -5528,6 +7504,21 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
           "name": {
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "UpdateTaxonomyMetadataInput": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 4096,
+            "type": "string",
+          },
+          "name": {
+            "maxLength": 256,
             "minLength": 1,
             "type": "string",
           },
@@ -8026,6 +10017,128 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "summary": "Retry current experiment processing",
+        "tags": [
+          "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/taxonomy-readout": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyReadoutReference",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Get typed Taxonome readout status",
+        "tags": [
+          "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/taxonomy-readout/json": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+          },
+        },
+        "summary": "Download Taxonome readout json",
+        "tags": [
+          "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/taxonomy-readout/markdown": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+          },
+        },
+        "summary": "Download Taxonome readout markdown",
+        "tags": [
+          "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/taxonomy-readout/retry": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyReadoutReference",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Generate or retry the typed Taxonome readout",
         "tags": [
           "Experiments",
         ],
@@ -13162,6 +15275,59 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
       },
     },
+    "/api/v1/requests/{id}/runs/{runId}/taxonomy-evaluation": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyEvaluationReference",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Get the exact-run Taxonome result reference",
+        "tags": [
+          "Requests",
+        ],
+      },
+    },
+    "/api/v1/requests/{id}/runs/{runId}/taxonomy-evaluation/content": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+          },
+        },
+        "summary": "Download the exact-run compressed Taxonome result",
+        "tags": [
+          "Requests",
+        ],
+      },
+    },
+    "/api/v1/requests/{id}/runs/{runId}/taxonomy-evaluation/json": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyRunResultResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Get the validated exact-run Taxonome result JSON",
+        "tags": [
+          "Requests",
+        ],
+      },
+    },
     "/api/v1/requests/{id}/runs/{runId}/tool-calls": {
       "get": {
         "parameters": [
@@ -14766,6 +16932,612 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Toggle feature flag on task prompt",
         "tags": [
           "Task Prompts",
+        ],
+      },
+    },
+    "/api/v1/taxonomies": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaxonomyListItemResponse",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "List project taxonomies",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+      "post": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaxonomyInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Create a user taxonomy and revision 1",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomies/import": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportTaxonomyYamlInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Import taxonomy YAML and referenced element YAML",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomies/{id}": {
+      "delete": {
+        "responses": {
+          "204": {
+            "description": "Success",
+          },
+        },
+        "summary": "Soft-delete a taxonomy",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Get a taxonomy",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+      "patch": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaxonomyMetadataInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Update taxonomy metadata",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomies/{id}/detail": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyDetailResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Get taxonomy detail with exact ordered element revisions",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomies/{id}/restore": {
+      "post": {
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Restore a taxonomy",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomies/{id}/revisions": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaxonomyRevisionResponse",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "List taxonomy revisions",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaxonomyRevisionInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyRevisionResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Create taxonomy revision",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomy-element-revisions/{revisionId}": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyElementRevisionResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Get an exact taxonomy element revision",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomy-element-revisions/{revisionId}/export": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+          },
+        },
+        "summary": "Export an exact taxonomy element revision as portable YAML",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomy-elements": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaxonomyElementResponse",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "List project taxonomy elements",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+      "post": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaxonomyElementInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyElementResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Create a user taxonomy element and revision 1",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomy-elements/{id}": {
+      "delete": {
+        "responses": {
+          "204": {
+            "description": "Success",
+          },
+        },
+        "summary": "Soft-delete a taxonomy element",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyElementResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Get a taxonomy element",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+      "patch": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaxonomyMetadataInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyElementResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Update taxonomy element metadata",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomy-elements/{id}/restore": {
+      "post": {
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyElementResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Restore a taxonomy element",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomy-elements/{id}/revisions": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaxonomyElementRevisionResponse",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "List taxonomy element revisions",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaxonomyElementRevisionInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyElementRevisionResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Create taxonomy element revision",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomy-revisions/{revisionId}": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyRevisionResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Get an exact taxonomy revision",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomy-revisions/{revisionId}/copy": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyBuiltinTaxonomyRevisionInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "Copy an exact built-in revision to user revision 1",
+        "tags": [
+          "Taxonomies",
+        ],
+      },
+    },
+    "/api/v1/taxonomy-revisions/{revisionId}/export": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+          },
+        },
+        "summary": "Export an exact taxonomy revision as portable YAML",
+        "tags": [
+          "Taxonomies",
         ],
       },
     },

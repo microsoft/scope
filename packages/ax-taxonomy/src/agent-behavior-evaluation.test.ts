@@ -42,7 +42,7 @@ async function caseAtif(id: string) {
   return parseScopeAtif(rows.find(row => row.id === id)!.atif);
 }
 
-describe("agent-behavior catalog definitions and handlers", () => {
+describe("Ax taxonomy catalog definitions and handlers", () => {
   it("evaluates deterministic Timeout with zero prompt executor calls", async () => {
     const loaded = await taxonomy();
     const atif = parseScopeAtif(JSON.parse(await readFile(
@@ -61,8 +61,8 @@ describe("agent-behavior catalog definitions and handlers", () => {
     expect(succeeded(evaluation)).toMatchObject({
       schema_version: "scope/taxonomy-evaluation/v1",
       taxonomy: {
-        id: "agent-behavior",
-        version: "3.0.0",
+        id: "ax-taxonomy",
+        version: "1.0.0",
         digest: loaded.digest,
       },
       element: {

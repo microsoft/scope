@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useLocation, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, FileText } from "lucide-react";
 import { api } from "@/lib/api";
@@ -14,13 +14,29 @@ import { TaskPromptBadge } from "@/components/TaskPromptBadge";
 import { AgentBadge, agentDisplayName, useAgentCatalog } from "@/components/AgentBadge";
 import { GATE_METADATA } from "@/lib/gates";
 import { formatDate, formatId, formatDuration, truncate } from "@/lib/utils";
+import type { RunNavigationState } from "@/lib/run-navigation";
 
-export function RunPreviewPanel() {
-  const { id } = useParams<{ id: string }>();
+export function RunPreviewPanel({
+  requestId,
+  runId,
+  onClose,
+  navigationState,
+}: {
+  requestId?: string;
+  runId?: string;
+  onClose?: () => void;
+  navigationState?: RunNavigationState;
+} = {}) {
+  const { id: routeId } = useParams<{ id: string }>();
+  const id = requestId ?? routeId;
   const navigate = useNavigate();
+  const location = useLocation();
+  const effectiveNavigationState =
+    navigationState ??
+    (location.state as RunNavigationState | undefined);
   const { agentById } = useAgentCatalog();
 
-  const { data: run, isLoading, error } = useQuery({
+  const { data: request, isLoading, error } = useQuery({
     queryKey: ["run", id],
     queryFn: () => api.getRun(id!),
     enabled: !!id,
@@ -30,6 +46,20 @@ export function RunPreviewPanel() {
       return 5_000;
     },
   });
+  const { data: attempts = [] } = useQuery({
+    queryKey: ["run-attempts", id],
+    queryFn: () => api.listRunAttempts(id!),
+    enabled: Boolean(id && runId),
+  });
+  const run = request
+    ? {
+        ...request,
+        run:
+          (runId
+            ? attempts.find((attempt) => attempt._id === runId)
+            : undefined) ?? request.run,
+      }
+    : undefined;
 
   const { data: profile } = useQuery({
     queryKey: ["profile", run?.profileId],
@@ -37,7 +67,9 @@ export function RunPreviewPanel() {
     enabled: !!run?.profileId,
   });
 
-  const closePanel = () => navigate({ pathname: "/runs", search: window.location.search });
+  const closePanel =
+    onClose ??
+    (() => navigate({ pathname: "/runs", search: window.location.search }));
 
   if (isLoading) {
     return (
@@ -79,7 +111,7 @@ export function RunPreviewPanel() {
       onClose={closePanel}
       headerActions={
         <div className="flex justify-end gap-2">
-          <Link to={`/runs/${run._id}`}>
+          <Link to={`/runs/${run._id}`} state={effectiveNavigationState}>
             <Button variant="outline" size="sm" className="gap-1.5">
               <ExternalLink className="h-3.5 w-3.5" />
               Open full view

@@ -26,11 +26,13 @@ import * as textarea from "./textarea.stories";
 import * as tooltip from "./tooltip.stories";
 import * as sonner from "./sonner.stories";
 import * as experimentReports from "../ExperimentReportCard.stories";
+import * as taxonomyStatus from "../TaxonomyStatus.stories";
+import * as taxonomeResultView from "../TaxonomeResultView.stories";
 
 const modules: Record<string, Record<string, unknown>> = {
   alert, alertDialog, checkbox, dialog, dropdownMenu, label, popover, scrollArea,
   select, separator, sheet, skeleton, switch: sw, table, tabs, textarea,
-  tooltip, sonner, experimentReports,
+  tooltip, sonner, experimentReports, taxonomyStatus, taxonomeResultView,
 };
 
 afterEach(() => cleanup());

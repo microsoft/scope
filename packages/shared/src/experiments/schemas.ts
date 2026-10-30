@@ -60,6 +60,14 @@ export const ExperimentRevisionSchema = z
     memberCount: z.number().int().nonnegative(),
     membershipFingerprint: IdSchema,
     reportTemplateIds: z.array(IdSchema).max(64).default([]),
+    taxonomy: z
+      .object({
+        taxonomyRevisionId: IdSchema,
+        ref: IdSchema,
+        contentSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+      .strict()
+      .optional(),
     definitionFingerprint: IdSchema,
     createdAt: z.coerce.date(),
   })
@@ -116,6 +124,7 @@ const ExperimentExecutionBaseSchema = z
     version: z.number().int().min(1),
     requests: ExperimentFixedRequestPayloadSchema,
     vectorFingerprint: IdSchema,
+    taxonomy: ExperimentRevisionSchema.shape.taxonomy,
     handlerSummary: z
       .record(IdSchema, ExperimentHandlerSummarySchema)
       .refine((value) => Object.keys(value).length <= 64, {
@@ -183,6 +192,19 @@ const ExperimentExecutionBaseSchema = z
         reportId: IdSchema,
         url: z.string().min(1).max(2_048),
         updatedAt: z.coerce.date(),
+      })
+      .strict()
+      .optional(),
+    taxonomyReadout: z
+      .object({
+        status: z.enum(["processing", "done", "failed"]),
+        claimToken: IdSchema.optional(),
+        experimentExecutionId: IdSchema,
+        taxonomyRevisionId: IdSchema,
+        jsonUrl: z.string().min(1).max(2_048).optional(),
+        markdownUrl: z.string().min(1).max(2_048).optional(),
+        updatedAt: z.coerce.date(),
+        error: ErrorSchema.optional(),
       })
       .strict()
       .optional(),

@@ -11,12 +11,25 @@ import type { RunStatus, RunOutcome, RunState } from "@/types";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "info" | "purple";
 
-const statusConfig: Record<RunStatus, { label: string; variant: BadgeVariant }> = {
+export type StatusBadgeStatus =
+  | RunStatus
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "deleted"
+  | "missing";
+
+const statusConfig: Record<StatusBadgeStatus, { label: string; variant: BadgeVariant }> = {
   pending: { label: "Pending", variant: "secondary" },
   queued: { label: "Queued", variant: "purple" },
   processing: { label: "Processing", variant: "info" },
   paused: { label: "Paused", variant: "warning" },
   done: { label: "Done", variant: "success" },
+  completed: { label: "Completed", variant: "success" },
+  failed: { label: "Failed", variant: "destructive" },
+  cancelled: { label: "Cancelled", variant: "warning" },
+  deleted: { label: "Deleted", variant: "destructive" },
+  missing: { label: "Missing", variant: "outline" },
 };
 
 const outcomeConfig: Record<RunOutcome, { label: string; variant: BadgeVariant }> = {
@@ -71,7 +84,7 @@ export function StatusBadge({
   lastHeartbeatAt,
   startedAt,
 }: {
-  status: RunStatus;
+  status: StatusBadgeStatus;
   worker?: RunState["worker"];
   lastHeartbeatAt?: RunState["lastHeartbeatAt"];
   startedAt?: RunState["startedAt"];
@@ -80,7 +93,9 @@ export function StatusBadge({
   // Tick once per second while processing so both the live "Ns ago" tooltip
   // value and the heartbeat-freshness check below advance over time.
   const now = useNow(status === "processing");
-  const pulsing = shouldPulse(status, lastHeartbeatAt, now, startedAt);
+  const pulsing =
+    status === "processing" &&
+    shouldPulse(status, lastHeartbeatAt, now, startedAt);
   const className = pulsing ? "animate-shimmer" : undefined;
   const staleClassName = status === "processing" && !pulsing ? "opacity-50" : undefined;
   const badge = <Badge variant={config.variant} className={cn(className, staleClassName)}>{config.label}</Badge>;

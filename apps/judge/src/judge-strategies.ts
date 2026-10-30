@@ -28,6 +28,7 @@ import {
   type AgentTrajectory,
   createTrajectoryTools,
 } from "./agent-trajectory.js";
+import { resolveJudgeModel } from "./model-config.js";
 
 export interface JudgeStrategyContext {
   workspacePath: string;
@@ -281,7 +282,7 @@ export abstract class JudgeStrategy {
   protected tokenClient: TokenManagerClient;
 
   constructor(model?: string) {
-    this.model = model || process.env.JUDGE_MODEL || "gpt-5.4-mini";
+    this.model = resolveJudgeModel(model);
     this.timeout = parseInt(process.env.JUDGE_TIMEOUT || String(DEFAULT_JUDGE_TIMEOUT));
     this.maxRetries = parseInt(process.env.JUDGE_RETRIES || String(DEFAULT_JUDGE_RETRIES));
     this.tokenClient = new TokenManagerClient();

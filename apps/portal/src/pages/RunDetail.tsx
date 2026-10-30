@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { RetryConfirmDialog } from "@/components/RetryConfirmDialog";
@@ -17,6 +17,8 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusBadge, OutcomeBadge } from "@/components/StatusBadge";
 import { EnrichmentBadge } from "@/components/EnrichmentBadge";
+import { TaxonomyStatus } from "@/components/TaxonomyStatus";
+import { TaxonomeResultView } from "@/components/TaxonomeResultView";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
 import { LogViewer } from "@/components/LogViewer";
 import { TurnTimeline } from "@/components/TurnTimeline";
@@ -58,6 +60,7 @@ import { useShiftModifier } from "@/hooks/useShiftModifier";
 import { getRetryButtonState } from "@/components/RetryButton";
 import { deriveEnrichmentStatus } from "@/lib/enrichment";
 import { getRunSkillReferences } from "@/lib/skill-spec";
+import { resolveRunReturnState } from "@/lib/run-navigation";
 
 /** A compact labeled stat: a micro uppercase label above its value. */
 function MetaItem({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
@@ -421,14 +424,11 @@ function WholeRunObservationsPanel({
 export function RunDetail() {
   const { id, tab } = useParams<{ id: string; tab?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const selectedRunId = searchParams.get("runId");
-  const fromExperimentId = searchParams.get("fromExperiment");
-  const fromExperimentExecutionId = searchParams.get("experimentExecution");
-  const experimentHref = fromExperimentId
-    ? `/experiments/${fromExperimentId}${fromExperimentExecutionId ? `?execution=${encodeURIComponent(fromExperimentExecutionId)}` : ""}`
-    : undefined;
+  const runReturn = resolveRunReturnState(location.state);
   const [copied, setCopied] = useState(false);
   const [reportsView, setReportsView] = useState<"grid" | "list">("grid");
   const [reportsFilter, setReportsFilter] = useState<"latest" | "all">("latest");
@@ -489,9 +489,12 @@ export function RunDetail() {
   const normalizedTab = tab === "observations" ? "taxonomy" : tab;
   useEffect(() => {
     if (tab === "observations") {
-      navigate(`/runs/${id}/taxonomy${selectedRunId ? `?runId=${selectedRunId}` : ""}`, { replace: true });
+      navigate(
+        `/runs/${id}/taxonomy${selectedRunId ? `?runId=${selectedRunId}` : ""}`,
+        { replace: true, state: location.state },
+      );
     }
-  }, [tab, id, selectedRunId, navigate]);
+  }, [tab, id, selectedRunId, navigate, location.state]);
 
   const isActive = activeRun?.status === "pending" || activeRun?.status === "processing";
   // Note: "done" is terminal — not active, no log streaming needed
@@ -535,6 +538,21 @@ export function RunDetail() {
     (activeRun?.turns ?? []).some((turn) => (turn.observationResults?.length ?? 0) > 0) ||
     (activeRun?.observationResults?.length ?? 0) > 0;
   const hasConfiguredObservations = (run?.observations?.length ?? 0) > 0;
+  const taxonomyEvaluation = activeRun?.taxonomyEvaluation;
+  const taxonomyHandlerStatus = activeRun?.handlerStatus?.["pp-taxonomy"];
+  const hasTaxonomyEvaluation = Boolean(taxonomyEvaluation);
+  const hasTaxonomyHandler = Boolean(taxonomyHandlerStatus);
+  const taxonomyResultQuery = useQuery({
+    queryKey: ["taxonomy-evaluation-json", id, activeRun?._id],
+    queryFn: () => api.getTaxonomyEvaluationJson(id!, activeRun!._id),
+    enabled: Boolean(
+      id &&
+      activeRun?._id &&
+      activeRun.taxonomyEvaluation &&
+      normalizedTab === "taxonomy",
+    ),
+    retry: false,
+  });
   // Aggregate enrichment status across the whole post-processing DAG so the
   // "Enriched" badge waits for pp-observations instead of flipping after pp-atif.
   const enrichmentStatus = useMemo(
@@ -710,10 +728,10 @@ export function RunDetail() {
   if (error || !run) {
     return (
       <div className="space-y-4">
-        <Link to={experimentHref ?? "/runs"}>
+        <Link to={runReturn.returnTo}>
           <Button variant="ghost" className="gap-1.5">
             <ArrowLeft className="h-4 w-4" />{" "}
-            {experimentHref ? "Back to experiment" : "Back to runs"}
+            {runReturn.returnLabel}
           </Button>
         </Link>
         <div className="text-center py-12 text-destructive">
@@ -810,14 +828,10 @@ export function RunDetail() {
     <div className="space-y-6">
       {/* Back link + header */}
       <div>
-        <Link
-          to={
-            experimentHref ?? "/runs"
-          }
-        >
+        <Link to={runReturn.returnTo}>
           <Button variant="ghost" size="sm" className="gap-1.5 mb-2">
             <ArrowLeft className="h-4 w-4" />{" "}
-            {experimentHref ? "Back to experiment" : "Back to runs"}
+            {runReturn.returnLabel}
           </Button>
         </Link>
 
@@ -1021,9 +1035,15 @@ export function RunDetail() {
                             onClick={() => {
                               setShowAttempts(false);
                               if (isCurrent) {
-                                navigate(`/runs/${id}/${tab ?? ""}`, { replace: true });
+                                navigate(`/runs/${id}/${tab ?? ""}`, {
+                                  replace: true,
+                                  state: location.state,
+                                });
                               } else {
-                                navigate(`/runs/${id}/${tab ?? ""}?runId=${attempt._id}`, { replace: true });
+                                navigate(
+                                  `/runs/${id}/${tab ?? ""}?runId=${attempt._id}`,
+                                  { replace: true, state: location.state },
+                                );
                               }
                             }}
                           >
@@ -1155,7 +1175,12 @@ export function RunDetail() {
             Viewing attempt #{activeRun?.attemptNumber} (historical).{" "}
             <button
               className="underline hover:no-underline font-medium"
-              onClick={() => navigate(`/runs/${id}/${tab ?? ""}`, { replace: true })}
+              onClick={() =>
+                navigate(`/runs/${id}/${tab ?? ""}`, {
+                  replace: true,
+                  state: location.state,
+                })
+              }
             >
               View latest attempt
             </button>
@@ -1166,7 +1191,12 @@ export function RunDetail() {
       {/* Tabs */}
       <Tabs
         value={normalizedTab || (activeRun?.status === "done" && activeRun?.turns && activeRun.turns.length > 0 ? "turns" : "logs")}
-        onValueChange={(value) => navigate(`/runs/${id}/${value}${selectedRunId ? `?runId=${selectedRunId}` : ""}`)}
+        onValueChange={(value) =>
+          navigate(
+            `/runs/${id}/${value}${selectedRunId ? `?runId=${selectedRunId}` : ""}`,
+            { state: location.state },
+          )
+        }
       >
         <TabsList>
           <TabsTrigger value="turns">
@@ -1178,7 +1208,7 @@ export function RunDetail() {
           {hasHarData && <TabsTrigger value="network">Network</TabsTrigger>}
           {hasHarData && <TabsTrigger value="tool-calls">Tool Calls</TabsTrigger>}
           {hasVideoData && <TabsTrigger value="video"><Video className="h-3.5 w-3.5 mr-1" />Videos ({videoCount})</TabsTrigger>}
-          {(hasConfiguredObservations || hasObservationResults) && (
+          {(hasConfiguredObservations || hasObservationResults || hasTaxonomyHandler || hasTaxonomyEvaluation) && (
             <TabsTrigger value="taxonomy">
               Taxonomy {hasObservationResults ? `(${((activeRun?.turns?.reduce((count, turn) => count + (turn.observationResults?.length ?? 0), 0) ?? 0) + (activeRun?.observationResults?.length ?? 0))})` : ""}
             </TabsTrigger>
@@ -1278,8 +1308,62 @@ export function RunDetail() {
           </TabsContent>
         )}
 
-        {(hasConfiguredObservations || hasObservationResults) && (
+        {(hasConfiguredObservations || hasObservationResults || hasTaxonomyHandler || hasTaxonomyEvaluation) && (
           <TabsContent value="taxonomy" className="mt-4 space-y-6">
+            {(hasTaxonomyHandler || taxonomyEvaluation) && (
+              <section className="space-y-3 rounded-lg border p-4">
+                <div>
+                  <h3 className="text-lg font-medium">Taxonome evaluation</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Full SDK result for this exact run attempt.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <TaxonomyStatus
+                    summary={
+                      taxonomyHandlerStatus
+                        ? {
+                            status: taxonomyHandlerStatus.status,
+                            updatedAt: taxonomyHandlerStatus.updatedAt,
+                            error: taxonomyHandlerStatus.error,
+                            resultAvailable: Boolean(taxonomyEvaluation),
+                          }
+                        : undefined
+                    }
+                  />
+                  {taxonomyEvaluation && (
+                    <>
+                      <span>{taxonomyEvaluation.schemaVersion}</span>
+                      <span>{taxonomyEvaluation.sizeBytes.toLocaleString()} bytes</span>
+                      <span className="font-mono">{taxonomyEvaluation.contentSha256.slice(0, 12)}</span>
+                      <Button asChild size="sm" variant="outline">
+                        <a href={`/api/v1/requests/${encodeURIComponent(id!)}/runs/${encodeURIComponent(activeRun!._id)}/taxonomy-evaluation/content`}>
+                          Download JSON
+                        </a>
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </section>
+            )}
+            {activeRun?.taxonomyEvaluation && (
+              <TaxonomeResultView
+                result={taxonomyResultQuery.data}
+                loading={taxonomyResultQuery.isLoading}
+                error={
+                  taxonomyResultQuery.error instanceof Error
+                    ? taxonomyResultQuery.error.message
+                    : undefined
+                }
+                readOnlyLabel={
+                  isViewingHistorical
+                    ? "Historical"
+                    : run.deletedAt
+                      ? "Deleted"
+                      : undefined
+                }
+              />
+            )}
             <section className="space-y-3">
               <div>
                 <h3 className="text-lg font-medium">Observations</h3>

@@ -5,6 +5,18 @@
 
 export type RunStatus = "pending" | "queued" | "processing" | "paused" | "done";
 export type RunOutcome = "succeeded" | "failed" | "finished";
+export type TaxonomyStatusValue =
+  | "queued"
+  | "processing"
+  | "done"
+  | "failed";
+
+export interface TaxonomyHandlerSummary {
+  status: TaxonomyStatusValue;
+  updatedAt?: string;
+  error?: string;
+  resultAvailable: boolean;
+}
 
 export interface TokenUsage {
   promptTokens: number;
@@ -179,6 +191,12 @@ export interface RunState {
    * tracks pp-atif and is kept for backward compatibility.
    */
   handlerStatus?: Record<string, HandlerRunStatus>;
+  taxonomyEvaluation?: {
+    url: string;
+    schemaVersion: string;
+    contentSha256: string;
+    sizeBytes: number;
+  };
   /**
    * Whole-run observation results — one entry per selected `subject:"run"`
    * observation criterion, evaluated once against the final snapshot + the
@@ -225,6 +243,7 @@ export interface Run {
   gates?: GateConfig[];
   observations?: string[];
   gateSummaries?: GateRunSummary[];
+  taxonomyHandler?: TaxonomyHandlerSummary;
 }
 
 export interface CursorPaginatedResponse<T> {
@@ -1212,6 +1231,91 @@ export interface FeatureFlag {
   label: string;
   enabled: boolean;
   updatedAt: string;
+}
+
+export interface TaxonomyDocument {
+  _id: string;
+  projectId: string;
+  id: string;
+  name: string;
+  description?: string;
+  sourceType: "builtin" | "user";
+  revisionCounter: number;
+  latestRevisionId?: string;
+  latestRevision?: number;
+  createdAt: string;
+  updatedAt?: string;
+  deletedAt?: string;
+}
+
+export interface TaxonomyListItem extends TaxonomyDocument {
+  ref: string;
+  version: string;
+  elementCount: number;
+}
+
+export interface TaxonomyRevisionDocument {
+  _id: string;
+  taxonomyId: string;
+  projectId: string;
+  id: string;
+  version: string;
+  sourceType: "builtin" | "user";
+  revision: number;
+  ref: string;
+  contentSha256: string;
+  schema_version: "scope/taxonomy/v1";
+  surfaces: Array<{ id: string; label: string; description?: string }>;
+  elements: Array<{ path: string } | { ref: string }>;
+  createdAt: string;
+}
+
+export interface TaxonomyElementDocument extends TaxonomyDocument {}
+
+export interface TaxonomyElementRevisionDocument {
+  _id: string;
+  elementId: string;
+  projectId: string;
+  schema_version?: "scope/taxonomy/v1";
+  id: string;
+  label: string;
+  description?: string;
+  category_id?: string;
+  sourceType: "builtin" | "user";
+  revision: number;
+  ref: string;
+  contentSha256: string;
+  implementation:
+    | { type: "prompt"; prompt: string }
+    | { type: "deterministic"; handler: string; config?: unknown };
+  preconditions: Record<string, boolean>;
+  output: { evidence_roles: Record<string, unknown>; constraints?: unknown[] };
+  createdAt: string;
+}
+
+export interface TaxonomyRevisionSummary {
+  _id: string;
+  revision: number;
+  ref: string;
+  version: string;
+  elementCount: number;
+  contentSha256: string;
+  creator?: string;
+  createdAt: string;
+  isLatest: boolean;
+}
+
+export interface ResolvedTaxonomyElement {
+  position: number;
+  root: TaxonomyElementDocument;
+  revision: TaxonomyElementRevisionDocument;
+}
+
+export interface TaxonomyDetailDocument {
+  taxonomy: TaxonomyDocument;
+  selectedRevision: TaxonomyRevisionDocument;
+  revisions: TaxonomyRevisionSummary[];
+  elements: ResolvedTaxonomyElement[];
 }
 
 // =============================================================================

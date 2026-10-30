@@ -9,10 +9,10 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
-import { TaskPromptStore, SkillRevisionStore, SkillResolver, CodebaseStore, CodebaseRevisionStore, CodebaseResolver, ResourceStore, ResourceRevisionStore, ResourceResolver, McpSecretClient, McpSecretUnavailableError, BlobStorage, RedisHeartbeatStore, ProjectStore, loadAuthConfigFromEnv } from "shared";
+import { TaskPromptStore, SkillRevisionStore, SkillResolver, CodebaseStore, CodebaseRevisionStore, CodebaseResolver, ResourceStore, ResourceRevisionStore, ResourceResolver, TaxonomyRootStore, TaxonomyRevisionStore, McpSecretClient, McpSecretUnavailableError, BlobStorage, RedisHeartbeatStore, ProjectStore, loadAuthConfigFromEnv } from "shared";
 import type { ExperimentDocument, ExperimentExecutionHistoryDocument } from "shared";
 import { initTelemetry } from "telemetry";
-import type { TaskPromptDocument, SkillDocument, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, ResourceDocument, ResourceRevisionDocument, ProfileDocument, ProfileVersionDocument, ProjectDocument, HeartbeatStore, AuthProvider, ProfileEnricher, UserDocument } from "shared";
+import type { TaskPromptDocument, SkillDocument, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, ResourceDocument, ResourceRevisionDocument, TaxonomyDocument, TaxonomyRevisionDocument, TaxonomyElementDocument, TaxonomyElementRevisionDocument, PortableTaxonomyDocument, PortableTaxonomyElementDocument, ProfileDocument, ProfileVersionDocument, ProjectDocument, HeartbeatStore, AuthProvider, ProfileEnricher, UserDocument } from "shared";
 import { UserStore } from "./auth/user-store.js";
 import { createAuthMiddleware, createUserAccessMiddleware } from "./auth/middleware.js";
 import { authErrorHandler } from "./auth/error-handler.js";
@@ -32,6 +32,7 @@ import { registerRequestsVideoRoutes } from "./routes/requests/video.js";
 import { registerRequestsToolCallsRoutes } from "./routes/requests/tool-calls.js";
 import { registerRequestsSnapshotsRoutes } from "./routes/requests/snapshots.js";
 import { registerRequestsArchiveRoutes } from "./routes/requests/archive.js";
+import { registerRequestsTaxonomyEvaluationRoutes } from "./routes/requests/taxonomy-evaluation.js";
 import { registerCriteriaRoutes } from "./routes/criteria.js";
 import { registerPromptFeaturesRoutes } from "./routes/prompt-features.js";
 import { registerTaskPromptsRoutes } from "./routes/task-prompts.js";
@@ -49,6 +50,8 @@ import { registerSecretsRoutes } from "./routes/secrets.js";
 import { registerProfilesRoutes } from "./routes/profiles.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerExperimentsRoutes } from "./routes/experiments.js";
+import { registerTaxonomyRoutes } from "./routes/taxonomies.js";
+import { registerTaxonomyReadoutRoutes } from "./routes/taxonomy-readout.js";
 import { ProjectScopeError } from "./utils/project-scope.js";
 import { registerUsersRoutes } from "./routes/users.js";
 import { shutdownPortalCopilotClientPool } from "./copilot-client-pool.js";
@@ -144,6 +147,14 @@ let resourceRevisionCollection: Collection<ResourceRevisionDocument>;
 let resourceStore: ResourceStore;
 let resourceRevisionStore: ResourceRevisionStore;
 let resourceResolver: ResourceResolver;
+let taxonomyCollection: Collection<TaxonomyDocument>;
+let taxonomyRevisionCollection: Collection<TaxonomyRevisionDocument>;
+let taxonomyElementCollection: Collection<TaxonomyElementDocument>;
+let taxonomyElementRevisionCollection: Collection<TaxonomyElementRevisionDocument>;
+let taxonomyStore: TaxonomyRootStore<TaxonomyDocument>;
+let taxonomyRevisionStore: TaxonomyRevisionStore<TaxonomyRevisionDocument, TaxonomyDocument, PortableTaxonomyDocument>;
+let taxonomyElementStore: TaxonomyRootStore<TaxonomyElementDocument>;
+let taxonomyElementRevisionStore: TaxonomyRevisionStore<TaxonomyElementRevisionDocument, TaxonomyElementDocument, PortableTaxonomyElementDocument>;
 let blobStorage: BlobStorage;
 let heartbeatStore: HeartbeatStore;
 let reportQueueClient: QueueClient;
@@ -237,6 +248,23 @@ async function initializeClients(): Promise<void> {
   resourceRevisionStore = new ResourceRevisionStore(resourceRevisionCollection, resourceStore);
   resourceResolver = new ResourceResolver();
 
+  taxonomyCollection = db.collection<TaxonomyDocument>("taxonomies");
+  taxonomyRevisionCollection = db.collection<TaxonomyRevisionDocument>("taxonomy-revisions");
+  taxonomyElementCollection = db.collection<TaxonomyElementDocument>("taxonomy-elements");
+  taxonomyElementRevisionCollection = db.collection<TaxonomyElementRevisionDocument>("taxonomy-element-revisions");
+  taxonomyStore = new TaxonomyRootStore(taxonomyCollection);
+  taxonomyRevisionStore = new TaxonomyRevisionStore(
+    taxonomyRevisionCollection,
+    taxonomyStore,
+    "taxonomyId",
+  );
+  taxonomyElementStore = new TaxonomyRootStore(taxonomyElementCollection);
+  taxonomyElementRevisionStore = new TaxonomyRevisionStore(
+    taxonomyElementRevisionCollection,
+    taxonomyElementStore,
+    "elementId",
+  );
+
   // Note: Collection indexes are managed by db-migrations (see 002-create-indexes.ts).
   // Run `pnpm migrate:up` to apply pending migrations.
 
@@ -253,6 +281,7 @@ async function initializeClients(): Promise<void> {
     // when ready. See apps/portal/src/lib/gates.ts (GATE_FEATURE_FLAGS).
     { key: "gates-run", label: "Run Gate", enabled: false },
     { key: "gates-deploy", label: "Deploy Gate", enabled: false },
+    { key: "taxonome", label: "Taxonome and Taxonomies", enabled: false },
   ];
   for (const flag of defaultFlags) {
     await featureFlagCollection.updateOne(
@@ -344,6 +373,14 @@ const routeCtx: RouteContext = {
   get resourceStore() { return resourceStore; },
   get resourceRevisionStore() { return resourceRevisionStore; },
   get resourceResolver() { return resourceResolver; },
+  get taxonomyCollection() { return taxonomyCollection; },
+  get taxonomyRevisionCollection() { return taxonomyRevisionCollection; },
+  get taxonomyElementCollection() { return taxonomyElementCollection; },
+  get taxonomyElementRevisionCollection() { return taxonomyElementRevisionCollection; },
+  get taxonomyStore() { return taxonomyStore; },
+  get taxonomyRevisionStore() { return taxonomyRevisionStore; },
+  get taxonomyElementStore() { return taxonomyElementStore; },
+  get taxonomyElementRevisionStore() { return taxonomyElementRevisionStore; },
   get projectStore() { return projectStore; },
   get reportQueueClient() { return reportQueueClient; },
   get blobStorage() { return blobStorage; },
@@ -371,6 +408,8 @@ registerSecretsRoutes(routeCtx);
 registerSystemRoutes(routeCtx);
 registerProjectsRoutes(routeCtx);
 registerExperimentsRoutes(routeCtx);
+registerTaxonomyRoutes(routeCtx);
+registerTaxonomyReadoutRoutes(routeCtx);
 registerRequestsRoutes(routeCtx);
 registerRequestsCancelRoutes(routeCtx);
 registerRequestsLogsRoutes(routeCtx);
@@ -380,6 +419,7 @@ registerRequestsVideoRoutes(routeCtx);
 registerRequestsToolCallsRoutes(routeCtx);
 registerRequestsSnapshotsRoutes(routeCtx);
 registerRequestsArchiveRoutes(routeCtx);
+registerRequestsTaxonomyEvaluationRoutes(routeCtx);
 registerCriteriaRoutes(routeCtx);
 registerPromptFeaturesRoutes(routeCtx);
 registerTaskPromptsRoutes(routeCtx);

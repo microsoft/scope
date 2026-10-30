@@ -46,6 +46,9 @@ A static documentation site published to GitHub Pages, within the
   Keep the Privacy & Cookies, Your Privacy Choices (including its
   privacy-options icon), and Consumer Health Privacy links visible
   site-wide.
+- `src/lib/taxonome-catalog.mjs` — safe build-time projection of the canonical
+  Ax taxonomy YAML for the generated element reference. It must not import or
+  execute the runtime engine, handlers, plugins, SDK, or network clients.
 - `src/openapi/scope-openapi.json` — committed artifact generated from
   the Scope API's OpenAPI registry; drives the auto-generated REST
   API reference

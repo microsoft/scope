@@ -40,6 +40,10 @@ vi.mock("@/lib/api", async (importOriginal) => {
       updateExperimentRequests: vi.fn(),
       deleteExperiment: vi.fn(),
       restoreExperiment: vi.fn(),
+      getRun: vi.fn(),
+      listRunAttempts: vi.fn(),
+      getProfile: vi.fn(),
+      listAgents: vi.fn(async () => []),
       experimentReportStructuredUrl: vi.fn(
         (_experimentId: string, executionId: string, reportId: string) =>
           `/api/v1/experiments/experiment-1/executions/${executionId}/reports/${reportId}/structured?projectId=project-1`,
@@ -67,10 +71,46 @@ const currentRequests = Array.from({ length: 11 }, (_, index) => ({
   requestId: `request-${String(index + 1).padStart(2, "0")}`,
   runId: `run-current-${String(index + 1).padStart(2, "0")}`,
   task: `Current task ${index + 1}`,
-  status: index === 0 ? "done" : "pending",
-  outcome: index === 0 ? "success" : undefined,
+  status:
+    index === 0
+      ? "done"
+      : index === 1
+        ? "processing"
+        : index === 2
+          ? "queued"
+          : index === 3
+            ? "deleted"
+            : index === 4
+              ? "missing"
+              : "pending",
+  outcome: index === 0 ? "succeeded" : undefined,
+  criteria: ["uses_python"],
+  taskPromptId: "task-prompt-1",
   workerType: "coder-acp-copilot",
   model: "gpt-5.6-sol",
+  reasoningEffort: "high",
+  agentVersion: "copilot-dev",
+  os: { platform: "linux", release: "6.8", arch: "arm64" },
+  mcpServers: ["github"],
+  skillRevisions: ["owner/skills/python@r1"],
+  extensions: ["ms-python.python@1.0.0"],
+  profileId: "profile-1",
+  priority: 5,
+  attemptNumber: 1,
+  taxonomyHandler:
+    index === 0
+      ? { status: "done" as const, resultAvailable: true }
+      : index === 1
+        ? { status: "processing" as const, resultAvailable: false }
+        : index === 2
+          ? { status: "queued" as const, resultAvailable: false }
+          : index === 3
+            ? {
+                status: "failed" as const,
+                resultAvailable: false,
+                error: "Taxonome execution failed",
+              }
+            : undefined,
 }));
 
 const currentExecution: ExperimentExecutionView = {
@@ -179,7 +219,12 @@ const qualityReport: Report = {
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname}{location.search}</div>;
+  return (
+    <>
+      <div data-testid="location">{location.pathname}{location.search}</div>
+      <div data-testid="location-state">{JSON.stringify(location.state)}</div>
+    </>
+  );
 }
 
 function renderDetail(
@@ -238,6 +283,47 @@ beforeEach(() => {
   vi.mocked(api.listExperimentReports).mockResolvedValue([]);
   vi.mocked(api.deleteExperiment).mockReset();
   vi.mocked(api.restoreExperiment).mockReset();
+  vi.mocked(api.getRun).mockImplementation(async (requestId) => {
+    const request =
+      currentRequests.find((candidate) => candidate.requestId === requestId) ??
+      historicalExecution.requests[0];
+    return {
+      _id: request.requestId,
+      id: request.requestId,
+      scenario: {
+        task: request.task ?? "",
+        criteria: request.criteria ?? [],
+      },
+      workerType: request.workerType ?? "coder-acp-copilot",
+      model: request.model,
+      agentVersion: request.agentVersion,
+      createdAt: "2026-10-16T10:00:00.000Z",
+      run: {
+        _id: request.runId,
+        attemptNumber: request.attemptNumber ?? 1,
+        status:
+          request.status === "processing"
+            ? "processing"
+            : request.status === "queued"
+              ? "queued"
+              : "done",
+        outcome: request.outcome === "failed" ? "failed" : "succeeded",
+      },
+    };
+  });
+  vi.mocked(api.listRunAttempts).mockResolvedValue([]);
+  vi.mocked(api.getProfile).mockResolvedValue(undefined as never);
+  vi.mocked(api.listAgents).mockResolvedValue([
+    {
+      _id: "coder-acp-copilot",
+      name: "GitHub Copilot CLI",
+      supportedModels: ["gpt-5.6-sol"],
+      available: true,
+      capabilities: {},
+      versions: [],
+      createdAt: "2026-10-16T08:00:00.000Z",
+    },
+  ]);
 });
 
 afterEach(() => {
@@ -320,6 +406,16 @@ describe("ExperimentDetail", { timeout: 10_000 }, () => {
 
     expect(await screen.findByText("Runs in attempt 2")).toBeTruthy();
     expect(screen.getAllByText("Current task 1").length).toBeGreaterThan(0);
+    expect(
+      screen
+        .getAllByText("Processing")
+        .some((element) => element.className.includes("animate-shimmer")),
+    ).toBe(true);
+    expect(screen.getAllByText("Queued").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Deleted").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Missing").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Processing").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Historical task")).toHaveLength(0);
     expect(screen.getByText("1–10 of 11 runs")).toBeTruthy();
     const embeddedTable = document.querySelector(
@@ -363,11 +459,44 @@ describe("ExperimentDetail", { timeout: 10_000 }, () => {
     expect(
       screen.queryByRole("button", { name: "Retry processing" }),
     ).toBeNull();
-    fireEvent.click(screen.getAllByText("Historical task")[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "View" })[0]);
     expect((await screen.findByTestId("location")).textContent).toBe(
       "/runs/request-history?runId=run-history",
     );
+    expect(screen.getByTestId("location-state").textContent).toContain(
+      "Back to experiment",
+    );
 
+  });
+
+  it("opens, switches, and closes the shared Run preview without navigating", async () => {
+    renderDetail();
+
+    const firstTask = (await screen.findAllByText("Current task 1"))[0];
+    const firstRow = firstTask.closest("tr");
+    if (!firstRow) throw new Error("Run row is missing");
+    fireEvent.click(firstRow);
+    expect(
+      await screen.findByRole("complementary", { name: "Detail panel" }),
+    ).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/experiments/experiment-1",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close detail panel" }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("complementary", { name: "Detail panel" }),
+      ).toBeNull();
+    });
+
+    const secondTask = (await screen.findAllByText("Current task 2"))[0];
+    const secondRow = secondTask.closest("tr");
+    if (!secondRow) throw new Error("Second run row is missing");
+    fireEvent.click(secondRow);
+    expect(
+      await screen.findByRole("complementary", { name: "Detail panel" }),
+    ).toBeTruthy();
   });
 
   it("keeps processing retry disabled for a historical attempt", async () => {

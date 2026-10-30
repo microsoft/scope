@@ -25,6 +25,11 @@ describe("StatusBadge", () => {
       ["processing", "Processing"],
       ["paused", "Paused"],
       ["done", "Done"],
+      ["completed", "Completed"],
+      ["failed", "Failed"],
+      ["cancelled", "Cancelled"],
+      ["deleted", "Deleted"],
+      ["missing", "Missing"],
     ];
     for (const [status, label] of cases) {
       const { unmount } = render(<StatusBadge status={status} />);

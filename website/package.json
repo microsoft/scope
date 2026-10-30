@@ -8,7 +8,7 @@
     "start": "worktree-env && astro dev",
     "build": "astro build",
     "preview": "worktree-env && astro preview",
-    "test": "node --test src/plugins/*.test.mjs",
+    "test": "node --test src/plugins/*.test.mjs src/lib/*.test.mjs",
     "test:a11y": "SITE=https://microsoft.github.io BASE_PATH=/scope pnpm build && playwright test",
     "astro": "astro",
     "refresh:openapi": "cd .. && pnpm --filter api generate:openapi"
@@ -18,7 +18,8 @@
     "astro": "^6.4.6",
     "astro-mermaid": "1.4.0",
     "mermaid": "^11.17.2",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "yaml": "2.8.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

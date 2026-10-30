@@ -274,8 +274,8 @@ describe("YAML/archive/plugin CLI process contract", () => {
         "ground-truth.json",
         "--element",
         "beh-skipped-invocation",
-        "--output",
-        "artifact.json",
+        "--output-dir",
+        "optimized",
       ],
       ["readout", "results.json"],
     ];
@@ -693,7 +693,7 @@ describe("YAML/archive/plugin CLI process contract", () => {
       "--elements",
       "beh-timeout",
     ]);
-    expect(human.stdout).toContain("Taxonomy: agent-behavior v3.0.0");
+    expect(human.stdout).toContain("Taxonomy: ax-taxonomy v1.0.0");
     expect(human.stdout).toContain(
       "Timeout (beh-timeout): deterministic (scope/timeout-v1)",
     );
@@ -720,8 +720,8 @@ describe("YAML/archive/plugin CLI process contract", () => {
     expect(JSON.parse(stdout)).toMatchObject({
       results: [{
         taxonomy: {
-          id: "agent-behavior",
-          version: "3.0.0",
+          id: "ax-taxonomy",
+          version: "1.0.0",
         },
         element: { id: "beh-timeout" },
         implementation: {
@@ -935,52 +935,107 @@ describe("YAML/archive/plugin CLI process contract", () => {
     });
   });
 
-  it("rejects artifacts for deterministic or unselected elements before SDK use", async () => {
-    const deterministic = runCli([
-      "eval",
-      "--taxonomy",
-      "packages/ax-taxonomy/taxonomy/taxonomy.yaml",
-      "--inputs",
-      "packages/ax-taxonomy/fixtures/timeout-inputs.jsonl",
-      "--ground-truth",
-      "packages/ax-taxonomy/fixtures/timeout-ground-truth.json",
-      "--element",
-      "beh-timeout",
-      "--artifact",
-      "missing.ax.json",
-    ]);
-    await expect(deterministic).rejects.toMatchObject({
-      stderr: expect.stringContaining(
-        "--artifact requires at least one prompt element",
-      ),
-    });
-
-    const directory = await mkdtemp(join(tmpdir(), "taxonome-artifact-"));
+  it("rejects duplicate and unknown element overrides before SDK use", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "taxonome-override-"));
     try {
-      const artifactPath = join(directory, "wrong-element.ax.json");
-      await writeFile(artifactPath, JSON.stringify({
-        element_id: "beh-timeout",
-      }));
+      const overridePath = join(directory, "timeout.yaml");
+      await writeFile(
+        overridePath,
+        await readFile(
+          "packages/ax-taxonomy/taxonomy/elements/timeout.yaml",
+          "utf8",
+        ),
+      );
       await expect(runCli([
         "eval",
         "--taxonomy",
         "packages/ax-taxonomy/taxonomy/taxonomy.yaml",
-        "--inputs",
-        "packages/ax-taxonomy/fixtures/skipped-invocation-test-inputs.jsonl",
+        "--inputs", "packages/ax-taxonomy/fixtures/timeout-inputs.jsonl",
         "--ground-truth",
-        "packages/ax-taxonomy/fixtures/skipped-invocation-test-ground-truth.json",
-        "--element",
-        "beh-skipped-invocation",
-        "--artifact",
-        artifactPath,
+        "packages/ax-taxonomy/fixtures/timeout-ground-truth.json",
+        "--element", "beh-timeout",
+        "--element-override", overridePath,
+        "--element-override", overridePath,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining(
-          "targets unselected or non-prompt element 'beh-timeout'",
+          "Duplicate element override for 'beh-timeout'",
+        ),
+      });
+
+      const unknownPath = join(directory, "unknown.yaml");
+      await writeFile(
+        unknownPath,
+        `id: unknown-element
+label: Unknown
+implementation:
+  type: prompt
+  prompt: Test.
+preconditions: {}
+output:
+  evidence_roles:
+    evidence:
+      type: atif.step
+      description: Evidence.
+`,
+      );
+      await expect(runCli([
+        "eval",
+        "--taxonomy",
+        "packages/ax-taxonomy/taxonomy/taxonomy.yaml",
+        "--inputs", "packages/ax-taxonomy/fixtures/timeout-inputs.jsonl",
+        "--ground-truth",
+        "packages/ax-taxonomy/fixtures/timeout-ground-truth.json",
+        "--element", "beh-timeout",
+        "--element-override", unknownPath,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining(
+          "Unknown element override ID(s): unknown-element",
         ),
       });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it("validates optimize target selection before model initialization", async () => {
+    const base = [
+      "optimize",
+      "--taxonomy", "packages/ax-taxonomy/taxonomy/taxonomy.yaml",
+      "--inputs", "packages/ax-taxonomy/fixtures/timeout-inputs.jsonl",
+      "--ground-truth",
+      "packages/ax-taxonomy/fixtures/timeout-ground-truth.json",
+      "--output-dir", "unused-output",
+    ];
+    await expect(runCli([
+      ...base,
+      "--element", "beh-timeout",
+    ])).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "Deterministic elements cannot be optimized: beh-timeout",
+      ),
+    });
+    await expect(runCli([
+      ...base,
+      "--element", "missing-element",
+    ])).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "Unknown --element ID(s): missing-element",
+      ),
+    });
+    await expect(runCli([
+      ...base,
+      "--element", "beh-skipped-invocation",
+      "--element", "beh-skipped-invocation",
+    ])).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "Duplicate --element ID(s): beh-skipped-invocation",
+      ),
+    });
+    await expect(runCli(base)).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "beh-skipped-invocation: missing eligible Train input",
+      ),
+    });
   });
 
   it("continues after reviewed failures and keeps JSON progress ANSI-free", async () => {
@@ -1588,6 +1643,41 @@ describe("YAML/archive/plugin CLI process contract", () => {
     const readoutHelp = await runCli(["readout", "--help"]);
     expect(readoutHelp.stderr).toContain("--taxonomy <path>");
     expect(readoutHelp.stderr).toContain("--inputs <pattern>");
+
+    const optimizeHelp = await runCli(["optimize", "--help"]);
+    expect(optimizeHelp.stderr).toContain("--output-dir <path>");
+    expect(optimizeHelp.stderr).toContain("--in-place");
+    expect(optimizeHelp.stderr).toContain("--from-candidate <path>");
+    expect(optimizeHelp.stderr).toContain(
+      "--element <id>",
+    );
+    expect(optimizeHelp.stderr).not.toContain("--artifact");
+    expect(optimizeHelp.stderr).not.toContain("--element-override");
+
+    await expect(runCli([
+      "optimize",
+      "--taxonomy", "packages/ax-taxonomy/taxonomy/taxonomy.yaml",
+      "--from-candidate", "candidate.yaml",
+    ])).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "--from-candidate requires --in-place",
+      ),
+    });
+    await expect(runCli([
+      "optimize",
+      "--taxonomy", "packages/ax-taxonomy/taxonomy/taxonomy.yaml",
+      "--from-candidate", "candidate.yaml",
+      "--in-place",
+      "--inputs", "inputs.jsonl",
+    ])).rejects.toMatchObject({
+      stderr: expect.stringContaining(
+        "--from-candidate derives elements from selected YAML",
+      ),
+    });
+
+    const evalHelp = await runCli(["eval", "--help"]);
+    expect(evalHelp.stderr).toContain("--element-override <path>");
+    expect(evalHelp.stderr).not.toContain("--artifact");
 
     const error = runCli(
       ["run", "missing.json", "--taxonomy", "missing.yaml"],

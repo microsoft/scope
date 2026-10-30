@@ -8,11 +8,12 @@ import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import type { AttemptProvenance } from "./assessment.js";
 import { evaluate } from "./engine.js";
-import type { PromptExecutionResult } from "./engine.js";
+import type { PromptExecutionResult, PromptExecutor } from "./engine.js";
 import { HandlerRegistry } from "./handlers.js";
 import { parseScopeAtif } from "./scope-atif.js";
 import { loadTaxonomy } from "./taxonomy.js";
 import { createAtifProvenance } from "./atif/index.js";
+import { assertObservation } from "./evaluation-inputs.js";
 
 async function neutralTaxonomy() {
   return loadTaxonomy(
@@ -43,6 +44,108 @@ function promptSuccess(
 }
 
 describe("generic taxonomy engine", () => {
+  it("supports a frozen naive baseline and improved override with a fake executor", async () => {
+    const naiveTaxonomy = await neutralTaxonomy();
+    const source = naiveTaxonomy.elementById.get("test-observation")!;
+    const optimizedTaxonomy = await loadTaxonomy(
+      new URL("../fixtures/test-taxonomy.yaml", import.meta.url).pathname,
+      {
+        handlers: new HandlerRegistry(),
+        elementOverrides: new Map([[
+          source.id,
+          {
+            schema_version: "scope/taxonomy/v1",
+            id: source.id,
+            label: source.label,
+            implementation: {
+              type: "prompt",
+              prompt:
+                "Only report the behavior when the user repeats a request after the agent already answered it.",
+            },
+            preconditions: source.preconditions,
+            output: source.output,
+          },
+        ]]),
+      },
+    );
+    const repeated = parseScopeAtif({
+      schema_version: "ATIF-v1.8",
+      agent: { name: "fixture", version: "1.0.0" },
+      steps: [
+        { step_id: 1, source: "user", message: "Show status." },
+        { step_id: 2, source: "agent", message: "Status is green." },
+        { step_id: 3, source: "user", message: "Show status." },
+      ],
+    });
+    const firstRequest = parseScopeAtif({
+      schema_version: "ATIF-v1.8",
+      agent: { name: "fixture", version: "1.0.0" },
+      steps: [
+        { step_id: 1, source: "user", message: "Show status." },
+        { step_id: 2, source: "agent", message: "Checking." },
+      ],
+    });
+    const reviewed = [
+      {
+        atif: repeated,
+        expected: {
+          state: "completed" as const,
+          observed: true as const,
+          occurrences: [{
+            evidence: [{ role: "step", path: "$.steps[2]" }],
+          }],
+        },
+      },
+      {
+        atif: firstRequest,
+        expected: {
+          state: "completed" as const,
+          observed: false as const,
+        },
+      },
+    ];
+    const fakeExecutor: PromptExecutor = {
+      evaluate: vi.fn(async (element, input) => {
+        const distinguishesRepeatedRequest =
+          element.implementation.type === "prompt" &&
+          element.implementation.prompt.includes("after the agent already answered");
+        const repeatedRequest = input.atif.steps.length === 3;
+        const observed = distinguishesRepeatedRequest ? repeatedRequest : true;
+        return promptSuccess(observed
+          ? {
+              state: "completed",
+              observed: true,
+              occurrences: [{
+                evidence: [{
+                  role: "step",
+                  path: repeatedRequest ? "$.steps[2]" : "$.steps[0]",
+                }],
+              }],
+            }
+          : { state: "completed", observed: false });
+      }),
+    };
+
+    const evaluateReviewed = async (taxonomy: Awaited<ReturnType<typeof neutralTaxonomy>>) =>
+      Promise.all(reviewed.map(async ({ atif, expected }) => {
+        const [evaluation] = await evaluate(
+          { atif, taxonomy },
+          ["test-observation"],
+          fakeExecutor,
+        );
+        expect(evaluation.status).toBe("succeeded");
+        return assertObservation(evaluation.result!, expected);
+      }));
+
+    const baseline = await evaluateReviewed(naiveTaxonomy);
+    const optimized = await evaluateReviewed(optimizedTaxonomy);
+
+    expect(baseline.filter(errors => errors.length === 0)).toHaveLength(1);
+    expect(optimized.every(errors => errors.length === 0)).toBe(true);
+    expect(optimizedTaxonomy.elementById.get("test-observation")!
+      .implementation).not.toEqual(source.implementation);
+  });
+
   it("forwards cancellation and binds successful prompt output to exact input", async () => {
     const taxonomy = await neutralTaxonomy();
     const atif = simpleAtif();

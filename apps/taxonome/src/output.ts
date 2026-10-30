@@ -40,20 +40,22 @@ export interface RunIdentity {
   profile: { id: string; label: string };
 }
 
-/** Minimum optimization artifact surface needed by the human summary. */
-export interface OptimizationHumanArtifact {
-  /** Optimized element ID. */
+/** One optimized element summary without trajectory or prompt payloads. */
+export interface OptimizationHumanResult {
   element_id: string;
-  /** Training input IDs. */
   train_ids: string[];
-  /** Validation input IDs. */
   validation_ids: string[];
-  /** Bounded optimizer settings. */
-  settings: { maxMetricCalls: number };
-  /** Per-metric-call trace entries. */
-  metric_trace: unknown[];
-  /** Complete serialized Ax program. */
-  optimized: unknown;
+  settings: { maxMetricCalls: number; bootstrap: false };
+  metrics: {
+    best_score: number;
+    metric_calls: number;
+    total_rounds: number;
+    converged: boolean;
+    stop_reason?: string;
+    pareto_front_size?: number;
+  };
+  yaml_path: string;
+  manifest_path: string;
 }
 
 /** Inputs required for one human eval summary. */
@@ -78,8 +80,8 @@ export interface EvaluationHumanOptions {
     label: string;
     implementation: "prompt" | "deterministic";
   }>;
-  /** Restored optimization artifact paths. */
-  artifacts: string[];
+  /** Standard optimized element YAML override paths. */
+  element_overrides: string[];
   /** Executed input rows. */
   rows: readonly EvaluationResultRow[];
 }
@@ -193,8 +195,8 @@ export function renderEvalHuman(options: EvaluationHumanOptions): string {
     `Input files: ${options.input_files.join(", ")}`,
     `Ground truth: ${options.ground_truth_files.join(", ")}`,
     `Split: ${options.split}`,
-    `Configuration: ${options.artifacts.length
-      ? `optimized artifacts ${options.artifacts.join(", ")}`
+    `Configuration: ${options.element_overrides.length
+      ? `element overrides ${options.element_overrides.join(", ")}`
       : "original YAML prompt"}`,
     `Inputs: ${options.inputs}; repetitions: ${options.repetitions}; executions: ${options.rows.length}`,
     `Result: ${passed} passed; ${failed} failed; pass rate ${passRate}`,
@@ -255,49 +257,27 @@ export function renderEvalCompactHuman(
   return `Result  ${parts.join(" • ")}\n`;
 }
 
-/** Counts learned Ax components without exposing their prompt/evidence contents. */
-function optimizationCounts(optimized: unknown) {
-  const program = record(optimized);
-  const demos = Array.isArray(program?.demos) ? program.demos : [];
-  const learnedTraces = demos.reduce((total, demo) => {
-    const traces = record(demo)?.traces;
-    return total + (Array.isArray(traces) ? traces.length : 0);
-  }, 0);
-  const examples = Array.isArray(program?.examples) ? program.examples.length : 0;
-  const selectorState = record(program?.selectorState);
-  const instructionProposals = Object.entries(selectorState ?? {})
-    .filter(([name]) => name.endsWith("::instruction"))
-    .reduce((total, [, value]) => {
-      const proposals = record(value)?.proposals;
-      return total + (typeof proposals === "number" ? proposals : 0);
-    }, 0);
-  const stats = record(program?.stats);
-  return {
-    bestScore: typeof program?.bestScore === "number" ? program.bestScore : null,
-    earlyStopped: typeof stats?.earlyStopped === "boolean"
-      ? stats.earlyStopped
-      : null,
-    examples,
-    instructionProposals,
-    learnedTraces,
-  };
-}
-
 /** Renders optimizer facts without claiming an unmeasured improvement. */
 export function renderOptimizeHuman(
-  outputPath: string,
-  artifact: OptimizationHumanArtifact,
+  results: readonly OptimizationHumanResult[],
 ): string {
-  const counts = optimizationCounts(artifact.optimized);
-  return [
-    `Artifact: ${outputPath}`,
-    `Element: ${artifact.element_id}`,
-    `Best optimizer score: ${counts.bestScore ?? "unknown"}`,
-    `Training inputs: ${artifact.train_ids.length}; validation inputs: ${artifact.validation_ids.length}`,
-    `Learned traces: ${counts.learnedTraces}; examples: ${counts.examples}`,
-    `Metric entries: ${artifact.metric_trace.length}; max metric calls: ${artifact.settings.maxMetricCalls}`,
-    `Instruction proposals: ${counts.instructionProposals}; early stopped: ${counts.earlyStopped ?? "unknown"}`,
+  const lines = [
+    `Optimized elements: ${results.length}`,
+    ...results.flatMap(result => [
+      `- ${result.element_id}`,
+      `  Train: ${result.train_ids.length}; Validation: ${result.validation_ids.length}`,
+      `  Best score: ${result.metrics.best_score}; metric calls: ${result.metrics.metric_calls}/${result.settings.maxMetricCalls}`,
+      `  Rounds: ${result.metrics.total_rounds}; converged: ${result.metrics.converged}`,
+      `  Stop: ${result.metrics.stop_reason ?? "not reported"}` +
+        `${result.metrics.pareto_front_size === undefined
+          ? ""
+          : `; Pareto frontier: ${result.metrics.pareto_front_size}`}`,
+      `  YAML: ${result.yaml_path}`,
+      `  Manifest: ${result.manifest_path}`,
+    ]),
+    "Bootstrap: disabled; no examples or complete ATIF trajectories were embedded.",
     "No before/after accuracy gain is inferred by this summary.",
     "",
-  ].join("\n");
+  ];
+  return lines.join("\n");
 }

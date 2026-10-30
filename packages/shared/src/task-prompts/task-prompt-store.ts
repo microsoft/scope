@@ -44,6 +44,10 @@ export function promptBlobName(id: string): string {
  */
 export class TaskPromptStore {
   private readonly inlineMaxBytes: number;
+  private readonly inFlightCreates = new Map<
+    string,
+    Promise<TaskPromptDocument>
+  >();
 
   constructor(
     private collection: Collection<TaskPromptDocument>,
@@ -115,7 +119,28 @@ export class TaskPromptStore {
   ): Promise<TaskPromptDocument> {
     const trimmed = text.trim();
     const keyId = computePromptId(type, trimmed);
+    const inFlightKey = `${projectId}\u0000${keyId}`;
+    const active = this.inFlightCreates.get(inFlightKey);
+    if (active) return active;
 
+    const create = this.findOrCreateOnce(projectId, trimmed, keyId, type);
+    this.inFlightCreates.set(inFlightKey, create);
+    try {
+      return await create;
+    } finally {
+      if (this.inFlightCreates.get(inFlightKey) === create) {
+        this.inFlightCreates.delete(inFlightKey);
+      }
+    }
+  }
+
+  /** Performs one deduplicated lookup/create attempt for a single-flight key. */
+  private async findOrCreateOnce(
+    projectId: string,
+    trimmed: string,
+    keyId: string,
+    type: PromptType,
+  ): Promise<TaskPromptDocument> {
     // Try to find existing within this project (including soft-deleted — revive if needed)
     const existing = await this.collection.findOne({ projectId, keyId });
     if (existing) {
@@ -170,8 +195,20 @@ export class TaskPromptStore {
       doc.text = trimmed;
     }
 
-    await this.collection.insertOne(doc as any);
-    return doc;
+    try {
+      await this.collection.insertOne(doc as any);
+      return doc;
+    } catch (error) {
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? Number(error.code)
+          : undefined;
+      if (code !== 11000) throw error;
+
+      const winner = await this.collection.findOne({ projectId, keyId });
+      if (!winner) throw error;
+      return winner;
+    }
   }
 
   /**

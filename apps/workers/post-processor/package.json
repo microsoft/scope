@@ -12,6 +12,8 @@
   "dependencies": {
     "shared": "workspace:*",
     "telemetry": "workspace:*",
+    "taxonomy-engine": "workspace:*",
+    "ax-taxonomy": "workspace:*",
     "@azure/storage-queue": "^12.25.0",
     "atifact": "^0.10.1",
     "dotenv": "^16.4.5",

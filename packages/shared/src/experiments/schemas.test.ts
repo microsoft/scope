@@ -4,11 +4,47 @@
 import { describe, expect, it } from "vitest";
 import {
   ExperimentDocumentSchema,
+  ExperimentExecutionSchema,
   ExperimentMetadataSchema,
   ExperimentRequestStateSchema,
 } from "./schemas.js";
 
 describe("experiment schemas", () => {
+  it("accepts execution-level taxonomy readout state", () => {
+    const now = new Date();
+    const execution = ExperimentExecutionSchema.parse({
+      experimentExecutionId: "execution-1",
+      attemptNumber: 1,
+      version: 1,
+      requests: {
+        storage: "inline",
+        entryCount: 0,
+        payloadFingerprint: "fingerprint",
+        payloadVersion: 1,
+        entries: [],
+      },
+      vectorFingerprint: "vector",
+      handlerSummary: {},
+      reportTemplates: {},
+      blocking: [],
+      taxonomyReadout: {
+        status: "done",
+        experimentExecutionId: "execution-1",
+        taxonomyRevisionId: "taxonomy-revision-1",
+        jsonUrl: "https://example.test/readout.json",
+        markdownUrl: "https://example.test/readout.md",
+        updatedAt: now,
+      },
+      createdAt: now,
+      updatedAt: now,
+    }) as { taxonomyReadout?: { status: string; taxonomyRevisionId: string } };
+
+    expect(execution.taxonomyReadout).toMatchObject({
+      status: "done",
+      taxonomyRevisionId: "taxonomy-revision-1",
+    });
+  });
+
   it("accepts only canonical Experiment metadata fields", () => {
     expect(
       ExperimentMetadataSchema.parse({

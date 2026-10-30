@@ -32,6 +32,7 @@ import {
   SlidersHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
+  Network,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +60,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   /** When set, this nav item is only shown if the corresponding feature flag is enabled */
   featureKey?: string;
+  failClosed?: boolean;
 }
 
 interface NavGroup {
@@ -114,6 +116,7 @@ const navGroups: NavGroup[] = [
       { to: "/profiles", label: "Profiles", icon: SlidersHorizontal, featureKey: "profiles" },
       { to: "/skills", label: "Skills", icon: BookOpen, featureKey: "skills" },
       { to: "/codebases", label: "Codebases", icon: FolderGit2 },
+      { to: "/taxonomies", label: "Taxonomies", icon: Network, featureKey: "taxonome", failClosed: true },
     ],
   },
   {
@@ -579,7 +582,7 @@ function NewWorkflowLauncher({
 
 export function Layout() {
   const location = useLocation();
-  const { isFeatureEnabled } = useFeatureFlags();
+  const { isFeatureEnabled, isFeatureEnabledFailClosed } = useFeatureFlags();
   const { hasProject } = useProjectContext();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(() => {
@@ -599,7 +602,12 @@ export function Layout() {
   }, [sidebarExpanded]);
 
   const filterByFeature = (items: NavItem[]) =>
-    items.filter((item) => !item.featureKey || isFeatureEnabled(item.featureKey));
+    items.filter((item) => {
+      if (!item.featureKey) return true;
+      return item.failClosed
+        ? isFeatureEnabledFailClosed(item.featureKey)
+        : isFeatureEnabled(item.featureKey);
+    });
 
   const visibleGroups = useMemo(
     () =>

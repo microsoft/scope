@@ -163,6 +163,7 @@ export class ExperimentStore {
         version: 1,
         requests: payload,
         vectorFingerprint: fingerprintExperimentRequestVector(requests),
+        ...(revision.taxonomy ? { taxonomy: revision.taxonomy } : {}),
         handlerSummary: input.handlerSummary ?? {},
         blocking: input.blocking ?? [],
         createdAt: now,
@@ -1012,7 +1013,11 @@ export class ExperimentStore {
         metadata: experiment.metadata,
         requestIds: canonicalRequests.map(({ requestId }) => requestId),
         reportTemplateIds: experiment.revision.reportTemplateIds,
+        taxonomy: experiment.revision.taxonomy,
       }),
+      ...(experiment.revision.taxonomy
+        ? { taxonomy: experiment.revision.taxonomy }
+        : {}),
       createdAt: input.now ?? new Date(),
     }) as ExperimentRevision;
 
@@ -1061,6 +1066,7 @@ export class ExperimentStore {
           candidate,
           canonicalRequests,
           now,
+          nextRevision.taxonomy,
         ),
       }),
       now,
@@ -1070,6 +1076,7 @@ export class ExperimentStore {
       payload,
       canonicalRequests,
       now,
+      nextRevision.taxonomy,
     );
     const claimed = await this.collections.experiments.findOneAndUpdate(
       {
@@ -1146,7 +1153,11 @@ export class ExperimentStore {
         metadata: experiment.metadata,
         requestIds: requests.map(({ requestId }) => requestId).sort(),
         reportTemplateIds,
+        taxonomy: experiment.revision.taxonomy,
       }),
+      ...(experiment.revision.taxonomy
+        ? { taxonomy: experiment.revision.taxonomy }
+        : {}),
       createdAt: now,
     }) as ExperimentRevision;
     const reusableHandlerSummary: ExperimentExecution["handlerSummary"] =
@@ -1172,6 +1183,9 @@ export class ExperimentStore {
       version: 1,
       requests: payload,
       vectorFingerprint: experiment.execution.vectorFingerprint,
+      ...(experiment.revision.taxonomy
+        ? { taxonomy: experiment.revision.taxonomy }
+        : {}),
       handlerSummary: reusableHandlerSummary,
       reportTemplates: reusableReportTemplates,
       blocking: [],
@@ -1401,6 +1415,7 @@ export class ExperimentStore {
       version: 1,
       requests,
       vectorFingerprint: fingerprintExperimentRequestVector(entries),
+      ...(current.taxonomy ? { taxonomy: current.taxonomy } : {}),
       handlerSummary: {},
       reportTemplates: {},
       blocking: [],
@@ -1414,6 +1429,7 @@ export class ExperimentStore {
     requests: FixedPayload<ExperimentRequestState>,
     entries: ExperimentRequestState[],
     now: Date,
+    taxonomy?: ExperimentRevision["taxonomy"],
   ): ExperimentExecution {
     return {
       experimentExecutionId,
@@ -1421,6 +1437,7 @@ export class ExperimentStore {
       version: 1,
       requests,
       vectorFingerprint: fingerprintExperimentRequestVector(entries),
+      ...(taxonomy ? { taxonomy } : {}),
       handlerSummary: {},
       reportTemplates: {},
       blocking: [],

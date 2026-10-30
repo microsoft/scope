@@ -6,6 +6,7 @@ import {
   ReadoutQueueProcessor,
   type ReadoutQueueProcessorConfig,
 } from "./readout-queue-processor.js";
+import { resolveReadoutModel } from "./readout-config.js";
 
 const config: ReadoutQueueProcessorConfig = {
   mongoUri:
@@ -26,7 +27,7 @@ const config: ReadoutQueueProcessorConfig = {
   redisHost: process.env.REDIS_HOST || "localhost",
   redisPort: Number(process.env.REDIS_PORT) || 6379,
   redisPassword: process.env.REDIS_PASSWORD || "",
-  model: process.env.READOUT_MODEL || "gpt-5.4",
+  model: resolveReadoutModel(),
   sessionTimeoutMs:
     Number(process.env.READOUT_SESSION_TIMEOUT_MS) || 5 * 60 * 1000,
   tokenManagerUrl: process.env.TOKEN_MANAGER_URL,

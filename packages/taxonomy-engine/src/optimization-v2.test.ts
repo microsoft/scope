@@ -6,9 +6,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { createHandlerRegistry } from "./handlers.js";
 import {
-  OPTIMIZATION_ARTIFACT_VERSION,
+  AxOptimizationProgressReporter,
+  OPTIMIZATION_MANIFEST_VERSION,
+  optimizationManifestSchema,
+  optimizationFeedbackForCandidate,
+  optimizePromptElement,
   promptContractHash,
-  restoreOptimizationArtifactV2,
   scoreOptimizationCandidate,
   semanticHash,
 } from "./optimization-v2.js";
@@ -28,22 +31,299 @@ async function neutralTaxonomy() {
   );
 }
 
-describe("generic v2 optimization compatibility", () => {
-  it("rejects historical artifacts instead of reinterpreting them", async () => {
-    const taxonomy = await neutralTaxonomy();
-    expect(() => restoreOptimizationArtifactV2(
-      { format: "taxonome.ax.v1" },
-      taxonomy,
-      "test-observation",
-      "gpt-4.1",
-    )).toThrow(/incompatible/);
+describe("instruction-only optimization contract", () => {
+  it("maps structured Ax events without inventing unavailable signals", () => {
+    const progress: Array<Record<string, unknown>> = [];
+    const reporter = new AxOptimizationProgressReporter(
+      "prompt-a",
+      () => 7,
+      event => progress.push(event),
+      "prompt-a::instruction",
+      "naive",
+    );
+
+    reporter.handle({
+      name: "OptimizationStart",
+      value: {
+        optimizerType: "GEPA",
+        config: {},
+        exampleCount: 2,
+        validationCount: 2,
+      },
+    });
+    reporter.handle({
+      name: "ConfigurationProposal",
+      value: {
+        type: "instructions",
+        proposals: ["candidate"],
+        count: 3,
+      },
+    });
+    reporter.handle({
+      name: "RoundProgress",
+      value: {
+        round: 2,
+        totalRounds: 4,
+        currentScore: 0.5,
+        bestScore: 0.75,
+        configuration: {},
+        paretoFrontSize: 2,
+      },
+    });
+    reporter.handle({
+      name: "EarlyStopping",
+      value: { reason: "patience exhausted", finalScore: 0.75, round: 3 },
+    });
+    reporter.handle({
+      name: "OptimizationComplete",
+      value: {
+        bestScore: 0.75,
+        bestConfiguration: {},
+        stats: {},
+      },
+    });
+    reporter.handleLogger({
+      name: "Notification",
+      id: "gepa_teacher",
+      value: "teacher failed token=synthetic-secret",
+    });
+    reporter.handleRoundProgress({
+      round: 3,
+      totalRounds: 4,
+      currentScore: 0.75,
+      bestScore: 1,
+      currentConfiguration: {
+        "prompt-a::instruction": "improved",
+      },
+    });
+    reporter.handle("unstructured text");
+
+    expect(progress).toEqual([
+      expect.objectContaining({
+        phase: "optimizing",
+        elementId: "prompt-a",
+        metricCalls: 7,
+        message: "GEPA started",
+      }),
+      expect.objectContaining({
+        candidateCount: 3,
+        message: "instructions proposal",
+      }),
+      expect.objectContaining({
+        phase: "candidate",
+        trial: 2,
+        totalTrials: 4,
+        candidateCount: 3,
+        latestScore: 0.5,
+        bestScore: 0.75,
+        paretoFrontSize: 2,
+      }),
+      expect.objectContaining({
+        trial: 3,
+        latestScore: 0.75,
+        stopReason: "patience exhausted",
+      }),
+      expect.objectContaining({
+        bestScore: 0.75,
+        stopReason: "patience exhausted",
+        message: "optimizer complete",
+      }),
+      expect.objectContaining({
+        phase: "optimizing",
+        message: "teacher failed token=[redacted]",
+      }),
+      expect.objectContaining({
+        phase: "candidate",
+        trial: 3,
+        totalTrials: 4,
+        latestScore: 0.75,
+        bestScore: 1,
+        candidateCount: 3,
+        candidateChanged: true,
+        message: "trial 3/4; candidate changed",
+      }),
+    ]);
+    expect(progress[0]).not.toHaveProperty("trial");
+    expect(progress[0]).not.toHaveProperty("paretoFrontSize");
   });
 
-  it("requires the exact taxonomy, element, model, and prompt contract", async () => {
+  it("reports exact measured evaluator defects without feedback on passes", () => {
+    const failing: OptimizationCandidateScore = {
+      score: 0,
+      errors: ["observed expected false"],
+      diagnostics: [],
+      dimensions: {
+        schema_valid: true,
+        roles_valid: true,
+        references_resolved: true,
+        types_valid: true,
+        constraints_valid: true,
+        semantic_match: false,
+      },
+    };
+    expect(optimizationFeedbackForCandidate(failing)).toEqual([
+      "Assessment mismatch: observed expected false",
+    ]);
+    expect(optimizationFeedbackForCandidate({
+      ...failing,
+      score: 1,
+      errors: [],
+      dimensions: { ...failing.dimensions, semantic_match: true },
+    })).toBeUndefined();
+  });
+
+  it("uses real GEPA proposal and Validation selection to replace a naive instruction", async () => {
+    const base = await neutralTaxonomy();
+    const source = base.elementById.get("test-observation")!;
+    const taxonomy = await loadTaxonomy(
+      new URL("../fixtures/test-taxonomy.yaml", import.meta.url).pathname,
+      {
+        handlers: createHandlerRegistry(),
+        elementOverrides: new Map([[
+          source.id,
+          {
+            schema_version: "scope/taxonomy/v1",
+            id: source.id,
+            label: "Repeated Request",
+            description: "The agent asks again for information already discussed.",
+            implementation: {
+              type: "prompt",
+              prompt: "Decide whether repeated-request behavior occurred.",
+            },
+            preconditions: source.preconditions,
+            output: source.output,
+          },
+        ]]),
+      },
+    );
+    const makeInput = (
+      id: string,
+      split: "train" | "validation",
+      confirmation: boolean,
+    ) => ({
+      id,
+      family: `${id}-family`,
+      originating_run: `${id}-run`,
+      split,
+      provenance: "optimizer proposal regression",
+      elements: [source.id],
+      atif: parseScopeAtif({
+        schema_version: "ATIF-v1.8",
+        agent: { name: "fixture", version: "1.0.0" },
+        steps: [
+          { step_id: 1, source: "user", message: `Use warning for ${id}.` },
+          {
+            step_id: 2,
+            source: "agent",
+            message: confirmation
+              ? `Use warning for ${id}, correct?`
+              : `Which level should ${id} use?`,
+          },
+        ],
+      }),
+      source_file: "fixture.jsonl",
+      source_line: 1,
+      atif_provenance: createAtifProvenance(
+        { file: "fixture.jsonl", jsonl_line: 1 },
+        "$.atif",
+        "ATIF-v1.8",
+      ),
+    });
+    const inputs = [
+      makeInput("train-positive-a", "train", false),
+      makeInput("train-positive-b", "train", false),
+      makeInput("train-positive-c", "train", false),
+      makeInput("train-confirmation", "train", true),
+      makeInput("validation-positive-a", "validation", false),
+      makeInput("validation-positive-b", "validation", false),
+      makeInput("validation-positive-c", "validation", false),
+      makeInput("validation-confirmation", "validation", true),
+    ];
+    const groundTruth = Object.fromEntries(inputs.map(input => [
+      input.id,
+      {
+        [source.id]: input.id.endsWith("confirmation")
+          ? { state: "completed", observed: false }
+          : {
+              state: "completed",
+              observed: true,
+              occurrences: [{
+                evidence: [{ role: "step", path: "$.steps[1]" }],
+              }],
+            },
+      },
+    ]));
+    const improvedInstruction =
+      "Mark observed only when the agent re-asks for supplied information. " +
+      "Do not count confirmation questions.";
+    const complete = vi.fn(async (system: string, user: string) => {
+      if (user.includes("Target Id:")) {
+        return {
+          content:
+            "Feedback Summary: The naive instruction creates false positives for confirmation questions.",
+        };
+      }
+      if (user.includes("Component Key:")) {
+        return { content: `New Value: ${improvedInstruction}` };
+      }
+      const confirmation = user.includes(", correct?");
+      const improved = system.includes("Do not count confirmation questions");
+      const observed = confirmation ? !improved : true;
+      return {
+        content: `Observation: ${JSON.stringify(observed
+          ? {
+              state: "completed",
+              observed: true,
+              occurrences: [{
+                evidence: [{ role: "step", path: "$.steps[1]" }],
+              }],
+            }
+          : { state: "completed", observed: false })}`,
+      };
+    });
+    const ai = copilotAI({ complete, close: async () => { } }, "mock");
+    const progress: Array<{ phase: string; message: string }> = [];
+
+    const optimized = await optimizePromptElement(
+      taxonomy,
+      source.id,
+      inputs,
+      groundTruth,
+      ai,
+      ai,
+      "mock",
+      16,
+      event => progress.push(event),
+    );
+
+    expect(optimized.element.implementation.prompt).toBe(improvedInstruction);
+    expect(optimized.manifest.metrics.best_score).toBe(1);
+    expect(optimized.manifest.source_element_sha256)
+      .not.toBe(optimized.manifest.optimized_element_sha256);
+    const finalValidation = optimized.manifest.metric_trace
+      .filter(row => row.split === "validation")
+      .slice(-4);
+    expect(finalValidation.map(row => row.input_id).sort()).toEqual([
+      "validation-confirmation",
+      "validation-positive-a",
+      "validation-positive-b",
+      "validation-positive-c",
+    ]);
+    expect(finalValidation.every(row => row.score === 1)).toBe(true);
+    expect(progress).toContainEqual(expect.objectContaining({
+      phase: "optimizing",
+      message: expect.stringContaining("candidate changed"),
+    }));
+    expect(complete.mock.calls.some(([, user]) =>
+      user.includes("false positives for confirmation")
+    )).toBe(true);
+  });
+
+  it("publishes provenance without demos, examples, or trajectory bodies", async () => {
     const taxonomy = await neutralTaxonomy();
     const element = taxonomy.elementById.get("test-observation")!;
-    const artifact = {
-      format: OPTIMIZATION_ARTIFACT_VERSION,
+    const manifest = {
+      schema_version: OPTIMIZATION_MANIFEST_VERSION,
       taxonomy: {
         schema_version: taxonomy.schema_version,
         id: taxonomy.id,
@@ -58,58 +338,28 @@ describe("generic v2 optimization compatibility", () => {
       sdk_version: "1.0.1",
       train_ids: ["input-a"],
       validation_ids: ["input-b"],
-      settings: { maxMetricCalls: 4, seed: 42, bootstrap: true },
+      source_element_sha256: semanticHash(element),
+      optimized_element_sha256: semanticHash({ ...element, prompt: "better" }),
+      settings: { maxMetricCalls: 4, seed: 42, bootstrap: false },
       transport_settings: {
         reasoning_effort: "low",
         sampling: "sdk-managed",
         ax_sampling_hints_applied: false,
       },
-      optimized: {
-        bestScore: 1,
-        stats: {},
-        optimizerType: "GEPA",
-        optimizationTime: 1,
-        totalRounds: 1,
+      metrics: {
+        best_score: 1,
+        metric_calls: 2,
+        total_rounds: 1,
         converged: true,
-        demos: [{ evidence: "input-a" }],
+        stop_reason: "converged",
+        optimization_time_ms: 10,
       },
       metric_trace: [],
     };
-
-    expect(restoreOptimizationArtifactV2(
-      artifact,
-      taxonomy,
-      element.id,
-      "gpt-4.1",
-    ).optimized).toMatchObject({
-      demos: [{ evidence: "input-a" }],
-    });
-    expect(() => restoreOptimizationArtifactV2(
-      artifact,
-      taxonomy,
-      element.id,
-      "gpt-4.1-mini",
-    )).toThrow(/mismatch/);
-    expect(() => restoreOptimizationArtifactV2(
-      { ...artifact, contract_hash: "tampered" },
-      taxonomy,
-      element.id,
-      "gpt-4.1",
-    )).toThrow(/mismatch/);
-    expect(() => restoreOptimizationArtifactV2(
-      {
-        ...artifact,
-        metric_trace: [{
-          input_id: "input-a",
-          score: 1,
-          errors: [],
-          prediction: {},
-        }],
-      },
-      taxonomy,
-      element.id,
-      "gpt-4.1",
-    )).toThrow(/rerun optimization explicitly/);
+    expect(optimizationManifestSchema.parse(manifest)).toEqual(manifest);
+    expect(JSON.stringify(manifest)).not.toContain("trajectory_context");
+    expect(JSON.stringify(manifest)).not.toContain('"demos"');
+    expect(JSON.stringify(manifest)).not.toContain('"examples"');
     expect(promptContractHash(
       taxonomy,
       {
@@ -124,7 +374,7 @@ describe("generic v2 optimization compatibility", () => {
           }],
         },
       },
-    )).not.toBe(artifact.contract_hash);
+    )).not.toBe(manifest.contract_hash);
     expect(promptContractHash(
       taxonomy,
       {
@@ -134,7 +384,7 @@ describe("generic v2 optimization compatibility", () => {
           requires_task: !element.preconditions.requires_task,
         },
       },
-    )).not.toBe(artifact.contract_hash);
+    )).not.toBe(manifest.contract_hash);
   });
 
   it("hard-scores wrong evidence references zero without repair or model calls", async () => {
@@ -225,7 +475,6 @@ describe("generic v2 optimization compatibility", () => {
     });
     const program = createTaxonomyPromptProgram(
       element,
-      undefined,
       {
         correctionRetries: 0,
         captureInvalidOutput: true,

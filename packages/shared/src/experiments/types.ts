@@ -114,12 +114,19 @@ export interface ExperimentMetadata {
   createdBy?: string;
 }
 
+export interface ExperimentTaxonomySelection {
+  taxonomyRevisionId: string;
+  ref: string;
+  contentSha256: string;
+}
+
 export interface ExperimentRevision {
   experimentRevisionId: string;
   revisionNumber: number;
   memberCount: number;
   membershipFingerprint: string;
   reportTemplateIds: string[];
+  taxonomy?: ExperimentTaxonomySelection;
   definitionFingerprint: string;
   createdAt: Date;
 }
@@ -200,10 +207,21 @@ export interface ExperimentExecution {
   version: number;
   requests: FixedPayload<ExperimentRequestState>;
   vectorFingerprint: string;
+  taxonomy?: ExperimentTaxonomySelection;
   handlerSummary: Record<string, ExperimentHandlerSummary>;
   reportTemplates: Record<string, ExperimentTemplateReportSummary>;
   blocking: ExperimentBlocker[];
   report?: ExperimentReportReference;
+  taxonomyReadout?: {
+    status: "processing" | "done" | "failed";
+    claimToken?: string;
+    experimentExecutionId: string;
+    taxonomyRevisionId: string;
+    jsonUrl?: string;
+    markdownUrl?: string;
+    updatedAt: Date;
+    error?: string;
+  };
   createdAt: Date;
   updatedAt: Date;
   startedAt?: Date;

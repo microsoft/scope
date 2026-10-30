@@ -137,6 +137,18 @@ describe("TaskPromptStore", () => {
       expect(col.insertOne).toHaveBeenCalledTimes(1);
     });
 
+    it("coalesces concurrent identical creates within one store", async () => {
+      const [a, b, c] = await Promise.all([
+        store.findOrCreate(PID, "concurrent prompt"),
+        store.findOrCreate(PID, "concurrent prompt"),
+        store.findOrCreate(PID, "concurrent prompt"),
+      ]);
+
+      expect(a._id).toBe(b._id);
+      expect(b._id).toBe(c._id);
+      expect(col.insertOne).toHaveBeenCalledTimes(1);
+    });
+
     it("creates distinct per-project copies for identical text (same keyId, distinct _id)", async () => {
       const a = await store.findOrCreate("project-a", "shared prompt");
       const b = await store.findOrCreate("project-b", "shared prompt");

@@ -16,7 +16,7 @@ The active identifiers remain:
 | Evaluation envelope | `scope/taxonomy-evaluation/v1` |
 | Readout report | `scope/taxonomy-readout/v1` |
 | Plugin API | `scope/taxonome-plugin/v1` |
-| Optimized prompt artifact | `scope/taxonome-ax/v2` |
+| Optimization provenance manifest | `scope/taxonome-optimization-manifest/v1` |
 
 These identifiers describe an unreleased experimental stack. Implementations
 MUST validate structure and contract hashes rather than treating an identifier
@@ -57,8 +57,8 @@ A taxonomy is YAML representing this closed object:
 
 ```yaml
 schema_version: scope/taxonomy/v1
-id: agent-behavior
-version: 3.0.0
+id: ax-taxonomy
+version: 1.0.0
 surfaces:
   - id: surface-mcp
     label: MCP
@@ -948,7 +948,7 @@ strict selector descendant of the call path. The occurrence count is one.
 ```json
 {
   "schema_version": "scope/taxonomy-evaluation/v1",
-  "taxonomy": {"id":"agent-behavior","version":"3.0.0","digest":"..."},
+  "taxonomy": {"id":"ax-taxonomy","version":"1.0.0","digest":"..."},
   "element": {"id":"malformed","label":"Malformed Invocation"},
   "implementation": {
     "type":"deterministic",

@@ -31,7 +31,7 @@ import { fromAtif, fromAtifList } from "./agent-trajectory.js";
 import { evaluateWorkspace } from "./judge-agent.js";
 
 const hasToken = !!process.env.GITHUB_TOKEN;
-const JUDGE_MODEL = process.env.JUDGE_MODEL || "gpt-5.4-mini";
+const JUDGE_MODEL = process.env.JUDGE_MODEL || "auto";
 
 /**
  * Realistic ATIF trajectory (the exact shape pp-taxonomy downloads and forwards

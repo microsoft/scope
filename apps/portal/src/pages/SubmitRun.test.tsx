@@ -24,6 +24,7 @@ vi.mock("@/lib/api", () => ({
     listProfileVersions: vi.fn(async () => []),
     listRuns: vi.fn(async () => ({ data: [] })),
     listModels: vi.fn(async () => []),
+    listTaxonomies: vi.fn(async () => []),
     createExperiment: vi.fn(async () => ({ experimentId: "experiment-1" })),
   },
 }));
@@ -47,7 +48,7 @@ vi.mock("@/components/ReasoningEffortSelect", () => ({
   ReasoningEffortSelect: () => null,
   useModelCapabilities: () => ({
     capabilitiesMap: new Map(),
-    activeModelIds: [],
+    activeModelIds: ["gpt-6.1-sol"],
     capabilitiesLoaded: true,
   }),
   useReasoningEffort: () => ({
@@ -210,6 +211,71 @@ describe("SubmitRun legacy composition guidance", () => {
 });
 
 describe("SubmitRun Experiment composition", () => {
+  it("submits a worker and model for a composed experiment", async () => {
+    vi.mocked(api.listAgents).mockResolvedValue([{
+      _id: "coder-acp-copilot",
+      name: "GitHub Copilot CLI",
+      description: "Copilot worker",
+      modelProvider: "github-copilot",
+      supportedModels: ["gpt-6.1-sol"],
+      defaultModel: "gpt-6.1-sol",
+      available: true,
+      capabilities: {},
+      versions: [{
+        agentVersion: "copilot-dev",
+        workerVersion: "development",
+        components: {},
+        gitCommit: "development",
+        buildTime: new Date().toISOString(),
+        imageTag: "development",
+        status: "active",
+        queueName: "queue-coder-acp-copilot",
+        createdAt: new Date().toISOString(),
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }]);
+    renderSubmitRun("experiment");
+
+    fireEvent.change(screen.getByLabelText("Name *"), {
+      target: { value: "Copilot comparison" },
+    });
+    fireEvent.change(screen.getByLabelText(/Task/), {
+      target: { value: "Build a hello-world CLI" },
+    });
+    fireEvent.change(screen.getByLabelText("Max iterations"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByLabelText("Occurrences"), {
+      target: { value: "1" },
+    });
+
+    const submit = await screen.findByRole("button", {
+      name: /Create experiment with 1 run/,
+    });
+    await waitFor(() =>
+      expect((submit as HTMLButtonElement).disabled).toBe(false)
+    );
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(api.createExperiment).toHaveBeenCalledWith({
+        metadata: { name: "Copilot comparison" },
+        reportTemplateIds: [],
+        request: expect.objectContaining({
+          scenario: {
+            task: "Build a hello-world CLI",
+            criteria: [],
+          },
+          worker: "coder-acp-copilot",
+          model: "gpt-6.1-sol",
+          agentVersion: "copilot-dev",
+          maxIterations: 1,
+        }),
+      });
+    });
+  });
+
   it("keeps the optional description collapsed and retains its value across toggles", async () => {
     renderSubmitRun("experiment");
 

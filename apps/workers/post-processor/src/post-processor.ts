@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { DequeuedMessageItem } from "@azure/storage-queue";
+import { randomUUID } from "node:crypto";
 import { BaseQueueProcessor, BlobStorage, type BaseQueueProcessorConfig, type LogEvent, type VisibilityHeartbeat } from "shared";
 import type { RequestDocument, HandlerRunStatus } from "shared";
 import { trackMetric, trackEvent } from "telemetry";
@@ -126,6 +127,7 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
     }
 
     const handlerId = `pp-${msg.type}`;
+    const claimToken = randomUUID();
     const currentStatus = doc.run?.handlerStatus?.[handlerId] as HandlerRunStatus | undefined;
 
     // This is the authoritative claim. A queued message alone does not mean the
@@ -139,6 +141,7 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
         $set: {
           "run.postProcessorStatus": "processing",
           [`run.handlerStatus.${handlerId}.status`]: "processing",
+          [`run.handlerStatus.${handlerId}.claimToken`]: claimToken,
           [`run.handlerStatus.${handlerId}.updatedAt`]: new Date(),
         },
         $unset: {
@@ -173,6 +176,8 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
         blobStorage: this.blobStorage,
         collection: this.collection as any,
         criteriaCollection: this.db.collection("criteria"),
+        db: this.db,
+        claimToken,
         log,
       };
 
@@ -184,6 +189,7 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
           _id: doc._id,
           "run._id": msg.runId,
           [`run.handlerStatus.${handlerId}.status`]: "processing",
+          [`run.handlerStatus.${handlerId}.claimToken`]: claimToken,
         } as any,
         {
           $set: {
@@ -228,6 +234,7 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
           _id: doc._id,
           "run._id": msg.runId,
           [`run.handlerStatus.${handlerId}.status`]: "processing",
+          [`run.handlerStatus.${handlerId}.claimToken`]: claimToken,
         } as any,
         {
           $set: {

@@ -10,7 +10,12 @@ export type { FilterSectionProps } from "./FilterSection";
 export { CheckboxFilterGroup } from "./CheckboxFilterGroup";
 export type { CheckboxFilterGroupProps, CheckboxFilterOption } from "./CheckboxFilterGroup";
 export { DataTable } from "./DataTable";
-export type { DataTableProps, DataTableColumn, DataTableSelection } from "./DataTable";
+export type {
+  DataTableProps,
+  DataTableColumn,
+  DataTableSelection,
+  DataTableGrouping,
+} from "./DataTable";
 export { EmbeddedTableBlock } from "./EmbeddedTableBlock";
 export type { EmbeddedTableBlockProps } from "./EmbeddedTableBlock";
 export { Pagination } from "./Pagination";

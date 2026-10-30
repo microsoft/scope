@@ -17,6 +17,7 @@ import {
   type ExperimentExecutionHistoryDocument,
   type ExperimentMetadata,
   type ExperimentRequestState,
+  taxonomyHandlerSummary,
 } from "shared";
 import type { RequestDocument, RouteContext } from "../route-context.js";
 import { apiRoute } from "../openapi/api-route.js";
@@ -35,6 +36,10 @@ import {
   ExperimentLifecycleCoordinator,
   ExperimentLifecycleError,
 } from "../experiment-lifecycle.js";
+import {
+  requestedAgentCapabilities,
+  validateAgentTarget,
+} from "../utils/agent-helpers.js";
 
 const CursorSchema = z.string().min(1).optional();
 const PageQuerySchema = ProjectIdQuerySchema.extend({
@@ -52,6 +57,7 @@ const ExperimentRequestInputSchema = CreateRequestInputSchema.omit({
   profileVariations: true,
 }).extend({
   workerType: z.string().trim().min(1),
+  agentVersion: z.string().trim().min(1).optional(),
 });
 
 const CreateExperimentInputSchema = z
@@ -61,6 +67,7 @@ const CreateExperimentInputSchema = z
     requests: z.array(ExperimentRequestInputSchema).max(250_000).default([]),
     requestIds: z.array(z.string().min(1)).max(250_000).default([]),
     reportTemplateIds: z.array(z.string().min(1)).max(1_000).default([]),
+    taxonomyRevisionId: z.string().min(1).optional(),
   })
   .superRefine((value, ctx) => {
     if (
@@ -121,6 +128,43 @@ const ExperimentReportReferenceSchema = z.object({
   updatedAt: z.coerce.date(),
 });
 
+const ExperimentRequestSummarySchema = z.object({
+  requestId: z.string(),
+  runId: z.string(),
+  task: z.string().optional(),
+  criteria: z.array(z.string()).optional(),
+  taskPromptId: z.string().optional(),
+  status: z.string().optional(),
+  outcome: z.string().optional(),
+  workerType: z.string().optional(),
+  model: z.string().optional(),
+  reasoningEffort: z.string().optional(),
+  agentVersion: z.string().optional(),
+  os: z.object({
+    platform: z.string(),
+    release: z.string(),
+    arch: z.string(),
+  }).optional(),
+  mcpServers: z.array(z.string()).optional(),
+  skillRevisions: z.array(z.string()).optional(),
+  extensions: z.array(z.string()).optional(),
+  profileId: z.string().optional(),
+  priority: z.number().optional(),
+  attemptNumber: z.number().int().positive().optional(),
+  worker: z.object({
+    instanceId: z.string(),
+    podName: z.string().optional(),
+  }).optional(),
+  lastHeartbeatAt: z.coerce.date().optional(),
+  startedAt: z.coerce.date().optional(),
+  taxonomyHandler: z.object({
+    status: z.enum(["queued", "processing", "done", "failed"]),
+    updatedAt: z.coerce.date().optional(),
+    error: z.string().optional(),
+    resultAvailable: z.boolean(),
+  }).strict().optional(),
+});
+
 const ExperimentTemplateReportSummarySchema = z.object({
   templateId: z.string(),
   templateVersionId: z.string().optional(),
@@ -166,12 +210,22 @@ const ExperimentResponseSchema = z
       revisionNumber: z.number().int(),
       memberCount: z.number().int(),
       reportTemplateIds: z.array(z.string()),
+      taxonomy: z
+        .object({
+          taxonomyRevisionId: z.string(),
+          ref: z.string(),
+          contentSha256: z.string(),
+        })
+        .optional(),
       createdAt: z.coerce.date(),
     }),
     currentExecution: z.object({
       experimentExecutionId: z.string(),
       attemptNumber: z.number().int(),
+      version: z.number().int().optional(),
       readiness: ReadinessSchema,
+      requestCount: z.number().int().nonnegative(),
+      requests: z.array(ExperimentRequestSummarySchema),
       blockers: z.array(
         z.object({
           requestId: z.string().optional(),
@@ -263,7 +317,10 @@ const ExecutionResponseSchema = z
   .object({
     experimentExecutionId: z.string(),
     attemptNumber: z.number().int(),
+    version: z.number().int().optional(),
     readiness: ReadinessSchema,
+    requestCount: z.number().int().nonnegative(),
+    requests: z.array(ExperimentRequestSummarySchema),
     blockers: z.array(z.object({
       requestId: z.string().optional(),
       runId: z.string().optional(),
@@ -410,9 +467,12 @@ function sendLifecycleError(res: Response, error: unknown): boolean {
   return true;
 }
 
-function membershipResponse(result: ReplaceMembershipResult) {
+async function membershipResponse(
+  ctx: RouteContext,
+  result: ReplaceMembershipResult,
+) {
   return {
-    experiment: experimentResponse(result.experiment),
+    experiment: await resolvedExperimentResponse(ctx, result.experiment),
     attachedRequestIds: result.attachedRequestIds,
     detachedRequestIds: result.detachedRequestIds,
   };
@@ -490,7 +550,10 @@ function executionResponse(execution: ExperimentExecution) {
   return {
     experimentExecutionId: execution.experimentExecutionId,
     attemptNumber: execution.attemptNumber,
+    version: execution.version,
     readiness: readiness(execution),
+    requestCount: execution.requests.entryCount,
+    requests: [],
     blockers: execution.blocking,
     progress: Object.fromEntries(
       Object.entries(execution.handlerSummary).map(([handlerId, status]) => [
@@ -520,6 +583,148 @@ function executionResponse(execution: ExperimentExecution) {
       ? { supersededReason: execution.supersededReason }
       : {}),
     ...(execution.report ? { report: execution.report } : {}),
+  };
+}
+
+/**
+ * Resolves one immutable execution vector into ordered request/run summaries.
+ * The vector is read once, active request documents are fetched in one query,
+ * and any non-current exact runs are fetched from history in one query.
+ */
+async function resolvedExecutionResponse(
+  ctx: RouteContext,
+  input: {
+    projectId: string;
+    experimentId: string;
+    execution: ExperimentExecution;
+    includeDeleted?: boolean;
+  },
+) {
+  const states = await store(ctx).readExecutionRequests({
+    projectId: input.projectId,
+    experimentId: input.experimentId,
+    experimentExecutionId: input.execution.experimentExecutionId,
+    includeDeleted: input.includeDeleted,
+  });
+  if (!states) return executionResponse(input.execution);
+
+  const requestIds = states.map(({ requestId }) => requestId);
+  const requestDocuments = requestIds.length === 0
+    ? []
+    : await ctx.requestCollection
+        .find(
+          {
+            _id: { $in: requestIds },
+            projectId: input.projectId,
+          } as Document,
+          {
+            projection: {
+              _id: 1,
+              "scenario.task": 1,
+              "scenario.criteria": 1,
+              taskPromptId: 1,
+              workerType: 1,
+              model: 1,
+              reasoningEffort: 1,
+              agentVersion: 1,
+              mcpServers: 1,
+              skillRevisions: 1,
+              extensions: 1,
+              profileId: 1,
+              priority: 1,
+              deletedAt: 1,
+              run: 1,
+            },
+          },
+        )
+        .toArray();
+  const requestsById = new Map(
+    requestDocuments.map((request) => [request._id, request]),
+  );
+
+  // Exact historical executions may reference a run no longer embedded on its request.
+  const historicalRunIds = states
+    .filter(({ requestId, runId }) => {
+      const request = requestsById.get(requestId);
+      return request?.run?._id !== runId;
+    })
+    .map(({ runId }) => runId);
+  const historicalRuns = historicalRunIds.length === 0
+    ? []
+    : await ctx.runsCollection
+        .find(
+          {
+            _id: { $in: historicalRunIds },
+            projectId: input.projectId,
+          } as Document,
+          {
+            projection: {
+              _id: 1,
+              status: 1,
+              outcome: 1,
+              attemptNumber: 1,
+              os: 1,
+              worker: 1,
+              lastHeartbeatAt: 1,
+              startedAt: 1,
+            },
+          },
+        )
+        .toArray();
+  const historicalRunsById = new Map(
+    historicalRuns.map((run) => [run._id, run]),
+  );
+
+  const requests = states.map(({ requestId, runId }) => {
+    const request = requestsById.get(requestId);
+    const run = request?.run?._id === runId
+      ? request.run
+      : historicalRunsById.get(runId);
+    const status = request?.deletedAt
+      ? "deleted"
+      : (run?.status ?? "missing");
+    return {
+      requestId,
+      runId,
+      ...(request?.scenario.task ? { task: request.scenario.task } : {}),
+      ...(request?.scenario.criteria
+        ? { criteria: request.scenario.criteria }
+        : {}),
+      ...(request?.taskPromptId ? { taskPromptId: request.taskPromptId } : {}),
+      status,
+      ...(run?.outcome ? { outcome: run.outcome } : {}),
+      ...(request?.workerType ? { workerType: request.workerType } : {}),
+      ...(request?.model ? { model: request.model } : {}),
+      ...(request?.reasoningEffort
+        ? { reasoningEffort: request.reasoningEffort }
+        : {}),
+      ...(request?.agentVersion
+        ? { agentVersion: request.agentVersion }
+        : {}),
+      ...(run?.os ? { os: run.os } : {}),
+      ...(request?.mcpServers ? { mcpServers: request.mcpServers } : {}),
+      ...(request?.skillRevisions
+        ? { skillRevisions: request.skillRevisions }
+        : {}),
+      ...(request?.extensions ? { extensions: request.extensions } : {}),
+      ...(request?.profileId ? { profileId: request.profileId } : {}),
+      ...(request?.priority !== undefined ? { priority: request.priority } : {}),
+      ...(run?.attemptNumber ? { attemptNumber: run.attemptNumber } : {}),
+      ...(run?.worker ? { worker: run.worker } : {}),
+      ...(run?.lastHeartbeatAt
+        ? { lastHeartbeatAt: run.lastHeartbeatAt }
+        : {}),
+      ...(run?.startedAt ? { startedAt: run.startedAt } : {}),
+      ...(taxonomyHandlerSummary(run)
+        ? { taxonomyHandler: taxonomyHandlerSummary(run) }
+        : {}),
+    };
+  });
+
+  return {
+    ...executionResponse(input.execution),
+    requestCount: states.length,
+    requests,
   };
 }
 
@@ -683,6 +888,7 @@ function experimentResponse(experiment: ExperimentDocument) {
       revisionNumber: experiment.revision.revisionNumber,
       memberCount: experiment.revision.memberCount,
       reportTemplateIds: experiment.revision.reportTemplateIds,
+      taxonomy: experiment.revision.taxonomy,
       createdAt: experiment.revision.createdAt,
     },
     currentExecution: executionResponse(experiment.execution),
@@ -710,6 +916,22 @@ function experimentResponse(experiment: ExperimentDocument) {
           },
         }
       : {}),
+  };
+}
+
+/** Returns the detail representation with the exact current execution hydrated. */
+async function resolvedExperimentResponse(
+  ctx: RouteContext,
+  experiment: ExperimentDocument,
+) {
+  return {
+    ...experimentResponse(experiment),
+    currentExecution: await resolvedExecutionResponse(ctx, {
+      projectId: experiment.projectId,
+      experimentId: experiment.experimentId,
+      execution: experiment.execution,
+      includeDeleted: Boolean(experiment.deletedAt || experiment.lifecycle),
+    }),
   };
 }
 
@@ -786,6 +1008,7 @@ function createRequestDocument(input: {
       ? { codebaseRevisionId: body.codebaseRevisionId }
       : {}),
     ...(body.extensions ? { extensions: body.extensions } : {}),
+    ...(body.agentVersion ? { agentVersion: body.agentVersion } : {}),
     ...(body.profileId ? { profileId: body.profileId } : {}),
     ...(body.gates ? { gates: body.gates } : {}),
     ...(body.observations ? { observations: body.observations } : {}),
@@ -827,6 +1050,39 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
       const reportTemplateIds = canonicalTemplateIds(
         req.body.reportTemplateIds,
       );
+      let taxonomy:
+        | {
+            taxonomyRevisionId: string;
+            ref: string;
+            contentSha256: string;
+          }
+        | undefined;
+      if (req.body.taxonomyRevisionId) {
+        const enabled = await ctx.featureFlagCollection.findOne({
+          key: "taxonome",
+          enabled: true,
+        });
+        if (!enabled) {
+          res.status(404).json({ error: "Taxonome is not enabled" });
+          return;
+        }
+        const revision = await ctx.taxonomyRevisionStore.get(
+          req.body.taxonomyRevisionId,
+        );
+        if (!revision) {
+          res.status(400).json({ error: "Taxonomy revision not found" });
+          return;
+        }
+        if (revision.projectId !== projectId) {
+          res.status(400).json({ error: "Taxonomy revision project mismatch" });
+          return;
+        }
+        taxonomy = {
+          taxonomyRevisionId: revision._id,
+          ref: revision.ref,
+          contentSha256: revision.contentSha256,
+        };
+      }
       const invalidReportTemplateIds =
         await invalidManualExperimentTemplateIds(
           ctx,
@@ -839,6 +1095,51 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
           invalidReportTemplateIds,
         });
         return;
+      }
+      const targetCache = new Map<
+        string,
+        ReturnType<typeof validateAgentTarget>
+      >();
+      const resolvedRequests: Array<
+        z.infer<typeof ExperimentRequestInputSchema>
+      > = [];
+      for (const body of req.body.requests) {
+        const capabilities = requestedAgentCapabilities({
+          reasoningEffort: body.reasoningEffort,
+          mcpServers: body.mcpServers,
+          skillRevisions: body.skillRevisions,
+          extensions: body.extensions,
+          resources: body.resources,
+        });
+        const targetKey = JSON.stringify({
+          workerType: body.workerType,
+          agentVersion: body.agentVersion,
+          model: body.model,
+          capabilities,
+        });
+        let targetPromise = targetCache.get(targetKey);
+        if (!targetPromise) {
+          targetPromise = validateAgentTarget(ctx.agentCollection, {
+            workerType: body.workerType,
+            requestedVersion: body.agentVersion,
+            model: body.model,
+            requirements: capabilities,
+            strictCapabilities: ctx.strictAgentCapabilities,
+            subjectPlural: "Experiment requests",
+          });
+          targetCache.set(targetKey, targetPromise);
+        }
+        const target = await targetPromise;
+        if (!target.ok) {
+          const { ok: _ok, status, ...payload } = target;
+          res.status(status).json(payload);
+          return;
+        }
+        resolvedRequests.push({
+          ...body,
+          agentVersion: target.agentVersion,
+          ...(target.model ? { model: target.model } : {}),
+        });
       }
       const experimentId = uuidv4();
       const experimentExecutionId = uuidv4();
@@ -854,10 +1155,14 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
             metadata: req.body.metadata,
             requestIds: req.body.requestIds,
             reportTemplateIds,
+            taxonomy,
             now,
           });
           res.status(201).json({
-            experiment: experimentResponse(result.experiment),
+            experiment: await resolvedExperimentResponse(
+              ctx,
+              result.experiment,
+            ),
             requestIds: result.attachedRequestIds,
           });
         } catch (error) {
@@ -865,12 +1170,12 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         }
         return;
       }
-      const identities = req.body.requests.map(() => ({
+      const identities = resolvedRequests.map(() => ({
         requestId: uuidv4(),
         runId: uuidv4(),
       }));
       const requestDocs = await Promise.all(
-        req.body.requests.map(async (body, index) => {
+        resolvedRequests.map(async (body, index) => {
           const identity = identities[index]!;
           const taskPrompt = await ctx.taskPromptStore.findOrCreate(
             projectId,
@@ -879,7 +1184,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
           return createRequestDocument({
             ...identity,
             experimentId,
-            expectedCount: req.body.requests.length,
+            expectedCount: resolvedRequests.length,
             index,
             projectId,
             body,
@@ -916,9 +1221,11 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
           reportTemplateIds,
           definitionFingerprint: fingerprintExperimentPayload({
             metadata,
-            requests: req.body.requests,
+            requests: resolvedRequests,
             reportTemplateIds,
+            taxonomy,
           }),
+          ...(taxonomy ? { taxonomy } : {}),
           createdAt: now,
         },
         experimentExecutionId,
@@ -950,7 +1257,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         );
       }
       res.status(201).json({
-        experiment: experimentResponse(finalized),
+        experiment: await resolvedExperimentResponse(ctx, finalized),
         requestIds: requestDocs.map((doc) => doc._id),
       });
     },
@@ -978,7 +1285,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
             req.body.expectedExperimentRevisionId,
           requestIds: req.body.requestIds,
         });
-        res.status(201).json(membershipResponse(result));
+        res.status(201).json(await membershipResponse(ctx, result));
       } catch (error) {
         if (!sendMembershipError(res, error)) throw error;
       }
@@ -1007,7 +1314,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
             req.body.expectedExperimentRevisionId,
           requestIds: req.body.requestIds,
         });
-        res.status(201).json(membershipResponse(result));
+        res.status(201).json(await membershipResponse(ctx, result));
       } catch (error) {
         if (!sendMembershipError(res, error)) throw error;
       }
@@ -1061,7 +1368,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         res.status(404).json({ error: "Experiment not found" });
         return;
       }
-      res.json(experimentResponse(experiment));
+      res.json(await resolvedExperimentResponse(ctx, experiment));
     },
   });
 
@@ -1245,7 +1552,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         });
         return;
       }
-      res.json(experimentResponse(updated));
+      res.json(await resolvedExperimentResponse(ctx, updated));
     },
   });
 
@@ -1363,7 +1670,12 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         res.status(404).json({ error: "Experiment execution not found" });
         return;
       }
-      res.json(executionResponse(execution));
+      res.json(await resolvedExecutionResponse(ctx, {
+        projectId: experiment.projectId,
+        experimentId: req.params.id,
+        execution,
+        includeDeleted: req.query.includeDeleted === "true",
+      }));
     },
   });
 

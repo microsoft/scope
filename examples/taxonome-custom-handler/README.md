@@ -66,8 +66,13 @@ taxonome optimize --taxonomy taxonomy.yaml \
   --inputs datasets/repeated-request/trajectory-inputs.jsonl \
   --ground-truth datasets/repeated-request/ground-truth.json \
   --element acme-repeated-request \
-  --output artifacts/repeated-request/optimized-prompt.ax.json \
+  --output-dir optimized \
   --max-metric-calls 12
+taxonome eval --taxonomy taxonomy.yaml \
+  --element-override optimized/acme-repeated-request.optimized.yaml \
+  --inputs datasets/repeated-request/trajectory-inputs.jsonl \
+  --ground-truth datasets/repeated-request/ground-truth.json \
+  --split test --element acme-repeated-request
 ```
 
 `eval` measures detector correctness against the reviewed judgments. A
@@ -75,8 +80,8 @@ completed `false` or `indeterminate` result can pass when that is the expected
 judgment. `passed` / `total` counts input executions (including `--samples`
 repeats), not successful agent tasks or SDK calls. When a prompt element reaches
 model execution, each evaluation makes a fresh SDK call; authoritative
-preflights can resolve an input without one. Artifact evaluation restores the
-optimized prompt/demos but does not cache prior answers.
+preflights can resolve an input without one. Optimized-element evaluation
+loads standard element YAML and does not cache prior answers.
 `--max-metric-calls` bounds the optimizer's search; Taxonome has no cumulative
 budget or ledger feature.
 

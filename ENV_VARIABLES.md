@@ -14,6 +14,31 @@ and source-mode CLIs fail before making an API request when no URL is configured
 Help, version, and CLI updates do not require a Scope API URL. The CLI no longer
 derives a localhost URL from `SCOPE_API_PORT` or uses `SCOPE_DEFAULT_API_URL`.
 
+## Taxonome post-processing
+
+### TAXONOME_MODEL
+**Default:** `claude-haiku-4.5`
+**Type:** model identifier
+
+Model used by the post-processor's lazy Taxonome prompt executor. The worker
+does not resolve credentials or initialize a Copilot SDK transport for
+deterministic-only taxonomies. Prompt execution uses the taxonomy engine's
+isolated, tool-free Copilot transport and normal credential resolution. This
+setting is independent from the coding run's model and reasoning effort.
+Explicit model IDs are checked against `CopilotClient.listModels()` before
+session creation and fail clearly when unavailable; `auto` remains available
+as an explicit provider-resolved override. The post-processor deliberately
+omits reasoning effort so a model that does not support configurable effort
+remains valid.
+
+### TAXONOMY_RESULT_MAX_BYTES
+**Default:** `10485760` (10 MiB)
+**Type:** positive integer bytes
+
+Maximum uncompressed Taxonome result size returned by the API's validated
+exact-run JSON view. The API rejects a larger persisted reference before
+downloading the blob and also enforces the limit while decompressing it.
+
 ## Docker Development
 
 ### API_DEBUG_PORT
@@ -425,21 +450,21 @@ a fallback or default.
 ## Judge Strategy Configuration
 
 ### JUDGE_MODEL
-**Default:** `gpt-5.4-mini`
+**Default:** `auto`
 **Type:** string
 
-Model used by the judge to evaluate agent output against criteria. Defaults to
-`gpt-5.4-mini` (set in code, docker-compose, and the K8s manifest). Override via
-`JUDGE_MODEL` (e.g. in `.env`) to use a different model.
+Model used by the judge to evaluate agent output against criteria. `auto`
+delegates selection to the Copilot provider so local environments do not pin a
+model unavailable to the active credential. Override via `JUDGE_MODEL` (e.g. in
+`.env`) when a deployment requires an exact model.
 
 ### FEEDBACK_MODEL
-**Default:** `gpt-5.4-mini`
+**Default:** `auto`
 **Type:** string
 
 Model used by the feedback generator that produces actionable feedback for the
-coding agent between iterations. Defaults to `gpt-5.4-mini` (set in code,
-docker-compose, and the K8s manifest). Override via `FEEDBACK_MODEL` (e.g. in
-`.env`) to use a different model.
+coding agent between iterations. `auto` uses the Copilot provider's available
+model routing. Override via `FEEDBACK_MODEL` (e.g. in `.env`) to pin a model.
 
 ### JUDGE_STRATEGY
 **Default:** `bundled`
@@ -866,10 +891,13 @@ FEEDBACK_DESCENDANT_GUARD=false
 Azure Storage Queue name for report generation jobs. The API enqueues messages here when a report is requested; the report-generator worker polls this queue.
 
 ### REPORT_MODEL
-**Default:** `gpt-5.4-mini`
+**Default:** `auto`
 **Type:** string
 
-The LLM model used by the report-generator worker (via the Copilot SDK) to generate run analysis reports. Examples: `gpt-5.4-mini`, `gpt-4.1`, `gpt-4o`, `claude-sonnet-4`.
+The LLM model used by the report-generator worker (via the Copilot SDK) to
+generate run analysis reports. `auto` avoids pinning local Compose to a model
+outside the active credential's catalog. Set an exact provider-supported model
+only when deterministic deployment policy requires it.
 
 ### SCOPE_MT_API_URL
 **Default:** `http://localhost:3001` (local), `http://api:80` (Docker)
@@ -898,15 +926,16 @@ Git commit hash embedded in reporter metadata. Automatically set during CI/CD bu
 Azure Storage Queue name for Experiment readout jobs. The coordinator enqueues
 an exact execution message containing `projectId`, `experimentId`,
 `experimentExecutionId`, handler identity/version, claim token, and execution
-version only after `pp-observations` is done for every exact request/run pair.
+version only after `pp-taxonomy` is done for every exact request/run pair.
 
 ### READOUT_MODEL
-**Default:** `gpt-5.4`
+**Default:** `auto`
 **Type:** string
 
 The Copilot SDK model used by the dedicated `pp-readout` worker to synthesize a
-schema-validated structured Experiment readout. Markdown is derived from the
-validated structured object.
+schema-validated structured Experiment readout. `auto` delegates selection to
+the provider so local Compose does not pin an unavailable model. Markdown is
+derived from the validated structured object.
 
 ### READOUT_SESSION_TIMEOUT_MS
 **Default:** `300000` (5 minutes)

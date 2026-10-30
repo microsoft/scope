@@ -18,10 +18,41 @@ const currentExecution = {
       requestId: "request-current",
       runId: "run-current",
       task: "Implement the current benchmark task",
-      status: "done",
-      outcome: "success",
+      criteria: ["uses_typescript"],
+      taskPromptId: "task-prompt-current",
+      status: "processing",
       workerType: "coder-acp-copilot",
       model: "gpt-5.6-sol",
+      reasoningEffort: "high",
+      agentVersion: "copilot-dev",
+      os: { platform: "linux", release: "6.8", arch: "arm64" },
+      mcpServers: ["github"],
+      skillRevisions: ["owner/skills/typescript@r1"],
+      extensions: ["ms-vscode.vscode-typescript-next@1.0.0"],
+      priority: 5,
+      attemptNumber: 2,
+      worker: { instanceId: "worker-current", podName: "pod-current" },
+      startedAt: "2026-10-16T09:59:30.000Z",
+    },
+    {
+      requestId: "request-queued",
+      runId: "run-queued",
+      task: "Implement the queued benchmark task",
+      status: "queued",
+      workerType: "coder-acp-copilot",
+      model: "gpt-5.6-sol",
+    },
+    {
+      requestId: "request-deleted",
+      runId: "run-deleted",
+      task: "Deleted exact member",
+      status: "deleted",
+    },
+    {
+      requestId: "request-missing",
+      runId: "run-missing",
+      task: "Missing exact member",
+      status: "missing",
     },
   ],
   handlerProgress: {
@@ -78,7 +109,7 @@ const experiment = {
   revision: {
     experimentRevisionId: "revision-demo",
     revisionNumber: 1,
-    memberCount: 1,
+    memberCount: 4,
     reportTemplateIds: ["quality-summary"],
   },
   execution: currentExecution,
@@ -250,6 +281,29 @@ const meta = {
             },
           ]),
         ),
+        http.get("/api/v1/requests/request-current", () =>
+          HttpResponse.json({
+            _id: "request-current",
+            id: "request-current",
+            scenario: {
+              task: "Implement the current benchmark task",
+              criteria: ["uses_typescript"],
+            },
+            workerType: "coder-acp-copilot",
+            model: "gpt-5.6-sol",
+            agentVersion: "copilot-dev",
+            createdAt: "2026-10-16T09:00:00.000Z",
+            run: {
+              _id: "run-current",
+              attemptNumber: 2,
+              status: "processing",
+              startedAt: "2026-10-16T09:59:30.000Z",
+            },
+          }),
+        ),
+        http.get("/api/v1/requests/request-current/runs", () =>
+          HttpResponse.json([]),
+        ),
       ],
     },
   },
@@ -280,12 +334,31 @@ export const AttemptSelectionAndRunsTable: Story = {
     await expect(
       screen.getAllByText("Implement the current benchmark task")[0],
     ).toBeVisible();
+    const processingBadge = screen
+      .getAllByText("Processing")
+      .find((element) => element.className.includes("animate-shimmer"));
+    if (!processingBadge) throw new Error("Processing status is not animated");
+    await expect(processingBadge).toBeVisible();
+    await expect(screen.getAllByText("Deleted")[0]).toBeVisible();
+    await expect(screen.getAllByText("Missing")[0]).toBeVisible();
     const embeddedTable = canvasElement.querySelector(
       '[data-slot="embedded-table-block"]',
     );
     if (!embeddedTable) throw new Error("Embedded runs table block is missing");
     await expect(embeddedTable).toHaveClass("space-y-3");
     await expect(embeddedTable.parentElement).toHaveClass("p-6");
+    const currentTask = screen.getAllByText(
+      "Implement the current benchmark task",
+    )[0];
+    const currentRow = currentTask.closest("tr");
+    if (!currentRow) throw new Error("Current run row is missing");
+    await userEvent.click(currentRow);
+    await expect(
+      await screen.findByRole("complementary", { name: "Detail panel" }),
+    ).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Close detail panel" }),
+    );
 
     await userEvent.click(
       canvas.getByRole("combobox", { name: "Experiment attempt" }),
