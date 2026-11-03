@@ -167,6 +167,12 @@ generated system wrapper, native file-reading transport, sandbox, and threat
 detection are not emulated. This is not evidence that a hosted Copilot run or
 cloud red-team assessment has occurred.
 
+Contribution-insight graders use the adapter's composed messages for both
+query and evidence context. This includes the trusted policies injected during
+generation, rather than the curated snapshot's intentionally empty policy list.
+Reviewed reference answers remain only in ground truth; they never replace the
+generation task or supply grading evidence.
+
 The native `pnpm contribution-insights:local` command reuses this same builder,
 callback, validator, and renderer with an isolated empty-mode Copilot SDK
 transport. It makes a real inference call but does not invoke GitHub Actions or

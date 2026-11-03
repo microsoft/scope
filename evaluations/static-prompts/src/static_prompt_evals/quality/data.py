@@ -447,11 +447,11 @@ def normalize_rows(
                 if family == "contribution-decision" else None
             )
             response = render_response(family, output, raw_response)
-            if family in {"parent-dependency-suggestion", "child-dependency-suggestion", "developer-feedback"}:
+            if family in {"parent-dependency-suggestion", "child-dependency-suggestion", "developer-feedback", "contribution-insights"}:
                 # Production-composed instructions define the task; reviewed answers
                 # remain exclusively in ground_truth, not in the evaluator query.
                 query = stable_text(query_messages) if query_messages else stable_text(case_input)
-            if family == "developer-feedback" and query_messages:
+            if family in {"developer-feedback", "contribution-insights"} and query_messages:
                 context = stable_text(query_messages)
             if family == "contribution-decision":
                 query = stable_text(decision_request or case_input)
