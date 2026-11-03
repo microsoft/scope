@@ -10,12 +10,16 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const script = resolve("scripts/bootstrap-pnpm.sh");
 const temporaryDirectories: string[] = [];
+const { parse } = createRequire(resolve("packages/shared/package.json"))(
+  "yaml",
+) as typeof import("yaml");
 const nodeDockerfiles = [
   "apps/api/Dockerfile",
   "apps/judge/Dockerfile",
@@ -38,6 +42,12 @@ const runtimeRegistryDockerfiles = new Set([
 interface BootstrapFixture {
   callsFile: string;
   env: NodeJS.ProcessEnv;
+}
+
+interface PnpmWorkspaceConfig {
+  ignoredBuiltDependencies?: string[];
+  onlyBuiltDependencies?: string[];
+  ignoreDepScripts?: boolean;
 }
 
 /**
@@ -231,6 +241,7 @@ describe("pnpm Docker bootstrap", () => {
       expect(contents, dockerfile).not.toMatch(
         /fetch[-_]retr(?:y|ies)|network-concurrency/i,
       );
+      expect(contents, dockerfile).not.toContain("--ignore-scripts");
       expect(packageInstallLines.length, dockerfile).toBeGreaterThan(0);
       for (const line of packageInstallLines) {
         expect(line, dockerfile).toContain(
@@ -238,5 +249,24 @@ describe("pnpm Docker bootstrap", () => {
         );
       }
     }
+  });
+
+  it("uses ssh2's supported JavaScript fallback without suppressing other build scripts", () => {
+    const workspaceSource = readFileSync("pnpm-workspace.yaml", "utf8");
+    const workspace = parse(workspaceSource) as PnpmWorkspaceConfig;
+
+    expect(workspace.ignoredBuiltDependencies).toEqual(
+      expect.arrayContaining(["cpu-features", "ssh2"]),
+    );
+    expect(workspace.onlyBuiltDependencies).not.toEqual(
+      expect.arrayContaining(["cpu-features", "ssh2"]),
+    );
+    expect(workspace.onlyBuiltDependencies).toEqual(
+      expect.arrayContaining(["esbuild", "keytar", "protobufjs"]),
+    );
+    expect(workspace.ignoreDepScripts).not.toBe(true);
+    expect(readFileSync(".npmrc", "utf8")).not.toMatch(
+      /^\s*ignore-scripts\s*=\s*true\s*$/m,
+    );
   });
 });
