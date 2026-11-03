@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
 import type { InsightsContext } from "./collect.mjs";
 import { SCENARIOS, type ContributionAssessment } from "./report.mjs";
@@ -24,8 +25,9 @@ interface Step {
 }
 
 interface Job {
-  needs?: string[];
+  needs?: string | string[];
   if?: string;
+  outputs?: Record<string, string>;
   permissions?: Record<string, string>;
   steps: Step[];
 }
@@ -64,6 +66,15 @@ const directories: string[] = [];
 afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
+
+function evaluateCondition(condition: string | undefined, context: Record<string, unknown>): boolean {
+  if (!condition) throw new Error("Missing workflow condition");
+  return Boolean(runInNewContext(condition, {
+    ...context,
+    cancelled: () => false,
+    contains: (value: string, match: string) => value.includes(match),
+  }, { timeout: 1_000 }));
+}
 
 function executeReport(items: unknown[], snapshot?: InsightsContext, decisionStatus?: number) {
   const directory = mkdtempSync(join(tmpdir(), "scope-contribution-report-"));
@@ -128,6 +139,38 @@ describe("contribution workflow trust boundaries", () => {
     expect(source).not.toMatch(/pull_request_target|slash_command|issue_comment:/);
   });
 
+  it.each([
+    '{"item_type":"pull_request","item_number":42}',
+    "{}",
+    "null",
+    "not JSON",
+    " ",
+  ])("rejects caller context before activation or contributor checkout: %s", (awContext) => {
+    const context = {
+      github: { repository: "microsoft/scope", ref: "refs/heads/main", event_name: "workflow_dispatch" },
+      inputs: { aw_context: awContext, pr_number: "42" },
+      vars: { CONTRIBUTION_INSIGHTS_ENABLED: "true" },
+    };
+    expect(evaluateCondition(workflow.if, context)).toBe(false);
+    expect(evaluateCondition(compiled.jobs.activation.if, context)).toBe(false);
+    expect(compiled.jobs.agent.needs).toBe("activation");
+    expect(compiled.jobs.agent.if).not.toMatch(/always\(\)|!cancelled\(\)/);
+  });
+
+  it.each([
+    { event: "workflow_dispatch", enabled: "false", inputs: { aw_context: "", pr_number: "42" }, allowed: true },
+    { event: "workflow_dispatch", enabled: "true", inputs: { aw_context: "", pr_number: "" }, allowed: true },
+    { event: "schedule", enabled: "true", inputs: {}, allowed: true },
+    { event: "schedule", enabled: "false", inputs: {}, allowed: false },
+  ])("preserves ordinary $event selection with schedule opt-in=$enabled", ({ event, enabled, inputs, allowed }) => {
+    const context = {
+      github: { repository: "microsoft/scope", ref: "refs/heads/main", event_name: event },
+      inputs, vars: { CONTRIBUTION_INSIGHTS_ENABLED: enabled },
+    };
+    expect(evaluateCondition(workflow.if, context)).toBe(allowed);
+    expect(evaluateCondition(compiled.jobs.activation.if, context)).toBe(allowed);
+  });
+
   it("grants no GitHub write permissions, including compiler-generated system jobs", () => {
     expect(compiled.permissions).toEqual({});
     for (const [id, job] of Object.entries(compiled.jobs)) {
@@ -187,9 +230,33 @@ describe("contribution workflow trust boundaries", () => {
   it("runs report validation only after successful analysis and threat detection", () => {
     expect(compiled.jobs.contribution_report.if).toContain("needs.agent.result == 'success'");
     expect(compiled.jobs.contribution_report.if).toContain("needs.detection.result == 'success'");
+    expect(compiled.jobs.detection.outputs?.detection_success).toBe("${{ steps.detection_conclusion.outputs.success }}");
+    expect(compiled.jobs.detection.outputs?.detection_conclusion).toBe("${{ steps.detection_conclusion.outputs.conclusion }}");
     expect(reportJob.permissions).toEqual({ contents: "read" });
     expect(reportJob.steps.at(-1)?.with?.["if-no-files-found"]).toBe("error");
     expect(reportJob.steps.at(-1)?.if).toBe("always() && steps.render.outputs.report_written == 'true'");
+  });
+
+  it.each([
+    { result: "success", success: "true", conclusion: "success", allowed: true },
+    { result: "success", success: "false", conclusion: "warning", allowed: false },
+    { result: "success", success: "", conclusion: "", allowed: false },
+    { result: "success", success: "true", conclusion: "warning", allowed: false },
+    { result: "success", success: "false", conclusion: "success", allowed: false },
+    { result: "success", success: "true", conclusion: "failure", allowed: false },
+    { result: "failure", success: "true", conclusion: "success", allowed: false },
+    { result: "skipped", success: "true", conclusion: "success", allowed: false },
+  ])("requires affirmative detection before reports and Azure inference: $result/$success/$conclusion", ({
+    result, success, conclusion, allowed,
+  }) => {
+    const context = {
+      needs: {
+        agent: { result: "success", outputs: { output_types: '["contribution_report"]' } },
+        detection: { result, outputs: { detection_success: success, detection_conclusion: conclusion } },
+      },
+    };
+    expect(evaluateCondition(reportJob.if, context)).toBe(allowed);
+    expect(evaluateCondition(compiled.jobs.contribution_report.if, context)).toBe(allowed);
   });
 
   it("keeps Azure credentials in the trusted report step, never in the Copilot agent job", () => {
@@ -200,12 +267,17 @@ describe("contribution workflow trust boundaries", () => {
   });
 
   it("selects these regression tests for workflow and helper changes in ordinary CI", () => {
-    const ci = parse(readFileSync(".github/workflows/ci.yml", "utf8")) as { jobs: Record<string, Job> };
+    const ci = parse(readFileSync(".github/workflows/ci.yml", "utf8")) as {
+      on: Record<"push" | "pull_request", { paths: string[] }>;
+      jobs: Record<string, Job>;
+    };
     const filters = ci.jobs["detect-changes"].steps.find((step) => step.with?.filters)?.with?.filters;
     expect(filters).toBeDefined();
     const paths = parse(filters!) as Record<string, string[]>;
-    expect(paths.typescript).toContain(".github/workflows/contribution-insights.md");
-    expect(paths.typescript).toContain(".github/workflows/contribution-insights.lock.yml");
+    for (const file of [".github/workflows/contribution-insights.md", ".github/workflows/contribution-insights.lock.yml"]) {
+      expect(paths.typescript).toContain(file);
+      for (const event of ["push", "pull_request"] as const) expect(ci.on[event].paths, event).toContain(file);
+    }
     expect(paths.typescript).toContain("scripts/contribution-insights/**");
   });
 });

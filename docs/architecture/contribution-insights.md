@@ -119,6 +119,9 @@ flowchart LR
   through MCP.
 - Both code checkouts use the trusted workflow SHA, not a contributor branch.
   Checkout credentials are not persisted.
+- Maintainer dispatches reject nonempty `aw_context` before activation, keeping
+  the compiler's automatic PR checkout unreachable. Select a contribution with
+  `pr_number`, which is read only as bounded metadata, never a checkout ref.
 - PR text, paths, patches, comments, check names, and related items are untrusted
   data, never instructions. The `community-contribution` label is not an
   authorization or integrity-approval label.
@@ -133,6 +136,11 @@ flowchart LR
 - A missing, invalid, duplicate, stale-snapshot, or failed report does not become
   a successful empty result. The report validator or mandatory verifier fails.
   A deliberately empty selection instead produces an explicit empty report.
+- Report processing and Decision-1 inference require both
+  `detection_success == 'true'` and `detection_conclusion == 'success'`, as well
+  as a successful detection job. An unavailable detector, warning, or missing
+  output blocks the report job and causes the mandatory verifier to fail;
+  green job status alone is insufficient.
 - Only trusted report post-processing receives the Azure decision credential.
   It is never exposed to the Copilot agent, contributor code, or decision input.
   The Decision API uses the configured Azure resource root with redirects
@@ -376,6 +384,8 @@ Helpers use native TypeScript `.mts` modules supported by the Node 24
 running lifecycle hooks in Actions. Their co-located tests run in normal CI;
 workflow/helper path filters select them. `.mts` is covered by the license-header
 checker.
+Both contribution workflow files are also included in CI's top-level `push`
+and `pull_request` path lists, so workflow-only edits trigger these checks.
 
 Compile only this workflow using v0.89.21:
 

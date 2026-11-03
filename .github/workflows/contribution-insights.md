@@ -18,7 +18,7 @@ on:
         required: false
         default: "3"
 
-if: github.repository == 'microsoft/scope' && github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.CONTRIBUTION_INSIGHTS_ENABLED == 'true')
+if: github.repository == 'microsoft/scope' && github.ref == 'refs/heads/main' && !inputs.aw_context && (github.event_name == 'workflow_dispatch' || vars.CONTRIBUTION_INSIGHTS_ENABLED == 'true')
 
 permissions:
   contents: read
@@ -102,7 +102,7 @@ safe-outputs:
     contribution-report:
       description: "Save one report-only contribution assessment as validated JSON and Markdown workflow artifacts. Does not post feedback or mutate GitHub entities."
       max: 1
-      if: needs.agent.result == 'success' && needs.detection.result == 'success'
+      if: needs.agent.result == 'success' && needs.detection.result == 'success' && needs.detection.outputs.detection_success == 'true' && needs.detection.outputs.detection_conclusion == 'success'
       runs-on: ubuntu-latest
       permissions:
         contents: read
