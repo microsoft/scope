@@ -384,10 +384,17 @@ services:
       db-migrate:
         condition: service_completed_successfully
   register-agents:
-    image: alpine:3.21
+    image: docker.io/mikefarah/yq:4.54.1@sha256:4b3d9475d65571d28cbb19544d3820ec2945e4c8b2f18279394282b8dc3a592e
     depends_on:
       api:
         condition: service_healthy
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=1m,mode=1777
     volumes:
       - ./apps/workers:/workers:ro
       - ./scripts/register-agent.sh:/register-agent.sh:ro
@@ -400,7 +407,6 @@ services:
       - -c
       - |
         set -eu
-        apk add --no-cache curl yq > /dev/null 2>&1
 
         register_agent() {
           name="$$1"
