@@ -634,6 +634,12 @@ public data collection and privacy document so users can understand what Scope
 handles and why. `components/Layout.tsx` renders this footer on both standard
 and full-bleed routes so the disclosures remain visible throughout the Portal.
 
+The same footer displays Portal commit, branch, and build-time metadata injected
+by Vite. Native and Compose launchers derive non-secret Git values on the host;
+production builds may provide the same Docker build arguments. The Portal
+validates these values before embedding them, falls back to `unknown` when Git
+metadata is unavailable, and never invokes Git inside its minimal image.
+
 ### Hover-preview + navigate badges
 
 Criteria and task prompts appear across many surfaces (Run Detail, Runs list and its
