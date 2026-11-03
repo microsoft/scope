@@ -830,10 +830,29 @@ Base URL of the Scope API. The report-generator worker calls this to fetch run d
 Timeout for the Copilot SDK session used by the report-generator worker. If the LLM takes longer than this to generate a report, the session will be terminated and the report marked as failed.
 
 ### GIT_COMMIT
-**Default:** `development`
+**Default:** `unknown` for Portal builds without host-provided metadata; service-specific development defaults may differ
 **Type:** string
 
-Git commit hash embedded in reporter metadata. Automatically set during CI/CD builds. Used to track which version of the report-generator produced a given report.
+Git commit hash embedded in build metadata. Host launch/build scripts pass this
+value to minimal images; the Portal validates the value before embedding it in
+the browser bundle and never invokes Git inside the container. The report
+generator also uses it to track which version produced a report.
+
+### GIT_BRANCH
+**Default:** `unknown`
+**Type:** string
+
+Git branch embedded in Portal build metadata. Local native and Compose launchers
+derive it on the host. Invalid or secret-like values are replaced with
+`unknown`; the Portal image never inspects a runtime repository.
+
+### BUILD_TIME
+**Default:** current Portal build/start time when not supplied
+**Type:** ISO-8601 timestamp
+
+Build timestamp embedded in service metadata. Portal launch/build scripts pass
+it explicitly when available; invalid values are replaced with the current
+Vite build/start timestamp.
 
 ## Scheduler Configuration
 

@@ -3,38 +3,21 @@
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { execSync } from "child_process";
 import path from "path";
+import { resolvePortalBuildMetadata } from "./src/lib/build-metadata";
 
-function gitExec(cmd: string, fallback: string): string {
-  try {
-    return execSync(cmd, { encoding: "utf-8" }).trim();
-  } catch {
-    return fallback;
-  }
-}
-
-function getGitInfo() {
-  const commit = process.env.GIT_COMMIT && process.env.GIT_COMMIT !== "unknown"
-    ? process.env.GIT_COMMIT
-    : gitExec("git rev-parse HEAD", "development");
-  const branch = process.env.GIT_BRANCH && process.env.GIT_BRANCH !== "unknown"
-    ? process.env.GIT_BRANCH
-    : gitExec("git rev-parse --abbrev-ref HEAD", "");
-  const buildTime = process.env.BUILD_TIME && process.env.BUILD_TIME !== "unknown"
-    ? process.env.BUILD_TIME
-    : new Date().toISOString();
-  return { commit, branch, buildTime };
-}
-
-const git = getGitInfo();
+const buildMetadata = resolvePortalBuildMetadata({
+  GIT_COMMIT: process.env.GIT_COMMIT,
+  GIT_BRANCH: process.env.GIT_BRANCH,
+  BUILD_TIME: process.env.BUILD_TIME,
+});
 
 export default defineConfig({
   plugins: [react()],
   define: {
-    __GIT_COMMIT__: JSON.stringify(git.commit),
-    __BUILD_TIME__: JSON.stringify(git.buildTime),
-    __GIT_BRANCH__: JSON.stringify(git.branch),
+    __GIT_COMMIT__: JSON.stringify(buildMetadata.commit),
+    __BUILD_TIME__: JSON.stringify(buildMetadata.buildTime),
+    __GIT_BRANCH__: JSON.stringify(buildMetadata.branch),
   },
   resolve: {
     alias: {
