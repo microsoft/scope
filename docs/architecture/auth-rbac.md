@@ -68,6 +68,13 @@ must be resolved with stakeholders before or during implementation.
 
 ## Current implementation
 
+The experimental [DinD/Kind development spike](devcontainer.md) verifies Entra
+Local 0.1.1's external discovery/JWK issuers through a private internal TLS
+endpoint and dev-edge. It does not change this authentication boundary or prove
+browser PKCE, API enrollment, cached reload, logout, or Codespaces forwarding.
+Those remain explicit phase-one acceptance gates; no synthetic principal or
+verification bypass is introduced.
+
 | Component | In this branch | Relevant files |
 |-----------|-------|----------------|
 | API | Verifies the IdP signature and claims before any access-cache lookup. `/users/me` owns explicit enrollment; subsequent middleware resolves existing active users. Public/anonymous rollout is unchanged. | [apps/api/src/index.ts](../../apps/api/src/index.ts), [auth/middleware.ts](../../apps/api/src/auth/middleware.ts), [routes/users.ts](../../apps/api/src/routes/users.ts) |

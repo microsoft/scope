@@ -29,6 +29,9 @@ COPY apps/model-scanners/copilot/src ./apps/model-scanners/copilot/src/
 
 RUN pnpm --filter shared build && pnpm --filter telemetry build && pnpm --filter model-scanning build && pnpm --filter model-scanner-copilot build
 
+FROM builder AS dev
+CMD ["node", "--conditions=source", "--enable-source-maps", "--import", "tsx", "apps/model-scanners/copilot/src/index.ts"]
+
 # --- Production stage ---
 FROM node:22.22.0-slim
 

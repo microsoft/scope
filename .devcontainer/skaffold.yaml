@@ -1,0 +1,38 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: scope-local-development
+build:
+  local:
+    push: false
+    concurrency: 1
+    useBuildkit: true
+  artifacts:
+    - image: scope-local/tools
+      context: ..
+      docker:
+        dockerfile: .devcontainer/runtime.Dockerfile
+      sync:
+        manual:
+          - src: apps/portal/src/**/*
+            dest: /app
+          - src: packages/*/src/**/*
+            dest: /app
+    - image: scope-local/api
+      context: ..
+      docker:
+        dockerfile: apps/api/Dockerfile
+        target: dev
+      sync:
+        manual:
+          - src: apps/api/src/**/*
+            dest: /app
+          - src: packages/*/src/**/*
+            dest: /app
+manifests:
+  kustomize:
+    paths:
+      - ../.dev-state/runtime/kustomize
+deploy:
+  kubectl: {}
+portForward: []

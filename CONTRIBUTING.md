@@ -58,6 +58,18 @@ dependencies.
 
 ## Local development
 
+### Experimental devcontainer spike
+
+The checked-in devcontainer currently provides only a phase-one DinD/Kind and
+Entra/dev-edge feasibility probe, **not the full Scope stack**. It requires a
+privileged, disposable outer container. See the
+[spike instructions and evidence ledger](./docs/architecture/devcontainer.md)
+before using `pnpm dev:spike doctor`. Real local-browser and private-Codespaces
+login remain unverified; use the existing Compose workflow below for regular
+development. Never transfer a development CA private key to the browser host.
+
+### Existing Compose workflow
+
 Local authentication requires your browser to trust a development certificate.
 The Portal development scripts run `mkcert -install` to add a local certificate
 authority to the OS/browser trust store and generate the emulator's `localhost`

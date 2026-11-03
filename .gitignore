@@ -34,5 +34,8 @@ tmp/
 # Local dev TLS certs (mkcert) for the entra-local auth emulator
 .certs/
 
+# Generated, workspace-scoped feasibility configuration and development CA
+.dev-state/
+
 # NOTICE generation build cache (scripts/generate-notice.ts)
 .notice-build/

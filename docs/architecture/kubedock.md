@@ -38,6 +38,12 @@ Kubedock gives coding agents the ability to run Docker commands (build, run, exe
 
 ## Feature Flag (Kustomize Component)
 
+The component described below is a design contract, not a component supplied by
+the experimental [Kind boot spike](devcontainer.md). That spike deploys no
+workers or Kubedock resources. A self-contained local component, scoped RBAC,
+projected tokens and representative Docker-operation tests are still required
+before claiming Kind worker support.
+
 Kubedock is deployed as a **Kustomize Component** that overlays opt into per environment.
 
 ### Enabling in an environment

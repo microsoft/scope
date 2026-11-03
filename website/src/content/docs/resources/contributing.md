@@ -22,6 +22,14 @@ and architecture references. Read
 [CONTRIBUTING.md](https://github.com/microsoft/scope/blob/main/CONTRIBUTING.md)
 for coding conventions, testing requirements, and the pull request process.
 
+The checked-in devcontainer is an experimental DinD/Kind and authentication
+topology probe, not a complete development stack. It requires a privileged,
+disposable environment; real browser login and private Codespaces forwarding
+remain unverified. See the
+[spike instructions and evidence](https://github.com/microsoft/scope/blob/main/docs/architecture/devcontainer.md)
+before using it. Continue to use the documented local-development workflow for
+regular contributions.
+
 ## Pull requests
 
 Open pull requests against `microsoft/scope` on `main`, including when working
