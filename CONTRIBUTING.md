@@ -99,6 +99,90 @@ all CPUs assigned to Docker or the Podman VM, while its memory remains limited
 to 2 GiB. Later starts reuse the gateway's named Cargo target volume and are
 faster.
 
+### Prepare container storage for a clean rebuild
+
+Before a large clean Docker or Podman rebuild, inspect the container runtime's
+storage rather than relying only on host free space. Docker Desktop and Podman
+Machine commonly keep images, writable layers, build cache, and named volumes
+inside a VM or separate filesystem. That storage can fill independently while
+the host still appears to have ample capacity.
+
+A first clean Copilot-stack build needs substantial temporary and persistent
+runtime space because it pulls base images, installs dependencies, and compiles
+the Rust gateway before caches can be reused. Treat this as planning guidance,
+not a fixed minimum: usage varies with the platform, CPU architecture, enabled
+profiles, existing layers, and cache state. Confirm the runtime has comfortable
+headroom before starting instead of relying on a universal threshold.
+
+These commands only inspect Docker-compatible runtime storage:
+
+```bash
+docker context show
+docker info --format 'DockerRootDir={{.DockerRootDir}}'
+docker system df
+docker system df -v
+```
+
+When Docker commands target a Podman socket, also inspect Podman directly.
+On macOS or Windows, check both the configured machine size and free space
+inside the running VM:
+
+```bash
+podman machine list
+podman system df
+podman system df -v
+machine_name="$(podman machine list --format '{{.Name}}' | head -n 1)"
+test -z "$machine_name" || podman machine ssh "$machine_name" \
+  df -h / /var /var/lib/containers
+```
+
+After `scripts/worktree-env.sh` or a `pnpm docker:*` command has generated
+`.env`, use the Compose project label to distinguish this worktree's resources
+from unrelated projects:
+
+```bash
+scope_project="$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env | tail -n 1)"
+test -n "$scope_project"
+docker ps -a --filter "label=com.docker.compose.project=$scope_project"
+docker compose images
+docker volume ls --filter "label=com.docker.compose.project=$scope_project"
+```
+
+`docker system df -v` and `podman system df -v` also show build-cache usage, but
+cache records are not always attributable to one Compose project. Do not assume
+that all reclaimable cache belongs to Scope.
+
+If storage is low, use this decision sequence:
+
+1. Inspect runtime and, when applicable, VM filesystem usage.
+2. Identify stopped containers, images, cache records, and volumes that belong
+   to this exact Scope worktree.
+3. Prefer removing only verified Scope resources. Ask the user before cleanup,
+   and do not recommend broad `system prune`, `volume prune`, wildcard removal,
+   or deletion of unrelated runtime resources.
+4. Re-run the inspection commands and retry the build only after confirming
+   adequate free space.
+
+The following are **destructive examples** for resources whose exact IDs or
+names have already been verified and whose removal the user approved:
+
+```bash
+docker container rm "$SCOPE_STOPPED_CONTAINER_ID"
+docker image rm --no-prune "$SCOPE_IMAGE_ID"
+docker volume rm "$SCOPE_VOLUME_NAME"
+
+# Native Podman equivalents
+podman rm "$SCOPE_STOPPED_CONTAINER_ID"
+podman rmi --no-prune "$SCOPE_IMAGE_ID"
+podman volume rm "$SCOPE_VOLUME_NAME"
+```
+
+Do not run these with unset variables, `--all`, `--force`, or glob-expanded
+names. Named volumes can contain local MongoDB, Azurite, authentication, gateway
+build, or worker workspace data; inspect and confirm their contents and impact
+before deleting them. If a Scope-specific build-cache record cannot be
+identified confidently, leave it in place rather than pruning shared cache.
+
 After Compose starts application services, `scripts/dev-compose.sh` verifies
 their published host endpoints before printing them as usable. The Portal root,
 API `/ready`, and gateway `/health/ready` must return a successful response from
