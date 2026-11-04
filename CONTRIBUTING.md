@@ -116,25 +116,48 @@ not a fixed minimum: usage varies with the platform, CPU architecture, enabled
 profiles, existing layers, and cache state. Confirm the runtime has comfortable
 headroom before starting instead of relying on a universal threshold.
 
-These commands only inspect Docker-compatible runtime storage:
+These commands identify the selected Docker daemon and inspect its object usage:
 
 ```bash
 docker context show
-docker info --format 'DockerRootDir={{.DockerRootDir}}'
+docker context inspect "$(docker context show)" \
+  --format 'Endpoint={{.Endpoints.docker.Host}}'
+docker info \
+  --format 'Name={{.Name}} OperatingSystem={{.OperatingSystem}} DockerRootDir={{.DockerRootDir}}'
 docker system df
 docker system df -v
 ```
 
+`docker system df` reports Docker object usage, not the filesystem's total
+capacity or free space. Check the filesystem containing `DockerRootDir` on the
+actual daemon host:
+
+- For a native local Linux daemon, run
+  `docker_root="$(docker info --format '{{.DockerRootDir}}')" && df -h "$docker_root"`.
+- For an SSH, TCP, or other remote context, use the approved access path to
+  that daemon host and run `df -h` there. Running `df` on the CLI host does not
+  measure the remote daemon's storage.
+- For Docker Desktop, inspect **Settings > Resources > Advanced > Disk usage
+  limit** and **Disk image location**, then confirm the filesystem containing
+  that image has headroom. See Docker's
+  [Resources settings](https://docs.docker.com/desktop/settings-and-maintenance/settings/#resources).
+
 When Docker commands target a Podman socket, also inspect Podman directly.
 On macOS or Windows, check both the configured machine size and free space
-inside the running VM:
+inside the running VM. Do not select the first listed machine: compare the
+active Docker context endpoint and Podman connection URI with the running
+machines, then set the verified machine name explicitly:
 
 ```bash
+docker context inspect "$(docker context show)" \
+  --format 'Endpoint={{.Endpoints.docker.Host}}'
+podman system connection list
 podman machine list
 podman system df
 podman system df -v
-machine_name="$(podman machine list --format '{{.Name}}' | head -n 1)"
-test -z "$machine_name" || podman machine ssh "$machine_name" \
+machine_name="<verified-running-machine>"
+test -n "$machine_name"
+podman machine ssh "$machine_name" \
   df -h / /var /var/lib/containers
 ```
 
@@ -150,15 +173,17 @@ docker compose images
 docker volume ls --filter "label=com.docker.compose.project=$scope_project"
 ```
 
-`docker system df -v` and `podman system df -v` also show build-cache usage, but
-cache records are not always attributable to one Compose project. Do not assume
-that all reclaimable cache belongs to Scope.
+`docker system df -v` also shows Docker build-cache usage, but cache records are
+not always attributable to one Compose project. `podman system df -v` reports
+images, containers, and volumes, including shared image-layer usage; it does not
+provide a separate Docker BuildKit-style build-cache section. Do not assume
+that all reclaimable or shared storage belongs to Scope.
 
 If storage is low, use this decision sequence:
 
 1. Inspect runtime and, when applicable, VM filesystem usage.
-2. Identify stopped containers, images, cache records, and volumes that belong
-   to this exact Scope worktree.
+2. Identify stopped containers, images, runtime-reported build-cache records,
+   and volumes that belong to this exact Scope worktree.
 3. Prefer removing only verified Scope resources. Ask the user before cleanup,
    and do not recommend broad `system prune`, `volume prune`, wildcard removal,
    or deletion of unrelated runtime resources.
