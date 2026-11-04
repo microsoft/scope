@@ -52,9 +52,9 @@ import { getRunSkillReferences } from "@/lib/skill-spec";
 /** A compact labeled stat: a micro uppercase label above its value. */
 function MetaItem({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
   return (
-    <div className="flex flex-col gap-0.5" title={title}>
-      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">{label}</span>
-      <span className="text-sm leading-tight text-foreground">{value}</span>
+    <div className="flex flex-col gap-0.5 rounded-lg border border-border/50 bg-muted/30 px-3 py-1.5 shadow-xs transition-colors hover:bg-muted/50" title={title}>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{label}</span>
+      <span className="text-sm font-medium leading-tight text-foreground">{value}</span>
     </div>
   );
 }
@@ -62,14 +62,14 @@ function MetaItem({ label, value, title }: { label: string; value: ReactNode; ti
 /** A labeled group of resource chips (MCP servers, skills, extensions). */
 function ResourceLinks({ label, items, hrefBase }: { label: string; items: string[]; hrefBase: string }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">{label}</span>
-      <div className="flex flex-wrap items-center gap-1">
+    <div className="flex flex-col gap-1 rounded-lg border border-border/50 bg-muted/30 px-3 py-1.5 shadow-xs">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{label}</span>
+      <div className="flex flex-wrap items-center gap-1.5">
         {items.map((slug) => (
           <Link
             key={slug}
             to={`${hrefBase}/${slug}`}
-            className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-mono hover:bg-accent transition-colors"
+            className="inline-flex items-center rounded-md border border-border/60 bg-background/80 px-2 py-0.5 text-xs font-mono transition-colors hover:bg-accent hover:text-accent-foreground"
           >
             {slug}
           </Link>
@@ -673,7 +673,7 @@ export function RunDetail() {
             )}
 
             {/* Tier 2 — labeled configuration + metrics */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="flex flex-wrap items-center gap-2.5">
               <MetaItem
                 label="Worker"
                 value={<AgentBadge agentId={run.workerType} version={run.agentVersion} />}
@@ -757,7 +757,7 @@ export function RunDetail() {
               (run.skills && run.skills.length > 0) ||
               hasRunResources ||
               (run.extensions && run.extensions.length > 0)) && (
-              <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+                <div className="flex flex-wrap items-start gap-2.5">
                 {run.mcpServers && run.mcpServers.length > 0 && (
                   <ResourceLinks label="MCP" items={run.mcpServers} hrefBase="/mcp-servers" />
                 )}
