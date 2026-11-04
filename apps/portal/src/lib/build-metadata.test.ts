@@ -69,12 +69,17 @@ describe("resolvePortalBuildMetadata", () => {
     expect(resolvePortalBuildMetadata({
       GIT_COMMIT: "not-a-commit",
       GIT_BRANCH: "github_pat_do-not-embed",
-      BUILD_TIME: "token=do-not-embed",
+      BUILD_TIME: "1",
     }, reader(undefined, undefined), () => FIXED_BUILD_TIME)).toEqual({
       commit: "development",
       branch: "",
       buildTime: FIXED_BUILD_TIME.toISOString(),
     });
+
+    expect(resolvePortalBuildMetadata({
+      BUILD_TIME: "token=do-not-embed",
+    }, reader(undefined, undefined), () => FIXED_BUILD_TIME).buildTime)
+      .toBe(FIXED_BUILD_TIME.toISOString());
   });
 
   it("uses Git after rejecting invalid explicit values", () => {
