@@ -311,8 +311,10 @@ unblock a PR.
 
 ### 6. Close the loop
 
-Thank the contributor and link any follow-up work. The PR owner checks the post-merge result and
-coordinates a fix or revert if needed.
+Thank the contributor and link any follow-up work. Once merged, the author appears in the
+"Thank you" section of the [Contribute page](https://microsoft.github.io/scope/community/contribute/#thank-you)
+and on the landing page after the merge-triggered contribution-data workflow completes. The PR
+owner checks the post-merge result and coordinates a fix or revert if needed.
 
 If a contribution is not a fit, explain why and close it promptly. When a PR is waiting on the
 contributor after a clear request for information or changes, send a reminder after **two weeks

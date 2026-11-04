@@ -1,0 +1,132 @@
+/*
+ * Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT License.
+ *
+ * Shared presentation for website contribution data: status messages,
+ * count pills, cards, and development-only sample labels.
+ */
+
+.contrib-fallback, .contrib-message { display: none; }
+.contrib-message, .contrib-fallback {
+	padding: 1.2rem 1.4rem;
+	border: 1px dashed var(--scope-border);
+	border-radius: 1rem;
+	background: var(--scope-inset);
+	color: var(--scope-muted);
+	font-size: 0.9rem;
+}
+
+.contrib-sample-tag {
+	display: inline-block;
+	margin-bottom: 0.9rem !important;
+	padding: 0.2rem 0.6rem;
+	border: 1px dashed var(--scope-fail);
+	border-radius: 100px;
+	color: var(--scope-fail);
+	font: 600 0.65rem var(--sl-font-mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+.contrib-sample-tag[hidden] { display: none; }
+
+.contrib-count {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.55rem;
+	margin-top: 1rem !important;
+	padding: 0.35rem 0.85rem 0.35rem 0.7rem;
+	border: 1px solid var(--scope-border);
+	border-radius: 100px;
+	background: var(--scope-surface);
+	color: var(--scope-text);
+	font-size: 0.8rem;
+	font-weight: 600;
+	visibility: hidden;
+}
+.contrib-count[data-shown] { visibility: visible; }
+.contrib-count__value {
+	color: var(--scope-brand);
+	font-family: var(--sl-font-mono);
+	font-variant-numeric: tabular-nums;
+}
+.contrib-count__pulse {
+	position: relative;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: var(--scope-pass);
+}
+.contrib-count__pulse::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	background: var(--scope-pass);
+	animation: contrib-pulse 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+@keyframes contrib-pulse {
+	from { transform: scale(1); opacity: 0.6; }
+	to { transform: scale(3.2); opacity: 0; }
+}
+
+.contrib-card {
+	--x: 50%;
+	--y: 0%;
+	position: relative;
+	isolation: isolate;
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	width: 100%;
+	padding: 1.3rem 1.4rem 1.2rem;
+	border: 1px solid var(--scope-border);
+	border-radius: 1rem;
+	background: var(--scope-surface);
+	color: var(--scope-text);
+	overflow: hidden;
+	transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease, border-color 0.35s ease;
+}
+.contrib-card::before, .contrib-card::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.35s ease;
+}
+.contrib-card::before {
+	padding: 1px;
+	background: radial-gradient(16rem circle at var(--x) var(--y), var(--scope-brand), transparent 70%);
+	-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+	-webkit-mask-composite: xor;
+	mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.contrib-card::after {
+	z-index: -1;
+	background: radial-gradient(26rem circle at var(--x) var(--y), color-mix(in srgb, var(--scope-brand) 11%, transparent), transparent 65%);
+}
+.contrib-card:is(:hover, :focus-visible) {
+	transform: translateY(-4px);
+	border-color: color-mix(in srgb, var(--scope-brand) 45%, var(--scope-border));
+	box-shadow: var(--scope-shadow);
+}
+.contrib-card:is(:hover, :focus-visible)::before, .contrib-card:is(:hover, :focus-visible)::after { opacity: 1; }
+.contrib-card:focus-visible { outline: 2px solid var(--scope-brand); outline-offset: 3px; }
+.contrib-card__arrow {
+	display: inline-block;
+	transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.contrib-card:is(:hover, :focus-visible) .contrib-card__arrow { transform: translate(3px, -3px); }
+
+.scope-contrib__all { display: inline-block; margin-top: 1.5rem; }
+
+@keyframes contrib-shimmer { to { transform: translateX(100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+	.contrib-count__pulse::after, .contrib-card, .contrib-card::before, .contrib-card::after, .contrib-card__arrow {
+		animation: none !important;
+		transition: none !important;
+	}
+	.contrib-card:is(:hover, :focus-visible), .contrib-card:is(:hover, :focus-visible) .contrib-card__arrow { transform: none; }
+}
