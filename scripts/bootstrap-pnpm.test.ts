@@ -258,9 +258,8 @@ describe("pnpm Docker bootstrap", () => {
     expect(workspace.ignoredBuiltDependencies).toEqual(
       expect.arrayContaining(["cpu-features", "ssh2"]),
     );
-    expect(workspace.onlyBuiltDependencies).not.toEqual(
-      expect.arrayContaining(["cpu-features", "ssh2"]),
-    );
+    expect(workspace.onlyBuiltDependencies).not.toContain("cpu-features");
+    expect(workspace.onlyBuiltDependencies).not.toContain("ssh2");
     expect(workspace.onlyBuiltDependencies).toEqual(
       expect.arrayContaining(["esbuild", "keytar", "protobufjs"]),
     );
