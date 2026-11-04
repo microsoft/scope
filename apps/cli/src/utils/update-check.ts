@@ -76,9 +76,30 @@ export const RELEASES_URL =
   process.env.SCOPE_RELEASES_URL ||
   `https://api.github.com/repos/${RELEASES_REPO}/releases`;
 
+/** Select a published stable CLI version from a GitHub release record. */
+function stableReleaseVersion(release: unknown): string | undefined {
+  if (!release || typeof release !== "object") return undefined;
+  const record = release as Record<string, unknown>;
+  if (record.draft || record.prerelease || record.isDraft || record.isPrerelease) return undefined;
+  const tag = record.tag_name ?? record.tagName;
+  if (typeof tag !== "string" || !tag.startsWith("cli/v")) return undefined;
+  const version = tag.slice("cli/v".length);
+  return semver.valid(version) && !semver.prerelease(version) ? version : undefined;
+}
+
+/** Keep GitHub's release ordering, skipping records that are not stable CLI releases. */
+function selectStableVersion(data: unknown): string | undefined {
+  const releases: unknown[] = Array.isArray(data) ? data : [data];
+  for (const release of releases) {
+    const version = stableReleaseVersion(release);
+    if (version) return version;
+  }
+  return undefined;
+}
+
 /**
  * Fetch the latest released CLI version.
- * Only considers releases with a `cli/v*` tag prefix.
+ * Only considers published, stable releases with a valid `cli/v*` tag.
  * Uses `gh release list`, falling back to the public REST API.
  * Returns the version string (without prefix) or undefined on failure.
  * Timeout defaults to 5000ms but can be overridden (background check uses 2000ms).
@@ -88,13 +109,12 @@ export async function fetchLatestVersion(timeoutMs = 5000): Promise<string | und
   if (!process.env.SCOPE_RELEASES_URL) {
     // Prefer gh CLI when available; its configured token also avoids anonymous rate limits.
     try {
-      const tag = execSync(
-        `gh release list --repo ${RELEASES_REPO} --json tagName -q '[.[].tagName | select(startswith("cli/v"))][0]'`,
+      const output = execSync(
+        `gh release list --repo ${RELEASES_REPO} --json tagName,isDraft,isPrerelease`,
         { encoding: "utf-8", timeout: timeoutMs, stdio: ["pipe", "pipe", "pipe"] },
-      ).trim();
-      if (!tag.startsWith("cli/v")) return undefined;
-      const version = tag.slice("cli/v".length);
-      if (semver.valid(version)) return version;
+      );
+      const releases: unknown = JSON.parse(output);
+      return selectStableVersion(releases);
     } catch {
       // gh not available or failed — fall through to REST API
     }
@@ -123,14 +143,8 @@ export async function fetchLatestVersion(timeoutMs = 5000): Promise<string | und
 
     if (!res.ok) return undefined;
 
-    const data = (await res.json()) as Array<{ tag_name?: string }> | { tag_name?: string };
-    // Handle both array (releases list) and single object (test mock compatibility)
-    const releases = Array.isArray(data) ? data : [data];
-    const match = releases.find((r) => r.tag_name?.startsWith("cli/v"));
-    if (!match?.tag_name) return undefined;
-
-    const latest = match.tag_name.slice("cli/v".length);
-    return semver.valid(latest) ? latest : undefined;
+    const data: unknown = await res.json();
+    return selectStableVersion(data);
   } catch {
     return undefined;
   } finally {
