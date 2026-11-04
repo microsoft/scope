@@ -5,6 +5,8 @@ const DEVELOPMENT_COMMIT = "development";
 const MAX_METADATA_LENGTH = 128;
 const COMMIT_PATTERN = /^[0-9a-f]{7,64}$/i;
 const BRANCH_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+const ISO_DATE_TIME_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const SECRET_LIKE_PATTERN = /^(?:gh[pousr]_|github_pat_|sk-|eyJ)|(?:password|secret|token)=/i;
 const UNKNOWN_METADATA = "unknown";
 
@@ -106,6 +108,7 @@ function resolveBuildTime(value: string | undefined, now: () => Date): string {
     candidate !== undefined &&
     candidate.length <= MAX_METADATA_LENGTH &&
     !SECRET_LIKE_PATTERN.test(candidate) &&
+    ISO_DATE_TIME_PATTERN.test(candidate) &&
     !Number.isNaN(Date.parse(candidate))
   ) {
     return candidate;

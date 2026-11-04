@@ -3,6 +3,7 @@ FROM node:22.22.0-slim AS base
 
 ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
 ARG COREPACK_NPM_REGISTRY=
+ENV npm_config_registry=${NPM_CONFIG_REGISTRY}
 COPY scripts/bootstrap-pnpm.sh /usr/local/bin/bootstrap-pnpm
 RUN NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY}" COREPACK_NPM_REGISTRY="${COREPACK_NPM_REGISTRY}" sh /usr/local/bin/bootstrap-pnpm
 # Install system tools for coding agents: Python, uv, git, PowerShell, Go, .NET, Rust, Java, Maven, Gradle

@@ -34,6 +34,10 @@ const nodeDockerfiles = [
   "apps/workers/report-generator/Dockerfile",
   "packages/db-migrations/Dockerfile",
 ];
+const runtimeRegistryDockerfiles = new Set([
+  "apps/workers/coder-acp-claude-code/Dockerfile",
+  "apps/workers/coder-acp-copilot/Dockerfile",
+]);
 
 interface BootstrapFixture {
   callsFile: string;
@@ -227,7 +231,13 @@ describe("pnpm Docker bootstrap", () => {
       expect(contents, dockerfile).not.toMatch(
         /^ENV .*COREPACK_NPM_REGISTRY/m,
       );
-      expect(contents, dockerfile).not.toMatch(/^ENV .*npm_config_registry/m);
+      if (runtimeRegistryDockerfiles.has(dockerfile)) {
+        expect(contents, dockerfile).toContain(
+          "ENV npm_config_registry=${NPM_CONFIG_REGISTRY}",
+        );
+      } else {
+        expect(contents, dockerfile).not.toMatch(/^ENV .*npm_config_registry/m);
+      }
       expect(contents, dockerfile).not.toMatch(
         /fetch[-_]retr(?:y|ies)|network-concurrency/i,
       );
@@ -248,9 +258,8 @@ describe("pnpm Docker bootstrap", () => {
     expect(workspace.ignoredBuiltDependencies).toEqual(
       expect.arrayContaining(["cpu-features", "ssh2"]),
     );
-    expect(workspace.onlyBuiltDependencies).not.toEqual(
-      expect.arrayContaining(["cpu-features", "ssh2"]),
-    );
+    expect(workspace.onlyBuiltDependencies).not.toContain("cpu-features");
+    expect(workspace.onlyBuiltDependencies).not.toContain("ssh2");
     expect(workspace.onlyBuiltDependencies).toEqual(
       expect.arrayContaining(["esbuild", "keytar", "protobufjs"]),
     );
