@@ -87,6 +87,11 @@ pnpm dev:coder-acp-copilot        # A single worker natively (pnpm dev:<service-
 pnpm open:portal                  # Open the portal in your browser
 ```
 
+`pnpm open:portal` and `pnpm portal:url` read `PORTAL_PORT` from `.env` with
+dotenv quoting and comments. If it appears more than once, the last assignment
+wins, including a worktree's appended managed port. Missing or invalid ports
+fall back to `5100`.
+
 ### Debug the Docker development API
 
 `pnpm docker:dev:portal` starts the API with the Node inspector enabled. To
