@@ -699,7 +699,7 @@ export function SubmitRun() {
       ...(inVariationMode ? {} : { ...(selectedSkills.length > 0 ? { skills: selectedSkills } : {}) }),
       ...(inVariationMode ? {} : { ...(selectedExtensions.length > 0 ? { extensions: selectedExtensions } : {}) }),
       ...(selectedCodebaseSpec ? { codebase: selectedCodebaseSpec } : {}),
-      ...(selectedResourceSpecs.length > 0 ? { resources: selectedResourceSpecs } : {}),
+      ...(inVariationMode ? {} : { ...(selectedResourceSpecs.length > 0 ? { resources: selectedResourceSpecs } : {}) }),
       ...(inVariationMode ? {} : { ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}) }),
       ...(inVariationMode
         ? {

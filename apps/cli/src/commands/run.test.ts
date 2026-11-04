@@ -3,6 +3,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { registerRunCommands } from "./run.js";
 
 interface MockResponse {
@@ -235,6 +238,88 @@ describe("run submit", () => {
 
     const { body } = captureSubmit();
     expect(body).not.toHaveProperty("agentsMd");
+  });
+
+  it("submits only shared intent for profile variations", async () => {
+    mockFetchWith({
+      ids: ["req-base", "req-variation"],
+      count: 2,
+      variationCount: 2,
+      status: "pending",
+      variations: [],
+    });
+    const tempDir = mkdtempSync(join(tmpdir(), "scope-profile-variations-"));
+    const variationsPath = join(tempDir, "variations.json");
+    writeFileSync(variationsPath, JSON.stringify(["comparison-profile@1"]));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const program = makeProgram();
+      await program.parseAsync(
+        [
+          "run", "submit",
+          "--message", "Compare profiles",
+          "--max-iterations", "1",
+          "--profile", "baseline-profile@1",
+          "--profile-variations-file", variationsPath,
+          "--no-stream",
+          "-u", "http://localhost:3100",
+          "--project", "proj-test",
+        ],
+        { from: "user" },
+      );
+    } finally {
+      logSpy.mockRestore();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+
+    const { url, body } = captureSubmit();
+    expect(url).toBe("http://localhost:3100/api/v1/requests?projectId=proj-test");
+    expect(body).toEqual({
+      scenario: { task: "Compare profiles", criteria: [] },
+      maxIterations: 1,
+      profileId: "baseline-profile@1",
+      profileVariations: ["comparison-profile@1"],
+    });
+  });
+
+  it("rejects profile-managed options before submitting variations", async () => {
+    mockFetchWith({});
+    const tempDir = mkdtempSync(join(tmpdir(), "scope-profile-variations-"));
+    const variationsPath = join(tempDir, "variations.json");
+    writeFileSync(variationsPath, JSON.stringify(["comparison-profile@1"]));
+    const errorLines: string[] = [];
+    const errSpy = vi.spyOn(console, "error").mockImplementation((...parts: unknown[]) => {
+      errorLines.push(parts.map(String).join(" "));
+    });
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code}) called`);
+    }) as never);
+
+    try {
+      const program = makeProgram();
+      await expect(program.parseAsync(
+        [
+          "run", "submit",
+          "--message", "Compare profiles",
+          "--profile", "baseline-profile@1",
+          "--profile-variations-file", variationsPath,
+          "--model", "gpt-5.6-sol",
+          "--resources", "github-simulator@r1",
+          "--no-stream",
+          "-u", "http://localhost:3100",
+          "--project", "proj-test",
+        ],
+        { from: "user" },
+      )).rejects.toThrow("process.exit(1) called");
+    } finally {
+      errSpy.mockRestore();
+      exitSpy.mockRestore();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+
+    expect(lastRequest).toBeUndefined();
+    expect(errorLines.join("\n")).toContain("--model, --resources cannot be used with --profile-variations-file");
   });
 });
 

@@ -35,6 +35,16 @@ config/                         # Benchmark definitions (YAML)
 
 For package architecture and data models, see [docs/architecture/app-design.md](docs/architecture/app-design.md).
 
+## Cross-client domain ownership
+
+The API owns domain validation, orchestration, fan-out, defaulting, and
+resolution rules shared by Portal, CLI, and direct API consumers. Portal and CLI
+are thin clients: they collect user intent and may provide early validation, but
+must not duplicate or materialize API-owned business logic. When one user action
+expands into multiple domain objects, each object is derived independently by
+the API from the shared intent so client or sibling state cannot leak between
+them.
+
 ## Key Components
 
 ### API (`apps/api/`)
