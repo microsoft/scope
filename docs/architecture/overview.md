@@ -83,35 +83,6 @@ flowchart TB
 
 ## Data Flow
 
-### Local Compose readiness boundary
-
-Local Compose startup has two distinct readiness boundaries. Container health
-proves that services can respond inside the container network; it does not prove
-that a runtime VM published those ports to the developer host.
-
-For application `up` commands, `scripts/dev-compose.sh` therefore performs
-bounded host-side checks against the selected services:
-
-| Service | Host verification contract |
-|---------|----------------------------|
-| Portal | Published port serves `/` with HTTP 2xx |
-| API | Published port serves `/ready` with HTTP 2xx |
-| AI gateway | Published port serves `/health/ready` with HTTP 2xx |
-| Copilot worker | Container is running and current logs confirm queue creation plus MongoDB connection |
-
-Only verified HTTP URLs are printed as usable. Exhausted checks fail the startup
-command and distinguish container failure, host transport failure, HTTP
-non-readiness, and missing worker startup signals. A healthy-container/failed-
-transport result identifies runtime VM networking or port forwarding as the
-likely failure class, but the wrapper only prints non-destructive inspection
-commands; it never validates or changes the user's active Docker context.
-
-The bounded readiness budget begins after Compose creates every selected
-application container. Image builds remain governed by the Compose process
-lifecycle instead of an independent timer: a running build can continue, a
-nonzero build/start exit fails immediately, and endpoint retries cannot expire
-before host publication is possible.
-
 ### User authentication
 
 Configured human callers send the **IdP access token unchanged** on each API call.
