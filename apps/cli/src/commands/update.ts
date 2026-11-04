@@ -46,16 +46,6 @@ export function registerUpdateCommand(program: Command): void {
       targetTag = latest ? `cli/v${latest}` : undefined;
 
       if (!targetTag) {
-        // Resolve tag via gh release list
-        try {
-          targetTag = execSync(
-            `gh release list --repo ${RELEASES_REPO} --json tagName -q '[.[].tagName | select(startswith("cli/v"))][0]'`,
-            { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
-          ).trim();
-        } catch { /* ignore */ }
-      }
-
-      if (!targetTag) {
         console.error("Could not determine the latest CLI release tag.");
         process.exit(1);
       }
