@@ -1,0 +1,11 @@
+# Post-process handler registration metadata.
+# Read by the generic register-handler script and POSTed to the
+# scheduler's POST /handlers/register endpoint on deploy.
+_id: pp-taxonomy
+type: post-process-handler
+version: 1
+queue: pp-taxonomy-queue
+selector: taxonomy
+autoBackfill: false
+dependsOn:
+  - pp-atif

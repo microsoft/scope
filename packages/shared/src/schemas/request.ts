@@ -233,6 +233,7 @@ export const RunStateSchema = z
       podName: z.string().optional(),
     }).optional(),
     harUrl: z.string().optional(),
+    taxonomyUrl: z.string().optional(),
     videoUrls: z.array(z.string()).optional(),
     setupVideoUrls: z.array(z.string()).optional(),
     tokenUsage: TokenUsageSchema.optional(),

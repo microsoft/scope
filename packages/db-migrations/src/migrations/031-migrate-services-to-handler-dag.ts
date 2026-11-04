@@ -7,7 +7,7 @@ import type { MigrationInterface } from "mongo-migrate-ts";
 /**
  * Migration 031: Remove the legacy "post-processor" service entry.
  *
- * Handler service registration (e.g. pp-atif) is now owned
+ * Handler service registration (pp-atif, pp-taxonomy) is now owned
  * by each worker's handler.yaml + the generic register-handler script,
  * which POSTs to the scheduler's POST /handlers/register endpoint on deploy.
  * Reports are not a DAG handler — the scheduler triggers report generation

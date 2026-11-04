@@ -116,7 +116,7 @@ When you run a command:
 | `029-create-users-collection` | Creates the database-enforced unique identity index for authentication; uses Cosmos collection-creation extensions for continuous-backup accounts and preserves native MongoDB index creation (see below) |
 | `030-create-resource-indexes` | Creates project-scoped resource indexes |
 | `031-migrate-services-to-handler-dag` | Replaces the legacy single `post-processor` service row with per-handler service registrations and dependencies |
-| `032-add-handler-status-index` | Adds a handler-specific dispatch index for `pp-atif` polling |
+| `032-add-handler-status-index` | Adds handler-specific dispatch indexes for `pp-atif`, `pp-taxonomy`, and `pp-report` polling |
 | `033-backfill-handler-status` | Backfills `run.handlerStatus.pp-atif` from deprecated `run.postProcessorStatus` / `run.postProcessorVersion` fields |
 
 ### Migration 029: users identity uniqueness

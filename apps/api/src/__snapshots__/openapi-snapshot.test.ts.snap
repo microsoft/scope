@@ -3267,6 +3267,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             ],
             "type": "string",
           },
+          "taxonomyUrl": {
+            "type": "string",
+          },
           "tokenUsage": {
             "$ref": "#/components/schemas/TokenUsage",
           },
@@ -10309,6 +10312,40 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
       },
     },
+    "/api/v1/requests/{id}/runs/{runId}/taxonomy": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "description": "Taxonomy v1 JSON document (scorecard, behavior analysis, action list)",
+          },
+          "404": {
+            "description": "Not found — taxonomy not yet generated",
+          },
+        },
+        "summary": "Download taxonomy JSON for a specific attempt",
+        "tags": [
+          "Requests",
+        ],
+      },
+    },
     "/api/v1/requests/{id}/runs/{runId}/tool-calls": {
       "get": {
         "parameters": [
@@ -10406,6 +10443,32 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "summary": "Download iteration snapshot",
+        "tags": [
+          "Requests",
+        ],
+      },
+    },
+    "/api/v1/requests/{id}/taxonomy": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "description": "Taxonomy v1 JSON document (scorecard, behavior analysis, action list)",
+          },
+          "404": {
+            "description": "Not found — taxonomy not yet generated",
+          },
+        },
+        "summary": "Download taxonomy JSON for the run",
         "tags": [
           "Requests",
         ],

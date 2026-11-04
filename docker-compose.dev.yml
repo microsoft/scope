@@ -217,7 +217,27 @@ services:
         - action: rebuild
           path: ./pnpm-lock.yaml
 
+  taxonomy-handler:
+    build:
+      target: dev
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/workers/taxonomy/src
+          target: /app/apps/workers/taxonomy/src
+        - action: sync
+          path: ./packages/shared/src
+          target: /app/packages/shared/src
+        - action: rebuild
+          path: ./apps/workers/taxonomy/package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+
   register-handler-post-processor:
+    build:
+      target: dev
+
+  register-handler-taxonomy:
     build:
       target: dev
 

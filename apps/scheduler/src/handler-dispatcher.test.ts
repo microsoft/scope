@@ -16,11 +16,11 @@ const HANDLERS: HandlerServiceDocument[] = [
     dependsOn: [],
   },
   {
-    _id: "pp-example",
+    _id: "pp-taxonomy",
     type: "post-process-handler",
     version: 1,
-    queue: "pp-example-queue",
-    selector: "example",
+    queue: "pp-taxonomy-queue",
+    selector: "taxonomy",
     autoBackfill: false,
     dependsOn: ["pp-atif"],
   },
@@ -87,7 +87,7 @@ describe("HandlerDispatcher — drain detection", () => {
 
   it("is drained when all handlers are done", () => {
     expect(
-      isDrained(HANDLERS, { "pp-atif": { status: "done" }, "pp-example": { status: "done" } }),
+      isDrained(HANDLERS, { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "done" } }),
     ).toBe(true);
   });
 
@@ -99,13 +99,13 @@ describe("HandlerDispatcher — drain detection", () => {
     expect(
       isDrained(HANDLERS, {
         "pp-atif": { status: "done" },
-        "pp-example": { status: "processing" },
+        "pp-taxonomy": { status: "processing" },
       }),
     ).toBe(false);
   });
 
   it("is drained when a failed dependency blocks its descendant", () => {
-    // pp-atif failed → pp-example can never run (blocked) → terminal.
+    // pp-atif failed → pp-taxonomy can never run (blocked) → terminal.
     expect(isDrained(HANDLERS, { "pp-atif": { status: "failed" } })).toBe(true);
   });
 
@@ -113,7 +113,7 @@ describe("HandlerDispatcher — drain detection", () => {
     expect(
       isDrained(HANDLERS, {
         "pp-atif": { status: "done" },
-        "pp-example": { status: "failed" },
+        "pp-taxonomy": { status: "failed" },
       }),
     ).toBe(true);
   });
@@ -143,7 +143,7 @@ describe("HandlerDispatcher — maybeTriggerReports", () => {
       run: {
         _id: "run-1",
         status: "done",
-        handlerStatus: { "pp-atif": { status: "done" }, "pp-example": { status: "done" } },
+        handlerStatus: { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "done" } },
       },
     });
     collection.findOneAndUpdate.mockResolvedValue({ _id: "req-1" }); // claim succeeds
@@ -203,7 +203,7 @@ describe("HandlerDispatcher — maybeTriggerReports", () => {
       run: {
         _id: "run-2",
         status: "done",
-        handlerStatus: { "pp-atif": { status: "done" }, "pp-example": { status: "done" } },
+        handlerStatus: { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "done" } },
       },
     });
 
@@ -220,7 +220,7 @@ describe("HandlerDispatcher — maybeTriggerReports", () => {
       run: {
         _id: "run-1",
         status: "done",
-        handlerStatus: { "pp-atif": { status: "done" }, "pp-example": { status: "done" } },
+        handlerStatus: { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "done" } },
       },
     });
     collection.findOneAndUpdate.mockResolvedValue(null); // another path claimed it first
@@ -237,7 +237,7 @@ describe("HandlerDispatcher — maybeTriggerReports", () => {
       run: {
         _id: "run-1",
         status: "done",
-        handlerStatus: { "pp-atif": { status: "done" }, "pp-example": { status: "done" } },
+        handlerStatus: { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "done" } },
       },
     });
     collection.findOneAndUpdate.mockResolvedValue({ _id: "req-1" });

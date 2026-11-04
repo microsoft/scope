@@ -19,6 +19,7 @@ apps/
     coder-acp-copilot/          # GitHub Copilot worker (ACP SDK)
     coder-acp-claude-code/      # Claude Code worker (ACP SDK)
     report-generator/           # Post-run report generation
+    taxonomy/                   # Post-run taxonomy generation
   model-scanners/               # Feature detection for Copilot and Anthropic models
   version-checkers/             # Poll for new agent/tool releases
   key-updaters/                 # GitHub auth cookie management for VS Code Web
@@ -69,6 +70,7 @@ Each worker implements the same queue-processor interface but adapts a different
 | `coder-acp-copilot` | GitHub Copilot | ACP SDK v0.14.1 |
 | `coder-acp-claude-code` | Claude Code | ACP SDK v0.13.1 |
 | `report-generator` | — | Copilot SDK |
+| `taxonomy` | — | Copilot SDK |
 
 Workers consume tasks from Azure Storage Queues (named `queue-<worker-name>`) and write results to MongoDB and Blob Storage. Each has its own Dockerfile and docker-compose profile.
 
