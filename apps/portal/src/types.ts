@@ -596,10 +596,10 @@ export const KEY_CAPABILITY_LABELS: Record<KeyCapability, string> = {
 };
 
 export const KEY_CAPABILITY_DESCRIPTIONS: Record<KeyCapability, string> = {
-  "github-models": "Access AI models hosted on GitHub (GPT-4o, Claude, etc.)",
+  "github-models": "Use the legacy GitHub Models fallback for Portal AI",
   "github-public-api": "Read public repository contents (used for skill discovery and resolution)",
   "copilot-models": "List models available via the Copilot API (OAuth only, PATs rejected)",
-  "copilot-sdk": "Use the Copilot SDK to make LLM requests programmatically",
+  "copilot-sdk": "Enable Portal AI and other programmatic LLM requests through GitHub Copilot",
   "copilot-cli": "Run GitHub Copilot in the CLI for code suggestions",
   "claude-code-cli": "Run Claude Code as an agentic coding assistant",
   "anthropic-api": "Access the Anthropic REST API (model scanning, direct API calls)",

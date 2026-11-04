@@ -26,37 +26,37 @@ import { toast } from "sonner";
 import { useCommandEnter } from "@/hooks/useCommandEnter";
 import { KbdBadge } from "@/components/KbdBadge";
 
-const KEY_INSTRUCTIONS: Record<KeyType, { steps: string[]; link?: { label: string; url: string }; note?: string }> = {
+export const KEY_INSTRUCTIONS: Record<KeyType, { steps: string[]; link?: { label: string; url: string }; note?: string }> = {
   "github-pat-classic": {
     steps: [
       "Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)",
       "Click 'Generate new token (classic)'",
-      "Select scopes: 'copilot' (for Copilot SDK/CLI/VS Code) and/or 'repo' as needed",
+      "Select the 'copilot' scope to enable Portal AI through the Copilot SDK (and Copilot CLI/VS Code); add 'repo' only if needed",
       "Set an expiration and click 'Generate token'",
       "Copy the token (starts with ghp_)",
     ],
     link: { label: "Open GitHub token settings", url: "https://github.com/settings/tokens" },
-    note: "Classic PATs cannot access GitHub Models. Use a fine-grained PAT with models:read for that.",
+    note: "A classic PAT with an active Copilot license is the recommended GitHub credential for Portal AI. It provides the copilot-sdk capability; GitHub Models is only a legacy fallback and requires a different token type.",
   },
   "github-pat-fine-grained": {
     steps: [
       "Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens",
       "Click 'Generate new token'",
       "Set a token name, expiration, and resource owner",
-      "Under Permissions, add 'Models' → Read access (for GitHub Models)",
+      "Under Permissions, add 'Models' → Read access only if you need the legacy GitHub Models fallback",
       "Click 'Generate token'",
       "Copy the token (starts with github_pat_)",
     ],
     link: { label: "Open GitHub token settings", url: "https://github.com/settings/personal-access-tokens" },
-    note: "Fine-grained PATs support GitHub Models via the models:read permission. They do not support Copilot SDK.",
+    note: "Fine-grained PATs support only the legacy GitHub Models path via models:read. They do not provide the Copilot SDK capability; use a classic PAT or OAuth token for Portal AI.",
   },
   "github-oauth": {
     steps: [
       "Obtain a GitHub OAuth token via an OAuth App flow (authorization code grant)",
-      "The token should have the 'copilot' scope for Copilot capabilities",
+      "Ensure the token has Copilot access so validation grants the copilot-sdk capability used by Portal AI",
       "Copy the OAuth access token",
     ],
-    note: "OAuth tokens typically support all GitHub capabilities including Copilot SDK, CLI, VS Code, and GitHub Models.",
+    note: "OAuth tokens with an active Copilot license can enable Portal AI through the Copilot SDK, as well as Copilot CLI and VS Code. GitHub Models remains a legacy fallback.",
   },
   "github-oauth-cookie-state": {
     steps: [
@@ -93,7 +93,7 @@ const KEY_INSTRUCTIONS: Record<KeyType, { steps: string[]; link?: { label: strin
       "Paste the endpoint, key, and (optionally) the deployment name below",
     ],
     link: { label: "Open Azure AI Foundry", url: "https://ai.azure.com/" },
-    note: "Used by the portal's AI features (criteria / prompt-feature / task-prompt generation). When at least one valid Foundry key is registered the API prefers it over the slow public GitHub Models endpoint.",
+    note: "Used by Portal AI (criteria, prompt-feature, and task-prompt generation). Foundry environment credentials take first priority, followed by registered Foundry keys, Copilot SDK credentials, and finally the legacy GitHub Models fallback.",
   },
 };
 
