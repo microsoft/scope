@@ -635,10 +635,18 @@ handles and why. `components/Layout.tsx` renders this footer on both standard
 and full-bleed routes so the disclosures remain visible throughout the Portal.
 
 The same footer displays Portal commit, branch, and build-time metadata injected
-by Vite. Native and Compose launchers derive non-secret Git values on the host;
-production builds may provide the same Docker build arguments. The Portal
-validates these values before embedding them, falls back to `unknown` when Git
-metadata is unavailable, and never invokes Git inside its minimal image.
+by Vite. Metadata behavior differs by environment:
+
+| Environment | Git metadata behavior |
+|-------------|-----------------------|
+| Native development | Git lookup is enabled by default. Valid explicit `GIT_COMMIT` / `GIT_BRANCH` values take precedence, otherwise Vite reads the source repository once at startup. |
+| Docker Compose development | `PORTAL_GIT_INFO_ENABLED=false` disables lookup in the minimal Git-free container. The footer uses `commit=development` and omits the branch. |
+| Integration and production | Lookup remains enabled for the one-time immutable bundle build. Explicit Docker/ACR build metadata takes precedence; unavailable values fall back to `development` and an empty branch. |
+
+All paths validate values before embedding them in client code. `BUILD_TIME` is
+independent of Git extraction: an explicit valid timestamp wins, otherwise Vite
+uses the current startup/build time. The deployed nginx runtime never invokes
+Git because metadata is already embedded in the immutable bundle.
 
 ### Hover-preview + navigate badges
 

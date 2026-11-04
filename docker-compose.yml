@@ -589,8 +589,8 @@ services:
       dockerfile: apps/portal/Dockerfile
       args:
         <<: *npm-build-args
-        # Host launch/build scripts derive these public values before Compose
-        # starts; the Portal never inspects the repository inside its image.
+        # Explicit metadata wins for immutable builds. If unavailable, Vite's
+        # default one-time Git lookup falls back to development placeholders.
         GIT_COMMIT: "${GIT_COMMIT:-unknown}"
         GIT_BRANCH: "${GIT_BRANCH:-unknown}"
         BUILD_TIME: "${BUILD_TIME:-unknown}"
