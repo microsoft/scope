@@ -140,6 +140,18 @@ if [ "${#EXPLICIT_SERVICES[@]}" -gt 0 ] && [ -z "$VERIFY_SERVICES" ]; then
   exec docker compose "${COMPOSE_ARGS[@]}"
 fi
 
+# Resolve profile-selected application services before startup. This lets the
+# wrapper distinguish a legitimate image build (containers do not exist yet)
+# from the bounded readiness phase after Compose begins creating containers.
+if [ -z "$VERIFY_SERVICES" ]; then
+  selected_services="$(docker compose "${COMPOSE_PREFIX[@]}" config --services)"
+  for service in portal api gateway coder-acp-copilot; do
+    if grep -qx "$service" <<<"$selected_services"; then
+      VERIFY_SERVICES+="${VERIFY_SERVICES:+$'\n'}$service"
+    fi
+  done
+fi
+
 compose_pid=""
 verify_pid=""
 cleanup_children() {
@@ -156,6 +168,39 @@ trap 'cleanup_children TERM; exit 143' TERM
 
 docker compose "${COMPOSE_ARGS[@]}" &
 compose_pid=$!
+
+# Do not consume the endpoint readiness budget while Compose is still building
+# images and none of the expected application containers can exist. This gate
+# is tied to the Compose lifecycle rather than an arbitrary clean-build timer:
+# it ends when every selected container has been created or Compose exits.
+while [ -n "$compose_pid" ]; do
+  all_containers_created=1
+  while IFS= read -r service; do
+    [ -n "$service" ] || continue
+    if [ -z "$(docker compose "${COMPOSE_PREFIX[@]}" ps -q "$service" 2>/dev/null | head -n 1)" ]; then
+      all_containers_created=0
+      break
+    fi
+  done <<<"$VERIFY_SERVICES"
+
+  if [ "$all_containers_created" -eq 1 ]; then
+    break
+  fi
+
+  if ! kill -0 "$compose_pid" 2>/dev/null; then
+    set +e
+    wait "$compose_pid"
+    compose_status=$?
+    set -e
+    compose_pid=""
+    if [ "$compose_status" -ne 0 ]; then
+      exit "$compose_status"
+    fi
+    break
+  fi
+
+  sleep 0.2
+done
 
 SCOPE_DEV_VERIFY_SERVICES="$VERIFY_SERVICES" \
   "$(dirname "$0")/verify-dev-stack.sh" "${COMPOSE_PREFIX[@]}" &
