@@ -10,6 +10,7 @@ import {
   UpdateInsightInputSchema,
 } from "shared";
 import { apiRoute } from "../openapi/api-route.js";
+import { escapeSearchText } from "../utils/search.js";
 import type { InsightDocument, RouteContext } from "../route-context.js";
 import { ProjectIdQuerySchema, getQueryProjectId, deriveProjectIdFromParent } from "../utils/project-scope.js";
 
@@ -40,8 +41,8 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       if (q && typeof q === "string" && q.trim()) {
-        // Case-insensitive regex search across title, description, category, and tags
-        const regex = { $regex: q.trim(), $options: "i" };
+        // Case-insensitive literal search across title, description, category, and tags
+        const regex = { $regex: escapeSearchText(q.trim()), $options: "i" };
         filter.$or = [
           { title: regex },
           { description: regex },
@@ -62,7 +63,7 @@ apiRoute(ctx.app, ctx.registry, {
   },
 });
 
-// Search insights by keyword (fuzzy regex match)
+// Search insights by literal keywords
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/api/v1/insights/search",
@@ -94,7 +95,7 @@ apiRoute(ctx.app, ctx.registry, {
       // Split query into words and match all of them (AND) across title/description/tags
       const words = q.trim().split(/\s+/);
       filter.$and = words.map((word) => {
-        const regex = { $regex: word, $options: "i" };
+        const regex = { $regex: escapeSearchText(word), $options: "i" };
         return {
           $or: [
             { title: regex },

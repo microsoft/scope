@@ -446,6 +446,15 @@ agent-version records may omit `queueName`; registry readers treat missing,
 blank, and whitespace-only values as unavailable rather than throwing. New
 registrations continue to require a non-empty queue.
 
+### Catalog search text
+
+The `q` searches for criteria, prompt features, report templates, internal skills,
+internal extensions, and insights match case-insensitive literal text. Characters
+such as `[`, `+`, and `.` are escaped before building MongoDB regex filters, so
+searching for `C++` or `a.b` cannot change the pattern or fail its compilation.
+Insight keyword search still requires every whitespace-separated word to match.
+External skill and extension registries receive the original, unescaped text.
+
 ### Run submission flow
 
 1. User submits via Portal or CLI with: **task**, **criteria** (required), **worker**, **model** (required), and optionally **agentVersion**, a **codebase** selection, and/or a per-gate **`gates`** configuration (see [Gates](#gates--multi-phase-evaluation-pipeline))
