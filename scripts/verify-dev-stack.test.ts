@@ -20,6 +20,8 @@ const directories: string[] = [];
 
 interface FixtureOptions {
   apiCodes?: string;
+  composeCreateAfter?: number;
+  composeUpStatus?: number;
   gatewayCodes?: string;
   portalCodes?: string;
   services?: string;
@@ -62,6 +64,15 @@ command="\${arguments[$command_index]}"
 if [ "$command" = "ps" ]; then
   last_index=$((\${#arguments[@]} - 1))
   service="\${arguments[$last_index]}"
+  ps_counter_file="$COUNTERS/PS"
+  ps_count=0
+  [ -f "$ps_counter_file" ] && ps_count="$(cat "$ps_counter_file")"
+  ps_count=$((ps_count + 1))
+  printf '%s' "$ps_count" > "$ps_counter_file"
+  if [ "$ps_count" -le "\${COMPOSE_CREATE_AFTER:-0}" ]; then
+    exit 0
+  fi
+  [ -n "\${COMPOSE_CREATED_FILE:-}" ] && : > "$COMPOSE_CREATED_FILE"
   printf 'container-%s\\n' "$service"
 elif [ "$command" = "port" ]; then
   service="\${arguments[$((command_index + 1))]}"
@@ -81,7 +92,16 @@ elif [ "$command" = "logs" ]; then
 elif [ "$command" = "config" ]; then
   printf '%s\\n' "\${SCOPE_DEV_VERIFY_SERVICES:-}"
 elif [ "$command" = "up" ]; then
-  exit "\${COMPOSE_UP_STATUS:-0}"
+  if [ "\${COMPOSE_UP_STATUS:-0}" -ne 0 ]; then
+    /bin/sleep 0.05
+    exit "$COMPOSE_UP_STATUS"
+  fi
+  if [ "\${COMPOSE_CREATE_AFTER:-0}" -gt 0 ]; then
+    while [ ! -f "$COMPOSE_CREATED_FILE" ]; do
+      /bin/sleep 0.02
+    done
+  fi
+  exit 0
 else
   exit 1
 fi
@@ -118,6 +138,7 @@ printf '%s' "$code"
 
   const services = options.services ?? "portal\napi\ngateway\ncoder-acp-copilot";
   const states = options.states ?? {};
+  const composeCreatedFile = join(directory, "compose-created");
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: `${bin}:${process.env.PATH ?? ""}`,
@@ -128,6 +149,9 @@ printf '%s' "$code"
     SCOPE_DEV_VERIFY_SERVICES: services,
     PORTAL_CODES: options.portalCodes ?? "200",
     API_CODES: options.apiCodes ?? "200",
+    COMPOSE_CREATED_FILE: composeCreatedFile,
+    COMPOSE_CREATE_AFTER: String(options.composeCreateAfter ?? 0),
+    COMPOSE_UP_STATUS: String(options.composeUpStatus ?? 0),
     GATEWAY_CODES: options.gatewayCodes ?? "200",
     WORKER_READY: options.workerReady === false ? "0" : "1",
     STATE_portal: states.portal ?? "running",
@@ -248,5 +272,35 @@ describe("verify-dev-stack.sh", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("published host endpoint is unreachable");
+  });
+
+  it("does not consume readiness attempts while Compose is still building", () => {
+    const test = fixture({
+      composeCreateAfter: 6,
+      services: "api",
+    });
+    const result = test.runWrapper({
+      SCOPE_DEV_READY_ATTEMPTS: "1",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(Number(readFileSync(join(test.counters, "PS"), "utf8"))).toBeGreaterThan(6);
+    expect(readFileSync(join(test.counters, "API"), "utf8")).toBe("1");
+    expect(result.stdout).toContain("API verified: http://localhost:3100/ready");
+  });
+
+  it("propagates a Compose build failure without waiting for readiness", () => {
+    const test = fixture({
+      composeCreateAfter: 100,
+      composeUpStatus: 17,
+      services: "api",
+    });
+    const result = test.runWrapper({
+      SCOPE_DEV_READY_ATTEMPTS: "1",
+    });
+
+    expect(result.status).toBe(17);
+    expect(result.stderr).not.toContain("Development stack readiness verification failed");
+    expect(() => readFileSync(join(test.counters, "API"), "utf8")).toThrow();
   });
 });
