@@ -3,13 +3,31 @@
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { spawnSync } from "node:child_process";
 import path from "path";
 import { resolvePortalBuildMetadata } from "./src/lib/build-metadata";
 
+/** Read one Git value without a shell or error-shaped stderr output. */
+function readGitValue(arguments_: string[]): string | undefined {
+  const result = spawnSync("git", arguments_, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (result.error || result.status !== 0) {
+    return undefined;
+  }
+
+  return result.stdout.trim();
+}
+
 const buildMetadata = resolvePortalBuildMetadata({
+  PORTAL_GIT_INFO_ENABLED: process.env.PORTAL_GIT_INFO_ENABLED,
   GIT_COMMIT: process.env.GIT_COMMIT,
   GIT_BRANCH: process.env.GIT_BRANCH,
   BUILD_TIME: process.env.BUILD_TIME,
+}, {
+  readCommit: () => readGitValue(["rev-parse", "HEAD"]),
+  readBranch: () => readGitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
 });
 
 export default defineConfig({

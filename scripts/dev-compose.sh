@@ -18,18 +18,6 @@ for p in /usr/local/bin /opt/homebrew/bin "$HOME/.docker/bin"; do
   [[ -d "$p" ]] && [[ ":$PATH:" != *":$p:"* ]] && export PATH="$p:$PATH"
 done
 
-# Derive public build metadata on the host. Minimal application images do not
-# include Git and must never inspect the repository during startup.
-if [ -z "${GIT_COMMIT:-}" ]; then
-  export GIT_COMMIT="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
-fi
-if [ -z "${GIT_BRANCH:-}" ]; then
-  export GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'unknown')"
-fi
-if [ -z "${BUILD_TIME:-}" ]; then
-  export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-fi
-
 # ---------------------------------------------------------------------------
 # Forward package and package-manager bootstrap registries into image builds.
 # ---------------------------------------------------------------------------
