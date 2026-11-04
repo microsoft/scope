@@ -96,28 +96,10 @@ pnpm open:portal                  # Open the portal in your browser
 The first Docker start compiles the Rust AI gateway inside its development
 container and can take several minutes. During development, the gateway may use
 all CPUs assigned to Docker or the Podman VM, while its memory remains limited
-to 2 GiB. Later starts reuse the gateway's named Cargo target volume and are
-faster.
-
-After Compose starts application services, `scripts/dev-compose.sh` verifies
-their published host endpoints before printing them as usable. The Portal root,
-API `/ready`, and gateway `/health/ready` must return a successful response from
-the host. The Copilot worker is verified separately: its container must be
-running and its logs must confirm both `queue-coder-acp-copilot` creation and
-MongoDB connection. The command exits nonzero when these bounded checks expire,
-so a Portal page alone is not evidence that runs can process.
-
-Clean image builds do not consume that bounded readiness window. The wrapper
-waits for Compose to create the selected application containers, while still
-propagating an immediate nonzero build/start failure, and only then starts the
-host endpoint and worker readiness attempts.
-
-The failure message distinguishes an unhealthy/not-running service, a reachable
-but non-ready HTTP endpoint, and a healthy container whose published port is
-unreachable from the host. The last case usually points to runtime VM networking
-or port forwarding. Use the printed `docker compose ps`, `docker compose port`,
-and `docker compose logs` commands to inspect it; the startup script never
-selects, restarts, or changes the active Docker runtime or context.
+to 2 GiB. Keep the Compose command running until the `coder-acp-copilot` logs
+show that it connected to MongoDB and ensured `queue-coder-acp-copilot`; runs
+submitted before that worker is ready remain pending. Later starts reuse the
+gateway's named Cargo target volume and are faster.
 
 ### Debug the Docker development API
 
