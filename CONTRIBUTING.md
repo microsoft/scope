@@ -101,6 +101,11 @@ running and its logs must confirm both `queue-coder-acp-copilot` creation and
 MongoDB connection. The command exits nonzero when these bounded checks expire,
 so a Portal page alone is not evidence that runs can process.
 
+Clean image builds do not consume that bounded readiness window. The wrapper
+waits for Compose to create the selected application containers, while still
+propagating an immediate nonzero build/start failure, and only then starts the
+host endpoint and worker readiness attempts.
+
 The failure message distinguishes an unhealthy/not-running service, a reachable
 but non-ready HTTP endpoint, and a healthy container whose published port is
 unreachable from the host. The last case usually points to runtime VM networking

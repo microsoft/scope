@@ -106,6 +106,12 @@ transport result identifies runtime VM networking or port forwarding as the
 likely failure class, but the wrapper only prints non-destructive inspection
 commands; it never validates or changes the user's active Docker context.
 
+The bounded readiness budget begins after Compose creates every selected
+application container. Image builds remain governed by the Compose process
+lifecycle instead of an independent timer: a running build can continue, a
+nonzero build/start exit fails immediately, and endpoint retries cannot expire
+before host publication is possible.
+
 ### User authentication
 
 Configured human callers send the **IdP access token unchanged** on each API call.
