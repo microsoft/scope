@@ -89,12 +89,18 @@ export class PostProcessorDispatcher {
           await this.queueClient.sendMessage(message);
           dispatched++;
         } catch (err) {
-          // Roll back status so the doc is picked up on next poll cycle
+          // Release only our still-queued attempt. A retry may have replaced
+          // the run, or a worker may have received the message despite a lost
+          // acknowledgement; neither state belongs to this rollback.
           await this.collection.updateOne(
-            { _id: claimed._id } as any,
+            {
+              _id: claimed._id,
+              "run._id": claimed.run?._id,
+              "run.postProcessorStatus": "queued",
+            },
             { $unset: { "run.postProcessorStatus": "" } } as any,
           );
-          console.error(`[PostProcessorDispatcher] Queue send failed for ${claimed._id}, rolled back status:`, err);
+          console.error(`[PostProcessorDispatcher] Queue send failed for ${claimed._id}, attempted queued-status rollback:`, err);
           break; // Stop batch — queue may be unavailable
         }
         console.log(`[PostProcessorDispatcher] Dispatched ${claimed._id}`);
