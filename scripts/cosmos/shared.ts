@@ -317,6 +317,9 @@ export function kubePodUp(opts: KubePodOptions): string {
   }
   const wait = spawnSync("kubectl", [...contextArgs, "wait", "--for=condition=Ready", `pod/${pod}`, "-n", opts.namespace, "--timeout=180s"], { stdio: "ignore" });
   if (wait.status !== 0) {
+    // The caller only owns the pod after this function returns. Reclaim it here
+    // when readiness fails, before its name can reach the caller's finally block.
+    kubePodDelete(pod, opts.namespace, opts.kubeContext);
     throw new CosmosCliError("in-cluster pod did not become ready.", 1);
   }
   return pod;
