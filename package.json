@@ -8,7 +8,7 @@
     "cli": "pnpm --filter cli exec tsx src/index.ts",
     "build:cli": "pnpm --filter shared build && pnpm --filter cli build",
     "dev:api": "pnpm --filter api dev",
-    "dev:portal": "GIT_COMMIT=$(git rev-parse HEAD) GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD) pnpm --filter portal dev",
+    "dev:portal": "pnpm --filter portal dev",
     "shared-infra:setup": "scripts/shared-infra-setup.sh",
     "shared-infra:use": "scripts/shared-infra-use.sh",
     "shared-infra:use:off": "scripts/shared-infra-use.sh --off",
