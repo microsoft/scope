@@ -17,28 +17,24 @@ import { readFileSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { parseEnv } from "node:util";
 
 /**
  * Extract a named port from a .env file content.
- * Returns the value or undefined if not found.
+ * Honors dotenv quoting, comments and last-assignment precedence. Returns
+ * undefined for missing values or values outside the TCP port range.
  */
 export function extractPort(
   envContent: string,
   portName: string
 ): number | undefined {
-  for (const line of envContent.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("#") || !trimmed) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    const value = trimmed.slice(eqIdx + 1).trim();
-    if (key === portName) {
-      const num = parseInt(value, 10);
-      return isNaN(num) ? undefined : num;
-    }
-  }
-  return undefined;
+  // A worktree's managed assignments can follow the base values in .env.
+  // Use Node's parser so both URL helpers select the effective assignment.
+  const value = parseEnv(envContent)[portName]?.trim();
+  if (!value || !/^\d+$/.test(value)) return undefined;
+
+  const port = Number(value);
+  return port >= 1 && port <= 65535 ? port : undefined;
 }
 
 const DEFAULT_PORTAL_PORT = 5100;
