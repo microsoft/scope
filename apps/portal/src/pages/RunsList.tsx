@@ -3,9 +3,8 @@
 
 import { useMemo, useState, useEffect, useCallback, Fragment, type Key, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Link, useNavigate, useOutlet, useParams, useSearchParams } from "react-router-dom";
-import { Trash2, Repeat, RotateCcw, Pause, Play, ChevronDown, ChevronRight, Apple, AppWindow, ArrowUpDown, FileText, Download, Lock, Eye } from "lucide-react";
-import { FaLinux } from "react-icons/fa";
+import { Link, useLocation, useNavigate, useOutlet, useParams, useSearchParams } from "react-router-dom";
+import { Trash2, Repeat, RotateCcw, Pause, Play, ChevronDown, ChevronRight, ArrowUpDown, FileText, Download, Lock, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -17,27 +16,40 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { StatusBadge, OutcomeBadge } from "@/components/StatusBadge";
-import { TaskPromptBadge } from "@/components/TaskPromptBadge";
 import { AgentBadge } from "@/components/AgentBadge";
 import { ShortId } from "@/components/ShortId";
+import {
+  OsPlatformIcon,
+  RunAttemptCell,
+  RunCriteriaCell,
+  RunEffortCell,
+  RunExtensionsCell,
+  RunIdCell,
+  RunMcpCell,
+  RunModelCell,
+  RunOsCell,
+  RunOutcomeCell,
+  RunPriorityCell,
+  RunProfileCell,
+  RunSkillsCell,
+  RunStatusCell,
+  RunTaskCell,
+  RunTaxonomyCell,
+  RunVersionCell,
+  RunWorkerCell,
+  runTableItemFromRun,
+  RunsTable,
+} from "@/components/runs-table";
 import {
   ListLayout,
   FilterRail,
   FilterSection,
   CheckboxFilterGroup,
-  ClearFiltersLink,  DataTable,
-  Pagination,
+  ClearFiltersLink,
   BulkActionBar,
   CustomizeColumnsPanel,
   CustomizeColumnsLink,
@@ -54,12 +66,13 @@ import { useShiftModifier } from "@/hooks/useShiftModifier";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useStrictAgentCapabilities } from "@/hooks/useStrictAgentCapabilities";
 import { useModelCapabilities, ModelSelectItems } from "@/components/ReasoningEffortSelect";
-import { formatDate, formatId, formatDuration, truncate, cn } from "@/lib/utils";
+import { formatDate, formatId, formatDuration, cn } from "@/lib/utils";
 import { getExistingRunMembershipEligibility } from "@/lib/experiment-membership";
 import { ExperimentMembershipActions } from "@/components/ExperimentMembershipActions";
 import { isAgentAvailable, isAgentVersionAvailable, STATUS_LIST, OUTCOME_LIST } from "@/types";
 import type { Run, RunStatus, RunOutcome, IterationOp, BulkResubmitOverrides, RunSortField, RunFacetBucket } from "@/types";
 import { buildRunWorkerFilterOptions } from "./run-worker-filter-options";
+import { runNavigationState } from "@/lib/run-navigation";
 
 const FILTER_KEYS = ["worker", "status", "outcome", "taskPromptId", "experimentId", "criteria", "model", "profile", "os", "priority", "version", "dateFrom", "dateTo", "groupBy", "turns", "turnsOp", "maxIter", "maxIterOp"] as const;
 
@@ -149,79 +162,6 @@ function groupKeyExtraFilter(
   if (groupBy === "profile")
     return { profileId: [key === "no-profile" ? EMPTY_FILTER_VALUE : key] };
   return { experimentId: key === "no-experiment" ? EMPTY_FILTER_VALUE : key };
-}
-
-/** Compact inline badges with overflow (+N) dropdown for dense table cells. */
-function OverflowBadges({
-  items,
-  max = 1,
-  renderItem,
-  renderMenuItem,
-}: {
-  items: string[];
-  max?: number;
-  renderItem: (item: string) => ReactNode;
-  renderMenuItem: (item: string) => ReactNode;
-}) {
-  const visible = items.slice(0, max);
-  const hidden = items.slice(max);
-  return (
-    <div className="flex min-w-0 items-center gap-1">
-      {visible.map((item) => renderItem(item))}
-      {hidden.length > 0 && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-xs font-mono bg-muted hover:bg-accent transition-colors"
-              onClick={(e) => e.stopPropagation()}
-            >
-              +{hidden.length}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
-            {hidden.map((item) => renderMenuItem(item))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </div>
-  );
-}
-
-/** Small OS-platform icon. Falls back to a text badge for unknown platforms. */
-function OsPlatformIcon({ platform }: { platform: string }) {
-  const p = platform.toLowerCase();
-  const Icon = p === "darwin" || p === "macos"
-    ? Apple
-    : p === "win32" || p === "windows"
-      ? AppWindow
-      : p === "linux"
-        ? FaLinux
-        : null;
-  const label = p === "darwin" || p === "macos"
-    ? "macOS"
-    : p === "win32" || p === "windows"
-      ? "Windows"
-      : p === "linux"
-        ? "Linux"
-        : platform;
-  if (!Icon) {
-    return (
-      <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-mono">
-        {platform}
-      </Badge>
-    );
-  }
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground">
-          <Icon className="h-3.5 w-3.5" aria-label={label} />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent className="text-xs">{label}</TooltipContent>
-    </Tooltip>
-  );
 }
 
 /**
@@ -318,6 +258,7 @@ const COLUMN_OPTIONS: CustomizeColumnsOption[] = [
   // growth-ecosystems/scope-project#127).
   { id: "status", label: "Status" },
   { id: "outcome", label: "Outcome" },
+  { id: "taxonomy", label: "Taxonomy" },
   { id: "experiment", label: "Experiment" },
   { id: "task", label: "Task" },
   { id: "criteria", label: "Criteria" },
@@ -455,6 +396,7 @@ function NumericComparatorRow({
 
 export function RunsList() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const strictAgentCapabilities = useStrictAgentCapabilities();
   const detailOutlet = useOutlet();
@@ -1423,7 +1365,7 @@ export function RunsList() {
       width: "120px",
       sticky: "left",
       stickyOffset: "40px",
-      cell: (r) => <ShortId id={r._id} label="run ID" />,
+      cell: (r) => <RunIdCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "experiment",
@@ -1446,58 +1388,14 @@ export function RunsList() {
       id: "task",
       header: "Task",
       hidden: columnVisibility.isHidden("task"),
-      cell: (r) =>
-        r.scenario?.task ? (
-          <TaskPromptBadge taskPromptId={r.taskPromptId} className="block truncate">
-            <span className="text-sm cursor-pointer hover:underline">
-              {truncate(r.scenario.task, 60)}
-            </span>
-          </TaskPromptBadge>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      cell: (r) => <RunTaskCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "criteria",
       header: "Criteria",
       width: "180px",
       hidden: columnVisibility.isHidden("criteria"),
-      cell: (r) => {
-        const criteria = r.scenario?.criteria ?? [];
-        return criteria.length > 0 ? (
-          <OverflowBadges
-            items={criteria}
-            max={1}
-            renderItem={(criterionId) => (
-              <Tooltip key={criterionId}>
-                <TooltipTrigger asChild>
-                  <Link
-                    to={`/criteria/${criterionId}`}
-                    className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-mono hover:bg-accent transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {criterionId}
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs">{criterionId}</TooltipContent>
-              </Tooltip>
-            )}
-            renderMenuItem={(criterionId) => (
-              <DropdownMenuItem key={criterionId} asChild>
-                <Link
-                  to={`/criteria/${criterionId}`}
-                  className="font-mono text-xs"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {criterionId}
-                </Link>
-              </DropdownMenuItem>
-            )}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        );
-      },
+      cell: (r) => <RunCriteriaCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "worker",
@@ -1505,221 +1403,54 @@ export function RunsList() {
       sortable: true,
       width: "180px",
       hidden: columnVisibility.isHidden("worker"),
-      cell: (r) => {
-        return (
-          <AgentBadge
-            agentId={r.workerType}
-            version={r.agentVersion}
-            variant="badge"
-            className="max-w-[160px] min-w-0"
-          />
-        );
-      },
+      cell: (r) => <RunWorkerCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "version",
       header: "Version",
       width: "110px",
       hidden: columnVisibility.isHidden("version"),
-      cell: (r) =>
-        r.agentVersion ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="font-mono text-xs truncate block cursor-default">{r.agentVersion}</span>
-            </TooltipTrigger>
-            <TooltipContent className="text-xs">{r.agentVersion}</TooltipContent>
-          </Tooltip>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      cell: (r) => <RunVersionCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "os",
       header: "OS",
       width: "120px",
       hidden: columnVisibility.isHidden("os"),
-      cell: (r) => {
-        const os = r.run?.os;
-        if (!os) return <span className="text-xs text-muted-foreground">—</span>;
-        return (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex items-center cursor-default">
-                <OsPlatformIcon platform={os.platform} />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent className="text-xs">
-              {os.platform} {os.release} ({os.arch})
-            </TooltipContent>
-          </Tooltip>
-        );
-      },
+      cell: (r) => <RunOsCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "mcp",
       header: "MCP",
       width: "180px",
       hidden: columnVisibility.isHidden("mcp"),
-      cell: (r) => {
-        const servers = r.mcpServers ?? [];
-        return servers.length > 0 ? (
-          <OverflowBadges
-            items={servers}
-            max={1}
-            renderItem={(slug) => (
-              <Tooltip key={slug}>
-                <TooltipTrigger asChild>
-                  <Link
-                    to={`/mcp-servers/${slug}`}
-                    className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-mono hover:bg-accent transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {slug}
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs">{slug}</TooltipContent>
-              </Tooltip>
-            )}
-            renderMenuItem={(slug) => (
-              <DropdownMenuItem key={slug} asChild>
-                <Link
-                  to={`/mcp-servers/${slug}`}
-                  className="font-mono text-xs"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {slug}
-                </Link>
-              </DropdownMenuItem>
-            )}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        );
-      },
+      cell: (r) => <RunMcpCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "skills",
       header: "Skills",
       width: "180px",
       hidden: columnVisibility.isHidden("skills"),
-      cell: (r) => {
-        const refs = (r.skillRevisions ?? r.skills ?? []) as string[];
-        return refs.length > 0 ? (
-          <OverflowBadges
-            items={refs}
-            max={1}
-            renderItem={(ref) => {
-              const skillName = ref.split("@")[0].split("/").pop() ?? ref;
-              const skillSlug = ref.split("@")[0];
-              return (
-                <Tooltip key={ref}>
-                  <TooltipTrigger asChild>
-                    <Link
-                      to={`/skills/${skillSlug}`}
-                      className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-mono hover:bg-accent transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {truncate(skillName, 20)}
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs">{ref}</TooltipContent>
-                </Tooltip>
-              );
-            }}
-            renderMenuItem={(ref) => {
-              const skillName = ref.split("@")[0].split("/").pop() ?? ref;
-              const skillSlug = ref.split("@")[0];
-              return (
-                <DropdownMenuItem key={ref} asChild>
-                  <Link
-                    to={`/skills/${skillSlug}`}
-                    className="font-mono text-xs"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {skillName}
-                  </Link>
-                </DropdownMenuItem>
-              );
-            }}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        );
-      },
+      cell: (r) => <RunSkillsCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "extensions",
       header: "Extensions",
       width: "190px",
       hidden: columnVisibility.isHidden("extensions"),
-      cell: (r) => {
-        const ids = r.extensions ?? [];
-        return ids.length > 0 ? (
-          <OverflowBadges
-            items={ids}
-            max={1}
-            renderItem={(id) => {
-              const [qualifiedName, version] = id.split("@");
-              const shortName = qualifiedName.split(".").pop() ?? id;
-              const extensionLabel = `${shortName}${version ? `@${version}` : ""}`;
-              return (
-                <Tooltip key={id}>
-                  <TooltipTrigger asChild>
-                    <Link
-                      to={`/extensions/${qualifiedName}`}
-                      className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-mono hover:bg-accent transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {truncate(extensionLabel, 20)}
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs">{id}</TooltipContent>
-                </Tooltip>
-              );
-            }}
-            renderMenuItem={(id) => {
-              const [qualifiedName, version] = id.split("@");
-              const shortName = qualifiedName.split(".").pop() ?? id;
-              const extensionLabel = `${shortName}${version ? `@${version}` : ""}`;
-              return (
-                <DropdownMenuItem key={id} asChild>
-                  <Link
-                    to={`/extensions/${qualifiedName}`}
-                    className="font-mono text-xs"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {truncate(extensionLabel, 20)}
-                  </Link>
-                </DropdownMenuItem>
-              );
-            }}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        );
-      },
+      cell: (r) => <RunExtensionsCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "profile",
       header: "Profile",
       width: "220px",
       hidden: columnVisibility.isHidden("profile"),
-      cell: (r) => {
-        if (!r.profileId) return <span className="text-xs text-muted-foreground">—</span>;
-
-        const profileLabel = profileNameById.get(r.profileId) ?? formatId(r.profileId);
-
-        return (
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="block min-w-0 truncate text-xs font-medium cursor-default">{profileLabel}</span>
-              </TooltipTrigger>
-              <TooltipContent className="text-xs">{profileLabel}</TooltipContent>
-            </Tooltip>
-          </div>
-        );
-      },
+      cell: (r) => (
+        <RunProfileCell
+          item={runTableItemFromRun(r)}
+          profileNameById={profileNameById}
+        />
+      ),
     },
     {
       id: "priority",
@@ -1727,41 +1458,21 @@ export function RunsList() {
       sortable: true,
       width: "80px",
       hidden: columnVisibility.isHidden("priority"),
-      cell: (r) =>
-        r.priority != null ? (
-          <span className="font-mono text-xs">{r.priority}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      cell: (r) => <RunPriorityCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "model",
       header: "Model",
       width: "180px",
       hidden: columnVisibility.isHidden("model"),
-      cell: (r) =>
-        r.model ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-            <span className="font-mono text-xs truncate block max-w-[120px] cursor-default">{r.model}</span>
-            </TooltipTrigger>
-            <TooltipContent className="text-xs">{r.model}</TooltipContent>
-          </Tooltip>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      cell: (r) => <RunModelCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "effort",
       header: "Effort",
       width: "100px",
       hidden: columnVisibility.isHidden("effort"),
-      cell: (r) =>
-        r.reasoningEffort ? (
-          <span className="font-mono text-xs">{r.reasoningEffort}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      cell: (r) => <RunEffortCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "status",
@@ -1769,24 +1480,21 @@ export function RunsList() {
       sortable: true,
       width: "120px",
       hidden: columnVisibility.isHidden("status"),
-      cell: (r) =>
-        r.run?.status ? (
-          <StatusBadge
-            status={r.run.status}
-            worker={r.run.worker}
-            lastHeartbeatAt={r.run.lastHeartbeatAt}
-            startedAt={r.run.startedAt}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      cell: (r) => <RunStatusCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "outcome",
       header: "Outcome",
       width: "120px",
       hidden: columnVisibility.isHidden("outcome"),
-      cell: (r) => (r.run?.outcome ? <OutcomeBadge outcome={r.run.outcome} /> : <span className="text-xs text-muted-foreground">—</span>),
+      cell: (r) => <RunOutcomeCell item={runTableItemFromRun(r)} />,
+    },
+    {
+      id: "taxonomy",
+      header: "Taxonomy",
+      width: "150px",
+      hidden: columnVisibility.isHidden("taxonomy"),
+      cell: (r) => <RunTaxonomyCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "report",
@@ -1808,14 +1516,7 @@ export function RunsList() {
       header: "Attempt",
       width: "80px",
       hidden: columnVisibility.isHidden("attempt"),
-      cell: (r) => {
-        const n = r.run?.attemptNumber;
-        return n != null ? (
-          <span className="font-mono text-xs">#{n}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        );
-      },
+      cell: (r) => <RunAttemptCell item={runTableItemFromRun(r)} />,
     },
     {
       id: "turns",
@@ -1916,7 +1617,12 @@ export function RunsList() {
             title="View run"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/runs/${r._id}`);
+              navigate(`/runs/${r._id}`, {
+                state: runNavigationState(
+                  `${location.pathname}${location.search}`,
+                  "Back to runs",
+                ),
+              });
             }}
           >
             <Eye className="h-3.5 w-3.5" />
@@ -2289,12 +1995,22 @@ export function RunsList() {
         </BulkActionBar>
 
         {groupBy === "none" ? (
-          <DataTable
+          <RunsTable
             items={flatRuns}
             columns={orderedColumns}
             getRowId={(r) => r._id}
             activeId={activeId}
-            onRowClick={(r) => navigate({ pathname: `/runs/${r._id}/preview`, search: window.location.search })}
+            onRowClick={(r) =>
+              navigate(
+                { pathname: `/runs/${r._id}/preview`, search: window.location.search },
+                {
+                  state: runNavigationState(
+                    `${location.pathname}${location.search}`,
+                    "Back to runs",
+                  ),
+                },
+              )
+            }
             selection={{
               selectedIds,
               onToggle: (id) => toggleRowSelection(id),
@@ -2310,15 +2026,35 @@ export function RunsList() {
                 ? "No runs match the current filters."
                 : "No runs yet. Submit one with the New Run button."
             }
+            pagination={{
+              page: state.page,
+              pageSize: state.pageSize,
+              total: estimatedTotal,
+              hasNext: !!cursors.next,
+              hasPrev: state.page > 1,
+              itemLabel: "runs",
+              onPageChange: handlePageChange,
+              onPageSizeChange: state.setPageSize,
+            }}
           />
         ) : (
           <div className="space-y-4">
-            <DataTable
+            <RunsTable
               items={groupedTableItems}
               columns={orderedColumns}
               getRowId={(r) => r._id}
               activeId={activeId}
-              onRowClick={(r) => navigate({ pathname: `/runs/${r._id}/preview`, search: window.location.search })}
+              onRowClick={(r) =>
+                navigate(
+                  { pathname: `/runs/${r._id}/preview`, search: window.location.search },
+                  {
+                    state: runNavigationState(
+                      `${location.pathname}${location.search}`,
+                      "Back to runs",
+                    ),
+                  },
+                )
+              }
               selection={{
                 selectedIds,
                 onToggle: (id) => toggleRowSelection(id),
@@ -2799,6 +2535,16 @@ export function RunsList() {
               loading={isGroupsLoading}
               loadingRows={state.pageSize}
               emptyState=""
+              pagination={{
+                page: state.page,
+                pageSize: state.pageSize,
+                total: estimatedTotal,
+                hasNext: !!cursors.next,
+                hasPrev: state.page > 1,
+                itemLabel: "groups",
+                onPageChange: handlePageChange,
+                onPageSizeChange: state.setPageSize,
+              }}
             />
             {!isGroupsLoading && serverGroups.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
@@ -2809,16 +2555,6 @@ export function RunsList() {
             )}
           </div>
         )}
-        <Pagination
-          page={state.page}
-          pageSize={state.pageSize}
-          total={estimatedTotal}
-          onPageChange={handlePageChange}
-          onPageSizeChange={state.setPageSize}
-          hasNext={!!cursors.next}
-          hasPrev={state.page > 1}
-          itemLabel={groupBy === "none" ? "runs" : "groups"}
-        />
       </div>
 
       <AlertDialog open={resubmitDialogOpen} onOpenChange={setResubmitDialogOpen}>

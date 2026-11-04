@@ -13,7 +13,7 @@ import {
 
 const positive: Evaluation = {
   schema_version: "scope/taxonomy-evaluation/v1",
-  taxonomy: { id: "agent-behavior", version: "2.0.0", digest: "digest" },
+  taxonomy: { id: "example-taxonomy", version: "1.0.0", digest: "digest" },
   element: {
     id: "beh-timeout",
     label: "Timeout",
@@ -44,7 +44,7 @@ const positive: Evaluation = {
 describe("Taxonome human output", () => {
   it("renders run state, strategy, observation, and grounded references", () => {
     const output = renderRunHuman(
-      { id: "agent-behavior", version: "2.0.0" },
+      { id: "example-taxonomy", version: "1.0.0" },
       {
         id: "run-1",
         scenario: { id: "scenario-1", label: "Scenario" },
@@ -99,7 +99,7 @@ describe("Taxonome human output", () => {
     ];
 
     const output = renderEvalHuman({
-      taxonomy: { id: "agent-behavior", version: "2.0.0" },
+      taxonomy: { id: "example-taxonomy", version: "1.0.0" },
       input_files: ["fixtures/prompt-inputs.jsonl"],
       ground_truth_files: ["fixtures/prompt-ground-truth.json"],
       split: "test",
@@ -111,7 +111,7 @@ describe("Taxonome human output", () => {
         label: "Skipped Invocation",
         implementation: "prompt",
       }],
-      artifacts: [],
+      element_overrides: [],
       rows,
     });
 
@@ -122,7 +122,7 @@ describe("Taxonome human output", () => {
     expect(output).toContain("expected false");
     expect(output).toContain("Elapsed: 1.23s");
     expect(renderEvalHuman({
-      taxonomy: { id: "agent-behavior", version: "2.0.0" },
+      taxonomy: { id: "example-taxonomy", version: "1.0.0" },
       input_files: ["fixtures/prompt-inputs.jsonl"],
       ground_truth_files: ["fixtures/prompt-ground-truth.json"],
       split: "test",
@@ -134,33 +134,35 @@ describe("Taxonome human output", () => {
         label: "Skipped Invocation",
         implementation: "prompt",
       }],
-      artifacts: ["optimized.ax.json"],
+      element_overrides: ["optimized/beh-skipped-invocation.optimized.yaml"],
       rows,
-    })).toContain("Configuration: optimized artifacts optimized.ax.json");
+    })).toContain(
+      "Configuration: element overrides optimized/beh-skipped-invocation.optimized.yaml",
+    );
   });
 
-  it("summarizes optimizer artifacts without claiming improvement", () => {
-    const output = renderOptimizeHuman("artifact.json", {
+  it("summarizes optimized YAML without embedding examples", () => {
+    const output = renderOptimizeHuman([{
       element_id: "beh-skipped-invocation",
       train_ids: ["train-1", "train-2"],
       validation_ids: ["validation-1"],
-      settings: { maxMetricCalls: 12 },
-      metric_trace: [{}, {}, {}],
-      optimized: {
-        bestScore: 1,
-        stats: { earlyStopped: false },
-        demos: [{ traces: [{}, {}, {}] }],
-        examples: [{}, {}],
-        selectorState: {
-          "prompt::instruction": { proposals: 0 },
-          "prompt::description": { proposals: 3 },
-        },
+      settings: { maxMetricCalls: 12, bootstrap: false },
+      metrics: {
+        best_score: 1,
+        metric_calls: 3,
+        total_rounds: 2,
+        converged: true,
+        stop_reason: "converged",
       },
-    });
+      yaml_path: "optimized/beh-skipped-invocation.optimized.yaml",
+      manifest_path:
+        "optimized/beh-skipped-invocation.optimization.manifest.json",
+    }]);
 
-    expect(output).toContain("Learned traces: 3; examples: 2");
-    expect(output).toContain("Metric entries: 3; max metric calls: 12");
-    expect(output).toContain("Instruction proposals: 0; early stopped: false");
+    expect(output).toContain("metric calls: 3/12");
+    expect(output).toContain("Stop: converged");
+    expect(output).toContain("Bootstrap: disabled");
+    expect(output).toContain("beh-skipped-invocation.optimized.yaml");
     expect(output).toContain("No before/after accuracy gain is inferred");
   });
 

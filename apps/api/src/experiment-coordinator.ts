@@ -485,10 +485,14 @@ export class ExperimentCoordinator {
     }
     const experimentHandlers = request.run.handlerStatus ?? {};
     const dependencyIds = handlers
-      .filter((handler) => handler.selector === "observations")
+      .filter(
+        (handler) =>
+          handler.selector === "taxonomy" ||
+          handler.selector === "observations",
+      )
       .map((handler) => handler._id);
     const effectiveDependencyIds =
-      dependencyIds.length > 0 ? dependencyIds : ["pp-observations"];
+      dependencyIds.length > 0 ? dependencyIds : ["pp-taxonomy"];
     const dependencies = effectiveDependencyIds.map((handlerId) => {
       const source = experimentHandlers[handlerId];
       const state = namedHandlerState(

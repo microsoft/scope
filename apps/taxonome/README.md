@@ -8,12 +8,12 @@ installed-package plugins can add custom deterministic handlers without
 modifying Taxonome. No Scope backing services are needed.
 
 The generic runtime is `packages/taxonomy-engine`; the shipped
-agent-behavior definitions and Timeout handler are isolated in
+Ax taxonomy definitions and Timeout handler are isolated in
 `packages/ax-taxonomy`. The CLI explicitly composes both packages.
 
 See [the architecture and usage guide](../../docs/architecture/taxonome.md)
 for YAML and `extra.scope` contracts, archive safety, plugin authoring,
-build/run/eval/optimization/replay commands, the typed API, evidence policy,
+build, run, evaluation, optimization, optimized-element, and readout commands,
 and scope limitations. A runnable custom project lives in
 [`examples/taxonome-custom-handler`](../../examples/taxonome-custom-handler/README.md).
 The language-neutral authoring/result/reference contract is the

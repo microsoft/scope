@@ -240,6 +240,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--resources",
           "--scenario",
           "--skills",
+          "--taxonomy-revision",
           "--traits",
           "--url",
           "--worker",
@@ -1206,6 +1207,105 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--project",
           "--search",
           "--type",
+          "--url",
+        ],
+      },
+    },
+  },
+  "taxonomy": {
+    "subcommands": {
+      "copy": {
+        "options": [
+          "--id",
+          "--name",
+          "--project",
+          "--url",
+        ],
+      },
+      "create": {
+        "options": [
+          "--description",
+          "--file",
+          "--name",
+          "--project",
+          "--url",
+        ],
+      },
+      "delete": {
+        "options": [
+          "--url",
+        ],
+      },
+      "element": {
+        "subcommands": {
+          "create": {
+            "options": [
+              "--file",
+              "--name",
+              "--project",
+              "--url",
+            ],
+          },
+          "list": {
+            "options": [
+              "--project",
+              "--url",
+            ],
+          },
+          "revise": {
+            "options": [
+              "--file",
+              "--url",
+            ],
+          },
+          "revisions": {
+            "options": [
+              "--url",
+            ],
+          },
+        },
+      },
+      "export": {
+        "options": [
+          "--output",
+          "--url",
+        ],
+      },
+      "import": {
+        "options": [
+          "--element",
+          "--name",
+          "--project",
+          "--taxonomy",
+          "--url",
+        ],
+      },
+      "list": {
+        "options": [
+          "--project",
+          "--url",
+        ],
+      },
+      "restore": {
+        "options": [
+          "--url",
+        ],
+      },
+      "revise": {
+        "options": [
+          "--file",
+          "--url",
+        ],
+      },
+      "revisions": {
+        "options": [
+          "--url",
+        ],
+      },
+      "show": {
+        "options": [
+          "--project",
+          "--revision",
           "--url",
         ],
       },

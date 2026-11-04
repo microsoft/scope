@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createHandlerRegistry } from "./handlers.js";
 import {
   createTaxonomyPromptProgram,
@@ -16,8 +16,10 @@ describe("Taxonome Ax output contract", () => {
       new URL("../fixtures/test-taxonomy.yaml", import.meta.url).pathname,
       { handlers: createHandlerRegistry() },
     );
+    const onOptimizationCandidate = vi.fn();
     const program = createTaxonomyPromptProgram(
       taxonomy.elementById.get("test-observation")!,
+      { onOptimizationCandidate },
     );
     const signature = program.getSignature().toJSON();
 
@@ -45,6 +47,35 @@ describe("Taxonome Ax output contract", () => {
     expect(signature.description).toContain(
       "Assessment JSON property-name casing is significant.",
     );
+    expect(program.getOptimizableComponents()).toEqual([
+      expect.objectContaining({
+        key: "test-observation@prompt::instruction",
+        kind: "instruction",
+        description:
+          taxonomy.elementById.get("test-observation")!.description ??
+          taxonomy.elementById.get("test-observation")!.label,
+        current: taxonomy.elementById.get("test-observation")!.implementation
+          .type === "prompt"
+          ? taxonomy.elementById.get("test-observation")!.implementation.prompt
+          : "",
+      }),
+    ]);
+    expect(program.getOptimizableComponents()[0]?.current).not.toContain(
+      "Shared assessment schema",
+    );
+    expect(program.getOptimizableComponents()[0]?.validate?.(
+      taxonomy.elementById.get("test-observation")!.implementation.type ===
+        "prompt"
+        ? taxonomy.elementById.get("test-observation")!.implementation.prompt
+        : "",
+    )).toBe("Propose a materially different instruction for evaluation.");
+    expect(program.getOptimizableComponents()[0]?.validate?.(
+      "A materially different instruction.",
+    )).toBe(true);
+    expect(onOptimizationCandidate.mock.calls).toEqual([
+      [{ changed: false }],
+      [{ changed: true }],
+    ]);
     expect(YAML_OBSERVATION_CONTRACT).not.toContain("repair_context");
   });
 });

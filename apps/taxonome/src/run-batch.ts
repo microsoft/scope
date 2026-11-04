@@ -53,14 +53,14 @@ export interface RunBatchCompatibility {
   taxonomy_digest: string;
   element_ids: string[];
   model: string;
-  artifact_contract_hashes: Record<string, string>;
+  element_override_hashes: Record<string, string>;
   atif_ingestion_policy_hash: string;
 }
 
 export interface RunBatchMetadata {
   taxonomy: { id: string; version: string; digest: string };
   model: string;
-  artifact_contract_hashes: Record<string, string>;
+  element_override_hashes: Record<string, string>;
   atif_ingestion_policy_hash: string;
   element_ids: string[];
   source: {
@@ -821,7 +821,7 @@ export async function canResumeRunBatchJob(
   const taxonomy = metadata?.taxonomy as Record<string, unknown> | undefined;
   const source = metadata?.source as Record<string, unknown> | undefined;
   const elementIds = metadata?.element_ids;
-  const artifactHashes = metadata?.artifact_contract_hashes;
+  const overrideHashes = metadata?.element_override_hashes;
   if (
     !metadata ||
     typeof taxonomy?.digest !== "string" ||
@@ -832,9 +832,9 @@ export async function canResumeRunBatchJob(
     typeof source?.retained_evidence_sha256 !== "string" ||
     !Array.isArray(elementIds) ||
     !elementIds.every(value => typeof value === "string") ||
-    !artifactHashes ||
-    typeof artifactHashes !== "object" ||
-    Array.isArray(artifactHashes)
+    !overrideHashes ||
+    typeof overrideHashes !== "object" ||
+    Array.isArray(overrideHashes)
   ) return false;
 
   const evaluations = record.results;
@@ -925,7 +925,10 @@ export async function canResumeRunBatchJob(
     sameStrings(elementIds as string[], expected.element_ids) &&
     sameStrings(resultElementIds, expected.element_ids) &&
     resultDigests.every(digest => digest === expected.taxonomy_digest) &&
-    sameRecord(artifactHashes as Record<string, string>, expected.artifact_contract_hashes)
+    sameRecord(
+      overrideHashes as Record<string, string>,
+      expected.element_override_hashes,
+    )
   );
 }
 

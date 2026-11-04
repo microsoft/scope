@@ -554,6 +554,13 @@ export interface RunState {
   reportTemplateIds?: string[];
   /** Per-handler post-processing status. Keys are handler IDs (e.g. "pp-atif"). */
   handlerStatus?: Record<string, HandlerRunStatus>;
+  /** Immutable compressed Taxonome SDK result for this exact run attempt. */
+  taxonomyEvaluation?: {
+    url: string;
+    schemaVersion: string;
+    contentSha256: string;
+    sizeBytes: number;
+  };
   /** Whole-run observation results — one entry per selected `subject:"run"`
    *  observation criterion, evaluated once against the final snapshot + the
    *  merged trajectory across all iterations by pp-taxonomy. Per-iteration

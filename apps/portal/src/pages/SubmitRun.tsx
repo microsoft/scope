@@ -43,6 +43,7 @@ import {
 } from "@/components/ReasoningEffortSelect";
 import { TaskPromptPicker } from "@/components/TaskPromptPicker";
 import { useCommandEnter } from "@/hooks/useCommandEnter";
+import { useFeatureFlags } from "@/contexts/FeatureFlagContext";
 import { useVisibleGates } from "@/hooks/useVisibleGates";
 import { useStrictAgentCapabilities } from "@/hooks/useStrictAgentCapabilities";
 import { KbdBadge } from "@/components/KbdBadge";
@@ -224,6 +225,7 @@ export function SubmitRun({
   const [experimentDescription, setExperimentDescription] = useState("");
   const [experimentReportTemplateIds, setExperimentReportTemplateIds] =
     useState<string[]>([]);
+  const [taxonomyRevisionId, setTaxonomyRevisionId] = useState("");
   const [experimentDescriptionOpen, setExperimentDescriptionOpen] =
     useState(false);
 
@@ -270,6 +272,8 @@ export function SubmitRun({
   const [generateDescription, setGenerateDescription] = useState("");
 
   // ─── Queries ────────────────────────────────────────────────────────────
+  const { isFeatureEnabledFailClosed } = useFeatureFlags();
+  const taxonomeEnabled = isFeatureEnabledFailClosed("taxonome");
   const { data: agents = [], isSuccess: agentsLoaded } = useQuery({
     queryKey: ["agents", "include-deleted"],
     queryFn: () => api.listAgents({ includeDeleted: true }),
@@ -292,6 +296,11 @@ export function SubmitRun({
   const manualExperimentReportTemplates = experimentReportTemplates.filter(
     (template) => !template.trigger,
   );
+  const { data: taxonomies = [] } = useQuery({
+    queryKey: ["taxonomies"],
+    queryFn: api.listTaxonomies,
+    enabled: mode === "experiment" && taxonomeEnabled,
+  });
 
   const { data: profileVersions = [] } = useQuery({
     queryKey: ["profile-versions", selectedProfileId],
@@ -704,6 +713,7 @@ export function SubmitRun({
                 : {}),
             },
             reportTemplateIds: experimentReportTemplateIds,
+            ...(taxonomyRevisionId ? { taxonomyRevisionId } : {}),
             ...(request ? { request } : { empty: true }),
           })
         : api.submitRun(request!),
@@ -737,6 +747,43 @@ export function SubmitRun({
     const baseProfileSpec = selectedProfileId
       ? (selectedProfileVersion ? `${selectedProfileId}@${selectedProfileVersion}` : selectedProfileId)
       : null;
+    const experimentProfileTargets = mode === "experiment" && inVariationMode
+      ? [
+          ...(selectedBaseProfileVersion
+            ? [{
+                profileId: baseProfileSpec ?? selectedProfileId!,
+                worker: selectedBaseProfileVersion.workerType,
+                model: selectedBaseProfileVersion.model,
+                ...(selectedBaseProfileVersion.reasoningEffort
+                  ? { reasoningEffort: selectedBaseProfileVersion.reasoningEffort }
+                  : {}),
+                ...(selectedBaseProfileVersion.agentVersion
+                  ? { agentVersion: selectedBaseProfileVersion.agentVersion }
+                  : {}),
+              }]
+            : []),
+          ...normalizedVariationDrafts.flatMap((draft) => {
+            const profile = profileList.find(candidate => candidate._id === draft.profileId);
+            const version = variationProfileVersions[draft.profileId]
+              ?.find(candidate => candidate.version === draft.profileVersion)
+              ?? profile?.version;
+            if (!version) return [];
+            return [{
+              profileId: draft.profileVersion
+                ? `${draft.profileId}@${draft.profileVersion}`
+                : draft.profileId,
+              worker: version.workerType,
+              model: version.model,
+              ...(version.reasoningEffort
+                ? { reasoningEffort: version.reasoningEffort }
+                : {}),
+              ...(version.agentVersion
+                ? { agentVersion: version.agentVersion }
+                : {}),
+            }];
+          }),
+        ]
+      : undefined;
 
     const request: RunCreateInput = {
       scenario: { task: task.trim(), criteria: pickedCriteria },
@@ -759,6 +806,9 @@ export function SubmitRun({
         ? {
             ...(baseProfileSpec ? { profileId: baseProfileSpec } : {}),
             profileVariations,
+            ...(experimentProfileTargets
+              ? { experimentProfileTargets }
+              : {}),
           }
         : {
             ...(baseProfileSpec ? { profileId: baseProfileSpec } : {}),
@@ -927,6 +977,39 @@ export function SubmitRun({
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              {taxonomeEnabled && (
+                <>
+                  <Label htmlFor="taxonomyRevision">Taxonomy</Label>
+                  <Select
+                    value={taxonomyRevisionId || "none"}
+                    onValueChange={(value) =>
+                      setTaxonomyRevisionId(value === "none" ? "" : value)
+                    }
+                  >
+                    <SelectTrigger id="taxonomyRevision">
+                      <SelectValue placeholder="No Taxonome evaluation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Taxonome evaluation</SelectItem>
+                      {taxonomies
+                        .filter((taxonomy) => taxonomy.latestRevisionId)
+                        .map((taxonomy) => (
+                          <SelectItem
+                            key={taxonomy._id}
+                            value={taxonomy.latestRevisionId!}
+                          >
+                            {taxonomy.name} · {taxonomy.id}@r{taxonomy.latestRevision}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    The exact immutable revision is pinned to this Experiment.
+                  </p>
+                </>
+              )}
+            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="experimentName">Name *</Label>
               <Input

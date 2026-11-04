@@ -1,0 +1,59 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { loadTaxonomeCatalog } from '../../lib/taxonome-catalog.mjs';
+
+const catalog = await loadTaxonomeCatalog();
+---
+
+<section class="taxonome-catalog">
+	<h2 id="canonical-manifest">Canonical manifest</h2>
+	<p>
+		<strong>{catalog.id}</strong> uses portable semantic version
+		<code>{catalog.version}</code>. Scope stores its first immutable database
+		revision separately as <code>{catalog.id}@r1</code>.
+	</p>
+	<pre><code class="language-yaml">{catalog.source}</code></pre>
+
+	<h2 id="element-index">Element index</h2>
+	<ul>
+		{catalog.elements.map((element) => (
+			<li>
+				<a href={`#${element.id}`}>{element.label}</a>
+				{' — '}
+				<code>{element.id}</code>
+				{' · '}
+				{element.implementation.type === 'prompt' ? 'Prompt' : 'Code'}
+			</li>
+		))}
+	</ul>
+
+	{catalog.elements.map((element) => (
+		<section>
+			<h2 id={element.id}>{element.label}</h2>
+			<p><code>{element.id}</code> · <code>{element.path}</code></p>
+			<p>{element.description}</p>
+			<p>
+				<strong>Implementation:</strong>{' '}
+				{element.implementation.type === 'prompt'
+					? 'Prompt instruction'
+					: `Deterministic handler ${element.implementation.handler}`}
+			</p>
+			<details>
+				<summary>View complete authored YAML</summary>
+				<pre><code class="language-yaml">{element.source}</code></pre>
+			</details>
+		</section>
+	))}
+</section>
+
+<style>
+	.taxonome-catalog pre {
+		max-height: 34rem;
+		overflow: auto;
+	}
+	.taxonome-catalog details {
+		margin-block: 1rem 2rem;
+	}
+</style>

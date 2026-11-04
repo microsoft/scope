@@ -3,13 +3,19 @@
 
 import { createHash } from "node:crypto";
 import {
+  mkdtemp,
   mkdir,
   readFile,
   realpath,
+  rename,
+  rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { Command, Option } from "commander";
+import { parse as parseYaml, parseDocument, stringify as stringifyYaml } from "yaml";
 import {
   buildReadoutV2,
   ATIF_INGESTION_POLICY_HASH,
@@ -37,7 +43,6 @@ import {
   type EvaluationInput,
 } from "taxonomy-engine/evaluation-inputs";
 import type { CopilotTransport } from "taxonomy-engine/copilot";
-import type { OptimizationArtifactV2 } from "taxonomy-engine/optimization-v2";
 import {
   configureTaxonomeHelp,
   createTaxonomeStyle,
@@ -57,6 +62,7 @@ import {
   type EvaluationJobOutcome,
 } from "./evaluation-jobs.js";
 import { EvaluationDashboard } from "./evaluation-dashboard.js";
+import { OptimizationDashboard } from "./optimization-dashboard.js";
 import { PromptWorkerRuntimes } from "./prompt-worker-runtimes.js";
 import { installEvaluationCancellation } from "./evaluation-cancellation.js";
 import {
@@ -90,8 +96,8 @@ interface ExecutionOptions {
   model: string;
   /** Emit the complete machine-readable JSON shape instead of human text. */
   json?: boolean;
-  /** Repeatable Ax artifacts, each scoped by its embedded element ID. */
-  artifact: string[];
+  /** Repeatable standard element YAML overrides. */
+  elementOverride: string[];
 }
 
 interface RunOptions extends ExecutionOptions {
@@ -129,10 +135,14 @@ interface OptimizeOptions extends ExecutionOptions {
   inputs: string[];
   /** Repeatable reviewed ground-truth JSON patterns. */
   groundTruth: string[];
-  /** Prompt element ID to optimize. */
-  element: string;
-  /** New artifact destination; existing files are never overwritten. */
-  output: string;
+  /** Optional repeatable prompt element IDs; omitted selects every prompt element. */
+  element: string[];
+  /** New candidate directory; mutually exclusive with in-place publication. */
+  outputDir?: string;
+  /** Atomically replace writable local referenced element YAML. */
+  inPlace?: boolean;
+  /** Existing selected optimized YAML to publish exactly with --in-place. */
+  fromCandidate: string[];
   /** Ax metric-evaluation cap from 1 through 100; default 48. */
   maxMetricCalls: string;
 }
@@ -174,10 +184,10 @@ export function createLazyPromptExecutor(
   };
 }
 
-interface PreparedArtifacts {
-  /** Immutable optimized Ax programs keyed by prompt element ID. */
-  values: ReadonlyMap<string, OptimizationArtifactV2["optimized"]>;
-  /** Contract hashes exposed in runtime metadata. */
+interface PreparedOverrides {
+  /** Parsed standard element YAML keyed by exact element ID. */
+  values: ReadonlyMap<string, unknown>;
+  /** Semantic override hashes exposed in runtime metadata. */
   hashes: Readonly<Record<string, string>>;
 }
 
@@ -193,7 +203,7 @@ function parseElementIds(value: string): string[] {
   return ids;
 }
 
-/** Adds taxonomy, plugin, model, and replay options. */
+/** Adds taxonomy, plugin, model, and element override options. */
 function addExecutionOptions(command: Command): Command {
   return command
     .requiredOption("--taxonomy <path>", "Taxonomy YAML manifest")
@@ -202,72 +212,231 @@ function addExecutionOptions(command: Command): Command {
     .option("--json", "Emit complete machine-readable JSON")
     .addOption(
       new Option(
-        "--artifact <path>",
-        "Repeatable compatible Ax artifact; embedded element_id scopes replay",
+        "--element-override <path>",
+        "Repeatable complete optimized element YAML override",
       ).argParser(collect).default([]),
     );
 }
 
 /** Loads built-ins, explicit plugins, and the authored taxonomy from invocation cwd. */
 async function loadExecutionTaxonomy(
-  options: Pick<ExecutionOptions, "taxonomy" | "plugin">,
+  options: Pick<ExecutionOptions, "taxonomy" | "plugin" | "elementOverride">,
 ): Promise<NormalizedTaxonomy> {
   // The CLI explicitly composes the shipped catalog before trusted plugins.
   const handlers = createAgentBehaviorHandlerRegistry();
   await loadPlugins(options.plugin, process.cwd(), handlers);
-  return loadTaxonomy(options.taxonomy, { handlers });
+  const overrides = await prepareElementOverrides(options.elementOverride);
+  return loadTaxonomy(options.taxonomy, {
+    handlers,
+    elementOverrides: overrides.values,
+  });
 }
 
-/** Loads and validates repeatable artifacts once before worker creation. */
-async function prepareArtifacts(
-  options: ExecutionOptions,
-  taxonomy: NormalizedTaxonomy,
-  selected: readonly string[],
-): Promise<PreparedArtifacts> {
-  const promptIds = selected.filter(id =>
-    taxonomy.elementById.get(id)?.implementation.type === "prompt"
-  );
-  if (!promptIds.length && options.artifact.length) {
-    throw new Error("--artifact requires at least one prompt element");
-  }
-
-  const values = new Map<string, OptimizationArtifactV2["optimized"]>();
+/** Loads complete standard element YAML overrides without model initialization. */
+async function prepareElementOverrides(
+  paths: readonly string[],
+): Promise<PreparedOverrides> {
+  const values = new Map<string, unknown>();
   const hashes: Record<string, string> = {};
-  const { promptContractHash } =
-    await import("taxonomy-engine/optimization-v2");
-  for (const elementId of promptIds) {
-    hashes[elementId] = promptContractHash(
-      taxonomy,
-      taxonomy.elementById.get(elementId)!,
-    );
-  }
-  if (options.artifact.length) {
-    const { restoreOptimizationArtifactV2 } =
-      await import("taxonomy-engine/optimization-v2");
-    for (const path of options.artifact) {
-      const value = JSON.parse(await readFile(path, "utf8")) as unknown;
-      const elementId = typeof value === "object" && value && "element_id" in value
-        ? String((value as { element_id: unknown }).element_id)
-        : "";
-      if (!promptIds.includes(elementId)) {
-        throw new Error(
-          `Artifact '${path}' targets unselected or non-prompt element '${elementId}'`,
-        );
-      }
-      if (values.has(elementId)) {
-        throw new Error(`Duplicate artifact for element '${elementId}'`);
-      }
-      const artifact = restoreOptimizationArtifactV2(
-        value,
-        taxonomy,
-        elementId,
-        options.model,
-      );
-      values.set(elementId, artifact.optimized);
-      hashes[elementId] = artifact.contract_hash;
+  const { semanticHash } = await import("taxonomy-engine/optimization-v2");
+  for (const path of paths) {
+    const value = parseYaml(await readFile(path, "utf8")) as unknown;
+    const elementId = typeof value === "object" && value && "id" in value
+      ? String((value as { id: unknown }).id)
+      : "";
+    if (!elementId) {
+      throw new Error(`Element override '${path}' is missing id`);
     }
+    if (values.has(elementId)) {
+      throw new Error(`Duplicate element override for '${elementId}'`);
+    }
+    values.set(elementId, value);
+    hashes[elementId] = semanticHash(value);
   }
   return { values, hashes };
+}
+
+interface ElementSourcePath {
+  id: string;
+  path: string;
+}
+
+/** Resolves writable local element files from explicit taxonomy path references. */
+async function taxonomyElementSourcePaths(
+  taxonomyPath: string,
+): Promise<Map<string, ElementSourcePath>> {
+  const manifestPath = await realpath(resolve(taxonomyPath));
+  const document = parseDocument(await readFile(manifestPath, "utf8"), {
+    uniqueKeys: true,
+  });
+  const value = document.toJS() as {
+    elements?: Array<{ path?: unknown } | Record<string, unknown>>;
+  };
+  const result = new Map<string, ElementSourcePath>();
+  for (const entry of value.elements ?? []) {
+    if (!entry || typeof entry !== "object" || typeof entry.path !== "string") {
+      continue;
+    }
+    const path = await realpath(resolve(dirname(manifestPath), entry.path));
+    const element = parseYaml(await readFile(path, "utf8")) as {
+      id?: unknown;
+    };
+    if (typeof element.id === "string") {
+      result.set(element.id, { id: element.id, path });
+    }
+  }
+  return result;
+}
+
+function optimizedYaml(value: unknown): string {
+  return stringifyYaml(value, { lineWidth: 100 });
+}
+
+function displayPath(path: string): string {
+  const value = relative(process.cwd(), path);
+  return value && !value.startsWith("..") ? value : path;
+}
+
+async function writeCandidateSet(input: {
+  outputDir: string;
+  results: ReadonlyArray<{
+    elementId: string;
+    element: unknown;
+    manifest: unknown;
+  }>;
+}): Promise<Array<{ elementId: string; yaml: string; manifest: string }>> {
+  const destination = resolve(input.outputDir);
+  const stage = await mkdtemp(join(tmpdir(), "taxonome-optimize-"));
+  const published: string[] = [];
+  try {
+    await mkdir(destination, { recursive: true });
+    const paths = input.results.map(result => ({
+      elementId: result.elementId,
+      yaml: join(destination, `${result.elementId}.optimized.yaml`),
+      manifest: join(
+        destination,
+        `${result.elementId}.optimization.manifest.json`,
+      ),
+      stagedYaml: join(stage, `${result.elementId}.optimized.yaml`),
+      stagedManifest: join(
+        stage,
+        `${result.elementId}.optimization.manifest.json`,
+      ),
+      element: result.element,
+      manifestValue: result.manifest,
+    }));
+    for (const path of paths) {
+      for (const target of [path.yaml, path.manifest]) {
+        try {
+          await stat(target);
+          throw new Error(`Refusing to overwrite '${target}'`);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+      }
+      await writeFile(path.stagedYaml, optimizedYaml(path.element), "utf8");
+      await writeFile(
+        path.stagedManifest,
+        `${JSON.stringify(path.manifestValue, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    for (const path of paths) {
+      await rename(path.stagedYaml, path.yaml);
+      published.push(path.yaml);
+      await rename(path.stagedManifest, path.manifest);
+      published.push(path.manifest);
+    }
+    return paths.map(({ elementId, yaml, manifest }) => ({
+      elementId,
+      yaml,
+      manifest,
+    }));
+  } catch (error) {
+    await Promise.all(published.map(path => rm(path, { force: true })));
+    throw error;
+  } finally {
+    await rm(stage, { recursive: true, force: true });
+  }
+}
+
+async function writeInPlaceSet(input: {
+  taxonomyPath: string;
+  results: ReadonlyArray<{
+    elementId: string;
+    element: { implementation: { prompt: string } };
+    manifest: unknown;
+  }>;
+}): Promise<Array<{ elementId: string; yaml: string; manifest: string }>> {
+  const sources = await taxonomyElementSourcePaths(input.taxonomyPath);
+  const stage = await mkdtemp(join(tmpdir(), "taxonome-in-place-"));
+  const backups = new Map<string, Buffer | undefined>();
+  const published: string[] = [];
+  try {
+    const paths = input.results.map(result => {
+      const source = sources.get(result.elementId);
+      if (!source) {
+        throw new Error(
+          `--in-place requires writable local path reference for '${result.elementId}'`,
+        );
+      }
+      const manifest = join(
+        dirname(source.path),
+        `${result.elementId}.optimization.manifest.json`,
+      );
+      return {
+        ...result,
+        yaml: source.path,
+        manifest,
+        stagedYaml: join(stage, `${result.elementId}.yaml`),
+        stagedManifest: join(
+          stage,
+          `${result.elementId}.optimization.manifest.json`,
+        ),
+      };
+    });
+    for (const path of paths) {
+      const source = await readFile(path.yaml, "utf8");
+      const document = parseDocument(source, { uniqueKeys: true });
+      document.setIn(
+        ["implementation", "prompt"],
+        path.element.implementation.prompt,
+      );
+      await writeFile(path.stagedYaml, document.toString(), "utf8");
+      await writeFile(
+        path.stagedManifest,
+        `${JSON.stringify(path.manifest, null, 2)}\n`,
+        "utf8",
+      );
+      backups.set(path.yaml, Buffer.from(source));
+      try {
+        backups.set(path.manifest, await readFile(path.manifest));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        backups.set(path.manifest, undefined);
+      }
+    }
+    for (const path of paths) {
+      await rename(path.stagedYaml, path.yaml);
+      published.push(path.yaml);
+      await rename(path.stagedManifest, path.manifest);
+      published.push(path.manifest);
+    }
+    return paths.map(({ elementId, yaml, manifest }) => ({
+      elementId,
+      yaml,
+      manifest,
+    }));
+  } catch (error) {
+    for (const path of published.reverse()) {
+      const backup = backups.get(path);
+      if (backup === undefined) await rm(path, { force: true });
+      else await writeFile(path, backup);
+    }
+    throw error;
+  } finally {
+    await rm(stage, { recursive: true, force: true });
+  }
 }
 
 /** Defers SDK initialization until an eligible prompt element reaches execution. */
@@ -275,13 +444,13 @@ async function createRuntime(
   options: ExecutionOptions,
   taxonomy: NormalizedTaxonomy,
   selected: readonly string[],
-  preparedArtifacts?: PreparedArtifacts,
+  preparedOverrides?: PreparedOverrides,
 ): Promise<LoadedExecution> {
   const promptIds = selected.filter(id =>
     taxonomy.elementById.get(id)?.implementation.type === "prompt"
   );
-  const artifacts = preparedArtifacts ??
-    await prepareArtifacts(options, taxonomy, selected);
+  const overrides = preparedOverrides ??
+    await prepareElementOverrides(options.elementOverride);
   if (!promptIds.length) {
     return {
       taxonomy,
@@ -302,7 +471,7 @@ async function createRuntime(
   let executor: PromptExecutor | undefined;
   let startFailed = false;
 
-  /** Creates one SDK transport after artifacts have been validated eagerly. */
+  /** Creates one SDK transport after element overrides have been validated. */
   async function start(): Promise<PromptExecutor> {
     const {
       copilotAI,
@@ -310,10 +479,7 @@ async function createRuntime(
       taxonomyPromptExecutor,
     } = await import("taxonomy-engine/copilot");
     transport = await openCopilotTransport(options.model);
-    executor = taxonomyPromptExecutor(
-      copilotAI(transport, options.model),
-      artifacts.values,
-    );
+    executor = taxonomyPromptExecutor(copilotAI(transport, options.model));
     return executor;
   }
 
@@ -341,7 +507,7 @@ async function createRuntime(
         },
         model: options.model,
         initialized: Boolean(transport),
-        artifact_contract_hashes: artifacts.hashes,
+        element_override_hashes: overrides.hashes,
         atif_ingestion_policy_hash: ATIF_INGESTION_POLICY_HASH,
       };
     },
@@ -652,13 +818,13 @@ async function runMultiArchive(
   isInterrupted: () => boolean,
   style: TaxonomeStyle,
 ): Promise<void> {
-  const artifacts = await prepareArtifacts(options, taxonomy, selected);
+  const overrides = await prepareElementOverrides(options.elementOverride);
   const expected = {
     taxonomy,
     taxonomy_digest: taxonomy.digest,
     element_ids: [...selected],
     model: options.model,
-    artifact_contract_hashes: artifacts.hashes,
+    element_override_hashes: overrides.hashes,
     atif_ingestion_policy_hash: ATIF_INGESTION_POLICY_HASH,
   };
   const planned = await planRunBatch(
@@ -668,7 +834,7 @@ async function runMultiArchive(
     Boolean(options.force),
   );
   const promptRuntimes = new PromptWorkerRuntimes(() =>
-    createRuntime(options, taxonomy, selected, artifacts)
+    createRuntime(options, taxonomy, selected, overrides)
   );
   const resumedSequences = new Set(planned.resumed.map(job => job.sequence));
   const selectedElements = selected.map(id => {
@@ -859,7 +1025,7 @@ async function runMultiArchive(
                 digest: taxonomy.digest,
               },
               model: options.model,
-              artifact_contract_hashes: artifacts.hashes,
+              element_override_hashes: overrides.hashes,
               atif_ingestion_policy_hash: ATIF_INGESTION_POLICY_HASH,
               element_ids: [...selected],
               source: {
@@ -1251,11 +1417,7 @@ export function createCli(style: TaxonomeStyle = createTaxonomeStyle()): Command
     const selectedElementUniverse = taxonomy.elements
       .map(element => element.id)
       .filter(elementId => selectedIds.has(elementId));
-    const artifacts = await prepareArtifacts(
-      options,
-      taxonomy,
-      selectedElementUniverse,
-    );
+    const overrides = await prepareElementOverrides(options.elementOverride);
     const jobs = planEvaluationJobs(
       inputs,
       taxonomy,
@@ -1285,7 +1447,7 @@ export function createCli(style: TaxonomeStyle = createTaxonomeStyle()): Command
         options,
         taxonomy,
         selectedElementUniverse,
-        artifacts,
+        overrides,
       )
     );
     const cleanupErrors: unknown[] = [];
@@ -1425,7 +1587,7 @@ export function createCli(style: TaxonomeStyle = createTaxonomeStyle()): Command
         },
         model: options.model,
         concurrency,
-        artifact_contract_hashes: artifacts.hashes,
+        element_override_hashes: overrides.hashes,
         workers: workerMetadata,
       },
       rows,
@@ -1497,7 +1659,7 @@ export function createCli(style: TaxonomeStyle = createTaxonomeStyle()): Command
             implementation: element?.implementation.type ?? "prompt",
           };
         }),
-        artifacts: options.artifact,
+        element_overrides: options.elementOverride,
         rows,
       });
     emitCommandOutput(
@@ -1516,31 +1678,166 @@ export function createCli(style: TaxonomeStyle = createTaxonomeStyle()): Command
     }
   });
 
-  const optimizeCommand = addExecutionOptions(
-    cli.command("optimize")
-      .description("Optimize one YAML prompt element and save a v2 Ax artifact")
+  const optimizeCommand = cli.command("optimize")
+      .description("Optimize prompt instructions and write standard element YAML")
       .addOption(
         new Option(
           "--inputs <pattern>",
-          "Repeatable disjoint train/validation/test JSONL file or glob",
+          "Repeatable JSONL file/glob with disjoint Train, Validation, and Test input IDs",
         ).argParser(collect).default([]),
       )
       .addOption(
         new Option(
           "--ground-truth <pattern>",
-          "Repeatable reviewed ground-truth JSON file or glob",
+          "Repeatable reviewed ground-truth JSON keyed by input ID and element ID",
         ).argParser(collect).default([]),
       )
-      .requiredOption("--element <id>", "Prompt element ID")
-      .requiredOption("--output <path>", "New complete artifact destination")
-      .option("--max-metric-calls <n>", "Maximum Ax metric calls for bounded search", "48"),
-  );
+      .addOption(
+        new Option(
+          "--element <id>",
+          "Prompt element ID (repeatable; omitted selects every prompt element)",
+        ).argParser(collect).default([]),
+      )
+      .option("--output-dir <path>", "Write optimized YAML and manifests to a new candidate directory")
+      .option("--in-place", "Atomically replace writable local referenced element YAML")
+      .addOption(
+        new Option(
+          "--from-candidate <path>",
+          "Publish an exact selected optimized YAML with --in-place (repeatable)",
+        ).argParser(collect).default([]),
+      )
+      .option("--max-metric-calls <n>", "Maximum Ax metric calls for bounded search", "48")
+      .requiredOption("--taxonomy <path>", "Taxonomy YAML manifest")
+      .addOption(new Option("--plugin <specifier>", "Trusted compiled JS plugin path or installed package").argParser(collect).default([]))
+      .option("--model <id>", "Copilot model (pinned for comparisons)", "gpt-5.6-sol-fast")
+      .option("--json", "Emit complete machine-readable JSON");
   configureTaxonomeHelp(optimizeCommand, style);
   optimizeCommand.action(async (options: OptimizeOptions) => {
-    if (options.artifact.length) {
-      throw new Error("--artifact is for run/eval replay");
+    if (options.fromCandidate.length) {
+      if (!options.inPlace || options.outputDir) {
+        throw new Error(
+          "--from-candidate requires --in-place and cannot use --output-dir",
+        );
+      }
+      if (
+        options.inputs.length ||
+        options.groundTruth.length ||
+        options.element.length
+      ) {
+        throw new Error(
+          "--from-candidate derives elements from selected YAML; omit --inputs, --ground-truth, and --element",
+        );
+      }
+      const taxonomy = await loadExecutionTaxonomy({
+        ...options,
+        elementOverride: [],
+      });
+      const promoted = await loadExecutionTaxonomy({
+        ...options,
+        elementOverride: options.fromCandidate,
+      });
+      const overrides = await prepareElementOverrides(options.fromCandidate);
+      const {
+        optimizationManifestSchema,
+        promptContractHash,
+        semanticHash,
+      } = await import("taxonomy-engine/optimization-v2");
+      const results = [];
+      for (const [elementId, rawElement] of overrides.values) {
+        const source = taxonomy.elementById.get(elementId);
+        const candidate = promoted.elementById.get(elementId);
+        if (
+          !source ||
+          !candidate ||
+          source.implementation.type !== "prompt" ||
+          candidate.implementation.type !== "prompt"
+        ) {
+          throw new Error(
+            `--from-candidate requires an existing prompt element: ${elementId}`,
+          );
+        }
+        let candidatePath: string | undefined;
+        for (const path of options.fromCandidate) {
+          const value = parseYaml(await readFile(path, "utf8")) as unknown;
+          if (semanticHash(value) === overrides.hashes[elementId]) {
+            candidatePath = path;
+            break;
+          }
+        }
+        if (!candidatePath) {
+          throw new Error(`Cannot resolve candidate path for '${elementId}'`);
+        }
+        const manifestPath = join(
+          dirname(resolve(candidatePath)),
+          `${elementId}.optimization.manifest.json`,
+        );
+        const manifest = optimizationManifestSchema.parse(
+          JSON.parse(await readFile(manifestPath, "utf8")) as unknown,
+        );
+        if (
+          manifest.element_id !== elementId ||
+          manifest.taxonomy.id !== taxonomy.id ||
+          manifest.taxonomy.version !== taxonomy.version ||
+          manifest.taxonomy.digest !== taxonomy.digest ||
+          manifest.contract_hash !== promptContractHash(taxonomy, source) ||
+          manifest.optimized_element_sha256 !== semanticHash(rawElement)
+        ) {
+          throw new Error(
+            `Candidate provenance does not match '${elementId}' and the loaded taxonomy`,
+          );
+        }
+        results.push({
+          elementId,
+          element: {
+            implementation: { prompt: candidate.implementation.prompt },
+          },
+          manifest,
+        });
+      }
+      const paths = await writeInPlaceSet({
+        taxonomyPath: options.taxonomy,
+        results,
+      });
+      const output = {
+        taxonomy: {
+          id: taxonomy.id,
+          version: taxonomy.version,
+          digest: taxonomy.digest,
+        },
+        optimized: results.map(result => {
+          const path = paths.find(candidate =>
+            candidate.elementId === result.elementId
+          )!;
+          return {
+            element_id: result.elementId,
+            yaml: displayPath(path.yaml),
+            manifest: displayPath(path.manifest),
+            train_ids: result.manifest.train_ids,
+            validation_ids: result.manifest.validation_ids,
+            settings: result.manifest.settings,
+            metrics: result.manifest.metrics,
+          };
+        }),
+        skipped: [],
+      };
+      emitCommandOutput(
+        options.json,
+        output,
+        renderOptimizeHuman(output.optimized.map(result => ({
+          ...result,
+          yaml_path: result.yaml,
+          manifest_path: result.manifest,
+        }))),
+      );
+      return;
     }
-    const taxonomy = await loadExecutionTaxonomy(options);
+    if (Boolean(options.outputDir) === Boolean(options.inPlace)) {
+      throw new Error("Choose exactly one of --output-dir or --in-place");
+    }
+    const taxonomy = await loadExecutionTaxonomy({
+      ...options,
+      elementOverride: [],
+    });
     const data = await loadEvaluationData(
       options.inputs,
       options.groundTruth,
@@ -1555,48 +1852,212 @@ export function createCli(style: TaxonomeStyle = createTaxonomeStyle()): Command
       throw new Error("--max-metric-calls must be 1..100");
     }
 
+    const explicit = options.element;
+    const duplicateIds = explicit.filter(
+      (id, index) => explicit.indexOf(id) !== index,
+    );
+    const unknownIds = explicit.filter(id => !taxonomy.elementById.has(id));
+    const deterministicIds = explicit.filter(
+      id => taxonomy.elementById.get(id)?.implementation.type === "deterministic",
+    );
+    const validationErrors = [
+      ...(duplicateIds.length
+        ? [`Duplicate --element ID(s): ${[...new Set(duplicateIds)].join(", ")}`]
+        : []),
+      ...(unknownIds.length
+        ? [`Unknown --element ID(s): ${unknownIds.join(", ")}`]
+        : []),
+      ...(deterministicIds.length
+        ? [`Deterministic elements cannot be optimized: ${deterministicIds.join(", ")}`]
+        : []),
+    ];
+    if (validationErrors.length) {
+      throw new Error(validationErrors.join("; "));
+    }
+    const selected = taxonomy.elements
+      .filter(element =>
+        element.implementation.type === "prompt" &&
+        (!explicit.length || explicit.includes(element.id))
+      );
+    if (!selected.length) {
+      throw new Error("Taxonomy has no selected prompt-backed elements");
+    }
+    const preflightErrors: string[] = [];
+    for (const element of selected) {
+      const eligible = data.inputs.filter(input =>
+        input.elements.includes(element.id)
+      );
+      for (const split of ["train", "validation"] as const) {
+        if (!eligible.some(input => input.split === split)) {
+          preflightErrors.push(
+            `${element.id}: missing eligible ${split === "train" ? "Train" : "Validation"} input`,
+          );
+        }
+      }
+      for (const input of eligible.filter(input =>
+        input.split === "train" || input.split === "validation"
+      )) {
+        if (!data.ground_truth.values[input.id]?.[element.id]) {
+          preflightErrors.push(
+            `${element.id}: missing ground truth for ${input.id}`,
+          );
+        }
+      }
+    }
+    if (preflightErrors.length) {
+      throw new Error(preflightErrors.join("; "));
+    }
+    const deterministic = explicit.length
+      ? []
+      : taxonomy.elements
+        .filter(element => element.implementation.type === "deterministic")
+        .map(element => element.id);
+    const dashboard = new OptimizationDashboard(
+      selected.map(element => element.id),
+      deterministic,
+      style,
+      process.stderr,
+      Boolean(options.json),
+    );
+    dashboard.start();
+    for (const element of selected) {
+      const eligible = data.inputs.filter(input =>
+        input.elements.includes(element.id)
+      );
+      dashboard.update({
+        elementId: element.id,
+        status: "PREFLIGHT",
+        train: eligible.filter(input => input.split === "train").length,
+        validation: eligible.filter(input => input.split === "validation").length,
+        detail: `${options.model}; bootstrap disabled`,
+      });
+    }
+
     const {
       closeTransports,
       copilotAI,
       openCopilotTransport,
     } = await import("taxonomy-engine/copilot");
-    const { optimizePromptElementV2 } =
+    const { optimizePromptElement } =
       await import("taxonomy-engine/optimization-v2");
-    const student = await openCopilotTransport(options.model);
-    let teacher: Awaited<ReturnType<typeof openCopilotTransport>> | undefined;
+    const results: Array<{
+      elementId: string;
+      element: Awaited<ReturnType<typeof optimizePromptElement>>["element"];
+      manifest: Awaited<ReturnType<typeof optimizePromptElement>>["manifest"];
+    }> = [];
     let failure: unknown;
-    let output: unknown;
-    let artifact: OptimizationArtifactV2 | undefined;
     try {
-      teacher = await openCopilotTransport(options.model);
-      artifact = await optimizePromptElementV2(
-        taxonomy,
-        options.element,
-        data.inputs,
-        data.ground_truth.values,
-        copilotAI(student, options.model),
-        copilotAI(teacher, options.model, ""),
-        options.model,
-        maxMetricCalls,
-      );
-      await writeFile(
-        options.output,
-        `${JSON.stringify(artifact, null, 2)}\n`,
-        { flag: "wx" },
-      );
-      output = {
-        artifact: options.output,
-        best_score: artifact.optimized.bestScore,
-      };
+      for (const element of selected) {
+        const student = await openCopilotTransport(options.model);
+        let teacher: Awaited<ReturnType<typeof openCopilotTransport>> | undefined;
+        try {
+          teacher = await openCopilotTransport(options.model);
+          const result = await optimizePromptElement(
+            taxonomy,
+            element.id,
+            data.inputs,
+            data.ground_truth.values,
+            copilotAI(student, options.model),
+            copilotAI(teacher, options.model, ""),
+            options.model,
+            maxMetricCalls,
+            progress => {
+              dashboard.update({
+                elementId: element.id,
+                status: progress.phase === "complete" ? "DONE" : "OPTIMIZING",
+                metricCalls: progress.metricCalls,
+                ...(progress.trial === undefined
+                  ? {}
+                  : { trial: progress.trial }),
+                ...(progress.totalTrials === undefined
+                  ? {}
+                  : { totalTrials: progress.totalTrials }),
+                ...(progress.candidateCount === undefined
+                  ? {}
+                  : { candidateCount: progress.candidateCount }),
+                ...(progress.latestScore === undefined
+                  ? {}
+                  : { latestScore: progress.latestScore }),
+                ...(progress.bestScore === undefined
+                  ? {}
+                  : { bestScore: progress.bestScore }),
+                ...(progress.paretoFrontSize === undefined
+                  ? {}
+                  : { paretoFrontSize: progress.paretoFrontSize }),
+                ...(progress.stopReason === undefined
+                  ? {}
+                  : { stopReason: progress.stopReason }),
+                detail: progress.message,
+              });
+            },
+          );
+          results.push({ elementId: element.id, ...result });
+        } finally {
+          await closeTransports(teacher ? [student, teacher] : [student]);
+        }
+      }
     } catch (error) {
       failure = error;
+      const active = selected.find(element =>
+        !results.some(result => result.elementId === element.id)
+      );
+      if (active) {
+        dashboard.update({
+          elementId: active.id,
+          status: "FAILED",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } finally {
+      dashboard.finalize();
     }
-    await closeTransports(teacher ? [student, teacher] : [student], failure);
-    if (!output || !artifact) throw new Error("Optimizer returned no artifact");
+    if (failure) throw failure;
+    const paths = options.inPlace
+      ? await writeInPlaceSet({
+          taxonomyPath: options.taxonomy,
+          results,
+        })
+      : await writeCandidateSet({
+          outputDir: options.outputDir!,
+          results,
+        });
+    const output = {
+      taxonomy: {
+        id: taxonomy.id,
+        version: taxonomy.version,
+        digest: taxonomy.digest,
+      },
+      optimized: results.map(result => {
+        const path = paths.find(candidate =>
+          candidate.elementId === result.elementId
+        )!;
+        return {
+          element_id: result.elementId,
+          yaml: displayPath(path.yaml),
+          manifest: displayPath(path.manifest),
+          train_ids: result.manifest.train_ids,
+          validation_ids: result.manifest.validation_ids,
+          settings: result.manifest.settings,
+          metrics: result.manifest.metrics,
+        };
+      }),
+      skipped: explicit.length
+        ? []
+        : taxonomy.elements
+          .filter(element => element.implementation.type === "deterministic")
+          .map(element => ({
+            element_id: element.id,
+            reason: "deterministic element",
+          })),
+    };
     emitCommandOutput(
       options.json,
       output,
-      renderOptimizeHuman(options.output, artifact),
+      renderOptimizeHuman(output.optimized.map(result => ({
+        ...result,
+        yaml_path: result.yaml,
+        manifest_path: result.manifest,
+      }))),
     );
   });
 
@@ -1620,6 +2081,7 @@ export function createCli(style: TaxonomeStyle = createTaxonomeStyle()): Command
     const taxonomy = await loadExecutionTaxonomy({
       taxonomy: options.taxonomy,
       plugin: options.plugin,
+      elementOverride: [],
     });
     const inputs = await loadReadoutInputs(options.inputs, taxonomy);
     const report = buildReadoutV2(

@@ -26,6 +26,9 @@ vi.mock("@/lib/api", async (importOriginal) => {
       listReportTemplateVersions: vi.fn(),
       updateExperimentReportTemplates: vi.fn(),
       restoreExperiment: vi.fn(),
+      getRun: vi.fn(),
+      listRunAttempts: vi.fn(),
+      getProfile: vi.fn(),
     },
   };
 });
@@ -71,8 +74,25 @@ beforeAll(() => {
         requestId: "request-current",
         runId: "run-current",
         task: "Implement the current benchmark task",
-        status: "done",
-        outcome: "success",
+        status: "processing",
+      },
+      {
+        requestId: "request-queued",
+        runId: "run-queued",
+        task: "Implement the queued benchmark task",
+        status: "queued",
+      },
+      {
+        requestId: "request-deleted",
+        runId: "run-deleted",
+        task: "Deleted exact member",
+        status: "deleted",
+      },
+      {
+        requestId: "request-missing",
+        runId: "run-missing",
+        task: "Missing exact member",
+        status: "missing",
       },
     ],
     handlerProgress: { "pp-readout": { status: "done" } },
@@ -92,7 +112,7 @@ beforeAll(() => {
     experimentExecutionId: "execution-history",
     attemptNumber: 1,
     readiness: "failed",
-    requestCount: 1,
+    requestCount: 4,
     requests: [
       {
         requestId: "request-history",
@@ -113,7 +133,7 @@ beforeAll(() => {
     revision: {
       experimentRevisionId: "revision-demo",
       revisionNumber: 1,
-      memberCount: 1,
+      memberCount: 4,
       reportTemplateIds: ["quality-summary"],
     },
     execution: currentExecution,
@@ -124,6 +144,22 @@ beforeAll(() => {
   };
 
   vi.mocked(api.getExperiment).mockResolvedValue(experiment);
+  vi.mocked(api.getRun).mockResolvedValue({
+    _id: "request-current",
+    id: "request-current",
+    scenario: {
+      task: "Implement the current benchmark task",
+      criteria: [],
+    },
+    workerType: "coder-acp-copilot",
+    createdAt: "2026-10-16T09:00:00.000Z",
+    run: {
+      _id: "run-current",
+      attemptNumber: 2,
+      status: "processing",
+    },
+  });
+  vi.mocked(api.listRunAttempts).mockResolvedValue([]);
   vi.mocked(api.listExperimentExecutions).mockResolvedValue({
     items: [currentExecution, historicalExecution],
   });

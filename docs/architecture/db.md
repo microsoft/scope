@@ -175,12 +175,59 @@ lookups match `slug` first, then fall back to the legacy `_id`. The public API i
 Runtime feature flags. Seeded idempotently by the API on startup. Includes the
 portal-only gate visibility flags `gates-run` and `gates-deploy` (both default
 `enabled: false`) that hide the Run/Deploy gates from authoring surfaces until
-launch — see [gates design §4.1.1](../design/gates.md).
+launch — see [gates design §4.1.1](../design/gates.md). The `taxonome` flag
+(`Taxonome and Taxonomies`) also defaults off. It gates only user-facing API,
+Portal, and CLI entry points; internal handlers and already-accepted work do
+not consult it. Portal taxonomy navigation, routes, controls, and queries are
+fail-closed while the flag is missing, loading, failed, or disabled.
 
 | Index | Key | Options | Migration |
 |-------|-----|---------|-----------|
 | `_id` | `{ _id: 1 }` | default | — |
 | `key` | `{ key: 1 }` | unique | 002 |
+
+### `taxonomies` and `taxonomy-revisions`
+
+Taxonomies use a Codebase-style mutable root plus immutable sequential
+revisions. `taxonomies._id` is the database identity, `id` is the portable
+Taxonome business ID, and `taxonomy-revisions.taxonomyId` is the root foreign
+key. Canonical refs are `{id}@rN`; there is no implicit-latest ref.
+
+| Collection | Index | Key | Options | Migration |
+|---|---|---|---|---|
+| `taxonomies` | project | `{ projectId: 1 }` | | 037 |
+| `taxonomies` | business identity | `{ projectId: 1, id: 1 }` | unique | 037 |
+| `taxonomies` | deleted | `{ deletedAt: 1 }` | | 037 |
+| `taxonomy-revisions` | root | `{ taxonomyId: 1 }` | | 037 |
+| `taxonomy-revisions` | exact ref | `{ ref: 1 }` | | 037 |
+| `taxonomy-revisions` | ordered history | `{ taxonomyId: 1, revision: -1 }` | unique | 037 |
+
+Revision documents preserve the portable Taxonome top-level schema directly:
+`schema_version`, `id`, `version`, `surfaces`, and the explicit `elements`
+union (`{path}` or `{ref}`). They add only bounded database metadata:
+`taxonomyId`, `projectId`, `sourceType`, `revision`, `ref`,
+`contentSha256`, creator, and timestamps. `contentSha256` deduplicates an
+unchanged latest revision and protects integrity; it is not identity and is
+omitted from YAML exports.
+
+### `taxonomy-elements` and `taxonomy-element-revisions`
+
+Elements use the same mutable-root/immutable-revision model. The database root
+foreign key is `elementId`; the portable `id` remains the business ID.
+
+| Collection | Index | Key | Options | Migration |
+|---|---|---|---|---|
+| `taxonomy-elements` | project | `{ projectId: 1 }` | | 037 |
+| `taxonomy-elements` | business identity | `{ projectId: 1, id: 1 }` | unique | 037 |
+| `taxonomy-elements` | deleted | `{ deletedAt: 1 }` | | 037 |
+| `taxonomy-element-revisions` | root | `{ elementId: 1 }` | | 037 |
+| `taxonomy-element-revisions` | exact ref | `{ ref: 1 }` | | 037 |
+| `taxonomy-element-revisions` | ordered history | `{ elementId: 1, revision: -1 }` | unique | 037 |
+
+Exactly these four collections implement the taxonomy catalog. Full run
+evaluation bodies are compressed JSON blobs, not a fifth
+`taxonomy-evaluations` collection. An exact run stores only the bounded
+`run.taxonomyEvaluation` reference.
 
 ### `profiles`
 

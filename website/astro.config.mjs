@@ -12,6 +12,7 @@ import { execSync } from 'node:child_process';
 import remarkGfm from 'remark-gfm';
 import remarkBasePath from './src/plugins/remark-base-path.mjs';
 import remarkHttpSnippets from './src/plugins/remark-http-snippets.mjs';
+import { taxonomeGuideNavigation } from './src/lib/taxonome-guide-navigation.mjs';
 
 // https://astro.build/config
 // `site` and `base` are driven by the GitHub Pages deployment URL in CI
@@ -131,6 +132,7 @@ export default defineConfig({
 								{ label: 'Prioritize & pause', slug: 'guides/prioritizing-requests' },
 							],
 						},
+						taxonomeGuideNavigation,
 						{
 							label: 'Design your benchmark',
 							collapsed: true,
@@ -185,6 +187,15 @@ export default defineConfig({
 						{ label: 'Criteria schema', slug: 'reference/criteria-schema' },
 						{ label: 'Prompt feature schema', slug: 'reference/prompt-feature-schema' },
 						{ label: 'Coding agents & capabilities', slug: 'reference/workers' },
+						{
+							label: 'Taxonome',
+							items: [
+								{ label: 'CLI commands', slug: 'reference/taxonome-cli' },
+								{ label: 'Taxonomy and results', slug: 'reference/taxonome-taxonomy' },
+								{ label: 'Ax taxonomy and elements', slug: 'reference/taxonome-elements' },
+								{ label: 'Deterministic handlers', slug: 'reference/taxonome-handlers' },
+							],
+						},
 					],
 				},
 				...openAPISidebarGroups,

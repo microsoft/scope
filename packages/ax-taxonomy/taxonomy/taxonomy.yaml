@@ -1,6 +1,6 @@
 schema_version: scope/taxonomy/v1
-id: agent-behavior
-version: 3.0.0
+id: ax-taxonomy
+version: 1.0.0
 surfaces:
   - id: surface-skills
     label: Skills

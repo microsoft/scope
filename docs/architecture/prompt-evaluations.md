@@ -54,6 +54,16 @@ name intentionally does not overlap assessment property names; composition
 tests ensure Ax rendering preserves the exact lower-case nested key
 `evidence`.
 
+Ax owns the GEPA reflection/proposal prompt. Scope supplies the production
+component contract: the authored fixed element description, only the current
+`implementation.prompt` as mutable text, bounded preservation constraints, and
+a validator that requires proposal exploration without forcing final
+selection. Deterministic Taxonome prompt/optimizer tests cover that exact
+component composition, measured evaluator feedback, proposal-change events,
+complete Validation rescoring, and selection of a higher-scoring candidate.
+This is not a separate Scope static prompt family because Scope does not own or
+copy the Ax reflection prompt text.
+
 Judge and report tool descriptions are static AI-facing instructions, but they
 are evaluated through their owning end-to-end judge and report families rather
 than counted as extra families.

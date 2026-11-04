@@ -39,6 +39,7 @@ import {
   computeTaskPromptId,
   ExperimentStore,
   LEGACY_REQUEST_COMPOSITION_DEPRECATION_ID,
+  taxonomyHandlerSummary,
 } from "shared";
 import { trackMetric } from "telemetry";
 import type {
@@ -1571,7 +1572,13 @@ apiRoute(ctx.app, ctx.registry, {
     }
 
     // Map _id back to id for API response
-    res.json({ ...resource, id: resource._id });
+    res.json({
+      ...resource,
+      id: resource._id,
+      ...(taxonomyHandlerSummary(resource.run)
+        ? { taxonomyHandler: taxonomyHandlerSummary(resource.run) }
+        : {}),
+    });
   },
 });
 
@@ -1931,7 +1938,13 @@ apiRoute(ctx.app, ctx.registry, {
       resources.reverse();
     }
 
-    const data = resources.map((r) => ({ ...r, id: r._id }));
+    const data = resources.map((r) => ({
+      ...r,
+      id: r._id,
+      ...(taxonomyHandlerSummary(r.run)
+        ? { taxonomyHandler: taxonomyHandlerSummary(r.run) }
+        : {}),
+    }));
 
     // Enrich `processing` runs with the latest liveness heartbeat from
     // Redis. The store's mget is cluster-safe (a pipeline of single-key GETs,

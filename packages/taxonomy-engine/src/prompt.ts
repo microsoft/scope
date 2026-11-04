@@ -6,11 +6,10 @@ import {
   AxGen,
   AxGenerateError,
   AxPromptTemplate,
-  axDeserializeOptimizedProgram,
   type AxAIService,
   type AxFieldValue,
+  type AxOptimizableComponent,
   type AxProgramForwardOptionsWithModels,
-  type AxSerializedOptimizedProgram,
 } from "@ax-llm/ax";
 import {
   ASSESSMENT_JSON_SCHEMA,
@@ -49,6 +48,10 @@ export interface TaxonomyPromptProgramOptions {
   assertion?: (observation: unknown) => boolean | string | undefined;
   /** Return an invalid parsed candidate for optimizer scoring, not runtime. */
   captureInvalidOutput?: boolean;
+  /** Observes actual GEPA instruction proposals without exposing their text. */
+  onOptimizationCandidate?: (candidate: {
+    changed: boolean;
+  }) => void;
 }
 
 function assessmentPropertyNames(): string[] {
@@ -139,8 +142,68 @@ class TaxonomyPromptProgram
     options: ConstructorParameters<typeof AxGen>[1],
     private readonly correctionRetries: 0 | 1,
     private readonly captureInvalidOutput: boolean,
+    private instruction: string,
+    private readonly fixedDescription: string,
+    private readonly outputContract: unknown,
+    private readonly preconditions: unknown,
+    private readonly onOptimizationCandidate?: (candidate: {
+      changed: boolean;
+    }) => void,
   ) {
     super(signature, options);
+  }
+
+  /** Exposes only authored instruction text to GEPA. */
+  override getOptimizableComponents(): readonly AxOptimizableComponent[] {
+    return [{
+      key: `${this.getId()}::instruction`,
+      kind: "instruction",
+      current: this.instruction,
+      description: this.fixedDescription,
+      constraints:
+        "Preserve the detector purpose. Do not add schemas, examples, demonstrations, or trusted-wrapper instructions.",
+      traceId: this.getId(),
+      validate: candidate => {
+        const changed = candidate.trim() !== this.instruction.trim();
+        this.onOptimizationCandidate?.({ changed });
+        return changed
+          ? true
+          : "Propose a materially different instruction for evaluation.";
+      },
+    }];
+  }
+
+  /** Applies a selected instruction while preserving fixed contracts. */
+  override applyOptimizedComponents(
+    updates: Readonly<Record<string, string>>,
+  ): void {
+    const instruction = updates[`${this.getId()}::instruction`];
+    if (instruction !== undefined) {
+      this.instruction = instruction;
+      this.setDescription(this.renderDescription());
+    }
+  }
+
+  /** Returns the current optimizer-editable instruction for YAML publication. */
+  optimizedInstruction(): string {
+    return this.instruction;
+  }
+
+  /** Rebuilds the fixed description after ID assignment or instruction updates. */
+  refreshDescription(): void {
+    this.setDescription(this.renderDescription());
+  }
+
+  private renderDescription(): string {
+    return [
+      this.fixedDescription,
+      `Instruction: ${this.instruction}`,
+      `Shared assessment schema: ${JSON.stringify(ASSESSMENT_JSON_SCHEMA)}`,
+      "Assessment JSON property-name casing is significant.",
+      `Evidence role contract: ${JSON.stringify(this.outputContract)}`,
+      `Preconditions: ${JSON.stringify(this.preconditions)}`,
+      `Repair policy: ${JSON.stringify(PRODUCTION_REPAIR_POLICY)}`,
+    ].join("\n\n");
   }
 
   /** Enforces one generation step and the configured Ax correction budget. */
@@ -199,28 +262,19 @@ class TaxonomyPromptProgram
  * Builds a one-call typed program from one normalized YAML prompt element.
  *
  * @param element - Loaded prompt element containing instructions/schema.
- * @param artifact - Optional compatible complete Ax serialization.
  */
 export function createTaxonomyPromptProgram(
   element: NormalizedElement,
-  artifact?: AxSerializedOptimizedProgram,
   options: TaxonomyPromptProgramOptions = {},
 ) {
   if (element.implementation.type !== "prompt") {
     throw new Error(`Element '${element.id}' is not prompt-backed`);
   }
+  const fixedDescription = element.description ?? element.label;
   const program = new TaxonomyPromptProgram(
     TAXONOMY_AX_OUTPUT_CONTRACT.signature,
     {
-      description: [
-        element.implementation.prompt,
-        `Shared assessment schema: ${JSON.stringify(ASSESSMENT_JSON_SCHEMA)}`,
-        `Assessment JSON property-name casing is significant. Use only these exact schema keys where applicable: ${ASSESSMENT_EXACT_KEYS.join(", ")}.`,
-        `Canonical assessment examples: ${JSON.stringify(ASSESSMENT_OUTPUT_EXAMPLES)}`,
-        `Evidence role contract: ${JSON.stringify(element.output)}`,
-        `Preconditions: ${JSON.stringify(element.preconditions)}`,
-        `Repair policy: ${JSON.stringify(PRODUCTION_REPAIR_POLICY)}`,
-      ].join("\n\n"),
+      description: fixedDescription,
       maxRetries: options.correctionRetries ?? 1,
       maxSteps: 1,
       stream: false,
@@ -229,6 +283,11 @@ export function createTaxonomyPromptProgram(
     },
     options.correctionRetries ?? 1,
     options.captureInvalidOutput ?? false,
+    element.implementation.prompt,
+    fixedDescription,
+    element.output,
+    element.preconditions,
+    options.onOptimizationCandidate,
   );
   if (options.assertion) {
     program.addAssert(
@@ -237,8 +296,6 @@ export function createTaxonomyPromptProgram(
     );
   }
   program.setId(`${element.id}@${element.implementation.type}`);
-  if (artifact) {
-    program.applyOptimization(axDeserializeOptimizedProgram(artifact));
-  }
+  program.refreshDescription();
   return program;
 }

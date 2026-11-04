@@ -7,6 +7,7 @@ import { initTelemetry } from "telemetry";
 initTelemetry("scope-report-generator");
 
 import { ReportQueueProcessor, ReportQueueProcessorConfig } from "./report-queue-processor.js";
+import { resolveReportModel } from "./report-config.js";
 
 const config: ReportQueueProcessorConfig = {
   mongoUri: process.env.MONGO_CONNECTION_STRING || process.env.AZURE_COSMOS_CONNECTION_STRING || "mongodb://localhost:27017",
@@ -20,7 +21,7 @@ const config: ReportQueueProcessorConfig = {
   redisHost: process.env.REDIS_HOST || "localhost",
   redisPort: Number(process.env.REDIS_PORT) || 6379,
   redisPassword: process.env.REDIS_PASSWORD || "",
-  reportModel: process.env.REPORT_MODEL || "gpt-5.4-mini",
+  reportModel: resolveReportModel(),
   apiBaseUrl: process.env.SCOPE_MT_API_URL || "http://localhost:3001",
   sessionTimeoutMs: Number(process.env.SESSION_TIMEOUT_MS) || 5 * 60 * 1000,
 };

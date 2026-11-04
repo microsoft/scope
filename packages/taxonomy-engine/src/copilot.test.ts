@@ -12,6 +12,11 @@ const sdkMocks = vi.hoisted(() => ({
   }>,
   start: vi.fn(async () => undefined),
   getAuthStatus: vi.fn(async () => ({ isAuthenticated: true })),
+  listModels: vi.fn(async () => [{
+    id: "mock-model",
+    name: "Mock model",
+    capabilities: {},
+  }]),
   stop: vi.fn(async () => undefined),
   sessionOptions: [] as Array<Record<string, unknown>>,
   deleteSession: vi.fn(async () => undefined),
@@ -21,6 +26,7 @@ vi.mock("@github/copilot-sdk", () => ({
   CopilotClient: class {
     start = sdkMocks.start;
     getAuthStatus = sdkMocks.getAuthStatus;
+    listModels = sdkMocks.listModels;
     stop = sdkMocks.stop;
     deleteSession = sdkMocks.deleteSession;
     createSession = vi.fn(async (options: Record<string, unknown>) => {
@@ -62,6 +68,11 @@ beforeEach(() => {
   sdkMocks.sessionOptions.length = 0;
   sdkMocks.start.mockResolvedValue(undefined);
   sdkMocks.getAuthStatus.mockResolvedValue({ isAuthenticated: true });
+  sdkMocks.listModels.mockResolvedValue([{
+    id: "mock-model",
+    name: "Mock model",
+    capabilities: {},
+  }]);
   sdkMocks.stop.mockResolvedValue(undefined);
 });
 
@@ -194,6 +205,7 @@ describe("Copilot SDK authentication boundary (offline)", () => {
         infiniteSessions: { enabled: false },
         systemMessage: { mode: "replace", content: "trusted system" },
       });
+
       const permission = sdkMocks.sessionOptions[0]?.onPermissionRequest;
       expect(typeof permission).toBe("function");
       expect((permission as () => unknown)()).toEqual({
@@ -211,6 +223,47 @@ describe("Copilot SDK authentication boundary (offline)", () => {
     } finally {
       await transport.close();
     }
+  });
+
+  it("omits reasoning effort when the caller delegates capability choice", async () => {
+    const transport = await openCopilotTransport(
+      "mock-model",
+      async () => ({ token: "test-token", source: "environment" }),
+      { reasoningEffort: false },
+    );
+    try {
+      await transport.complete("trusted system", "evidence");
+      expect(sdkMocks.sessionOptions[0]).not.toHaveProperty("reasoningEffort");
+    } finally {
+      await transport.close();
+    }
+  });
+
+  it("rejects an unavailable explicit model before session creation", async () => {
+    sdkMocks.listModels.mockResolvedValueOnce([{
+      id: "available-model",
+      name: "Available model",
+      capabilities: {},
+    }]);
+
+    await expect(openCopilotTransport(
+      "invalid-model",
+      async () => ({ token: "test-token", source: "environment" }),
+    )).rejects.toThrow(
+      "Configured Taxonome model 'invalid-model' is not available",
+    );
+    expect(sdkMocks.sessionOptions).toHaveLength(0);
+    expect(sdkMocks.stop).toHaveBeenCalledOnce();
+  });
+
+  it("accepts provider-resolved auto without requiring a catalog entry", async () => {
+    sdkMocks.listModels.mockResolvedValueOnce([]);
+    const transport = await openCopilotTransport(
+      "auto",
+      async () => ({ token: "test-token", source: "environment" }),
+      { reasoningEffort: false },
+    );
+    await expect(transport.close()).resolves.toBeUndefined();
   });
 
   it("reports SDK authentication guidance without exposing credentials", async () => {
@@ -238,6 +291,27 @@ describe("Ax custom SDK provider contract (offline)", () => {
     await expect(ai.chat({ chatPrompt: [] }, { stream: true })).rejects.toThrow("Streaming");
     await expect(ai.chat({ chatPrompt: [], responseFormat: { type: "json_schema", schema: {} } })).rejects.toThrow("Native structured");
     await expect(ai.chat({ chatPrompt: [], model: "different-model" })).rejects.toThrow("pinned");
+  });
+
+  it("allows provider-resolved auto usage but rejects explicit substitution", async () => {
+    const complete = vi.fn(async () => ({
+      content: "ok",
+      usage: { model: "provider-selected-model" },
+    }));
+
+    await expect(
+      copilotAI({ complete, close: async () => { } }, "auto").chat({
+        chatPrompt: [{ role: "user", content: "data" }],
+      }),
+    ).resolves.toMatchObject({ results: [{ content: "ok" }] });
+    await expect(
+      copilotAI(
+        { complete, close: async () => { } },
+        "configured-model",
+      ).chat({
+        chatPrompt: [{ role: "user", content: "data" }],
+      }),
+    ).rejects.toThrow("unexpected model");
   });
 
   it("accepts Ax text-part correction messages and still rejects media", async () => {

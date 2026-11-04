@@ -8,5 +8,5 @@ queue: pp-readout-queue
 selector: readout
 autoBackfill: false
 dependsOn:
-  - pp-observations
+  - pp-taxonomy
 dependencyMode: all-runs

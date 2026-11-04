@@ -7,12 +7,15 @@ import {
   ArchiveRestore,
   ArrowLeft,
   Clock,
+  Download,
+  Eye,
   RotateCcw,
   Trash2,
   Unlink,
 } from "lucide-react";
 import {
   Link,
+  useLocation,
   useNavigate,
   useParams,
   useSearchParams,
@@ -31,14 +34,34 @@ import {
 import {
   CustomizeColumnsLink,
   CustomizeColumnsPanel,
-  DataTable,
   EmbeddedTableBlock,
-  Pagination,
   useColumnOrder,
   useHiddenColumns,
   type CustomizeColumnsOption,
   type DataTableColumn,
 } from "@/components/list-layout";
+import {
+  RunAttemptCell,
+  RunCriteriaCell,
+  RunEffortCell,
+  RunExtensionsCell,
+  RunIdCell,
+  RunMcpCell,
+  RunModelCell,
+  RunOsCell,
+  RunOutcomeCell,
+  RunPriorityCell,
+  RunProfileCell,
+  RunSkillsCell,
+  RunStatusCell,
+  RunTaskCell,
+  RunTaxonomyCell,
+  RunVersionCell,
+  RunWorkerCell,
+  RunsTable,
+  type RunTableItem,
+} from "@/components/runs-table";
+import { RunPreviewPanel } from "./RunPreviewPanel";
 import {
   Select,
   SelectContent,
@@ -62,17 +85,30 @@ import type {
   ExperimentRequestSummaryView,
   ExperimentView,
 } from "@/lib/experiments";
-import { formatDate, truncate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import type { ReportTemplate } from "@/types";
+import { useFeatureFlags } from "@/contexts/FeatureFlagContext";
+import { runNavigationState } from "@/lib/run-navigation";
+import type { RunOutcome } from "@/types";
 
 const RUN_COLUMN_OPTIONS: CustomizeColumnsOption[] = [
   { id: "requestId", label: "ID", required: true },
   { id: "status", label: "Status" },
   { id: "outcome", label: "Outcome" },
+  { id: "taxonomy", label: "Taxonomy" },
   { id: "task", label: "Task" },
+  { id: "criteria", label: "Criteria" },
   { id: "worker", label: "Worker" },
   { id: "model", label: "Model" },
+  { id: "effort", label: "Effort" },
+  { id: "version", label: "Version" },
+  { id: "os", label: "OS" },
+  { id: "mcp", label: "MCP" },
+  { id: "skills", label: "Skills" },
+  { id: "extensions", label: "Extensions" },
   { id: "profile", label: "Profile" },
+  { id: "priority", label: "Priority" },
+  { id: "attempt", label: "Attempt" },
   { id: "runId", label: "Run ID" },
 ];
 const RUN_COLUMN_IDS = RUN_COLUMN_OPTIONS.map((column) => column.id);
@@ -123,19 +159,112 @@ function requestSortValue(
       return request.runId;
     case "task":
       return request.task ?? "";
+    case "criteria":
+      return request.criteria?.join("\u0000") ?? "";
     case "status":
       return request.status ?? "";
     case "outcome":
       return request.outcome ?? "";
+    case "taxonomy":
+      return request.taxonomyHandler?.status ?? "";
     case "worker":
       return request.workerType ?? "";
     case "model":
       return request.model ?? "";
+    case "effort":
+      return request.reasoningEffort ?? "";
+    case "version":
+      return request.agentVersion ?? "";
+    case "os":
+      return request.os?.platform ?? "";
+    case "mcp":
+      return request.mcpServers?.join("\u0000") ?? "";
+    case "skills":
+      return request.skillRevisions?.join("\u0000") ?? "";
+    case "extensions":
+      return request.extensions?.join("\u0000") ?? "";
     case "profile":
       return request.profileId ?? "";
+    case "priority":
+      return String(request.priority ?? "");
+    case "attempt":
+      return String(request.attemptNumber ?? "");
     default:
       return "";
   }
+}
+
+function experimentRunStatus(
+    status: string | undefined,
+  ): RunTableItem["status"] {
+    if (!status) return undefined;
+    const normalized = status.toLowerCase();
+    if (
+      normalized === "pending" ||
+      normalized === "queued" ||
+      normalized === "processing" ||
+      normalized === "paused" ||
+      normalized === "done" ||
+      normalized === "completed" ||
+      normalized === "failed" ||
+      normalized === "cancelled" ||
+      normalized === "deleted" ||
+      normalized === "missing"
+    ) {
+      return normalized;
+    }
+    return undefined;
+  }
+
+function experimentRunOutcome(
+    outcome: string | undefined,
+  ): RunOutcome | undefined {
+    if (outcome === "success") return "succeeded";
+    if (outcome === "failure") return "failed";
+    if (
+      outcome === "succeeded" ||
+      outcome === "failed" ||
+      outcome === "finished"
+    ) {
+      return outcome;
+    }
+    return undefined;
+  }
+
+function experimentRunTableItem(
+    request: ExperimentRequestSummaryView,
+  ): RunTableItem {
+    return {
+      requestId: request.requestId,
+      runId: request.runId,
+      task: request.task,
+      criteria: request.criteria,
+      taskPromptId: request.taskPromptId,
+      workerType: request.workerType,
+      model: request.model,
+      reasoningEffort: request.reasoningEffort,
+      agentVersion: request.agentVersion,
+      os: request.os,
+      mcpServers: request.mcpServers,
+      skillRevisions: request.skillRevisions,
+      extensions: request.extensions,
+      profileId: request.profileId,
+      priority: request.priority,
+      status: experimentRunStatus(request.status),
+      outcome: experimentRunOutcome(request.outcome),
+      attemptNumber: request.attemptNumber,
+      worker: request.worker,
+      lastHeartbeatAt: request.lastHeartbeatAt,
+      startedAt: request.startedAt,
+      taxonomyHandler: request.taxonomyHandler,
+    };
+}
+
+function isUnavailableExperimentMember(
+  request: ExperimentRequestSummaryView,
+): boolean {
+  const status = experimentRunStatus(request.status);
+  return status === "missing" || status === "deleted";
 }
 
 function ExecutionSummary({
@@ -277,7 +406,10 @@ function TemplateCategory({
 export function ExperimentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
+  const { isFeatureEnabledFailClosed } = useFeatureFlags();
+  const taxonomeEnabled = isFeatureEnabledFailClosed("taxonome");
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
@@ -297,6 +429,8 @@ export function ExperimentDetail() {
     useState<RunSortColumn>("requestId");
   const [sortDirection, setSortDirection] =
     useState<SortDirection>("asc");
+  const [previewMember, setPreviewMember] =
+    useState<ExperimentRequestSummaryView | null>(null);
   const columnVisibility = useHiddenColumns({
     storageKey: "experiment-runs",
     defaultHidden: ["profile", "runId"],
@@ -372,6 +506,23 @@ export function ExperimentDetail() {
       }
       return 5_000;
     },
+  });
+  const taxonomyReadoutQuery = useQuery({
+    queryKey: ["experiment-taxonomy-readout", id],
+    queryFn: () => api.getTaxonomyReadout(id!),
+    enabled: Boolean(id && taxonomeEnabled && !isViewingHistorical),
+    retry: false,
+  });
+  const retryTaxonomyReadout = useMutation({
+    mutationFn: () => api.retryTaxonomyReadout(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["experiment-taxonomy-readout", id],
+      });
+      toast.success("Taxonome readout generated");
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Readout failed"),
   });
   const retry = useMutation({
     mutationFn: () =>
@@ -678,6 +829,7 @@ export function ExperimentDetail() {
   useEffect(() => {
     setSelectedRequestIds(new Set());
     setRemoveDialogOpen(false);
+    setPreviewMember(null);
   }, [activeExecution?.experimentExecutionId]);
 
   const pagedRequests = useMemo(() => {
@@ -686,6 +838,12 @@ export function ExperimentDetail() {
   }, [page, pageSize, sortedRequests]);
 
   const columns = useMemo<DataTableColumn<ExperimentRequestSummaryView>[]>(() => {
+    const item = (request: ExperimentRequestSummaryView) =>
+      experimentRunTableItem(request);
+    const returnState = runNavigationState(
+      `${location.pathname}${location.search}`,
+      "Back to experiment",
+    );
     const naturalColumns: DataTableColumn<ExperimentRequestSummaryView>[] = [
       {
         id: "requestId",
@@ -693,9 +851,7 @@ export function ExperimentDetail() {
         sortable: true,
         width: "120px",
         sticky: "left",
-        cell: (request) => (
-          <ShortId id={request.requestId} label="request ID" />
-        ),
+        cell: (request) => <RunIdCell item={item(request)} />,
       },
       {
         id: "status",
@@ -703,12 +859,7 @@ export function ExperimentDetail() {
         sortable: true,
         width: "110px",
         hidden: columnVisibility.isHidden("status"),
-        cell: (request) =>
-          request.status ? (
-            <Badge variant="outline">{request.status}</Badge>
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          ),
+        cell: (request) => <RunStatusCell item={item(request)} />,
       },
       {
         id: "outcome",
@@ -716,23 +867,28 @@ export function ExperimentDetail() {
         sortable: true,
         width: "110px",
         hidden: columnVisibility.isHidden("outcome"),
-        cell: (request) =>
-          request.outcome ? (
-            <Badge variant="secondary">{request.outcome}</Badge>
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          ),
+        cell: (request) => <RunOutcomeCell item={item(request)} />,
+      },
+      {
+        id: "taxonomy",
+        header: "Taxonomy",
+        width: "150px",
+        hidden: columnVisibility.isHidden("taxonomy"),
+        cell: (request) => <RunTaxonomyCell item={item(request)} />,
       },
       {
         id: "task",
         header: "Task",
         sortable: true,
         hidden: columnVisibility.isHidden("task"),
-        cell: (request) => (
-          <span className="block max-w-[360px] truncate text-sm">
-            {request.task ? truncate(request.task, 80) : "—"}
-          </span>
-        ),
+        cell: (request) => <RunTaskCell item={item(request)} />,
+      },
+      {
+        id: "criteria",
+        header: "Criteria",
+        width: "180px",
+        hidden: columnVisibility.isHidden("criteria"),
+        cell: (request) => <RunCriteriaCell item={item(request)} />,
       },
       {
         id: "worker",
@@ -740,11 +896,7 @@ export function ExperimentDetail() {
         sortable: true,
         width: "180px",
         hidden: columnVisibility.isHidden("worker"),
-        cell: (request) => (
-          <span className="font-mono text-xs">
-            {request.workerType ?? "—"}
-          </span>
-        ),
+        cell: (request) => <RunWorkerCell item={item(request)} />,
       },
       {
         id: "model",
@@ -752,9 +904,49 @@ export function ExperimentDetail() {
         sortable: true,
         width: "180px",
         hidden: columnVisibility.isHidden("model"),
-        cell: (request) => (
-          <span className="font-mono text-xs">{request.model ?? "—"}</span>
-        ),
+        cell: (request) => <RunModelCell item={item(request)} />,
+      },
+      {
+        id: "effort",
+        header: "Effort",
+        width: "100px",
+        hidden: columnVisibility.isHidden("effort"),
+        cell: (request) => <RunEffortCell item={item(request)} />,
+      },
+      {
+        id: "version",
+        header: "Version",
+        width: "110px",
+        hidden: columnVisibility.isHidden("version"),
+        cell: (request) => <RunVersionCell item={item(request)} />,
+      },
+      {
+        id: "os",
+        header: "OS",
+        width: "120px",
+        hidden: columnVisibility.isHidden("os"),
+        cell: (request) => <RunOsCell item={item(request)} />,
+      },
+      {
+        id: "mcp",
+        header: "MCP",
+        width: "180px",
+        hidden: columnVisibility.isHidden("mcp"),
+        cell: (request) => <RunMcpCell item={item(request)} />,
+      },
+      {
+        id: "skills",
+        header: "Skills",
+        width: "180px",
+        hidden: columnVisibility.isHidden("skills"),
+        cell: (request) => <RunSkillsCell item={item(request)} />,
+      },
+      {
+        id: "extensions",
+        header: "Extensions",
+        width: "190px",
+        hidden: columnVisibility.isHidden("extensions"),
+        cell: (request) => <RunExtensionsCell item={item(request)} />,
       },
       {
         id: "profile",
@@ -762,11 +954,22 @@ export function ExperimentDetail() {
         sortable: true,
         width: "150px",
         hidden: columnVisibility.isHidden("profile"),
-        cell: (request) => (
-          <span className="font-mono text-xs">
-            {request.profileId ?? "—"}
-          </span>
-        ),
+        cell: (request) => <RunProfileCell item={item(request)} />,
+      },
+      {
+        id: "priority",
+        header: "Priority",
+        sortable: true,
+        width: "80px",
+        hidden: columnVisibility.isHidden("priority"),
+        cell: (request) => <RunPriorityCell item={item(request)} />,
+      },
+      {
+        id: "attempt",
+        header: "Attempt",
+        width: "80px",
+        hidden: columnVisibility.isHidden("attempt"),
+        cell: (request) => <RunAttemptCell item={item(request)} />,
       },
       {
         id: "runId",
@@ -778,7 +981,7 @@ export function ExperimentDetail() {
       },
     ];
     const byId = new Map(naturalColumns.map((column) => [column.id, column]));
-    return columnOrder.order
+    const ordered = columnOrder.order
       .map((columnId) => byId.get(columnId))
       .filter(
         (
@@ -786,7 +989,65 @@ export function ExperimentDetail() {
         ): column is DataTableColumn<ExperimentRequestSummaryView> =>
           Boolean(column),
       );
-  }, [columnOrder.order, columnVisibility]);
+    return [
+      ...ordered,
+      {
+        id: "actions",
+        header: "",
+        width: "80px",
+        sticky: "right",
+        cell: (request) => {
+          const unavailable = isUnavailableExperimentMember(request);
+          return (
+            <div className="flex items-center justify-end gap-0.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title="View run"
+                disabled={unavailable}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  navigate(
+                    `/runs/${request.requestId}?runId=${encodeURIComponent(request.runId)}`,
+                    { state: returnState },
+                  );
+                }}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span className="sr-only">View</span>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title="Download archive"
+                disabled={unavailable}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  window.open(
+                    api.runArchiveUrl(request.requestId, request.runId),
+                    "_blank",
+                  );
+                }}
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span className="sr-only">Download</span>
+              </Button>
+            </div>
+          );
+        },
+      },
+    ];
+  }, [
+    columnOrder.order,
+    columnVisibility,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const selectExecution = (executionId: string) => {
     const next = new URLSearchParams(searchParams);
@@ -1119,16 +1380,24 @@ export function ExperimentDetail() {
                         onReorder={columnOrder.setOrder}
                       />
                     )}
-                    <div className="min-w-0 flex-1">
-                      <DataTable
+                    <div
+                      className={
+                        previewMember
+                          ? "grid min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_360px]"
+                          : "min-w-0 flex-1"
+                      }
+                    >
+                      <RunsTable
                         items={pagedRequests}
                         columns={columns}
                         getRowId={(request) => request.requestId}
-                        onRowClick={(request) =>
-                          navigate(
-                            `/runs/${request.requestId}?runId=${encodeURIComponent(request.runId)}`,
-                          )
-                        }
+                        activeId={previewMember?.requestId}
+                        onRowClick={(request) => {
+                          if (isUnavailableExperimentMember(request)) {
+                            return;
+                          }
+                          setPreviewMember(request);
+                        }}
                         sort={sortColumn}
                         sortDir={sortDirection}
                         onSortChange={changeSort}
@@ -1141,6 +1410,16 @@ export function ExperimentDetail() {
                                 onToggle: (requestId) =>
                                   setSelectedRequestIds((current) => {
                                     const id = String(requestId);
+                                    const request = activeExecution.requests.find(
+                                      (candidate) =>
+                                        candidate.requestId === id,
+                                    );
+                                    if (
+                                      !request ||
+                                      isUnavailableExperimentMember(request)
+                                    ) {
+                                      return current;
+                                    }
                                     const next = new Set(current);
                                     if (next.has(id)) next.delete(id);
                                     else next.add(id);
@@ -1149,7 +1428,19 @@ export function ExperimentDetail() {
                                 onToggleAll: (requestIds) =>
                                   setSelectedRequestIds((current) => {
                                     const next = new Set(current);
-                                    const ids = requestIds.map(String);
+                                    const eligible = new Set(
+                                      activeExecution.requests
+                                        .filter(
+                                          (request) =>
+                                            !isUnavailableExperimentMember(
+                                              request,
+                                            ),
+                                        )
+                                        .map((request) => request.requestId),
+                                    );
+                                    const ids = requestIds
+                                      .map(String)
+                                      .filter((id) => eligible.has(id));
                                     const allSelected = ids.every((requestId) =>
                                       next.has(requestId)
                                     );
@@ -1168,18 +1459,31 @@ export function ExperimentDetail() {
                               : `${activeExecution.requestCount} linked runs are stored outside the resolved response.`}
                           </div>
                         }
+                        pagination={
+                          sortedRequests.length > 0
+                            ? {
+                                page,
+                                pageSize,
+                                total: sortedRequests.length,
+                                pageSizeOptions: [10, 25, 50],
+                                onPageChange: setPage,
+                                onPageSizeChange: setPageSize,
+                              }
+                            : undefined
+                        }
                       />
-                      {sortedRequests.length > 0 && (
-                        <Pagination
-                          page={page}
-                          pageSize={pageSize}
-                          total={sortedRequests.length}
-                          pageSizeOptions={[10, 25, 50]}
-                          onPageChange={setPage}
-                          onPageSizeChange={setPageSize}
-                          itemLabel="runs"
-                          className="px-1 pt-2"
-                        />
+                      {previewMember && (
+                        <div className="min-h-[520px] overflow-hidden rounded-md border">
+                          <RunPreviewPanel
+                            requestId={previewMember.requestId}
+                            runId={previewMember.runId}
+                            onClose={() => setPreviewMember(null)}
+                            navigationState={runNavigationState(
+                              `${location.pathname}${location.search}`,
+                              "Back to experiment",
+                            )}
+                          />
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1188,7 +1492,55 @@ export function ExperimentDetail() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="reports" className="mt-4">
+          <TabsContent value="reports" className="mt-4 space-y-4">
+            {taxonomeEnabled && !isViewingHistorical && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between gap-4">
+                    <span>Taxonome readout</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={retryTaxonomyReadout.isPending}
+                      onClick={() => retryTaxonomyReadout.mutate()}
+                    >
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      {taxonomyReadoutQuery.data ? "Retry" : "Generate"}
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  {taxonomyReadoutQuery.data ? (
+                    <>
+                      <Badge variant={taxonomyReadoutQuery.data.status === "done" ? "default" : "secondary"}>
+                        {taxonomyReadoutQuery.data.status}
+                      </Badge>
+                      {taxonomyReadoutQuery.data.error && (
+                        <p className="text-destructive">{taxonomyReadoutQuery.data.error}</p>
+                      )}
+                      {taxonomyReadoutQuery.data.status === "done" && (
+                        <div className="flex gap-2">
+                          <Button asChild size="sm" variant="outline">
+                            <a href={`/api/v1/experiments/${encodeURIComponent(id!)}/taxonomy-readout/json?projectId=${encodeURIComponent(experiment.projectId)}`}>
+                              JSON
+                            </a>
+                          </Button>
+                          <Button asChild size="sm" variant="outline">
+                            <a href={`/api/v1/experiments/${encodeURIComponent(id!)}/taxonomy-readout/markdown?projectId=${encodeURIComponent(experiment.projectId)}`}>
+                              Markdown
+                            </a>
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      Generate a typed readout after exact-run taxonomy evaluations finish.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             <ExperimentReportCard
               experimentId={experiment.experimentId}
               experimentExecutionId={activeExecution.experimentExecutionId}

@@ -21,6 +21,7 @@ export * from "./resources/index.js";
 export * from "./extensions/index.js";
 export * from "./projects/index.js";
 export * from "./experiments/index.js";
+export * from "./taxonomies/index.js";
 export * from "./agent-version.js";
 export * from "./resolve-agent-version.js";
 export * from "./resolve-agent-target.js";

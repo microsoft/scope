@@ -9,7 +9,15 @@ import { describe, expect, it } from "vitest";
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const forbidden = /\bcases?\b|\bgold\b|heldout|held-out|--cases|--gold|case_id/i;
 const forbiddenSplit = /"split"\s*:\s*"unit"|validation,\s*test,\s*unit/i;
+const forbiddenReplay = /\breplay(?:ed|ing|s)?\b/i;
 const extensions = new Set([".ts", ".mjs", ".json", ".jsonl", ".md", ".yaml"]);
+
+/** Removes TypeScript switch labels so the language keyword is not terminology. */
+function terminologyText(file: string, content: string): string {
+  return extname(file) === ".ts"
+    ? content.replace(/^\s*case\s+["'`][^"'`]+["'`]\s*:\s*\{?/gm, "")
+    : content;
+}
 
 /** Recursively collects active text files while excluding generated/frozen areas. */
 async function activeFiles(directory: string): Promise<string[]> {
@@ -43,8 +51,9 @@ describe("active Taxonome evaluation terminology", () => {
     for (const file of files) {
       expect(file, file).not.toMatch(forbidden);
       const content = await readFile(file, "utf8");
-      expect(content, file).not.toMatch(forbidden);
+      expect(terminologyText(file, content), file).not.toMatch(forbidden);
       expect(content, file).not.toMatch(forbiddenSplit);
+      expect(content, file).not.toMatch(forbiddenReplay);
     }
 
     const architecture = await readFile(
@@ -54,5 +63,6 @@ describe("active Taxonome evaluation terminology", () => {
     const current = architecture.split("## Recorded spike findings")[0];
     expect(current).not.toMatch(forbidden);
     expect(current).not.toMatch(forbiddenSplit);
+    expect(current).not.toMatch(forbiddenReplay);
   });
 });

@@ -1,6 +1,6 @@
 # ax-taxonomy
 
-`ax-taxonomy` contains the shipped agent-behavior taxonomy, its reviewed
+`ax-taxonomy` contains the shipped Ax taxonomy, its reviewed
 inputs/ground truth, and the concrete Discovered, Malformed Invocation, and
 Timeout handlers. The generic loader, evaluation engine, Copilot transport,
 optimization support, and CLI remain in `taxonomy-engine` and `taxonome`.
@@ -92,9 +92,9 @@ Taxonome uses the first non-empty `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or
 The token remains in memory and is never printed or persisted. Without an
 environment override, install and authenticate GitHub CLI with `gh auth login`.
 
-`--artifact <path>` is repeatable. Each artifact's embedded `element_id`
-scopes it generically; duplicate artifacts or artifacts for unselected or
-deterministic elements fail before model submission.
+`--element-override <path>` is repeatable for side-by-side evaluation of
+complete optimized element YAML. Duplicate, unknown, or mismatched IDs fail
+before model submission. Optimization manifests are provenance only.
 
 The current CLI has no cumulative budget or ledger option. Optimization's
 `--max-metric-calls` limits Ax's bounded search only; it is not a global SDK
@@ -105,13 +105,13 @@ call counter.
 Use deterministic elements to process a multi-run export without credentials:
 
 ```bash
-pnpm --silent taxonome run submission.tar.gz \
+taxonome run submission.tar.gz \
   --taxonomy packages/ax-taxonomy/taxonomy/taxonomy.yaml \
   --elements beh-discovered,beh-malformed-invocation,beh-timeout \
   --output-dir ./taxonome-results \
   --concurrency 4
 
-pnpm --silent taxonome readout "./taxonome-results/*.json" \
+taxonome readout "./taxonome-results/*.json" \
   --taxonomy packages/ax-taxonomy/taxonomy/taxonomy.yaml \
   --inputs submission.tar.gz \
   --markdown ./taxonome-results/readout.md

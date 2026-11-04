@@ -31,6 +31,7 @@ COPY packages/db-migrations/tsconfig.json ./packages/db-migrations/
 COPY packages/db-migrations/src ./packages/db-migrations/src/
 RUN pnpm --filter db-migrations build
 
+COPY packages/ax-taxonomy/taxonomy ./packages/ax-taxonomy/taxonomy/
 COPY apps/api/tsconfig.json ./apps/api/
 COPY apps/api/src ./apps/api/src/
 
@@ -71,6 +72,7 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist/
 COPY --from=builder /app/packages/telemetry/dist ./packages/telemetry/dist/
 COPY --from=builder /app/packages/db-migrations/dist ./packages/db-migrations/dist/
+COPY --from=builder /app/packages/ax-taxonomy/taxonomy ./packages/ax-taxonomy/taxonomy/
 COPY --from=builder /app/apps/api/dist ./apps/api/dist/
 
 WORKDIR /app/apps/api
