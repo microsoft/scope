@@ -77,29 +77,32 @@ async function handleVideo(
   const properties = await blobClient.getProperties();
   const totalSize = properties.contentLength ?? 0;
 
-  // Support HTTP Range requests for video seeking
-  const rangeHeader = req.headers.range;
-  if (rangeHeader && totalSize > 0) {
-    const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-    if (match) {
-      const start = parseInt(match[1], 10);
-      const end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
-      const chunkSize = end - start + 1;
-
-      const downloadResponse = await blobClient.download(start, chunkSize);
-      if (!downloadResponse.readableStreamBody) {
-        res.status(500).json({ error: "Failed to download video file" });
-        return;
-      }
-
-      res.status(206);
-      res.setHeader("Content-Type", "video/webm");
-      res.setHeader("Content-Range", `bytes ${start}-${end}/${totalSize}`);
-      res.setHeader("Accept-Ranges", "bytes");
-      res.setHeader("Content-Length", chunkSize);
-      downloadResponse.readableStreamBody.pipe(res);
+  // Support one complete byte-range specification. Ignore other units,
+  // malformed headers and multipart ranges, which this endpoint cannot serve.
+  const range = req.headers.range?.match(/^bytes=(\d*)-(\d*)$/);
+  if (range && (range[1] || range[2])) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, totalSize - Number(range[2]));
+    const end = range[1] && range[2] ? Math.min(Number(range[2]), totalSize - 1) : totalSize - 1;
+    if (start > end || start >= totalSize) {
+      res.setHeader("Content-Range", `bytes */${totalSize}`);
+      res.status(416).end();
       return;
     }
+    const chunkSize = end - start + 1;
+
+    const downloadResponse = await blobClient.download(start, chunkSize);
+    if (!downloadResponse.readableStreamBody) {
+      res.status(500).json({ error: "Failed to download video file" });
+      return;
+    }
+
+    res.status(206);
+    res.setHeader("Content-Type", "video/webm");
+    res.setHeader("Content-Range", `bytes ${start}-${end}/${totalSize}`);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Content-Length", chunkSize);
+    downloadResponse.readableStreamBody.pipe(res);
+    return;
   }
 
   const downloadResponse = await blobClient.download();
@@ -130,7 +133,10 @@ apiRoute(ctx.app, ctx.registry, {
   response: z.any(),
   rawResponse: true,
   responseDescription: "WebM video recording (supports Range requests)",
-  errorResponses: { 404: { description: "Not found" } },
+  errorResponses: {
+    404: { description: "Not found" },
+    416: { description: "Requested byte range is not satisfiable" },
+  },
   handler: async (req, res) => {
     try {
       const { id } = req.params;
@@ -162,7 +168,10 @@ apiRoute(ctx.app, ctx.registry, {
   response: z.any(),
   rawResponse: true,
   responseDescription: "WebM video recording (supports Range requests)",
-  errorResponses: { 404: { description: "Not found" } },
+  errorResponses: {
+    404: { description: "Not found" },
+    416: { description: "Requested byte range is not satisfiable" },
+  },
   handler: async (req, res) => {
     try {
       const { id, runId } = req.params;
