@@ -465,6 +465,11 @@ When a codebase is selected, the API resolves the submitted spec (`codebaseRevis
 
 Profile fan-out mode is also supported for comparative runs:
 
+The Portal's **Instances** field specifies how many identical runs to submit
+(1-10, default 5), matching CLI `scope run submit --count` and API `count`.
+With profile variations, this count applies to each profile, including the base;
+the submit action shows the total expanded run count.
+
 1. User selects a base `profileId` (optionally pinned via `profileId@version`) and a `profileVariations[]` array of profile spec strings to compare against (e.g. `["def456", "ghi789@2"]`)
 2. API parses each spec, validates every variation upfront, then expands one submit call into multiple requests under one shared `submissionId`
 3. Each expanded request resolves configuration from its variation profile; unpinned specs resolve to `latestVersion`

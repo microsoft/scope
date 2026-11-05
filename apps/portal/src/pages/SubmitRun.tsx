@@ -1131,7 +1131,7 @@ export function SubmitRun() {
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">
-                <Label htmlFor="occurrences">Occurrences</Label>
+                <Label htmlFor="occurrences">Instances</Label>
                 <HelpTooltip
                   text="How many times to repeat this exact run. Useful for measuring variance across identical inputs."
                   docs="submitRunPortal"
