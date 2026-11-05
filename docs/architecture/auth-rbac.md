@@ -196,6 +196,15 @@ capability response live in `shared/rbac`. An unavailable/uninitialized authorit
 denies protected requests. Public health/readiness/version/about endpoints retain
 their explicit classification; anonymous data access is not a recovery mechanism.
 
+`GET /about` is public and storage-independent. It returns only `name`,
+`version`, `docsUrl` and `openapiUrl`; `version` is the same API contract version
+as the OpenAPI document, not a deployment commit. It does not expose build time,
+environment, storage implementation or the available worker catalog. Worker
+inventory remains on the existing authorized `/api/v1/agents` surface. This
+endpoint-specific reduction does not change the public `/health`, `/ready` or
+`/api/v1/version` contracts, including the version endpoint's build information
+and authentication-mode probe.
+
 The authorization decision has a **20-second total deadline**, with individual
 Mongo reads capped at the smaller of 5 seconds and the remaining original
 budget. Identity, membership, operation-marker and reference reads share that

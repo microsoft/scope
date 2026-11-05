@@ -65,7 +65,7 @@ apiRoute(testApp, registry, {
 });
 apiRoute(testApp, registry, {
   method: "get", path: "/about", tags: ["System"],
-  summary: "API metadata", response: z.object({ name: z.string(), version: z.string(), buildTime: z.string(), environment: z.string(), description: z.string(), workers: z.array(z.string()) }), handler: noop,
+  summary: "Public API metadata", response: z.object({ name: z.string(), version: z.string(), docsUrl: z.string(), openapiUrl: z.string() }), handler: noop,
 });
 apiRoute(testApp, registry, {
   method: "get", path: "/api/v1/version", tags: ["System"],

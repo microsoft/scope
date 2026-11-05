@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { checkMigrations } from "db-migrations/check-migrations";
 import { apiRoute } from "../openapi/api-route.js";
+import { API_VERSION } from "../openapi/registry.js";
 import type { RouteContext } from "../route-context.js";
 
 export function registerSystemRoutes(ctx: RouteContext): void {
@@ -48,42 +49,24 @@ apiRoute(ctx.app, ctx.registry, {
   },
 });
 
-// About endpoint
+// Public product metadata must not depend on deployment details or the database.
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/about",
   tags: ["System"],
-  summary: "API metadata",
+  summary: "Public API metadata",
   response: z.object({
     name: z.string(),
     version: z.string(),
-    buildTime: z.string(),
-    environment: z.string(),
-    description: z.string(),
-    workers: z.array(z.string()),
+    docsUrl: z.string(),
+    openapiUrl: z.string(),
   }),
   handler: async (_req, res) => {
-    const agents = await ctx.agentCollection
-      .find({
-        deletedAt: { $exists: false },
-        available: true,
-        versions: {
-          $elemMatch: {
-            status: "active",
-            queueName: { $type: "string", $ne: "" },
-          },
-        },
-      })
-      .project({ _id: 1 })
-      .sort({ _id: 1 })
-      .toArray();
     res.json({
-      name: "Multi-Worker API (MongoDB)",
-      version: (process.env.GIT_COMMIT || "development"),
-      buildTime: (process.env.BUILD_TIME || new Date().toISOString()),
-      environment: (process.env.SCOPE_ENVIRONMENT || "production"),
-      description: "API that routes requests to multiple workers via separate queues",
-      workers: agents.map((agent) => agent._id),
+      name: "Scope API",
+      version: API_VERSION,
+      docsUrl: "/api-docs",
+      openapiUrl: "/openapi.json",
     });
   },
 });

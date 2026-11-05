@@ -4034,35 +4034,24 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "application/json": {
                 "schema": {
                   "properties": {
-                    "buildTime": {
-                      "type": "string",
-                    },
-                    "description": {
-                      "type": "string",
-                    },
-                    "environment": {
+                    "docsUrl": {
                       "type": "string",
                     },
                     "name": {
                       "type": "string",
                     },
-                    "version": {
+                    "openapiUrl": {
                       "type": "string",
                     },
-                    "workers": {
-                      "items": {
-                        "type": "string",
-                      },
-                      "type": "array",
+                    "version": {
+                      "type": "string",
                     },
                   },
                   "required": [
                     "name",
                     "version",
-                    "buildTime",
-                    "environment",
-                    "description",
-                    "workers",
+                    "docsUrl",
+                    "openapiUrl",
                   ],
                   "type": "object",
                 },
@@ -4072,7 +4061,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "security": [],
-        "summary": "API metadata",
+        "summary": "Public API metadata",
         "tags": [
           "System",
         ],

@@ -7,6 +7,7 @@ import { app, _injectTestDependencies } from "./index.js";
 import { useTestServer } from "./test-server.js";
 import { _resetRunFacetsCacheForTests } from "./routes/requests/index.js";
 import { createAllMockDependencies, createMockCollection, mockRouteAuthorization } from "./test-helpers.js";
+import { generateOpenAPIDocument } from "./openapi/registry.js";
 
 const TEST_PROJECT_ID = "test-project";
 
@@ -118,12 +119,34 @@ describe("API Endpoints", () => {
   });
 
   describe("GET /about", () => {
-    it("returns 200 with name and version", async () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("returns only public product metadata, the API contract version and documentation links", async () => {
+      // Deployment-specific values must never enter this public response.
+      vi.stubEnv("GIT_COMMIT", "private-build-commit");
+      vi.stubEnv("BUILD_TIME", "2026-11-05T16:20:36.440Z");
+      vi.stubEnv("SCOPE_ENVIRONMENT", "private-deployment");
+      const res = await request(testServer()).get("/about");
+      const body: unknown = res.body;
+      expect(res.status).toBe(200);
+      expect(body).toEqual({
+        name: "Scope API",
+        version: generateOpenAPIDocument().info.version,
+        docsUrl: "/api-docs",
+        openapiUrl: "/openapi.json",
+      });
+      expect(mocks.agentCollection.find).not.toHaveBeenCalled();
+    });
+
+    it("remains available without reading an unavailable database or worker catalog", async () => {
+      // A public metadata request must succeed even when backing storage cannot.
+      vi.mocked(mocks.db.collection).mockImplementation(() => { throw new Error("Database unavailable"); });
+      vi.mocked(mocks.agentCollection.find).mockImplementation(() => { throw new Error("Worker catalog unavailable"); });
+
       const res = await request(testServer()).get("/about");
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty("name");
-      expect(res.body).toHaveProperty("version");
-      expect(res.body).toHaveProperty("workers");
+      expect(mocks.db.collection).not.toHaveBeenCalled();
+      expect(mocks.agentCollection.find).not.toHaveBeenCalled();
     });
   });
 

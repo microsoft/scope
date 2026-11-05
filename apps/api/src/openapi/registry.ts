@@ -6,6 +6,9 @@ import {
   OpenApiGeneratorV31,
 } from "@asteasolutions/zod-to-openapi";
 
+/** Public API contract version, independent of the deployed build. */
+export const API_VERSION = "1.0.0";
+
 export const registry = new OpenAPIRegistry();
 
 registry.registerComponent("securitySchemes", "bearerAuth", {
@@ -21,7 +24,7 @@ export function generateOpenAPIDocument() {
     openapi: "3.1.0",
     info: {
       title: "Scope API",
-      version: "1.0.0",
+      version: API_VERSION,
       description:
         "REST API for the Scope platform — benchmarking AI coding agents",
     },
