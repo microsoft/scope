@@ -1,10 +1,11 @@
 FROM node:22.22.0-bookworm@sha256:20a424ecd1d2064a44e12fe287bf3dae443aab31dc5e0c0cb6c74bef9c78911c
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl git sudo openssl mkcert libnss3-tools iptables jq \
+    ca-certificates curl git git-lfs sudo openssl mkcert libnss3-tools iptables jq \
     build-essential pkg-config libssl-dev cmake clang lldb libclang-dev \
     python3 python3-venv python3-pip xz-utils unzip chromium xvfb x11vnc novnc websockify \
     && rm -rf /var/lib/apt/lists/* \
+    && git lfs install --system --skip-repo \
     && printf 'node ALL=(root) NOPASSWD:ALL\n' > /etc/sudoers.d/node \
     && chmod 0440 /etc/sudoers.d/node
 
