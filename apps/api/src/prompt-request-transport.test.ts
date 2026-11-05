@@ -31,11 +31,28 @@ vi.mock("@azure-rest/ai-inference", () => ({
 }));
 
 vi.mock("./llm-token.js", () => ({
-  acquireInferenceClient: async () => ({
-    client: { path: () => ({ post: mockPost }) },
-    endpoint: "https://prompt-transport.example.test/models",
-    model: "test-deployment",
-  }),
+  completePortalLlm: async (request: {
+    messages: ChatCompletionRequestBody["messages"];
+    model: string;
+    temperature: number;
+    max_tokens: number;
+  }, explicitModel?: string) => {
+    const { postAdaptiveChatCompletion } = await import("./adaptive-chat-completions.js");
+    const response = await postAdaptiveChatCompletion({
+      endpoint: "https://prompt-transport.example.test/models",
+      model: explicitModel || request.model,
+      messages: request.messages,
+      temperature: request.temperature,
+      maxTokens: request.max_tokens,
+      send: (body) => mockPost({ body }),
+    });
+    const body = response.body as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = body.choices?.[0]?.message?.content;
+    if (!content) throw new Error("LLM returned empty response");
+    return content;
+  },
   isLlmAvailable: () => true,
 }));
 
