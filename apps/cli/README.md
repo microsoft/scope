@@ -91,6 +91,23 @@ scope --help
 scope run --help
 ```
 
+### Share a submission
+
+Fan-out profile variations and repetitions from one submission share a
+`submissionId`. Generate one Portal link for the whole group:
+
+```bash
+scope run share \
+  --submission-id <submission-id> \
+  --project <project-id> \
+  --portal-url https://your-scope-portal.example.com
+```
+
+This command prints a project-aware results URL grouped by profile. It needs no
+API connection; `--portal-url` is the Portal origin, which may differ from
+`SCOPE_API_URL`. Project resolution uses the usual `--project`, `SCOPE_PROJECT`,
+or saved selection. Recipients still need access to the deployment.
+
 ### Provider secrets
 
 `scope secret` manages provider credentials (GitHub tokens, Anthropic keys,

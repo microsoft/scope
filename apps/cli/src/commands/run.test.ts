@@ -59,6 +59,45 @@ async function runListAndCaptureOutput(args: string[] = []): Promise<string> {
   return lines.join("\n");
 }
 
+describe("run share", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("prints a project-aware URL for the complete submission without calling the API", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    try {
+      await makeProgram().parseAsync([
+        "run", "share", "--submission-id", "submission/a & b",
+        "--portal-url", "https://scope.example", "--project", "project-alpha",
+      ], { from: "user" });
+      expect(log).toHaveBeenCalledWith(
+        "https://scope.example/runs?projectId=project-alpha&submissionId=submission%2Fa+%26+b&groupBy=profile",
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each(["javascript:alert(1)", "https://user:password@scope.example"])(
+    "rejects unsafe Portal URLs (%s)",
+    async (portalUrl) => {
+      await expect(makeProgram().parseAsync([
+        "run", "share", "--submission-id", "submission-1",
+        "--portal-url", portalUrl, "--project", "project-alpha",
+      ], { from: "user" })).rejects.toThrow("HTTP(S) URL without credentials");
+    },
+  );
+
+  it("rejects blank submission IDs", async () => {
+    await expect(makeProgram().parseAsync([
+      "run", "share", "--submission-id", " ",
+      "--portal-url", "https://scope.example", "--project", "project-alpha",
+    ], { from: "user" })).rejects.toThrow("must not be blank");
+  });
+});
+
 describe("run list", () => {
   beforeEach(() => {
     vi.restoreAllMocks();

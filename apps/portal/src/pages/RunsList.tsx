@@ -28,6 +28,8 @@ import { StatusBadge, OutcomeBadge } from "@/components/StatusBadge";
 import { TaskPromptBadge } from "@/components/TaskPromptBadge";
 import { AgentBadge } from "@/components/AgentBadge";
 import { ShortId } from "@/components/ShortId";
+import { SubmissionLink } from "@/components/SubmissionLink";
+import { useSelectedProjectId } from "@/contexts/ProjectContext";
 import {
   ListLayout,
   FilterRail,
@@ -450,6 +452,7 @@ function NumericComparatorRow({
 
 export function RunsList() {
   const navigate = useNavigate();
+  const selectedProjectId = useSelectedProjectId();
   const queryClient = useQueryClient();
   const strictAgentCapabilities = useStrictAgentCapabilities();
   const detailOutlet = useOutlet();
@@ -1349,8 +1352,8 @@ export function RunsList() {
       width: "120px",
       hidden: columnVisibility.isHidden("submission"),
       cell: (r) =>
-        r.submissionId ? (
-          <ShortId id={r.submissionId} label="submission ID" />
+        r.submissionId && selectedProjectId ? (
+          <SubmissionLink submissionId={r.submissionId} projectId={selectedProjectId} />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         ),
@@ -1941,6 +1944,9 @@ export function RunsList() {
       railStorageKey="runs"
       actions={
         <div className="flex items-center gap-2">
+          {submissionId && selectedProjectId && (
+            <SubmissionLink submissionId={submissionId} projectId={selectedProjectId} />
+          )}
           <GroupByToggle
             value={groupBy}
             onChange={(next) => state.setFilter("groupBy", next === "none" ? null : next)}

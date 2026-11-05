@@ -470,6 +470,31 @@ Profile fan-out mode is also supported for comparative runs:
 3. Each expanded request resolves configuration from its variation profile; unpinned specs resolve to `latestVersion`
 4. Expanded requests persist `profileId` and `profileVersionId` on each `RequestDocument` for indexing and traceability
 
+### Sharing comparative submissions
+
+Fan-out variations and repeated runs from one submit call already share a
+`submissionId`; sharing does not introduce another grouping entity. After a batch
+submission, the Portal opens `/runs?projectId=<project>&submissionId=<submission>&groupBy=profile`.
+Single-run submissions continue to open the run detail page.
+
+The Runs table's Submission column and the filtered view's header expose the
+submission results link and a copy-link button. The copied absolute URL includes
+the project and full submission ID, without unrelated list filters. Clipboard
+failures produce an error toast rather than a success notification.
+
+`ProjectGate` validates a link's `projectId` against the projects list, selects it
+through `useSelectProject` (which resets project-scoped query caches), and blocks
+scoped page mounting until the target project is selected. Missing projects and
+lookup failures display an error instead of loading results from the previously
+selected project. Once selected, the scope hint is removed from the address bar
+while result filters remain; subsequent manual project switches are not pinned
+to the original link. Links do not grant access or change authentication.
+
+CLI parity is provided by
+`scope run share --submission-id <id> --project <id> --portal-url <portal-origin>`.
+It prints the same project-aware URL without making an API request. The Portal
+origin is explicit because the API and Portal can use different hosts.
+
 ## Runs List Query API
 
 `GET /api/v1/requests` powers the Portal **Runs** list and `scope run list`. All
