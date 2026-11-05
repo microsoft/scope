@@ -160,6 +160,7 @@ const SENSITIVE_HEADER_NAMES = new Set([
   "x-api-key",
   "api-key",
   "x-internal-api-key",
+  "x-scope-run-share",
 ]);
 
 const REDACTED = "[REDACTED]";
@@ -192,6 +193,7 @@ export function redactHeaders(headers: HeadersInit | undefined): Record<string, 
  */
 export function redactString(input: string): string {
   let out = input;
+  out = out.replace(/\/shared\/runs#[A-Za-z0-9._-]+/g, `/shared/runs#${REDACTED}`);
   // `Bearer <token>` anywhere in the text.
   out = out.replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`);
   // JSON-ish secret fields: "token": "..."  /  "password":"..." etc.
@@ -486,7 +488,7 @@ export async function apiFetch(baseUrl: string | undefined, path: string, init?:
 
   let response = await dispatch(url, finalInit, init?.body, init?.sensitiveBody);
 
-  if (response.status === 401 && reauthHandler) {
+  if (response.status === 401 && reauthHandler && !init?.skipAuth) {
     const shouldRetry = await reauthHandler(response);
     if (shouldRetry) {
       // Re-dispatch: the auth hook re-resolves the (possibly refreshed) token.

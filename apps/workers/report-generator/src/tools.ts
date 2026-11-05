@@ -5,7 +5,13 @@ import { defineTool } from "@github/copilot-sdk";
 import { readFileSync, readdirSync, statSync, existsSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
-import type { RequestDocument } from "shared";
+import { withRetry, type RequestDocument, type RunState } from "shared";
+
+class ReportReadError extends Error {
+  constructor(readonly status: number) {
+    super(`Failed to fetch report source: HTTP ${status}`);
+  }
+}
 
 /**
  * Create tools for the report agent to access run data via the REST API
@@ -15,8 +21,28 @@ export function createReportTools(
   apiBaseUrl: string,
   requestId: string,
   snapshotsDir: string,
-  reportId: string
+  reportId: string,
+  runId?: string,
 ) {
+  const requestPath = `${apiBaseUrl}/api/v1/requests/${encodeURIComponent(requestId)}`;
+  const attemptPath = runId ? `${requestPath}/runs/${encodeURIComponent(runId)}` : requestPath;
+  async function readRequest(): Promise<RequestDocument> {
+    return withRetry(async () => {
+      const response = await fetch(requestPath);
+      if (!response.ok) throw new ReportReadError(response.status);
+      const request: RequestDocument = await response.json();
+      if (!runId || request.run?._id === runId) return request;
+      const attemptResponse = await fetch(attemptPath);
+      if (!attemptResponse.ok) throw new ReportReadError(attemptResponse.status);
+      const run: RunState = await attemptResponse.json();
+      if (run._id !== runId) throw new Error("Report source returned a different attempt");
+      return { ...request, run };
+    }, {
+      maxRetries: 3, baseDelayMs: 500, maxDelayMs: 5000,
+      isRetryable: (error) => error instanceof TypeError ||
+        (error instanceof ReportReadError && (error.status === 429 || error.status >= 500)),
+    });
+  }
   const getRunSummary = defineTool("get_run_summary", {
     description:
       "Get the summary of the benchmark run including scenario, worker type, persona, status, iteration count, and criteria list.",
@@ -26,11 +52,7 @@ export function createReportTools(
     },
     handler: async () => {
       try {
-        const response = await fetch(`${apiBaseUrl}/api/v1/requests/${requestId}`);
-        if (!response.ok) {
-          return { error: `Failed to fetch run: ${response.status} ${response.statusText}` };
-        }
-        const request: RequestDocument = await response.json();
+        const request = await readRequest();
         const run = request.run;
         return {
           id: request._id,
@@ -62,11 +84,7 @@ export function createReportTools(
     },
     handler: async () => {
       try {
-        const response = await fetch(`${apiBaseUrl}/api/v1/requests/${requestId}`);
-        if (!response.ok) {
-          return { error: `Failed to fetch run: ${response.status} ${response.statusText}` };
-        }
-        const request: RequestDocument = await response.json();
+        const request = await readRequest();
         const run = request.run;
         const turns = (run?.turns || []).map((turn: any) => ({
           iteration: turn.iteration,
@@ -103,11 +121,7 @@ export function createReportTools(
     },
     handler: async (args: { iteration: number }) => {
       try {
-        const response = await fetch(`${apiBaseUrl}/api/v1/requests/${requestId}`);
-        if (!response.ok) {
-          return { error: `Failed to fetch run: ${response.status} ${response.statusText}` };
-        }
-        const request: RequestDocument = await response.json();
+        const request = await readRequest();
         const run = request.run;
         const turn = (run?.turns || []).find((t: any) => t.iteration === args.iteration);
         if (!turn) {
@@ -139,11 +153,7 @@ export function createReportTools(
     },
     handler: async () => {
       try {
-        const response = await fetch(`${apiBaseUrl}/api/v1/requests/${requestId}`);
-        if (!response.ok) {
-          return { error: `Failed to fetch run: ${response.status} ${response.statusText}` };
-        }
-        const request: RequestDocument = await response.json();
+        const request = await readRequest();
         const run = request.run;
         const turns = run?.turns || [];
 
@@ -201,7 +211,7 @@ export function createReportTools(
 
       try {
         const response = await fetch(
-          `${apiBaseUrl}/api/v1/requests/${requestId}/snapshots/${args.iteration}`
+          `${attemptPath}/snapshots/${args.iteration}`
         );
         if (!response.ok) {
           return { error: `Failed to download snapshot: ${response.status} ${response.statusText}` };
@@ -365,7 +375,7 @@ export function createReportTools(
     },
     handler: async (args: { iteration: number }) => {
       try {
-        const url = `${apiBaseUrl}/api/v1/requests/${requestId}/atif?iteration=${args.iteration}`;
+        const url = `${attemptPath}/atif?iteration=${args.iteration}`;
         const response = await fetch(url);
         if (!response.ok) {
           if (response.status === 404) {

@@ -107,7 +107,8 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
         this.reportConfig.apiBaseUrl,
         requestId,
         snapshotsDir,
-        reportId
+        reportId,
+        doc.runId,
       );
 
       await log("info", "Initialized tools, starting Copilot SDK session");
@@ -176,6 +177,7 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
           $set: {
             status: "completed",
             content,
+            ...(doc.runId ? { sourceRunId: doc.runId } : {}),
             updatedAt: new Date(),
           },
         } as any

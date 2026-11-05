@@ -1682,6 +1682,38 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "properties": {},
         "type": "object",
       },
+      "LogEvent": {
+        "properties": {
+          "data": {
+            "additionalProperties": {},
+            "type": "object",
+          },
+          "level": {
+            "enum": [
+              "info",
+              "warn",
+              "error",
+              "debug",
+            ],
+            "type": "string",
+          },
+          "message": {
+            "type": "string",
+          },
+          "source": {
+            "type": "string",
+          },
+          "timestamp": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "timestamp",
+          "level",
+          "message",
+        ],
+        "type": "object",
+      },
       "McpServerHeader": {
         "properties": {
           "name": {
@@ -2360,6 +2392,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "$ref": "#/components/schemas/Reporter",
           },
           "requestId": {
+            "type": "string",
+          },
+          "runId": {
+            "type": "string",
+          },
+          "sourceRunId": {
             "type": "string",
           },
           "status": {
@@ -3968,6 +4006,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "description": "Use the unchanged IdP access token, without the Bearer prefix.",
         "scheme": "bearer",
         "type": "http",
+      },
+      "runShareToken": {
+        "description": "Secret from the fragment of a shared run URL. Grants only the link's selected read access.",
+        "in": "header",
+        "name": "X-Scope-Run-Share",
+        "type": "apiKey",
       },
     },
   },
@@ -10267,6 +10311,932 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
       },
     },
+    "/api/v1/requests/{id}/runs/{runId}/shares": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "properties": {
+                          "content": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "conversations": {
+                                "type": "boolean",
+                              },
+                              "evaluationDetails": {
+                                "type": "boolean",
+                              },
+                              "logs": {
+                                "type": "boolean",
+                              },
+                              "network": {
+                                "type": "boolean",
+                              },
+                              "prompts": {
+                                "type": "boolean",
+                              },
+                              "reports": {
+                                "type": "boolean",
+                              },
+                              "snapshots": {
+                                "type": "boolean",
+                              },
+                              "video": {
+                                "type": "boolean",
+                              },
+                            },
+                            "required": [
+                              "prompts",
+                              "evaluationDetails",
+                              "conversations",
+                              "logs",
+                              "reports",
+                              "snapshots",
+                              "network",
+                              "video",
+                            ],
+                            "type": "object",
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string",
+                          },
+                          "expiresAt": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null",
+                            ],
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "type": "string",
+                          },
+                          "label": {
+                            "type": "string",
+                          },
+                          "requestId": {
+                            "type": "string",
+                          },
+                          "revokedAt": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null",
+                            ],
+                          },
+                          "runId": {
+                            "type": "string",
+                          },
+                          "updatedAt": {
+                            "format": "date-time",
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "id",
+                          "requestId",
+                          "runId",
+                          "label",
+                          "content",
+                          "createdAt",
+                          "updatedAt",
+                          "expiresAt",
+                          "revokedAt",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "next": {
+                      "format": "uuid",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                  },
+                  "required": [
+                    "data",
+                    "next",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "401": {
+            "description": "Active Scope user required",
+          },
+          "404": {
+            "description": "Sharing disabled, attempt unavailable, or link not owned by this user",
+          },
+          "429": {
+            "description": "Rate limited",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "List your links for this attempt (50 per page)",
+        "tags": [
+          "Run sharing",
+        ],
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "acknowledgeSensitiveContent": {
+                    "type": "boolean",
+                  },
+                  "content": {
+                    "additionalProperties": false,
+                    "default": {
+                      "conversations": false,
+                      "evaluationDetails": false,
+                      "logs": false,
+                      "network": false,
+                      "prompts": false,
+                      "reports": false,
+                      "snapshots": false,
+                      "video": false,
+                    },
+                    "properties": {
+                      "conversations": {
+                        "type": "boolean",
+                      },
+                      "evaluationDetails": {
+                        "type": "boolean",
+                      },
+                      "logs": {
+                        "type": "boolean",
+                      },
+                      "network": {
+                        "type": "boolean",
+                      },
+                      "prompts": {
+                        "type": "boolean",
+                      },
+                      "reports": {
+                        "type": "boolean",
+                      },
+                      "snapshots": {
+                        "type": "boolean",
+                      },
+                      "video": {
+                        "type": "boolean",
+                      },
+                    },
+                    "required": [
+                      "prompts",
+                      "evaluationDetails",
+                      "conversations",
+                      "logs",
+                      "reports",
+                      "snapshots",
+                      "network",
+                      "video",
+                    ],
+                    "type": "object",
+                  },
+                  "expiresAt": {
+                    "format": "date-time",
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "label": {
+                    "default": "Shared run",
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                    },
+                    "share": {
+                      "properties": {
+                        "content": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "conversations": {
+                              "type": "boolean",
+                            },
+                            "evaluationDetails": {
+                              "type": "boolean",
+                            },
+                            "logs": {
+                              "type": "boolean",
+                            },
+                            "network": {
+                              "type": "boolean",
+                            },
+                            "prompts": {
+                              "type": "boolean",
+                            },
+                            "reports": {
+                              "type": "boolean",
+                            },
+                            "snapshots": {
+                              "type": "boolean",
+                            },
+                            "video": {
+                              "type": "boolean",
+                            },
+                          },
+                          "required": [
+                            "prompts",
+                            "evaluationDetails",
+                            "conversations",
+                            "logs",
+                            "reports",
+                            "snapshots",
+                            "network",
+                            "video",
+                          ],
+                          "type": "object",
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                        "expiresAt": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null",
+                          ],
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                        "label": {
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "type": "string",
+                        },
+                        "revokedAt": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null",
+                          ],
+                        },
+                        "runId": {
+                          "type": "string",
+                        },
+                        "updatedAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "id",
+                        "requestId",
+                        "runId",
+                        "label",
+                        "content",
+                        "createdAt",
+                        "updatedAt",
+                        "expiresAt",
+                        "revokedAt",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "share",
+                    "path",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "400": {
+            "description": "Invalid content policy or expiry",
+          },
+          "401": {
+            "description": "Active Scope user required",
+          },
+          "404": {
+            "description": "Sharing disabled, attempt unavailable, or link not owned by this user",
+          },
+          "429": {
+            "description": "Rate limited",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Create a public, read-only link to a run attempt",
+        "tags": [
+          "Run sharing",
+        ],
+      },
+    },
+    "/api/v1/requests/{id}/runs/{runId}/shares/{shareId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "shareId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "content": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "conversations": {
+                          "type": "boolean",
+                        },
+                        "evaluationDetails": {
+                          "type": "boolean",
+                        },
+                        "logs": {
+                          "type": "boolean",
+                        },
+                        "network": {
+                          "type": "boolean",
+                        },
+                        "prompts": {
+                          "type": "boolean",
+                        },
+                        "reports": {
+                          "type": "boolean",
+                        },
+                        "snapshots": {
+                          "type": "boolean",
+                        },
+                        "video": {
+                          "type": "boolean",
+                        },
+                      },
+                      "required": [
+                        "prompts",
+                        "evaluationDetails",
+                        "conversations",
+                        "logs",
+                        "reports",
+                        "snapshots",
+                        "network",
+                        "video",
+                      ],
+                      "type": "object",
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string",
+                    },
+                    "label": {
+                      "type": "string",
+                    },
+                    "requestId": {
+                      "type": "string",
+                    },
+                    "revokedAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "runId": {
+                      "type": "string",
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "requestId",
+                    "runId",
+                    "label",
+                    "content",
+                    "createdAt",
+                    "updatedAt",
+                    "expiresAt",
+                    "revokedAt",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "401": {
+            "description": "Active Scope user required",
+          },
+          "404": {
+            "description": "Sharing disabled, attempt unavailable, or link not owned by this user",
+          },
+          "429": {
+            "description": "Rate limited",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Revoke your shared run link",
+        "tags": [
+          "Run sharing",
+        ],
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "shareId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "acknowledgeSensitiveContent": {
+                    "type": "boolean",
+                  },
+                  "content": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "conversations": {
+                        "type": "boolean",
+                      },
+                      "evaluationDetails": {
+                        "type": "boolean",
+                      },
+                      "logs": {
+                        "type": "boolean",
+                      },
+                      "network": {
+                        "type": "boolean",
+                      },
+                      "prompts": {
+                        "type": "boolean",
+                      },
+                      "reports": {
+                        "type": "boolean",
+                      },
+                      "snapshots": {
+                        "type": "boolean",
+                      },
+                      "video": {
+                        "type": "boolean",
+                      },
+                    },
+                    "required": [
+                      "prompts",
+                      "evaluationDetails",
+                      "conversations",
+                      "logs",
+                      "reports",
+                      "snapshots",
+                      "network",
+                      "video",
+                    ],
+                    "type": "object",
+                  },
+                  "expiresAt": {
+                    "format": "date-time",
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "label": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "content": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "conversations": {
+                          "type": "boolean",
+                        },
+                        "evaluationDetails": {
+                          "type": "boolean",
+                        },
+                        "logs": {
+                          "type": "boolean",
+                        },
+                        "network": {
+                          "type": "boolean",
+                        },
+                        "prompts": {
+                          "type": "boolean",
+                        },
+                        "reports": {
+                          "type": "boolean",
+                        },
+                        "snapshots": {
+                          "type": "boolean",
+                        },
+                        "video": {
+                          "type": "boolean",
+                        },
+                      },
+                      "required": [
+                        "prompts",
+                        "evaluationDetails",
+                        "conversations",
+                        "logs",
+                        "reports",
+                        "snapshots",
+                        "network",
+                        "video",
+                      ],
+                      "type": "object",
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string",
+                    },
+                    "label": {
+                      "type": "string",
+                    },
+                    "requestId": {
+                      "type": "string",
+                    },
+                    "revokedAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "runId": {
+                      "type": "string",
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "requestId",
+                    "runId",
+                    "label",
+                    "content",
+                    "createdAt",
+                    "updatedAt",
+                    "expiresAt",
+                    "revokedAt",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "400": {
+            "description": "Invalid policy or expiry",
+          },
+          "401": {
+            "description": "Active Scope user required",
+          },
+          "404": {
+            "description": "Sharing disabled, attempt unavailable, or link not owned by this user",
+          },
+          "429": {
+            "description": "Rate limited",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Update your shared link's policy or expiry",
+        "tags": [
+          "Run sharing",
+        ],
+      },
+    },
+    "/api/v1/requests/{id}/runs/{runId}/shares/{shareId}/rotate": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "shareId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                    },
+                    "share": {
+                      "properties": {
+                        "content": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "conversations": {
+                              "type": "boolean",
+                            },
+                            "evaluationDetails": {
+                              "type": "boolean",
+                            },
+                            "logs": {
+                              "type": "boolean",
+                            },
+                            "network": {
+                              "type": "boolean",
+                            },
+                            "prompts": {
+                              "type": "boolean",
+                            },
+                            "reports": {
+                              "type": "boolean",
+                            },
+                            "snapshots": {
+                              "type": "boolean",
+                            },
+                            "video": {
+                              "type": "boolean",
+                            },
+                          },
+                          "required": [
+                            "prompts",
+                            "evaluationDetails",
+                            "conversations",
+                            "logs",
+                            "reports",
+                            "snapshots",
+                            "network",
+                            "video",
+                          ],
+                          "type": "object",
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                        "expiresAt": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null",
+                          ],
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                        "label": {
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "type": "string",
+                        },
+                        "revokedAt": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null",
+                          ],
+                        },
+                        "runId": {
+                          "type": "string",
+                        },
+                        "updatedAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "id",
+                        "requestId",
+                        "runId",
+                        "label",
+                        "content",
+                        "createdAt",
+                        "updatedAt",
+                        "expiresAt",
+                        "revokedAt",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "share",
+                    "path",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "401": {
+            "description": "Active Scope user required",
+          },
+          "404": {
+            "description": "Sharing disabled, attempt unavailable, or link not owned by this user",
+          },
+          "429": {
+            "description": "Rate limited",
+          },
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+          },
+        ],
+        "summary": "Replace your link's secret and invalidate its previous URL",
+        "tags": [
+          "Run sharing",
+        ],
+      },
+    },
     "/api/v1/requests/{id}/runs/{runId}/snapshots/{iteration}": {
       "get": {
         "parameters": [
@@ -10974,6 +11944,451 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Import batch run archive",
         "tags": [
           "Requests",
+        ],
+      },
+    },
+    "/api/v1/shared/runs/artifacts/{artifactId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifactId",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+          },
+          "404": {
+            "description": "Artifact not shared or unavailable",
+          },
+          "413": {
+            "description": "Artifact too large",
+          },
+          "416": {
+            "description": "Invalid byte range",
+          },
+        },
+        "security": [
+          {
+            "runShareToken": [],
+          },
+        ],
+        "summary": "Download an explicitly shared artifact (128 MiB maximum)",
+        "tags": [
+          "Run sharing",
+        ],
+      },
+    },
+    "/api/v1/shared/runs/logs": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "events": {
+                      "items": {
+                        "$ref": "#/components/schemas/LogEvent",
+                      },
+                      "type": "array",
+                    },
+                    "truncated": {
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "events",
+                    "truncated",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "runShareToken": [],
+          },
+        ],
+        "summary": "Read up to the last 1 MiB of persisted shared run logs",
+        "tags": [
+          "Run sharing",
+        ],
+      },
+    },
+    "/api/v1/shared/runs/reports": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "properties": {
+                          "content": {
+                            "type": "string",
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string",
+                          },
+                          "id": {
+                            "type": "string",
+                          },
+                          "label": {
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "content",
+                          "createdAt",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                  },
+                  "required": [
+                    "data",
+                    "next",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "security": [
+          {
+            "runShareToken": [],
+          },
+        ],
+        "summary": "Read reports verified as belonging to the shared attempt",
+        "tags": [
+          "Run sharing",
+        ],
+      },
+    },
+    "/api/v1/shared/runs/view": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "artifacts": {
+                      "items": {
+                        "properties": {
+                          "category": {
+                            "enum": [
+                              "conversations",
+                              "snapshots",
+                              "network",
+                              "video",
+                            ],
+                            "type": "string",
+                          },
+                          "contentType": {
+                            "type": "string",
+                          },
+                          "id": {
+                            "type": "string",
+                          },
+                          "label": {
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "category",
+                          "contentType",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "content": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "conversations": {
+                          "type": "boolean",
+                        },
+                        "evaluationDetails": {
+                          "type": "boolean",
+                        },
+                        "logs": {
+                          "type": "boolean",
+                        },
+                        "network": {
+                          "type": "boolean",
+                        },
+                        "prompts": {
+                          "type": "boolean",
+                        },
+                        "reports": {
+                          "type": "boolean",
+                        },
+                        "snapshots": {
+                          "type": "boolean",
+                        },
+                        "video": {
+                          "type": "boolean",
+                        },
+                      },
+                      "required": [
+                        "prompts",
+                        "evaluationDetails",
+                        "conversations",
+                        "logs",
+                        "reports",
+                        "snapshots",
+                        "network",
+                        "video",
+                      ],
+                      "type": "object",
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "label": {
+                      "type": "string",
+                    },
+                    "prompts": {
+                      "items": {
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                          },
+                          "text": {
+                            "type": [
+                              "string",
+                              "null",
+                            ],
+                          },
+                        },
+                        "required": [
+                          "label",
+                          "text",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "run": {
+                      "properties": {
+                        "agentVersion": {
+                          "type": "string",
+                        },
+                        "attemptNumber": {
+                          "type": "number",
+                        },
+                        "durationMs": {
+                          "type": "number",
+                        },
+                        "error": {
+                          "type": "string",
+                        },
+                        "finishedAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                        "model": {
+                          "type": "string",
+                        },
+                        "outcome": {
+                          "enum": [
+                            "succeeded",
+                            "failed",
+                            "finished",
+                          ],
+                          "type": "string",
+                        },
+                        "result": {
+                          "type": "string",
+                        },
+                        "startedAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                        "status": {
+                          "enum": [
+                            "pending",
+                            "queued",
+                            "processing",
+                            "paused",
+                            "done",
+                          ],
+                          "type": "string",
+                        },
+                        "turns": {
+                          "items": {
+                            "properties": {
+                              "codingAgentResponse": {
+                                "type": "string",
+                              },
+                              "criteriaResults": {
+                                "items": {
+                                  "properties": {
+                                    "criterionId": {
+                                      "type": "string",
+                                    },
+                                    "evaluated": {
+                                      "type": "boolean",
+                                    },
+                                    "feedback": {
+                                      "type": "string",
+                                    },
+                                    "passed": {
+                                      "type": "boolean",
+                                    },
+                                  },
+                                  "required": [
+                                    "criterionId",
+                                    "passed",
+                                    "evaluated",
+                                  ],
+                                  "type": "object",
+                                },
+                                "type": "array",
+                              },
+                              "durationMs": {
+                                "type": "number",
+                              },
+                              "gate": {
+                                "type": "string",
+                              },
+                              "iteration": {
+                                "type": "number",
+                              },
+                              "judgeFeedback": {
+                                "type": "string",
+                              },
+                              "passed": {
+                                "type": "boolean",
+                              },
+                              "timestamp": {
+                                "format": "date-time",
+                                "type": "string",
+                              },
+                              "toolCalls": {
+                                "items": {
+                                  "properties": {
+                                    "arguments": {
+                                      "additionalProperties": {},
+                                      "type": "object",
+                                    },
+                                    "name": {
+                                      "type": "string",
+                                    },
+                                    "response": {
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "name",
+                                    "arguments",
+                                  ],
+                                  "type": "object",
+                                },
+                                "type": "array",
+                              },
+                            },
+                            "required": [
+                              "iteration",
+                              "passed",
+                              "timestamp",
+                              "criteriaResults",
+                            ],
+                            "type": "object",
+                          },
+                          "type": "array",
+                        },
+                        "workerType": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "attemptNumber",
+                        "status",
+                        "workerType",
+                        "turns",
+                      ],
+                      "type": "object",
+                    },
+                    "version": {
+                      "enum": [
+                        1,
+                      ],
+                      "type": "number",
+                    },
+                  },
+                  "required": [
+                    "version",
+                    "label",
+                    "content",
+                    "expiresAt",
+                    "run",
+                    "artifacts",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Link unavailable",
+          },
+          "429": {
+            "description": "Rate limited",
+          },
+        },
+        "security": [
+          {
+            "runShareToken": [],
+          },
+        ],
+        "summary": "View the content permitted by a public run link",
+        "tags": [
+          "Run sharing",
         ],
       },
     },
@@ -12001,6 +13416,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                     "environment": {
                       "type": "string",
                     },
+                    "runSharingEnabled": {
+                      "type": "boolean",
+                    },
                     "strictAgentCapabilities": {
                       "type": "boolean",
                     },
@@ -12010,6 +13428,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                     "buildTime",
                     "environment",
                     "strictAgentCapabilities",
+                    "runSharingEnabled",
                   ],
                   "type": "object",
                 },

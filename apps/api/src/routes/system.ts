@@ -5,6 +5,7 @@ import { z } from "zod";
 import { checkMigrations } from "db-migrations/check-migrations";
 import { apiRoute } from "../openapi/api-route.js";
 import type { RouteContext } from "../route-context.js";
+import { isRunSharingEnabled } from "../run-sharing/guards.js";
 
 export function registerSystemRoutes(ctx: RouteContext): void {
 
@@ -99,6 +100,7 @@ apiRoute(ctx.app, ctx.registry, {
     buildTime: z.string(),
     environment: z.string(),
     strictAgentCapabilities: z.boolean(),
+    runSharingEnabled: z.boolean(),
   }),
   handler: async (_req, res) => {
     res.json({
@@ -106,6 +108,7 @@ apiRoute(ctx.app, ctx.registry, {
       buildTime: (process.env.BUILD_TIME || new Date().toISOString()),
       environment: (process.env.SCOPE_ENVIRONMENT || "production"),
       strictAgentCapabilities: ctx.strictAgentCapabilities,
+      runSharingEnabled: isRunSharingEnabled(),
     });
   },
 });

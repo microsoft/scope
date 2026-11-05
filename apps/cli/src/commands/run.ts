@@ -20,6 +20,7 @@ import { requireProjectId } from "../utils/config.js";
 import { apiFetch, getApiBasePath } from "../utils/api-client.js";
 import { parseGatesOption } from "../utils/gates.js";
 import { buildResourceBindingSpecs, collectRepeatable } from "../utils/resources.js";
+import { registerRunShareCommands } from "./run-share.js";
 
 /**
  * Resolve a CLI option that may be either a literal string or a `@path`
@@ -66,6 +67,7 @@ const run = program
   });
 
 configureHelp(run);
+registerRunShareCommands(run);
 
 run
   .command("submit")

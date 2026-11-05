@@ -204,6 +204,7 @@ export function createAllMockDependencies() {
   const db = createMockDb();
   const collection = createMockCollection();
   const runsCollection = createMockCollection();
+  const projectCollection = createMockCollection();
   const criteriaCollection = createMockCollection();
   const promptFeatureCollection = createMockCollection();
   const reportCollection = createMockCollection();
@@ -232,6 +233,7 @@ export function createAllMockDependencies() {
     db,
     collection,
     runsCollection,
+    projectCollection,
     criteriaCollection,
     promptFeatureCollection,
     reportCollection,
@@ -262,6 +264,7 @@ export function createAllMockDependencies() {
     db: ReturnType<typeof createMockDb>;
     collection: Collection;
     runsCollection: Collection;
+    projectCollection: Collection;
     criteriaCollection: Collection;
     promptFeatureCollection: Collection;
     reportCollection: Collection;

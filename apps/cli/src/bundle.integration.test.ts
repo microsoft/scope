@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { resolve, join } from "node:path";
 import { existsSync, copyFileSync, chmodSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { SUMMARY_SHARE_CONTENT, type SharedRun } from "shared/run-sharing";
 
 const execFileAsync = promisify(execFile);
 const BUNDLE_PATH = resolve(import.meta.dirname, "../dist/scope.mjs");
@@ -20,6 +21,11 @@ if (!existsSync(BUNDLE_PATH)) {
 
 /** Canned API responses for the mock server */
 const MOCK_RESPONSES: Record<string, unknown> = {
+  "/api/v1/shared/runs/view": {
+    version: 1, label: "Shared result", content: SUMMARY_SHARE_CONTENT, expiresAt: null,
+    run: { attemptNumber: 1, status: "done", workerType: "coder-acp-copilot", turns: [] },
+    artifacts: [],
+  },
   "/api/v1/requests": {
     data: [
       {
@@ -44,6 +50,7 @@ let server: Server;
 let port: number;
 let bundleDir: string;
 let isolatedBundle: string;
+const publicRequests: Array<{ url: string; authorized: boolean; token: string | string[] | undefined }> = [];
 
 beforeAll(async () => {
   bundleDir = mkdtempSync(join(tmpdir(), "scope-bundle-"));
@@ -51,6 +58,9 @@ beforeAll(async () => {
   copyFileSync(BUNDLE_PATH, isolatedBundle);
   server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost`);
+    if (url.pathname.startsWith("/api/v1/shared/runs/")) {
+      publicRequests.push({ url: req.url ?? "", authorized: Boolean(req.headers.authorization), token: req.headers["x-scope-run-share"] });
+    }
     const response = MOCK_RESPONSES[url.pathname];
     if (response) {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -91,6 +101,16 @@ async function runScope(args: string[], env: NodeJS.ProcessEnv = {}): Promise<{ 
 }
 
 describe("Bundle integration tests", () => {
+  it("opens a public run URL anonymously from the isolated standalone bundle", async () => {
+    const token = `11111111-2222-4333-8444-555555555555.${"A".repeat(43)}`;
+    const { stdout } = await runScope(["run", "share", "view", `http://127.0.0.1:${port}/shared/runs#${token}`], {
+      SCOPE_API_URL: "", SCOPE_TOKEN: "private-idp-token",
+    });
+    const result: SharedRun = JSON.parse(stdout);
+    expect(result.label).toBe("Shared result");
+    expect(publicRequests).toEqual([{ url: "/api/v1/shared/runs/view", authorized: false, token }]);
+  });
+
   it("--version prints the version", async () => {
     const { stdout } = await runScope(["--version"], { SCOPE_API_URL: "" });
     expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);

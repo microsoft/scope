@@ -12,7 +12,12 @@ Scope verifies IdP access tokens and resolves an active application user, but do
 no-token/auth-not-configured anonymous rollout and public endpoints remain supported.
 An authenticated identity that is missing or disabled in Scope is **not** anonymous.
 
-The implemented boundary is narrow: only **`POST /api/v1/users/me`**
+Opt-in [public run sharing](app-design.md#public-run-sharing) is a separate,
+capability-limited exception: anyone holding a valid link can read its selected
+content without an IdP identity. Publishing still requires an active Scope
+user. This does not enable anonymous discovery, mutation, or full RBAC.
+
+The implemented enrollment boundary is narrow: only **`POST /api/v1/users/me`**
 may JIT-create a user, refresh their profile/`lastLoginAt`, or apply bootstrap-admin
 Every GET `/users/me` and other -authenticated routes verify the IdP token,
 then read an existing active principal through one Redis-backed resolver. Clients
@@ -35,7 +40,9 @@ The following are **deferred RBAC goals**, not guarantees of the current rollout
    is discoverable, usable, and editable only by its owner; shared data is globally
    discoverable and usable by everyone but **read-only unless you own it**. An `admin` sees
    everything. (See §5.)
-5. Keep a new **anonymous/public product mode out of scope.** In the future permission
+5. Keep a broad **anonymous/public product mode out of scope.** Explicit
+   capability-limited run links are the implemented opt-in exception, not a grant
+   of application permissions to anonymous callers. In the future permission
    model, the `anonymous` principal carries **zero
    permissions** and is rejected by any permission-gated route. Treating it as a named
    principal is a guard *mechanism* convenience only — it is **not** a public experience and
@@ -78,6 +85,7 @@ must be resolved with stakeholders before or during implementation.
 | Portal | MSAL supplies the IdP bearer; `AuthProvider` gates queries on `/users/me`. Fresh callback uses POST; cached-account reload uses GET. Scope UUID and role come from the API, not account claims. | [AuthContext.tsx](../../apps/portal/src/contexts/AuthContext.tsx), [apps/portal/src/lib/api.ts](../../apps/portal/src/lib/api.ts), [apps/portal/src/main.tsx](../../apps/portal/src/main.tsx) |
 | Token Manager | Already has a `users`-like pattern for **provider** credentials (not app users). Reuse its KeyVault/Mongo patterns, not its schema. | [apps/token-manager/src/account-routes.ts](../../apps/token-manager/src/account-routes.ts) |
 | Migrations | `mongo-migrate-ts`, numbered files with `up()`/`down()`. CosmosDB-compatible constraints apply. | [packages/db-migrations/src/migrations](../../packages/db-migrations/src/migrations) |
+| Public run links | Default-off capability routes are mounted before IdP middleware. Active signed-in users publish links and manage their own records; anonymous recipients have selected, attempt-scoped reads only. The public Portal bootstrap does not initialize MSAL or enroll users. | [routes/run-shares.ts](../../apps/api/src/routes/run-shares.ts), [routes/public-run-shares.ts](../../apps/api/src/routes/public-run-shares.ts), [public-main.tsx](../../apps/portal/src/public-main.tsx) |
 
 Key constraint: **coder workers** do **not** call the API for run state — they write to
 MongoDB directly, so their traffic is out of scope for user auth. **But there is one

@@ -34,6 +34,31 @@ function reqOf(mock: ReturnType<typeof vi.fn>, call = 0): Request {
   return mock.mock.calls[call][0] as Request;
 }
 
+describe("public run-share credentials", () => {
+  afterEach(() => { vi.unstubAllGlobals(); resetApiClient(); });
+
+  it("redacts share headers and URL fragments", () => {
+    expect(redactHeaders({ "X-Scope-Run-Share": "capability" })).toEqual({ "X-Scope-Run-Share": "[REDACTED]" });
+    expect(redactString('{"path":"/shared/runs#id.secret"}')).toBe('{"path":"/shared/runs#[REDACTED]"}');
+  });
+
+  it("never invokes interactive reauthentication for an explicitly anonymous read", async () => {
+    resetApiClient();
+    setTokenProvider(() => "private-idp-token");
+    const reauth = vi.fn(async () => true);
+    setReauthHandler(reauth);
+    const fetch = vi.fn().mockResolvedValue(new Response("Denied", { status: 401 }));
+    vi.stubGlobal("fetch", fetch);
+    const response = await apiFetch("https://scope.test", "/shared/runs/view", {
+      skipAuth: true, headers: { "X-Scope-Run-Share": "capability" },
+    });
+    expect(response.status).toBe(401);
+    expect(reqOf(fetch).headers.has("authorization")).toBe(false);
+    expect(reauth).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("apiFetch URL handling", () => {
   beforeEach(() => {
     resetApiClient();

@@ -43,16 +43,13 @@ vi.mock("shared", () => {
   return {
     BaseQueueProcessor: StubBaseQueueProcessor,
     TokenManagerClient: StubTokenManagerClient,
+    REPORT_SYSTEM_PROMPT: "You are a test prompt.",
     withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
   };
 });
 
 vi.mock("./tools.js", () => ({
   createReportTools: vi.fn(() => []),
-}));
-
-vi.mock("./prompt.js", () => ({
-  REPORT_SYSTEM_PROMPT: "You are a test prompt.",
 }));
 
 vi.mock("fs", () => ({
@@ -445,6 +442,36 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
     const requestedUrl = String(fetchMock.mock.calls[0][0]);
     expect(requestedUrl).toContain("/report-templates/nonexistent-template");
     expect(requestedUrl).toContain("projectId=proj-1");
+  });
+
+  it.each([undefined, "pinned-attempt"])("records verified attempt provenance only for a pinned job (%s)", async (runId) => {
+    Reflect.set(processor, "fetchReportTemplate", vi.fn(async () => ({
+      id: "template-1", name: "Template", userPrompt: "Summarize the run.", projectId: "proj-1",
+    })));
+    Reflect.set(processor, "runCopilotSession", vi.fn(async () => "Completed report"));
+    Reflect.set(processor, "safeDeleteMessage", vi.fn(async () => {}));
+    const generate: (
+      doc: import("shared").ReportDocument,
+      message: ReturnType<typeof makeMessage>,
+      heartbeat: { stop: () => string },
+      logger: typeof log,
+    ) => Promise<void> = Reflect.get(processor, "handleRequest");
+    await generate.call(processor, makeReportDoc({
+      _id: `report-proof-${crypto.randomUUID()}`, templateId: "template-1", runId,
+    }), makeMessage(), { stop: () => "pop-1" }, log);
+    const updates: unknown[] = mockUpdateOne.mock.calls.map(([, update]) => update);
+    expect(updates).toContainEqual(expect.objectContaining({
+      $set: expect.objectContaining({ status: "completed", content: "Completed report" }),
+    }));
+    if (runId) {
+      expect(updates).toContainEqual(expect.objectContaining({
+        $set: expect.objectContaining({ sourceRunId: runId }),
+      }));
+    } else {
+      expect(updates).not.toContainEqual(expect.objectContaining({
+        $set: expect.objectContaining({ sourceRunId: expect.anything() }),
+      }));
+    }
   });
 });
 

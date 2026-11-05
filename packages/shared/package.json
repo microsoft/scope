@@ -30,6 +30,11 @@
       "types": "./dist/utils/retry.d.ts",
       "import": "./dist/utils/retry.js"
     },
+    "./run-sharing": {
+      "source": "./src/schemas/run-share.ts",
+      "types": "./dist/schemas/run-share.d.ts",
+      "import": "./dist/schemas/run-share.js"
+    },
     "./criteria-store": {
       "source": "./src/criteria/criteria-store.ts",
       "types": "./dist/criteria/criteria-store.d.ts",

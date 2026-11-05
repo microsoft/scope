@@ -37,6 +37,8 @@ export const ReportResponseSchema = z
   .object({
     _id: z.string(),
     requestId: z.string(),
+    runId: z.string().optional(),
+    sourceRunId: z.string().optional(),
     templateId: z.string().optional(),
     reporter: ReporterSchema.optional(),
     content: z.string().optional(),

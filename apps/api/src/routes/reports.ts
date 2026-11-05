@@ -77,6 +77,7 @@ apiRoute(ctx.app, ctx.registry, {
         _id: reportId,
         projectId: run.projectId,
         requestId,
+        runId: run.run?._id,
         ...(templateId ? { templateId } : {}),
         status: "pending",
         createdAt: new Date(),
@@ -169,6 +170,7 @@ apiRoute(ctx.app, ctx.registry, {
       // Create reports only for runs that exist
       const validIds = requestIds.filter(id => foundIds.has(id));
       const projectByRequestId = new Map(runs.map(r => [r._id, r.projectId]));
+      const attemptByRequestId = new Map(runs.map(r => [r._id, r.run?._id]));
       const created: { reportId: string; requestId: string }[] = [];
 
       for (const requestId of validIds) {
@@ -177,6 +179,7 @@ apiRoute(ctx.app, ctx.registry, {
           _id: reportId,
           projectId: projectByRequestId.get(requestId)!,
           requestId,
+          runId: attemptByRequestId.get(requestId),
           status: "pending",
           createdAt: new Date(),
         };
@@ -530,6 +533,7 @@ apiRoute(ctx.app, ctx.registry, {
             _id: reportId,
             projectId: run.projectId,
             requestId,
+            runId: run.run?._id,
             templateId: template.id,
             status: "pending",
             createdAt: new Date(),
@@ -604,6 +608,7 @@ apiRoute(ctx.app, ctx.registry, {
               _id: reportId,
               projectId: run.projectId,
               requestId: run._id,
+              runId: run.run?._id,
               templateId: template.id,
               status: "pending",
               createdAt: new Date(),
