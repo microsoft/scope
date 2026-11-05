@@ -184,6 +184,15 @@ pnpm dev:<worker-name>            # Individual worker (native)
 pnpm open:portal                  # Open portal in browser
 ```
 
+Before a large clean Docker or Podman rebuild, inspect the container runtime
+storage and any runtime VM filesystem as described in
+[`CONTRIBUTING.md`](CONTRIBUTING.md#prepare-container-storage-for-a-clean-rebuild),
+then report the available space and Scope-specific resources. Never
+automatically run broad prune commands or delete unrelated images, containers,
+build cache, or volumes. Any cleanup must target verified Scope resources and
+requires explicit user approval; warn that named volumes may contain local
+database or authentication data.
+
 ### Shared Dev Infrastructure (CosmosDB)
 
 For testing against real Azure CosmosDB (e.g. index behavior), a shared dev instance can be provisioned. Each worktree gets its own isolated database. See [docs/shared-dev-infra.md](docs/shared-dev-infra.md) for setup and usage.

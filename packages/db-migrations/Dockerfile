@@ -1,12 +1,9 @@
 FROM node:22.22.0-slim
 
 ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
-ENV npm_config_registry=${NPM_CONFIG_REGISTRY} \
-    COREPACK_NPM_REGISTRY=${NPM_CONFIG_REGISTRY}
-# corepack bootstraps pnpm from the registry's per-version metadata endpoint,
-# which some private registry proxies don't serve; fall back to a pinned global
-# install (honors npm_config_registry) so restricted networks can still build.
-RUN corepack enable && (corepack prepare pnpm@10.29.1 --activate || npm install -g pnpm@10.29.1 --force)
+ARG COREPACK_NPM_REGISTRY=
+COPY scripts/bootstrap-pnpm.sh /usr/local/bin/bootstrap-pnpm
+RUN NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY}" COREPACK_NPM_REGISTRY="${COREPACK_NPM_REGISTRY}" sh /usr/local/bin/bootstrap-pnpm
 WORKDIR /app
 
 # Copy workspace root files
@@ -15,7 +12,7 @@ COPY tsconfig.base.json ./
 COPY packages/db-migrations/package.json ./packages/db-migrations/
 
 # Install dependencies (production + dev for tsx)
-RUN pnpm install --frozen-lockfile --filter db-migrations
+RUN NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY}" pnpm install --frozen-lockfile --filter db-migrations
 
 # Copy migration source files
 COPY packages/db-migrations/tsconfig.json ./packages/db-migrations/
