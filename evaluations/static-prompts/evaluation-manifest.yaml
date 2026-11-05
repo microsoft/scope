@@ -20,6 +20,8 @@ qualityFamilies:
     variants: [default, persona, descendant-guard]
   - id: run-report
     variants: [default, append, override-control, experiment-readout]
+  - id: experiment-report
+    variants: [default, append, override-control]
 standaloneFamilies:
   - id: taxonome-skipped-invocation
     variants: [default]

@@ -27,14 +27,24 @@ const PromptFeatureTriggerSchema = z.object({
   match: z.enum(["any", "all"]).optional(),
 });
 
+const RunReportTemplatesTriggerSchema = z.object({
+  type: z.literal("run-report-templates"),
+  reportTemplateIds: z.array(z.string().min(1)).min(1),
+});
+
 export const ReportTriggerSchema = z
   .discriminatedUnion("type", [
     AlwaysTriggerSchema,
     CriteriaTriggerSchema,
     TaskPromptTriggerSchema,
     PromptFeatureTriggerSchema,
+    RunReportTemplatesTriggerSchema,
   ])
   .openapi("ReportTrigger");
+
+export const ReportTemplateSubjectSchema = z
+  .enum(["run", "experiment"])
+  .openapi("ReportTemplateSubject");
 
 export const ReportTemplateSystemPromptSchema = z
   .object({
@@ -46,6 +56,7 @@ export const ReportTemplateSystemPromptSchema = z
 export const CreateReportTemplateInputSchema = z
   .object({
     id: z.string(),
+    subject: ReportTemplateSubjectSchema.default("run"),
     name: z.string(),
     description: z.string().optional(),
     userPrompt: z.string(),
@@ -53,6 +64,33 @@ export const CreateReportTemplateInputSchema = z
     trigger: ReportTriggerSchema.optional(),
     model: z.string().optional(),
     timeoutMs: z.number().int().positive().optional(),
+    enabled: z.boolean().default(true),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.subject === "run" &&
+      value.trigger?.type === "run-report-templates"
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["trigger"],
+        message:
+          "run-report-templates is only valid for experiment report templates",
+      });
+    }
+    if (
+      value.subject === "experiment" &&
+      value.trigger &&
+      value.trigger.type !== "always" &&
+      value.trigger.type !== "run-report-templates"
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["trigger"],
+        message:
+          "experiment report templates support only always, run-report-templates, or no trigger",
+      });
+    }
   })
   .openapi("CreateReportTemplateInput");
 
@@ -65,6 +103,7 @@ export const UpdateReportTemplateInputSchema = z
     trigger: ReportTriggerSchema.optional(),
     model: z.string().nullable().optional(),
     timeoutMs: z.number().int().positive().nullable().optional(),
+    enabled: z.boolean().optional(),
   })
   .openapi("UpdateReportTemplateInput");
 
@@ -72,6 +111,7 @@ export const ReportTemplateResponseSchema = z
   .object({
     _id: z.string(),
     id: z.string(),
+    subject: ReportTemplateSubjectSchema,
     name: z.string(),
     description: z.string().optional(),
     userPrompt: z.string(),
@@ -79,9 +119,29 @@ export const ReportTemplateResponseSchema = z
     trigger: ReportTriggerSchema.optional(),
     model: z.string().optional(),
     timeoutMs: z.number().int().positive().optional(),
+    enabled: z.boolean(),
+    currentVersionId: z.string(),
+    currentVersion: z.number().int().positive(),
+    contentFingerprint: z.string(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date().optional(),
     deletedAt: z.coerce.date().optional(),
     projectId: z.string(),
   })
   .openapi("ReportTemplateResponse");
+
+export const ReportTemplateVersionResponseSchema = z
+  .object({
+    _id: z.string(),
+    projectId: z.string(),
+    templateId: z.string(),
+    version: z.number().int().positive(),
+    contentFingerprint: z.string(),
+    userPrompt: z.string(),
+    systemPrompt: ReportTemplateSystemPromptSchema.optional(),
+    trigger: ReportTriggerSchema.optional(),
+    model: z.string().optional(),
+    timeoutMs: z.number().int().positive().optional(),
+    createdAt: z.coerce.date(),
+  })
+  .openapi("ReportTemplateVersionResponse");

@@ -59,6 +59,7 @@ export const ExperimentRevisionSchema = z
     revisionNumber: z.number().int().min(1),
     memberCount: z.number().int().nonnegative(),
     membershipFingerprint: IdSchema,
+    reportTemplateIds: z.array(IdSchema).max(64).default([]),
     definitionFingerprint: IdSchema,
     createdAt: z.coerce.date(),
   })
@@ -120,6 +121,62 @@ const ExperimentExecutionBaseSchema = z
       .refine((value) => Object.keys(value).length <= 64, {
         message: "handlerSummary is limited to 64 handlers",
       }),
+    reportTemplates: z
+      .record(
+        IdSchema,
+        z
+          .object({
+            templateId: IdSchema,
+            templateVersionId: IdSchema.optional(),
+            templateVersion: z.number().int().positive().optional(),
+            templateContentFingerprint: IdSchema.optional(),
+            source: z.enum(["always", "linked", "selected"]),
+            status: z.enum([
+              "waiting",
+              "not-applicable",
+              "unavailable",
+              "queued",
+              "processing",
+              "done",
+              "failed",
+            ]),
+            claimToken: IdSchema.optional(),
+            matchingRunCount: z.number().int().nonnegative(),
+            blockers: z
+              .array(
+                z
+                  .object({
+                    requestId: IdSchema.optional(),
+                    runId: IdSchema.optional(),
+                    runTemplateId: IdSchema.optional(),
+                    reason: z.enum([
+                      "run-template-unused",
+                      "run-report-pending",
+                      "run-report-failed",
+                      "template-unavailable",
+                    ]),
+                    error: ErrorSchema.optional(),
+                  })
+                  .strict(),
+              )
+              .max(256),
+            report: z
+              .object({
+                reportId: IdSchema,
+                url: z.string().min(1).max(2_048),
+                updatedAt: z.coerce.date(),
+              })
+              .strict()
+              .optional(),
+            updatedAt: z.coerce.date(),
+            error: ErrorSchema.optional(),
+          })
+          .strict(),
+      )
+      .refine((value) => Object.keys(value).length <= 64, {
+        message: "reportTemplates is limited to 64 templates",
+      })
+      .default({}),
     blocking: z.array(ExperimentBlockerSchema).max(32),
     report: z
       .object({
@@ -138,7 +195,9 @@ const ExperimentExecutionBaseSchema = z
     discardReason: z.string().max(2_048).optional(),
     supersededAt: z.coerce.date().optional(),
     supersededByExperimentExecutionId: IdSchema.optional(),
-    supersededReason: z.enum(["rollover", "retry", "membership"]).optional(),
+    supersededReason: z
+      .enum(["rollover", "retry", "membership", "templates"])
+      .optional(),
     requestStateUpdate: z
       .object({
         updateId: IdSchema,
@@ -157,7 +216,7 @@ export const ExperimentExecutionSchema: z.ZodType = ExperimentExecutionBaseSchem
       .object({
         nextExecution: ExperimentExecutionBaseSchema,
         nextRevision: ExperimentRevisionSchema.optional(),
-        reason: z.enum(["rollover", "retry", "membership"]),
+        reason: z.enum(["rollover", "retry", "membership", "templates"]),
         claimedAt: z.coerce.date(),
       })
       .strict()

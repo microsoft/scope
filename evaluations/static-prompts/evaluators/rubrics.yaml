@@ -73,11 +73,11 @@ graders:
     range: [1, 5]
     scorePassThreshold: 3
     prompt: |
-      Score the run report from 1 to 5 for factual consistency with the
-      evidence, trajectory and regression analysis, evidence-backed findings,
-      actionable recommendations, and appropriate uncertainty. Penalize
-      fabricated identifiers, unsupported certainty, and operational narration
-      about insight-management tools.
+      Score the run or Experiment report from 1 to 5 for factual consistency
+      with the evidence, trajectory and regression analysis, evidence-backed
+      findings, actionable recommendations, and appropriate uncertainty.
+      Penalize fabricated identifiers, unsupported certainty, and operational
+      narration about insight-management tools.
 
   criteria_evidence_source:
     type: label
@@ -450,3 +450,38 @@ families:
       tool_call_accuracy: {minPassRate: 0.67, minMeanScore: 3.0}
       report_quality: {minPassRate: 0.67, minMeanScore: 3.0}
       report_simulation_interpretation: {minPassRate: 0.67}
+
+  experiment-report:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.markdown, output.report, output.content, output]
+      - check: non_empty
+        metric: non_empty_report
+        paths: [output.markdown, output.report, output.content, response]
+      - check: markdown
+        metric: valid_markdown
+        paths: [output.markdown, output.report, output.content, response]
+      - check: no_fabricated_references
+        metric: no_fabricated_references
+        paths: [output.markdown, output.report, output.content, response]
+    evaluators:
+      - relevance
+      - coherence
+      - fluency
+      - groundedness
+      - name: task_adherence
+        scorePassThreshold: 1
+      - report_quality
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      non_empty_report: {minPassRate: 0.8}
+      valid_markdown: {minPassRate: 0.8}
+      no_fabricated_references: {minPassRate: 0.8}
+      relevance: {minPassRate: 0.67, minMeanScore: 3.0}
+      coherence: {minPassRate: 0.67, minMeanScore: 3.0}
+      fluency: {minPassRate: 0.67, minMeanScore: 3.0}
+      groundedness: {minPassRate: 0.67, minMeanScore: 3.0}
+      task_adherence: {minPassRate: 0.67}
+      report_quality: {minPassRate: 0.67, minMeanScore: 3.0}

@@ -36,7 +36,8 @@
       "prompt-feature-extraction": 30,
       "judge-instructions": 30,
       "developer-feedback": 25,
-      "run-report": 31
+      "run-report": 31,
+      "experiment-report": 3
     }
   },
   "files": [
@@ -55,6 +56,14 @@
       "families": [
         "child-dependency-suggestion",
         "parent-dependency-suggestion"
+      ]
+    },
+    {
+      "path": "v1/experiment-reports.jsonl",
+      "sha256": "afa10edb1509ecff73a1efaa78fb44409bf5c182c1e151bc5bb005e2d6b882d0",
+      "rows": 3,
+      "families": [
+        "experiment-report"
       ]
     },
     {
@@ -83,17 +92,17 @@
       ]
     },
     {
-      "path": "v1/reports.jsonl",
-      "sha256": "a049fa4a33054c1e5caa5f44bdab996c016979109024f6c752bde6d8e44d9df6",
-      "rows": 30,
+      "path": "v1/readouts.jsonl",
+      "sha256": "1099b5cf2e076dfbba9e5284ec0e9e2dd326a4f49c6a7475cc655a2efb738886",
+      "rows": 1,
       "families": [
         "run-report"
       ]
     },
     {
-      "path": "v1/readouts.jsonl",
-      "sha256": "1099b5cf2e076dfbba9e5284ec0e9e2dd326a4f49c6a7475cc655a2efb738886",
-      "rows": 1,
+      "path": "v1/reports.jsonl",
+      "sha256": "a049fa4a33054c1e5caa5f44bdab996c016979109024f6c752bde6d8e44d9df6",
+      "rows": 30,
       "families": [
         "run-report"
       ]

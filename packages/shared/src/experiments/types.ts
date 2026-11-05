@@ -78,6 +78,7 @@ export interface ExperimentRevision {
   revisionNumber: number;
   memberCount: number;
   membershipFingerprint: string;
+  reportTemplateIds: string[];
   definitionFingerprint: string;
   createdAt: Date;
 }
@@ -99,7 +100,7 @@ export interface ExperimentHandlerSummary {
 export interface ExperimentRolloverClaim {
   nextExecution: ExperimentExecution;
   nextRevision?: ExperimentRevision;
-  reason: "rollover" | "retry" | "membership";
+  reason: "rollover" | "retry" | "membership" | "templates";
   claimedAt: Date;
 }
 
@@ -116,6 +117,42 @@ export interface ExperimentReportReference {
   updatedAt: Date;
 }
 
+export type ExperimentTemplateReportStatus =
+  | "waiting"
+  | "not-applicable"
+  | "unavailable"
+  | "queued"
+  | "processing"
+  | "done"
+  | "failed";
+
+export interface ExperimentTemplateReportBlocker {
+  requestId?: string;
+  runId?: string;
+  runTemplateId?: string;
+  reason:
+    | "run-template-unused"
+    | "run-report-pending"
+    | "run-report-failed"
+    | "template-unavailable";
+  error?: string;
+}
+
+export interface ExperimentTemplateReportSummary {
+  templateId: string;
+  templateVersionId?: string;
+  templateVersion?: number;
+  templateContentFingerprint?: string;
+  source: "always" | "linked" | "selected";
+  status: ExperimentTemplateReportStatus;
+  claimToken?: string;
+  matchingRunCount: number;
+  blockers: ExperimentTemplateReportBlocker[];
+  report?: ExperimentReportReference;
+  updatedAt: Date;
+  error?: string;
+}
+
 export interface ExperimentExecution {
   experimentExecutionId: string;
   attemptNumber: number;
@@ -123,6 +160,7 @@ export interface ExperimentExecution {
   requests: FixedPayload<ExperimentRequestState>;
   vectorFingerprint: string;
   handlerSummary: Record<string, ExperimentHandlerSummary>;
+  reportTemplates: Record<string, ExperimentTemplateReportSummary>;
   blocking: ExperimentBlocker[];
   report?: ExperimentReportReference;
   createdAt: Date;
@@ -134,7 +172,7 @@ export interface ExperimentExecution {
   discardReason?: string;
   supersededAt?: Date;
   supersededByExperimentExecutionId?: string;
-  supersededReason?: "rollover" | "retry" | "membership";
+  supersededReason?: "rollover" | "retry" | "membership" | "templates";
   requestStateUpdate?: ExperimentRequestStateUpdateClaim;
   rollover?: ExperimentRolloverClaim;
 }

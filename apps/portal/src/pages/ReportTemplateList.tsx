@@ -31,8 +31,8 @@ import {
   type CustomizeColumnsOption,
 } from "@/components/list-layout";
 
-const TRIGGER_TYPES = ["always", "criteria", "taskPrompt", "promptFeature"] as const;
-const FILTER_KEYS = ["trigger"] as const;
+const TRIGGER_TYPES = ["always", "criteria", "taskPrompt", "promptFeature", "run-report-templates"] as const;
+const FILTER_KEYS = ["trigger", "subject"] as const;
 
 function triggerSummary(trigger?: ReportTrigger): string {
   if (!trigger) return "always (no trigger configured)";
@@ -44,6 +44,8 @@ function triggerSummary(trigger?: ReportTrigger): string {
       return `taskPrompt: ${trigger.taskPromptIds.join(", ")}`;
     case "promptFeature":
       return `promptFeature: ${trigger.featureIds.join(", ")} (match: ${trigger.match ?? "all"})`;
+    case "run-report-templates":
+      return `linked run reports: ${trigger.reportTemplateIds.join(", ")}`;
     default:
       return "unknown";
   }
@@ -74,7 +76,7 @@ export function ReportTemplateList() {
 
   const { data: templates = [], isLoading, isRefetching } = useQuery({
     queryKey: ["report-templates"],
-    queryFn: () => api.listReportTemplates(),
+    queryFn: () => api.listReportTemplates({ includeDisabled: true }),
   });
 
   const deleteMutation = useMutation({
@@ -94,9 +96,11 @@ export function ReportTemplateList() {
 
   const filteredTemplates = useMemo(() => {
     const triggers = state.getFilterList("trigger");
+    const subjects = state.getFilterList("subject");
     const q = state.search.trim().toLowerCase();
     return templates.filter((t) => {
       if (triggers.length > 0 && !triggers.includes(triggerType(t.trigger))) return false;
+      if (subjects.length > 0 && !subjects.includes(t.subject)) return false;
       if (q) {
         const blob = `${t.id} ${t.name} ${triggerType(t.trigger)}`.toLowerCase();
         if (!blob.includes(q)) return false;
@@ -112,6 +116,8 @@ export function ReportTemplateList() {
   const columnOptions: CustomizeColumnsOption[] = [
     { id: "id", label: "ID", required: true },
     { id: "name", label: "Name" },
+    { id: "subject", label: "Subject" },
+    { id: "version", label: "Version" },
     { id: "trigger", label: "Trigger" },
     { id: "model", label: "Model" },
     { id: "systemPrompt", label: "Sys Prompt" },
@@ -132,6 +138,20 @@ export function ReportTemplateList() {
       width: "200px",
       hidden: columnVisibility.isHidden("name"),
       cell: (t) => <span className="text-sm">{t.name}</span>,
+    },
+    {
+      id: "subject",
+      header: "Subject",
+      width: "120px",
+      hidden: columnVisibility.isHidden("subject"),
+      cell: (t) => <Badge variant="outline">{t.subject}</Badge>,
+    },
+    {
+      id: "version",
+      header: "Version",
+      width: "90px",
+      hidden: columnVisibility.isHidden("version"),
+      cell: (t) => <span className="font-mono text-sm">v{t.currentVersion}</span>,
     },
     {
       id: "trigger",
@@ -258,6 +278,16 @@ export function ReportTemplateList() {
                   options={triggerOptions}
                   selected={state.getFilterList("trigger")}
                   onToggle={(v) => state.toggleFilterValue("trigger", v)}
+                />
+              </FilterSection>
+              <FilterSection title="Subject" storageKey="report-templates-subject">
+                <CheckboxFilterGroup
+                  options={[
+                    { value: "run", label: "Run", count: templates.filter((template) => template.subject === "run").length },
+                    { value: "experiment", label: "Experiment", count: templates.filter((template) => template.subject === "experiment").length },
+                  ]}
+                  selected={state.getFilterList("subject")}
+                  onToggle={(v) => state.toggleFilterValue("subject", v)}
                 />
               </FilterSection>
             </FilterRail>

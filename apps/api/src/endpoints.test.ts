@@ -1381,8 +1381,21 @@ describe("API Endpoints", () => {
 
   describe("GET /api/v1/report-templates", () => {
     it("returns 200 with array of report templates", async () => {
-      const templates = [{ id: "rt1", name: "Default", userPrompt: "Analyze", createdAt: new Date() }];
+      const templates = [{
+        _id: "rt1",
+        projectId: TEST_PROJECT_ID,
+        id: "rt1",
+        subject: "run",
+        name: "Default",
+        userPrompt: "Analyze",
+        enabled: true,
+        currentVersionId: "rt1:v1",
+        currentVersion: 1,
+        contentFingerprint: "fingerprint",
+        createdAt: new Date(),
+      }];
       (mocks.reportTemplateCollection.find as any).mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
         toArray: vi.fn().mockResolvedValue(templates),
       });
 
@@ -1400,8 +1413,14 @@ describe("API Endpoints", () => {
     const seededTemplate = {
       projectId: TEST_PROJECT_ID,
       id: TID,
+      _id: TID,
+      subject: "run",
       name: "Seed",
       userPrompt: "Analyze",
+      enabled: true,
+      currentVersionId: `${TID}:v1`,
+      currentVersion: 1,
+      contentFingerprint: "fingerprint",
       createdAt: new Date(),
     };
 
@@ -1428,6 +1447,10 @@ describe("API Endpoints", () => {
 
     it("PUT /:id?projectId scopes both the existence check and the update to { projectId, id }", async () => {
       (mocks.reportTemplateCollection.findOne as any).mockResolvedValue(seededTemplate);
+      (mocks.reportTemplateCollection.findOneAndUpdate as any).mockResolvedValue({
+        ...seededTemplate,
+        name: "Renamed",
+      });
       const res = await request(testServer())
         .put(`/api/v1/report-templates/${TID}?projectId=${TEST_PROJECT_ID}`)
         .send({ name: "Renamed" });
@@ -1435,9 +1458,10 @@ describe("API Endpoints", () => {
       expect(mocks.reportTemplateCollection.findOne).toHaveBeenCalledWith(
         expect.objectContaining({ projectId: TEST_PROJECT_ID, id: TID })
       );
-      expect(mocks.reportTemplateCollection.updateOne).toHaveBeenCalledWith(
-        expect.objectContaining({ projectId: TEST_PROJECT_ID, id: TID }),
-        expect.anything()
+      expect(mocks.reportTemplateCollection.findOneAndUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: TEST_PROJECT_ID }),
+        expect.anything(),
+        { returnDocument: "after" },
       );
     });
 
