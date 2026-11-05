@@ -491,6 +491,44 @@ apiRoute(ctx.app, ctx.registry, {
     const { scenario: scenarioObj, persona: personaObj, maxIterations, personaInstructions, count = 1, model: requestedModel, reasoningEffort: requestedReasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, extensions: extensionIds, agentVersion: requestedAgentVersion, profileId: requestedProfileSpec, profileVariations, priority: requestedPriority, agentsMd: requestedAgentsMd, agentsMdParentIds: requestedAgentsMdParentIds, gates: requestedGates, observations: requestedObservations, codebase: codebaseSpec, codebaseRevisionId: requestedCodebaseRevisionId, resources: resourceSpecs } = req.body;
     let worker = req.query.worker as string | undefined;
 
+    const typedProfileVariations: string[] = Array.isArray(profileVariations)
+      ? profileVariations.filter((v: unknown): v is string => typeof v === "string")
+      : [];
+    const isVariationSubmit = typedProfileVariations.length > 0;
+
+    if (isVariationSubmit) {
+      if (!requestedProfileSpec) {
+        res.status(400).json({ error: "profileId (the base profile) is required when profileVariations are provided" });
+        return;
+      }
+
+      // Profile fan-out starts from shared run intent only. Every controlled
+      // value must be resolved independently from each profile.
+      const requestControlledFields: Array<[string, unknown]> = [
+        ["model", requestedModel],
+        ["reasoningEffort", requestedReasoningEffort],
+        ["agentVersion", requestedAgentVersion],
+        ["mcpServers", mcpServerSlugs],
+        ["skills", skillSlugs],
+        ["extensions", extensionIds],
+        ["resources", resourceSpecs],
+      ];
+      const providedControlledFields = requestControlledFields.filter(([, value]) => value !== undefined);
+      if (providedControlledFields.length > 0) {
+        res.status(400).json({
+          error: `In variation mode, request-level ${providedControlledFields.map(([field]) => field).join("/")} must be omitted; each profile supplies its own controlled configuration.`,
+        });
+        return;
+      }
+
+      if (worker !== undefined) {
+        res.status(400).json({
+          error: "The ?worker query parameter is not allowed in variation mode; worker is derived from each variation profile.",
+        });
+        return;
+      }
+    }
+
     // AGENTS.md body + lineage (for any caller that wants to attach an
     // AGENTS.md instruction file to a run).
     const agentsMdText =
@@ -549,34 +587,7 @@ apiRoute(ctx.app, ctx.registry, {
       label?: string;
     };
 
-    const typedProfileVariations: string[] = Array.isArray(profileVariations)
-      ? profileVariations.filter((v: unknown): v is string => typeof v === "string")
-      : [];
-    const isVariationSubmit = typedProfileVariations.length > 0;
-
     if (isVariationSubmit) {
-      if (!requestedProfileSpec) {
-        res.status(400).json({ error: "profileId (the base profile) is required when profileVariations are provided" });
-        return;
-      }
-
-      // In variation mode, controlled fields come from the variation profiles themselves.
-      if (requestedModel !== undefined || mcpServerSlugs !== undefined || skillSlugs !== undefined || extensionIds !== undefined) {
-        res.status(400).json({
-          error: "In variation mode, model/mcpServers/skills/extensions must be set via the variation profile.",
-        });
-        return;
-      }
-
-      // In variation mode, the worker is derived per-variation from each profile's workerType.
-      // Reject the ?worker= query param so callers don't think it has any effect.
-      if (worker) {
-        res.status(400).json({
-          error: "The ?worker query parameter is not allowed in variation mode; worker is derived from each variation profile.",
-        });
-        return;
-      }
-
       if (!scenarioObj || typeof scenarioObj !== "object" || !scenarioObj.task || typeof scenarioObj.task !== "string") {
         res.status(400).json({ error: "scenario.task is required and must be a string" });
         return;
@@ -598,7 +609,7 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       const baseParsed = (() => {
-        try { return parseProfileSpec(requestedProfileSpec); }
+        try { return parseProfileSpec(requestedProfileSpec!); }
         catch (err) { res.status(400).json({ error: (err as Error).message }); return null; }
       })();
       if (!baseParsed) return;
@@ -702,25 +713,17 @@ apiRoute(ctx.app, ctx.registry, {
         const effectiveMcpServers = variationProfileVersion.mcpServers ?? undefined;
         const effectiveSkills = variationProfileVersion.skillRevisions ?? undefined;
         const effectiveExtensions = variationProfileVersion.extensions ?? undefined;
-        const requestedVariationAgentVersion = variationProfileVersion.agentVersion ?? requestedAgentVersion;
         const targetCheck = await validateAgentTarget(ctx.agentCollection, {
           workerType: variationWorkerType,
-          requestedVersion: requestedVariationAgentVersion,
+          requestedVersion: variationProfileVersion.agentVersion,
           model: variationProfileVersion.model,
           requireModel: true,
           requirements: requestedAgentCapabilities({
-            reasoningEffort:
-              variationProfileVersion.reasoningEffort ?? requestedReasoningEffort,
+            reasoningEffort: variationProfileVersion.reasoningEffort,
             mcpServers: effectiveMcpServers,
             skillRevisions: effectiveSkills,
             extensions: effectiveExtensions,
-            // Mirrors resolveResourceBindings' precedence (profile wins). Uses the
-            // specs rather than resolved bindings because the capability check only
-            // needs to know whether any resource was requested, and resolution
-            // happens after this point.
-            resources:
-              normalizeResourceBindingSpecs(variationProfileVersion.resources)
-              ?? requestedResourceSpecs,
+            resources: normalizeResourceBindingSpecs(variationProfileVersion.resources),
           }),
           strictCapabilities: ctx.strictAgentCapabilities,
         });
@@ -801,7 +804,7 @@ apiRoute(ctx.app, ctx.registry, {
         const resourceResult = await resolveResourceBindings(
           ctx,
           projectId,
-          requestedResourceSpecs,
+          undefined,
           normalizeResourceBindingSpecs(variationProfileVersion.resources),
         );
         if (resourceResult.errors.length > 0) {
@@ -862,8 +865,8 @@ apiRoute(ctx.app, ctx.registry, {
             createdAt: new Date(),
             priority: requestedPriority ?? 0,
             ...(r.model ? { model: r.model } : {}),
-            ...((r.profileVersion.reasoningEffort ?? requestedReasoningEffort)
-              ? { reasoningEffort: r.profileVersion.reasoningEffort ?? requestedReasoningEffort }
+            ...(r.profileVersion.reasoningEffort
+              ? { reasoningEffort: r.profileVersion.reasoningEffort }
               : {}),
             ...(maxIterations ? { maxIterations } : {}),
             ...(personaInstructions ? { personaInstructions } : {}),

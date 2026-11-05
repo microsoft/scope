@@ -263,6 +263,23 @@ workers have no Dockerfiles or integration suites in this repository.
 Live-model credentials remain necessary for live-auth tests; passing public
 tool checks does not validate live-model access.
 
+All external GitHub Actions and reusable workflows must use an immutable,
+full-length commit SHA followed by the corresponding release version:
+
+```yaml
+- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+```
+
+When updating an action, update the SHA and version comment together. The
+dedicated **Pin GitHub Actions** check validates both through
+[pinact](https://github.com/suzuki-shunsuke/pinact), while
+`scripts/ci-workflow.test.ts` independently rejects mutable references and
+missing comments. If pinact is installed locally, run the same validation with:
+
+```bash
+pinact run --check --verify-comment
+```
+
 Windows validation uses GitHub's `windows-2022` runner and its Windows Docker
 engine. `scripts/build-windows-worker.ps1` builds `Dockerfile.base` from public
 `servercore:ltsc2022`, builds pinned Copilot dependencies against that local image,

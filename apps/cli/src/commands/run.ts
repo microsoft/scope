@@ -213,13 +213,29 @@ run
         body.profileVariations = parsed;
       }
 
-      // In variation mode the API derives the worker per-variation from each
-      // profile's workerType, and explicitly rejects `?worker=`. Skip the
-      // query param so the request isn't 400'd, and warn if --worker was
-      // explicitly passed (default values are silently ignored).
       const isVariationSubmit = Array.isArray(body.profileVariations) && body.profileVariations.length > 0;
-      if (isVariationSubmit && command.getOptionValueSource("worker") === "cli") {
-        console.warn(label("Warning:"), "--worker is ignored in variation mode; worker is derived per-variation from each profile's workerType.");
+      if (isVariationSubmit) {
+        // Keep the CLI a thin client, but fail before the network call when the
+        // user supplies fields that the API resolves independently per profile.
+        const incompatibleOptions = [
+          command.getOptionValueSource("worker") === "cli" ? "--worker" : undefined,
+          model !== undefined ? "--model" : undefined,
+          reasoningEffort !== undefined ? "--reasoning-effort" : undefined,
+          mcpServerSlugs !== undefined ? "--mcp-servers" : undefined,
+          skillSlugs !== undefined ? "--skills" : undefined,
+          resourceSpecs !== undefined ? "--resources" : undefined,
+          resourceParamOverrides.length > 0 ? "--resource-param" : undefined,
+          extensionIds !== undefined ? "--extensions" : undefined,
+          agentVersion !== undefined ? "--agent-version" : undefined,
+        ].filter((flag): flag is string => flag !== undefined);
+        if (incompatibleOptions.length > 0) {
+          console.error(
+            errorText(
+              `Error: ${incompatibleOptions.join(", ")} cannot be used with --profile-variations-file; each profile supplies its own controlled configuration.`,
+            ),
+          );
+          process.exit(1);
+        }
       }
       if (!isVariationSubmit && !profileId && !worker) {
         console.error(
