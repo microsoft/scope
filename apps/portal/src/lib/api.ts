@@ -86,6 +86,7 @@ export interface RunFilterParams {
   taskPromptId?: string;
   criteria?: string;
   submissionId?: string;
+  experimentId?: string | string[];
   search?: string;
   createdAfter?: string;
   createdBefore?: string;
@@ -109,6 +110,7 @@ function runFilterQs(f: RunFilterParams): Record<string, string | string[] | und
     taskPromptId: f.taskPromptId,
     criteria: f.criteria,
     submissionId: f.submissionId,
+    experimentId: f.experimentId,
     search: f.search,
     createdAfter: f.createdAfter,
     createdBefore: f.createdBefore,
@@ -178,8 +180,8 @@ export const api = {
     })}`, undefined, { scoped: true });
   },
 
-  /** List runs grouped by task/profile/submissionId, with cursor pagination and server-side filtering */
-  listRunGroups: (opts: RunFilterParams & { groupBy: "task" | "submissionId" | "profile"; sortBy?: RunSortField; sortDir?: RunSortDir; limit?: number; after?: string; before?: string; last?: boolean }): Promise<CursorPaginatedResponse<RunGroup>> => {
+  /** List runs grouped by task/profile/submissionId/experiment, with cursor pagination and server-side filtering */
+  listRunGroups: (opts: RunFilterParams & { groupBy: "task" | "submissionId" | "profile" | "experiment"; sortBy?: RunSortField; sortDir?: RunSortDir; limit?: number; after?: string; before?: string; last?: boolean }): Promise<CursorPaginatedResponse<RunGroup>> => {
     return request(`/requests${qs({
       groupBy: opts.groupBy,
       ...runFilterQs(opts),
@@ -225,6 +227,7 @@ export const api = {
     agentVersion?: string;
     profileId?: string;
     profileVariations?: string[];
+    experimentId?: string;
     agentsMd?: string;
     agentsMdParentIds?: string[];
     gates?: GateConfig[];

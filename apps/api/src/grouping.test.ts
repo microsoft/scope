@@ -38,6 +38,14 @@ describe("buildGroupingPipeline", () => {
     expect(addFields._groupKey).toBeDefined();
   });
 
+  it("groups missing experiment ids under a stable sentinel", () => {
+    const pipeline = buildGroupingPipeline("experiment");
+    const addFields = pipeline[0].$addFields as Record<string, unknown>;
+    expect(addFields._groupKey).toEqual({
+      $ifNull: ["$experimentId", { $literal: "no-experiment" }],
+    });
+  });
+
   it("$group stage uses _groupKey as _id", () => {
     const pipeline = buildGroupingPipeline("task");
     const group = pipeline[1].$group as Record<string, unknown>;

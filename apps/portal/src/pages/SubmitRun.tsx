@@ -213,6 +213,7 @@ export function SubmitRun() {
   }));
   const [occurrences, setOccurrences] = useState<number>(5);
   const [priority, setPriority] = useState<number>(0);
+  const [experimentId, setExperimentId] = useState<string>("");
   const [agentsMd, setAgentsMd] = useState<string>("");
 
   // Optional add-ons
@@ -575,6 +576,7 @@ export function SubmitRun() {
         .then((content) => setAgentsMd(content.text))
         .catch(() => undefined);
     }
+    setExperimentId(run.experimentId ?? "");
     if (run.extensions && run.extensions.length > 0) {
       setSelectedExtensions(run.extensions);
       setExtensionsOpen(true);
@@ -694,6 +696,7 @@ export function SubmitRun() {
       ...(gatesEnabled ? { gates: gateConfigs } : {}),
       ...(priority !== 0 ? { priority } : {}),
       ...(occurrences > 1 ? { count: occurrences } : {}),
+      ...(experimentId.trim() ? { experimentId: experimentId.trim() } : {}),
       ...(agentsMd.trim() ? { agentsMd: agentsMd } : {}),
       ...(inVariationMode ? {} : { ...(selectedMcpServers.length > 0 ? { mcpServers: selectedMcpServers } : {}) }),
       ...(inVariationMode ? {} : { ...(selectedSkills.length > 0 ? { skills: selectedSkills } : {}) }),
@@ -815,6 +818,7 @@ export function SubmitRun() {
     selectedSkills.length > 0 ? `${selectedSkills.length} skill${selectedSkills.length === 1 ? "" : "s"}` : "",
     selectedCodebaseSpec ? `codebase ${selectedCodebaseSpec}` : "",
     selectedResourceSpecs.length > 0 ? `${selectedResourceSpecs.length} resource${selectedResourceSpecs.length === 1 ? "" : "s"}` : "",
+    experimentId.trim() ? `experiment ${experimentId.trim()}` : "",
     agentsMd.trim() ? "AGENTS.md" : "",
     selectedExtensions.length > 0 ? `${selectedExtensions.length} ext` : "",
   ].filter(Boolean);
@@ -1144,6 +1148,19 @@ export function SubmitRun() {
                 max={10}
                 value={occurrences}
                 onChange={(e) => setOccurrences(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="experimentId">Experiment ID</Label>
+                <HelpTooltip text="Optional correlation key used to group related runs in one experiment." />
+              </div>
+              <Input
+                id="experimentId"
+                value={experimentId}
+                onChange={(e) => setExperimentId(e.target.value)}
+                placeholder="experiment-2026-10-14"
+                className="font-mono"
               />
             </div>
           </div>

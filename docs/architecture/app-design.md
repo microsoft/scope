@@ -321,6 +321,22 @@ pre-asserts no composite duplicates, reuses 025's Cosmos-safe helpers (composite
 non-unique on Cosmos, unique on real MongoDB), and its `down()` unsets `slug`/`ref` (index changes
 log-only). The dead `prompt-feature-extractions` drop is guarded against a missing namespace.
 
+### Experiment correlation and grouping
+
+Requests may carry an optional `experimentId` to correlate related runs without
+changing their submission or profile identity. The Runs API supports exact
+filtering with `?experimentId=` (including the standard `__empty__` sentinel for
+missing values) and server-side grouping with `groupBy=experiment`. Grouped
+pagination uses the same two-phase aggregation as the other group dimensions,
+including a stable `no-experiment` bucket whose member fetch matches both absent
+and explicit `null` values.
+
+Bulk resubmission preserves `experimentId`. The CLI and Portal expose the field
+at submission time and support filtering/grouping existing runs by it. Migration
+031 adds a sparse single-field index on `requests.experimentId`; Cosmos DB can
+intersect it with the existing project and deletion filters, while runs without
+an experiment avoid the additional index entry.
+
 ## Judge Pipeline
 
 The judge evaluates coding agent output against criteria. Two strategies are supported:

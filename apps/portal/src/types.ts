@@ -142,6 +142,7 @@ export interface Run {
   extensions?: string[];
   priority?: number;
   submissionId?: string;
+  experimentId?: string;
   profileId?: string;
   profileVersionId?: string;
   /** Resolved AGENTS.md prompt id when an AGENTS.md was supplied. */
@@ -1133,7 +1134,7 @@ export interface ProfileWithVersion extends ProfileDocument {
 
 // --- Runs grouping types (mirrored from shared) ---
 
-export type GroupByKey = "none" | "task" | "submissionId" | "profile";
+export type GroupByKey = "none" | "task" | "submissionId" | "profile" | "experiment";
 
 export interface AggregateStats {
   min: number;

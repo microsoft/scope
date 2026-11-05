@@ -175,6 +175,15 @@ describe("run list", () => {
     expect(output).toContain("status: done");
     expect(output).not.toContain("Found 1 request(s):");
   });
+
+  it("passes --experiment-id and --group-by through as query params", async () => {
+    mockFetchWith({ data: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } });
+
+    await runListAndCaptureOutput(["--experiment-id", "exp-42", "--group-by", "experiment"]);
+
+    expect(lastRequest?.url).toContain("experimentId=exp-42");
+    expect(lastRequest?.url).toContain("groupBy=experiment");
+  });
 });
 
 describe("run submit", () => {
@@ -191,7 +200,7 @@ describe("run submit", () => {
     return { url: lastRequest.url, body: JSON.parse(lastRequest.body) as Record<string, unknown> };
   }
 
-  it("includes agentsMd in the submit body", async () => {
+  it("includes agentsMd and experimentId in the submit body", async () => {
     mockFetchWith({ id: "req-submit-1", workerType: "coder-acp-copilot", status: "queued" });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
@@ -203,6 +212,7 @@ describe("run submit", () => {
           "-m", "do the thing",
           "--worker", "dynamic-worker",
           "--agents-md", "# Be helpful",
+          "--experiment-id", "exp-99",
           "--no-stream",
           "-u", "http://localhost:3100",
           "--project", "proj-test",
@@ -217,6 +227,7 @@ describe("run submit", () => {
     expect(url).toContain("/api/v1/requests?worker=dynamic-worker");
     expect(url).toContain("projectId=proj-test");
     expect(body.agentsMd).toBe("# Be helpful");
+    expect(body.experimentId).toBe("exp-99");
   });
 
   it("omits agentsMd when not provided", async () => {
@@ -235,6 +246,7 @@ describe("run submit", () => {
 
     const { body } = captureSubmit();
     expect(body).not.toHaveProperty("agentsMd");
+    expect(body).not.toHaveProperty("experimentId");
   });
 });
 
