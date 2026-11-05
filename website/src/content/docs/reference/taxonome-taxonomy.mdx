@@ -1,0 +1,196 @@
+---
+title: Taxonome taxonomy format
+description: Manifest and element YAML, shared assessments, typed evidence roles, preconditions, and exact-input binding.
+---
+
+import CanonicalSource from '../../../components/taxonome/CanonicalSource.astro';
+
+Taxonome uses the experimental Trajectory Taxonomy Format. Authors define elements in YAML; prompt producers and code handlers return the same assessment union. The engine validates assessments against normalized ATIF evidence.
+
+The normative specification lives at `docs/architecture/trajectory-taxonomy-format.md`. Use the source panels on this page and the [generated element reference](/reference/taxonome-elements/) to inspect canonical definitions without running terminal dumps. Follow [the practical guide](/guides/taxonome/) to author and run a taxonomy.
+
+## Contract identifiers
+
+| Contract | Identifier |
+| --- | --- |
+| Taxonomy authoring | `scope/taxonomy/v1` |
+| Evaluation envelope | `scope/taxonomy-evaluation/v1` |
+| Readout | `scope/taxonomy-readout/v1` |
+| Plugin API | `scope/taxonome-plugin/v1` |
+| Optimized prompt artifact | `scope/taxonome-ax/v2` |
+
+These experimental identifiers do not establish compatibility between older draft shapes. Consumers check structure, digests, and contract hashes.
+
+## Manifest
+
+```yaml
+schema_version: scope/taxonomy/v1
+id: tutorial-questions
+version: 1.0.0
+surfaces:
+  - id: surface-base-model
+    label: Base model
+elements:
+  - path: elements/repeated-question.yaml
+  - path: elements/question-step.yaml
+```
+
+| Field | Requirement |
+| --- | --- |
+| `schema_version` | Exact authoring identifier. |
+| `id` | Required ID matching `^[A-Za-z0-9][A-Za-z0-9._-]*$`. |
+| `version` | Required semantic version. |
+| `surfaces` | Required array, at most 100; unique IDs. Each surface requires `id` and `label`, with optional `description`. |
+| `elements` | Required nonempty array, at most 200; inline elements or exact `{path}` references. |
+
+Reference paths resolve relative to the manifest. The loader rejects absolute paths, `..`, symlink escapes, duplicate references, cycles, and directory escapes. It rejects unknown authoring fields, duplicate YAML keys, anchors, and aliases. YAML is data, never executable code; canonical hashing requires JSON-compatible values. Taxonome limits one file to 1 MiB, expanded YAML to 4 MiB, and referenced element files to 100.
+
+## Elements
+
+Each element requires `id`, `label`, `implementation`, and `output`. Optional fields are `schema_version`, `description`, `category_id`, and `preconditions`. An element-local schema version must match the manifest. IDs must remain unique after expansion.
+
+Prompt implementation:
+
+```yaml
+implementation:
+  type: prompt
+  prompt: Assess whether the agent repeats an answered clarification.
+```
+
+Code implementation:
+
+```yaml
+implementation:
+  type: deterministic
+  handler: demo/question-step-v1
+  config:
+    min_chars: 8
+```
+
+The code handler's config parser validates and normalizes `config`. The YAML names an origin-independent handler ID, not an import path. Load trusted implementations through the registry or explicit `--plugin`; see [handlers](/reference/taxonome-handlers/).
+
+### Preconditions
+
+Each flag defaults to `false`:
+
+| Flag | Semantics |
+| --- | --- |
+| `requires_complete_trajectory` | Partial or unknown trajectories return `indeterminate` before task/discovery checks or producer execution. Missing trajectory state defaults to complete. |
+| `requires_task` | Require task context from `extra.scope.task` or nonempty user-step message text. This is a presence heuristic, not semantic extraction or a Scope Task ID lookup. |
+| `requires_recorded_discovery` | An otherwise eligible prompt element on a complete trajectory with no recorded discoveries returns completed negative without model execution. Partial/unknown trajectories and deterministic elements do not use this shortcut. |
+
+Declare the evidence your element needs. Do not enable discovery gating for a behavior such as repeated clarification that requires no discovery event.
+
+## Shared assessment
+
+All elements return one of these closed shapes:
+
+```ts
+type Assessment =
+  | {
+      state: "completed";
+      observed: true;
+      occurrences: { evidence: { role: string; path: string }[] }[];
+    }
+  | { state: "completed"; observed: false }
+  | { state: "indeterminate" | "inapplicable"; reason: string };
+```
+
+A positive needs at least one occurrence, each with at least one reference. A negative has no occurrences or reason. Indeterminate and inapplicable assessments have a nonempty reason, without `observed` or occurrences.
+
+Producers must not append confidence, rationale, diagnostics, copied source objects, arbitrary detail, or execution errors. The engine reports execution failures in the evaluation envelope.
+
+Count occurrences as semantic findings. Two references to question steps inside one repeated-question occurrence count as one finding.
+
+## Evidence roles and cardinality
+
+```yaml
+output:
+  evidence_roles:
+    question:
+      type: atif.step
+      min: 2
+      max: 2
+      description: The two agent steps asking the repeated clarification.
+```
+
+Declare at least one role. Each role requires a registered `type` and nonempty `description`. `min` defaults to 1; omitted `max` means unbounded within shared limits. `max` must be at least `min`. Role names match `^[A-Za-z][A-Za-z0-9_]*$`.
+
+The validator rejects unknown roles/types and duplicate role/path pairs after canonicalization. Optional roles do not remove the positive assessment's nonempty-evidence requirement. Taxonome caps an assessment at 100 occurrences, 100 references per occurrence, and 1,000 references total.
+
+### Registered types
+
+| Type | Canonical location |
+| --- | --- |
+| `atif.step` | `$.steps[i]` |
+| `atif.tool_call` | `$.steps[i].tool_calls[j]` |
+| `atif.observation` | `$.steps[i].observation` |
+| `atif.observation_result` | `$.steps[i].observation.results[j]` |
+| `atif.content_part` | An item in step message or observation-result content arrays. |
+| `atif.image_source` | The source of an image content part. |
+| `atif.audio_source` | The source of an audio content part. |
+| `scope.discovery` | `$.steps[i].extra.scope.discoveries[j]` |
+| `scope.input_validation_issue` | An issue under a tool call's `extra.scope.input_validation` with status `invalid`. |
+
+Type checks use both structural location and runtime schema. A similar-looking object elsewhere does not acquire a registry type. Null cannot satisfy a registered type.
+
+### Paths and constraints
+
+Use absolute definite JSONPaths into the normalized ATIF document, such as `$.steps[1]`. Array indices are zero-based positions, not `step_id` values. The resolver canonicalizes paths and rejects queries that do not identify one permitted node. Do not infer source attribution from a function name.
+
+`output.constraints` defaults to an empty array. It accepts exactly three constraint kinds:
+
+```yaml
+output:
+  evidence_roles:
+    call:
+      type: atif.tool_call
+      max: 1
+      description: The invoked call.
+    issue:
+      type: scope.input_validation_issue
+      description: A recorded input-validation issue for that call.
+  constraints:
+    - kind: owned_by
+      role: issue
+      owner_role: call
+```
+
+| Kind | Check |
+| --- | --- |
+| `owned_by` | Each target reference belongs to a tool call cited under `owner_role`. The owner role must target `atif.tool_call`. |
+| `after` | Every target lies after every reference along the immediate child indices of the array identified by `within`, such as `$.steps`. Equal indices fail. |
+| `descendant_of` | Each target is a strict selector-sequence descendant of a reference. A node is not its own descendant. |
+
+For `after`, use `role`, `reference_role`, and `within`. For `descendant_of`, use `role` and `reference_role`. Constraints operate per occurrence after cardinality, resolution, and type checks. An absent target role skips its constraint; a present ownership/descendant target still requires a matching owner/ancestor. An absent optional reference role makes `after` vacuously true, subject to role cardinality.
+
+These checks establish evidence structure, not the truth of a behavioral judgment. Your prompt or handler must still decide whether the evidence supports the element.
+
+## ATIF normalization and exact-input binding
+
+Taxonome accepts ATIF v1.6, v1.7, and v1.8, either as one trajectory object or a root array containing exactly one trajectory. It validates the declared historical schema before adjacent upcasts to v1.8 and validates after each conversion.
+
+Required source fields remain required, including `agent.version`, object-valued tool-call arguments, and increasing step IDs. The converter does not repair malformed historical input or invent missing evidence. String and content-part-array messages retain their form and positions. External trajectory references remain references; Taxonome does not fetch them.
+
+Record Scope metadata in legal `extra.scope` locations. Discoveries live under a step's `extra.scope.discoveries`; configured or available sources do not count as discoveries. Recorded source IDs establish attribution.
+
+Evaluation identities bind results to retained normalized evidence and ingestion policy. Readout revalidates that binding against the exact supplied input and resolves evidence again. Do not substitute a different trajectory with the same session ID or trust saved assessment paths without validation.
+
+## Evaluation envelopes
+
+`status: "succeeded"` means the engine produced a valid assessment. The result can be positive, negative, indeterminate, or inapplicable. `status: "failed"` carries `error` and no `result`. Engine errors include execution, cancellation, invalid output, and invalid input binding.
+
+Validation diagnostics distinguish unknown roles, role cardinality, duplicate references, invalid/unresolved JSONPaths, type mismatches, and constraint mismatches. Read `output_path` as a location in the assessment and `evidence_path` as a location in normalized ATIF. Source-location metadata can point back to original input files or archive entries.
+
+## Canonical source panels
+
+These panels read the actual source files as text during the website build.
+They never import the modules or initialize a model.
+
+<CanonicalSource id="authoring-schema-source" file="packages/taxonomy-engine/src/taxonomy.ts" start={21} end={76} />
+<CanonicalSource id="safe-yaml-source" file="packages/taxonomy-engine/src/taxonomy.ts" start={320} end={398} />
+<CanonicalSource id="assessment-source" file="packages/taxonomy-engine/src/assessment.ts" start={6} end={96} />
+
+Canonical sources are the manifest/element authoring schemas in `packages/taxonomy-engine/src/taxonomy.ts`, shared assessment contracts in `packages/taxonomy-engine/src/assessment.ts`, and the normative Trajectory Taxonomy Format. The shipped manifest and element YAML live under `packages/ax-taxonomy/taxonomy/`; see the [elements reference](/reference/taxonome-elements/).
+
+Authored `output_schema` and element-level `evidence` are obsolete. Use `output.evidence_roles` and `preconditions`. Replace `complete_for_negative` with `requires_complete_trajectory`, `requires_discovery_event` with `requires_recorded_discovery`, and obsolete relationships with `output.constraints`. The loader rejects these older shapes rather than supplying runtime aliases.

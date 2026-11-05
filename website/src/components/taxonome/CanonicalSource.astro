@@ -1,0 +1,55 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { Code } from 'astro:components';
+import { documentationSourceRoot } from '../../lib/taxonome-catalog.mjs';
+import KeyboardScroll from './KeyboardScroll.astro';
+
+interface Props {
+	file: string;
+	start?: number;
+	end?: number;
+	id: string;
+}
+
+const allowed = new Set([
+	'packages/taxonomy-engine/src/taxonomy.ts',
+	'packages/taxonomy-engine/src/assessment.ts',
+	'packages/taxonomy-engine/src/prompt.ts',
+	'packages/taxonomy-engine/src/copilot.ts',
+	'packages/taxonomy-engine/src/optimization-v2.ts',
+	'packages/taxonomy-engine/src/handlers.ts',
+	'packages/taxonomy-engine/src/plugins.ts',
+	'packages/ax-taxonomy/src/index.ts',
+	'packages/ax-taxonomy/src/handlers/discovered/handler.ts',
+	'packages/ax-taxonomy/src/handlers/malformed-invocation/handler.ts',
+	'packages/ax-taxonomy/src/handlers/timeout/handler.ts',
+	'packages/ax-taxonomy/src/handlers/timeout/handler.test.ts',
+]);
+const { file, start = 1, end, id } = Astro.props;
+if (!allowed.has(file)) throw new Error(`Unsupported documentation source: ${file}`);
+// Read source text only: never import the module or run its top-level code.
+const bytes = await readFile(resolve(documentationSourceRoot, file));
+if (bytes.length > 128 * 1024) throw new Error(`Documentation source exceeds 128 KiB: ${file}`);
+const lines = bytes.toString('utf8').trimEnd().split('\n');
+const last = end ?? lines.length;
+if (!Number.isInteger(start) || !Number.isInteger(last) ||
+	start < 1 || last < start || last > lines.length) {
+	throw new Error(`Invalid documentation source range: ${file}:${start}-${last}`);
+}
+const code = lines.slice(start - 1, last).join('\n');
+---
+
+<KeyboardScroll />
+<details id={id} class="canonical-source">
+	<summary>Canonical source: {file} (lines {start}–{last})</summary>
+	<Code code={code} lang="ts" theme="github-dark-high-contrast" tabindex="0" />
+</details>
+
+<style>
+	.canonical-source { margin-block: 1rem; border: 1px solid var(--sl-color-hairline); padding: 1rem; border-radius: .5rem; scroll-margin-top: 6rem; }
+	summary { font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
+</style>
