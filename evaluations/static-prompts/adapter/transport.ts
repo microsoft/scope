@@ -111,7 +111,9 @@ export function createFakeAdapterContext(
     async complete(request): Promise<CompletionResult> {
       const adapterId = request.metadata.adapterId;
       let content: string;
-      if (adapterId.startsWith("criteria-authoring/")) {
+      if (adapterId.startsWith("external-contribution-triage/")) {
+        content = '{"body":"The evidence supports advisory triage; maintainers decide the next step.","labels":"[]"}';
+      } else if (adapterId.startsWith("criteria-authoring/")) {
         content = JSON.stringify({
           prompt: "The generated criterion is observable.",
           suggestedId: "generated_criterion",

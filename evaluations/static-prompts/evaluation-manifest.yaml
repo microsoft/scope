@@ -20,3 +20,5 @@ qualityFamilies:
     variants: [default, persona, descendant-guard]
   - id: run-report
     variants: [default, append, override-control]
+  - id: external-contribution-triage
+    variants: [default]
