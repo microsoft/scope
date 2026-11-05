@@ -2,28 +2,19 @@
 // Licensed under the MIT License.
 
 import { useEffect, type ReactNode } from "react";
-import { Link, matchRoutes, useLocation } from "react-router-dom";
+import { Link, matchRoutes, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProjectContext } from "@/contexts/ProjectContext";
-import { Button } from "@/components/ui/button";
 
 const platformRoutes = ["/agents/*", "/models/*", "/secrets/*", "/admin/*", "/access"].map(path => ({ path }));
 
-export function NoAccessView({ userId, onLogout }: { userId: string; onLogout: () => void }) {
-  return <main className="mx-auto max-w-xl space-y-4 p-10">
-    <h1 className="text-xl font-semibold">No project access</h1>
-    <p>Your account is enrolled. Ask a project or platform administrator to assign a project membership.</p>
-    <p>Your Scope user ID: <code>{userId}</code></p>
-    <Button onClick={onLogout}>Sign out</Button>
-  </main>;
-}
-
 export function AccessShell({ children }: { children: ReactNode }) {
-  const { user, logout, authEnabled, isReady } = useAuth();
+  const { user, authEnabled, isReady } = useAuth();
   const { selectedProjectId, setSelectedProjectId } = useProjectContext();
   const location = useLocation();
   const platformMatch = matchRoutes(platformRoutes, location)?.[0];
   const platformRoute = Boolean(platformMatch);
+  const projectInventoryRoute = Boolean(matchRoutes([{ path: "/projects" }], location));
   const capabilities = user?.capabilities;
   const accessRoute = platformMatch?.route.path === "/access";
   const accessProjectId = new URLSearchParams(location.search).get("projectId");
@@ -40,8 +31,9 @@ export function AccessShell({ children }: { children: ReactNode }) {
       : <>{children}</>;
   }
   if (!isReady || !capabilities) return <main className="p-10">Access capabilities are unavailable.</main>;
-  if (!capabilities.platformAdmin && !capabilities.memberships.length) {
-    return <NoAccessView userId={user!.id} onLogout={() => { void logout(); }} />;
+  // Keep enrolled accounts in the normal app without mounting inaccessible pages.
+  if (!capabilities.platformAdmin && !capabilities.memberships.length && !projectInventoryRoute) {
+    return <Navigate to="/projects" replace />;
   }
   if (platformRoute && !capabilities.platformAdmin && !projectMembershipAdmin) return <main className="p-10">Platform administration is not permitted.</main>;
   if (!platformRoute && location.pathname.endsWith("/new") && !capabilities.memberships.some(m => m.projectId === selectedProjectId && m.permissions.includes("content:write"))) {

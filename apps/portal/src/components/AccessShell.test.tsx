@@ -3,7 +3,7 @@
 
 // @vitest-environment happy-dom
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, expect, it } from "vitest";
 import { AuthContext, type AuthContextValue } from "@/contexts/AuthContext";
 import { anonymousAuth, signedInAuth } from "@/contexts/authFixtures";
@@ -18,7 +18,10 @@ afterEach(() => { cleanup(); localStorage.removeItem(PROJECT_STORAGE_KEY); });
 
 function tree(auth: AuthContextValue, path = "/runs", children: ReactNode = <p>Project content</p>) {
   return <AuthContext.Provider value={auth}><ProjectProvider>
-    <MemoryRouter initialEntries={[path]}><AccessShell>{children}</AccessShell></MemoryRouter>
+    <MemoryRouter initialEntries={[path]}><AccessShell><Routes>
+      <Route path="/projects" element={<h1>Projects</h1>} />
+      <Route path="*" element={children} />
+    </Routes></AccessShell></MemoryRouter>
   </ProjectProvider></AuthContext.Provider>;
 }
 const noMembership: AuthContextValue = {
@@ -40,12 +43,26 @@ it.each(["/access", "/ACCESS", "/acc%65ss"])("does not expose %s administration 
   expect(screen.queryByText("Project content")).toBeNull();
 });
 
-it("shows only the enrolled account when no memberships exist", () => {
-  render(tree(noMembership));
-  expect(screen.getByRole("heading", { name: "No project access" })).toBeTruthy();
-  expect(screen.queryByText("Project content")).toBeNull();
-  expect(screen.queryByRole("link")).toBeNull();
-});
+it.each(["/", "/runs", "/runs/new", "/profiles/example/new-version", "/access", "/agents", "/settings"])(
+  "redirects an enrolled account without memberships from %s to Projects without mounting protected content",
+  path => {
+    // Redirect before a protected page can issue project-scoped requests.
+    const ProtectedPage = vi.fn(() => <p>Project content</p>);
+    render(tree(noMembership, path, <ProtectedPage />));
+    expect(screen.getByRole("heading", { name: "Projects" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "No project access" })).toBeNull();
+    expect(ProtectedPage).not.toHaveBeenCalled();
+    expect(screen.queryByText("Project content")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  },
+);
+it.each(["/projects", "/projects/", "/PROJECTS", "/proj%65cts"])(
+  "allows an enrolled account without memberships to open the Projects inventory at %s",
+  path => {
+    render(tree(noMembership, path));
+    expect(screen.getByRole("heading", { name: "Projects" })).toBeTruthy();
+  },
+);
 it("clears a selected project after membership removal", async () => {
   localStorage.setItem(PROJECT_STORAGE_KEY, "demo-project");
   const view = render(tree(signedInAuth));
@@ -53,6 +70,7 @@ it("clears a selected project after membership removal", async () => {
   view.rerender(tree(noMembership));
   await waitFor(() => expect(localStorage.getItem(PROJECT_STORAGE_KEY)).toBeNull());
   expect(screen.queryByText("Project content")).toBeNull();
+  expect(screen.getByRole("heading", { name: "Projects" })).toBeTruthy();
 });
 it("does not allow an ordinary member to open platform administration", () => {
   render(tree(signedInAuth, "/access"));

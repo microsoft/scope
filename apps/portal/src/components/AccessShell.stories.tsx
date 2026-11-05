@@ -9,27 +9,39 @@ import { AuthContext } from "@/contexts/AuthContext";
 import { signedInAuth } from "@/contexts/authFixtures";
 import { ProjectProvider } from "@/contexts/ProjectContext";
 import { PROJECT_STORAGE_KEY } from "@/lib/project-scope";
-import { AccessShell, NoAccessView } from "./AccessShell";
+import { Projects } from "@/pages/Projects";
+import { http, HttpResponse } from "msw";
+import { AccessShell } from "./AccessShell";
 
 const meta = {
-  component: NoAccessView,
+  component: AccessShell,
   tags: ["ai-generated", "needs-work"],
-  args: { userId: "11111111-2222-4333-8444-555555555555", onLogout: () => {} },
-} satisfies Meta<typeof NoAccessView>;
+  args: { children: null },
+} satisfies Meta<typeof AccessShell>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const EnrolledWithoutMembership: Story = {
-  render: args => {
-    const [signedOut, setSignedOut] = useState(false);
-    return signedOut ? <p>Signed out</p> : <NoAccessView {...args} onLogout={() => setSignedOut(true)} />;
-  },
+  beforeEach: () => localStorage.removeItem(PROJECT_STORAGE_KEY),
+  parameters: { msw: { handlers: [
+    http.get("/api/v1/projects", () => HttpResponse.json([])),
+  ] } },
+  render: () => <AuthContext.Provider value={{
+    ...signedInAuth, user: signedInAuth.user && { ...signedInAuth.user,
+      capabilities: { platformAdmin: false, reportsEnabled: false, memberships: [] } },
+  }}><ProjectProvider><AccessShell><Routes>
+    <Route path="/projects" element={<Projects />} />
+    <Route path="*" element={<h1>Protected project content</h1>} />
+  </Routes></AccessShell></ProjectProvider></AuthContext.Provider>,
   play: async ({ canvas }) => {
-    await expect(canvas.getByRole("heading", { name: "No project access" })).toBeVisible();
-    await expect(canvas.getByText(meta.args.userId)).toBeVisible();
-    await expect(canvas.queryByRole("link")).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByRole("button", { name: "Sign out" }));
-    await expect(canvas.getByText("Signed out")).toBeVisible();
+    await expect((await canvas.findAllByText("No accessible projects. Ask a project or platform administrator for membership."))[0]).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "Projects" })).toBeVisible();
+    await expect(canvas.queryByRole("heading", { name: "Protected project content" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("heading", { name: "No project access" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("link", { name: "Access administration" })).not.toBeInTheDocument();
+    for (const button of canvas.getAllByRole("button", { name: "New project" })) {
+      await expect(button).toBeDisabled();
+    }
   },
 };
 

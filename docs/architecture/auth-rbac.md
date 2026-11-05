@@ -432,6 +432,14 @@ projects and manage memberships; both platform admins and project admins have
 **Manage access** links on their own readable project rows. Projects uses a
 title-only header with a platform-admin-only **Access administration** button,
 without an explanatory callout or subtitle.
+Enrolled ordinary users with no memberships stay signed in and land on the
+normal Projects page with an empty inventory and membership-request guidance,
+instead of a blocking account-only screen. Other routes redirect them to
+`/projects` before mounting protected content, including after their last
+membership is removed; any stale project selection is cleared. Project creation
+remains disabled for ordinary users, and platform administration and API
+authorization are unchanged. Inventory failures remain explicit errors rather
+than being presented as an empty list.
 Creation remains on Projects and grants the creator
 an audited project-admin membership. The header switcher remains membership-only,
 and creation never synthesizes a membership in its cache or selects it automatically.
