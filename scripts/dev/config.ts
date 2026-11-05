@@ -137,6 +137,10 @@ ${config.codespaces ? "" : "  ssl_certificate /certs/edge.pem;\n  ssl_certificat
   proxy_http_version 1.1;
   proxy_set_header Host ${new URL(config.publicOrigin).host};
   proxy_set_header X-Forwarded-Proto https;
+  # Keep every header at server level: nginx drops all inherited proxy_set_header
+  # directives in a location that declares any of its own.
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection $connection_upgrade;
   proxy_read_timeout 3600s;
   proxy_send_timeout 3600s;
   proxy_buffering off;
@@ -156,8 +160,6 @@ ${config.codespaces ? "" : "  ssl_certificate /certs/edge.pem;\n  ssl_certificat
     return 404;
   }
   location / {
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $connection_upgrade;
     proxy_pass ${upstreams.portal};
   }
 }

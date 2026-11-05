@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderKindStack } from "./kind.js";
+import { MONGO_REPLICA_SET_INIT, renderKindStack } from "./kind.js";
 import { runtimes } from "./inventory.js";
 import { inspectorCommand } from "./cluster.js";
 
@@ -31,6 +31,21 @@ describe("complete Kind stack", () => {
     expect(text).toContain('"nodePort":30080');
     expect(text).toContain("--LOWKEY_IMPORT_LOCATION=/data/export.json");
     expect(text).toContain('"runAsUser":1000');
+  });
+  it("rolls ConfigMap consumers, and only them, when the public origin changes", () => {
+    const hashes = (origin: string): Record<string, string | undefined> => Object.fromEntries(renderKindStack({ PUBLIC_ORIGIN: origin }).filter((resource) => resource.kind === "Deployment").map((resource) => [(resource.metadata as { name: string }).name, (resource.spec as { template: { metadata: { annotations?: Record<string, string> } } }).template.metadata.annotations?.["scope.dev/config-hash"]]));
+    const before = hashes("https://localhost:8443");
+    const after = hashes("https://scope.example.test:8443");
+    for (const name of ["dev-edge", "api", "portal"]) {
+      expect(before[name]).toBeDefined();
+      expect(after[name]).not.toBe(before[name]);
+    }
+    expect(before.mongodb).toBeUndefined();
+  });
+  it("keeps the replica-set bootstrap valid for mongosh --eval", () => {
+    expect(() => new Function(MONGO_REPLICA_SET_INIT)).not.toThrow();
+    expect(MONGO_REPLICA_SET_INIT).not.toMatch(/\bawait\b/);
+    expect(text).toContain(JSON.stringify(MONGO_REPLICA_SET_INIT));
   });
   it("keeps an overridden tenant and local TLS listener aligned with cluster routing", () => {
     const tenant = "22222222-2222-2222-2222-222222222222";

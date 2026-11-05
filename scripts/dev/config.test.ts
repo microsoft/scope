@@ -70,6 +70,13 @@ describe("dev-edge routing", () => {
     expect(routes).not.toContain("/auth/");
   });
 
+  it("never redeclares proxy headers inside a location, so the public Host is always forwarded", () => {
+    const locations = routes.split(/\n\s*location /).slice(1);
+    expect(locations.length).toBeGreaterThan(0);
+    for (const location of locations) expect(location).not.toContain("proxy_set_header");
+    expect(routes).toContain("proxy_set_header Host localhost:8443;");
+  });
+
   it("uses HTTP only behind Codespaces external HTTPS termination", () => {
     const remote = resolveDevConfig({ CODESPACES: "true", PUBLIC_ORIGIN: "https://example.app.github.dev" });
     const routes = renderEdgeRoutes(remote, { api: "http://api:3000", portal: "http://portal:5100", entra: "https://entra-local:8443" });

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +9,24 @@ type Resource = Record<string, unknown>;
 export const namespace = "scope-dev";
 const entraImage = "ghcr.io/cmaneu/entra-local@sha256:70584ef110914d100409cb3d63a63548ccdde10ca780f9751755f1482dec5d7e";
 const edgeImage = "nginx@sha256:5b4900b042ccfa8b0a73df622c3a60f2322faeb2be800cbee5aa7b44d241649e";
+
+/**
+ * Idempotently initiate the single-member replica set and wait until it is writable.
+ * mongosh `--eval` rejects `await` inside loop bodies, so the retry pause uses its synchronous `sleep()`.
+ */
+export const MONGO_REPLICA_SET_INIT = [
+  "for (let attempt = 0; attempt < 90; attempt++) {",
+  "  try {",
+  "    try { rs.status() } catch (error) {",
+  "      if (error.code !== 94) throw error;",
+  "      rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongodb:27017' }] });",
+  "    }",
+  "    if (db.hello().isWritablePrimary) quit(0);",
+  "  } catch (error) { print(error.message) }",
+  "  sleep(2000);",
+  "}",
+  "quit(1);",
+].join("\n");
 
 function identity(name: string): Resource {
   return { apiVersion: "v1", kind: "ServiceAccount", metadata: { name, namespace }, automountServiceAccountToken: false };
@@ -55,7 +74,7 @@ export function renderKindStack(env: NodeJS.ProcessEnv = {}): Resource[] {
   const volume = (name: string): Resource => ({ name: "data", persistentVolumeClaim: { claimName: name } });
   const mount = [{ name: "data", mountPath: "/data" }];
   resources.push(identity("mongodb"), service("mongodb", 27017), deployment("mongodb", "mongo:7.0.17", { command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--dbpath", "/data/db"], volumeMounts: mount, readinessProbe: { exec: { command: ["mongosh", "--quiet", "--eval", "db.adminCommand({ping:1}).ok || quit(1)"] }, periodSeconds: 3 } }, { volumes: [volume("mongodb")] }));
-  resources.push(identity("mongo-init"), job("mongo-init", "mongo:7.0.17", ["mongosh", "--host", "mongodb", "--quiet", "--eval", "for(let attempt=0;attempt<90;attempt++){try{try{rs.status()}catch(error){if(error.code!==94)throw error;rs.initiate({_id:'rs0',members:[{_id:0,host:'mongodb:27017'}]})}if(db.hello().isWritablePrimary)quit(0)}catch(error){print(error.message)}await new Promise(resolve=>setTimeout(resolve,2000))}quit(1)"]));
+  resources.push(identity("mongo-init"), job("mongo-init", "mongo:7.0.17", ["mongosh", "--host", "mongodb", "--quiet", "--eval", MONGO_REPLICA_SET_INIT]));
   resources.push(identity("redis"), service("redis", 6379), deployment("redis", "redis:7.4.2-alpine", { command: ["redis-server", "--appendonly", "yes"], volumeMounts: mount, readinessProbe: { exec: { command: ["redis-cli", "ping"] }, periodSeconds: 3 } }, { volumes: [volume("redis")] }));
   resources.push(identity("azurite"), { apiVersion: "v1", kind: "Service", metadata: { name: "azurite", namespace }, spec: { selector: { app: "azurite" }, ports: [10000, 10001, 10002].map((port) => ({ name: `port-${port}`, port })) } }, deployment("azurite", "mcr.microsoft.com/azure-storage/azurite:3.29.0", { command: ["azurite", "--skipApiVersionCheck", "--loose", "--blobHost", "0.0.0.0", "--queueHost", "0.0.0.0", "--tableHost", "0.0.0.0", "--location", "/data"], volumeMounts: mount, readinessProbe: { tcpSocket: { port: 10001 }, periodSeconds: 3 } }, { volumes: [volume("azurite")] }));
   const leafVolumes = [{ name: "certificates", secret: { secretName: "development-certificates" } }, { name: "public-ca", configMap: { name: "public-ca" } }];
@@ -94,9 +113,33 @@ export function renderKindStack(env: NodeJS.ProcessEnv = {}): Resource[] {
   const seed = JSON.stringify({ vaults: [{ attributes: { baseUri: "https://lowkey-vault:8443", recoveryLevel: "Recoverable+Purgeable", recoverableDays: 90, created: 0, deleted: null }, keys: {}, secrets: {}, certificates: {} }] });
   vaultPod.containers[0].command = ["/bin/sh", "-c", `[ -f /data/export.json ] || printf '%s\\n' '${seed}' > /data/export.json; exec java -jar /lowkey-vault.jar $LOWKEY_ARGS`];
   vaultPod.containers[0].env.find((value) => value.name === "LOWKEY_ARGS")!.value += " --LOWKEY_IMPORT_LOCATION=/data/export.json";
+  annotateConfigHashes(resources, { "scope-runtime": settings, "dev-edge": { "default.conf": edgeConfig } });
   const tag = env.SCOPE_IMAGE_TAG || "development";
   if (!/^[a-zA-Z\d_.-]+$/.test(tag)) throw new Error("Invalid SCOPE_IMAGE_TAG");
   return JSON.parse(JSON.stringify(resources).replaceAll(":development\"", `:${tag}\"`)) as Resource[];
+}
+
+/**
+ * Stamp each Deployment's pod template with a hash of the ConfigMaps it consumes.
+ * ConfigMap edits (for example a new PUBLIC_ORIGIN) never restart pods on their own:
+ * env is read once at start and nginx does not reload mounted config.
+ *
+ * @param resources Rendered stack, mutated in place.
+ * @param configMaps ConfigMap name -> data, for every ConfigMap whose consumers must roll.
+ */
+function annotateConfigHashes(resources: Resource[], configMaps: Record<string, Record<string, string>>): void {
+  for (const resource of resources) {
+    if (resource.kind !== "Deployment") continue;
+    const template = (resource.spec as { template: { metadata: { annotations?: Record<string, string> }; spec: unknown } }).template;
+    const podSpec = JSON.stringify(template.spec);
+
+    // Hash only the ConfigMaps this pod references, so backing services do not restart needlessly.
+    const consumed = Object.keys(configMaps).filter((name) => podSpec.includes(`"name":"${name}"`));
+    if (!consumed.length) continue;
+    const hash = createHash("sha256");
+    for (const name of consumed) hash.update(name).update(JSON.stringify(configMaps[name]));
+    template.metadata.annotations = { ...template.metadata.annotations, "scope.dev/config-hash": hash.digest("hex").slice(0, 16) };
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
