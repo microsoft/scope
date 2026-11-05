@@ -75,9 +75,18 @@ renamed rather than the item: its siblings, MCP and Extensions, name *things*, s
 anything other than Resources would have hidden it from anyone looking for it.
 
 Run detail surfaces the pinned bindings, their resolved parameter values, `run.resources` and
-`run.mcpRegistered` (see [Run observability](#run-observability)). Parameters a profile has
-preset render **locked**, not merely pre-filled — an editable field whose value the API rejects
-at submit would be a lie in the UI.
+`run.mcpRegistered` (see [Run observability](#run-observability)). The run submission wizard
+places Resources with the other agent/runtime integrations beside MCP Servers and Skills. When a
+profile declares resources, it owns the binding list, revision choices, and preset parameter
+values: those controls render visibly locked and cannot be added, removed, replaced, or
+overridden. Parameter gaps the profile leaves unset remain editable because the single-profile
+API contract permits the run to fill them. A profile that declares no resources leaves resource
+configuration run-owned and editable. Showing profile-owned values as editable would be a lie in
+the UI because the API rejects the apparent override. Once a comparison variation is added,
+request-level resources are no longer submitted: every selected profile must independently provide
+complete resource bindings and required parameters. The wizard therefore removes any existing
+run-owned resource edits with a visible warning and disables all resource edits while variation
+mode remains active.
 
 ## Run observability
 
@@ -136,8 +145,10 @@ refs and any preset parameters. A run may still fill parameters left unset by th
 profile by sending a matching resource entry at the same position, but a
 different value for a profile-pinned parameter is reported through the same
 profile conflict response used for worker/model/MCP/skills/extensions. Grouped
-profile-variation submissions apply the same positional rule per variation:
-`profileVersion.resources ?? requestedResources`.
+profile-variation submissions are intentionally stricter: request-level
+`resources` are rejected, and every profile must independently provide complete
+resource bindings. The API resolves each profile against a fresh run request so
+the base profile's bindings cannot leak into another comparison member.
 
 The worker then runs the lifecycle in a fixed order. **Each of these orderings is
 load-bearing — moving one reintroduces a specific bug:**
