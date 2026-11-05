@@ -240,7 +240,7 @@ describe("run submit", () => {
     expect(body).not.toHaveProperty("agentsMd");
   });
 
-  it("submits only shared intent for profile variations", async () => {
+  it("sends profile references without profile-managed overrides", async () => {
     mockFetchWith({
       ids: ["req-base", "req-variation"],
       count: 2,
