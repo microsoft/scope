@@ -16,52 +16,102 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const temporaryDirectories: string[] = [];
 const script = resolve("scripts/register-agent.sh");
-const SCRIPT_TEST_TIMEOUT_MS = 15_000;
+const SCRIPT_TEST_TIMEOUT_MS = 30_000;
 
-function fixture(statuses: number[], exitCodes: number[] = []) {
+interface FakeResponse {
+  statuses?: number[];
+  exitCode?: number;
+  body?: string;
+  diagnostics?: string;
+}
+
+function fixture(responses: FakeResponse[]) {
   const directory = mkdtempSync(join(tmpdir(), "scope-register-agent-"));
   temporaryDirectories.push(directory);
   const bin = join(directory, "bin");
   mkdirSync(bin);
-  const statusFile = join(directory, "statuses");
+  const responsesFile = join(directory, "responses");
   const callsFile = join(directory, "calls");
-  const exitCodesFile = join(directory, "exit-codes");
+  const payloadsFile = join(directory, "payloads");
   const agentManifest = join(directory, "agent.yaml");
   const versionManifest = join(directory, "version.yaml");
-  writeFileSync(statusFile, `${statuses.join("\n")}\n`);
+  writeFileSync(
+    responsesFile,
+    responses
+      .map((response) =>
+        [
+          response.statuses?.join(",") ?? "",
+          response.exitCode ?? 0,
+          response.body ?? "",
+          response.diagnostics ?? "",
+        ].join("|"),
+      )
+      .join("\n") + "\n",
+  );
   writeFileSync(callsFile, "");
-  writeFileSync(exitCodesFile, `${exitCodes.join("\n")}\n`);
+  writeFileSync(payloadsFile, "");
   writeFileSync(agentManifest, "_id: test-worker\n");
   writeFileSync(versionManifest, "agentVersion: test-v1\n");
 
-  const curl = join(bin, "curl");
+  const wget = join(bin, "wget");
   writeFileSync(
-    curl,
+    wget,
     `#!/bin/sh
 set -eu
-echo "$*" >> "$FAKE_CURL_CALLS_FILE"
-exit_code=$(sed -n '1p' "$FAKE_CURL_EXIT_CODES_FILE")
-tail -n +2 "$FAKE_CURL_EXIT_CODES_FILE" > "$FAKE_CURL_EXIT_CODES_FILE.next"
-mv "$FAKE_CURL_EXIT_CODES_FILE.next" "$FAKE_CURL_EXIT_CODES_FILE"
-if [ -n "$exit_code" ] && [ "$exit_code" -ne 0 ]; then
-  exit "$exit_code"
-fi
+echo "$*" >> "$FAKE_WGET_CALLS_FILE"
+response=$(sed -n '1p' "$FAKE_WGET_RESPONSES_FILE")
+tail -n +2 "$FAKE_WGET_RESPONSES_FILE" > "$FAKE_WGET_RESPONSES_FILE.next"
+mv "$FAKE_WGET_RESPONSES_FILE.next" "$FAKE_WGET_RESPONSES_FILE"
+old_ifs=$IFS
+IFS='|'
+read -r statuses exit_code body diagnostics <<EOF
+$response
+EOF
+IFS=$old_ifs
 output=""
+post_file=""
 while [ "$#" -gt 0 ]; do
-  if [ "$1" = "-o" ]; then
-    shift
-    output=$1
-  fi
+  case "$1" in
+    -O)
+      shift
+      output=$1
+      ;;
+    --post-file)
+      shift
+      post_file=$1
+      ;;
+  esac
   shift
 done
-status=$(sed -n '1p' "$FAKE_CURL_STATUS_FILE")
-tail -n +2 "$FAKE_CURL_STATUS_FILE" > "$FAKE_CURL_STATUS_FILE.next"
-mv "$FAKE_CURL_STATUS_FILE.next" "$FAKE_CURL_STATUS_FILE"
-printf '{"status":%s}' "$status" > "$output"
-printf '%s' "$status"
+if [ -n "$post_file" ]; then
+  cat "$post_file" >> "$FAKE_WGET_PAYLOADS_FILE"
+  printf '\\n' >> "$FAKE_WGET_PAYLOADS_FILE"
+fi
+old_ifs=$IFS
+IFS=,
+for status in $statuses; do
+  printf '  HTTP/1.1 %s Fake Status\\n' "$status" >&2
+done
+IFS=$old_ifs
+if [ -n "$diagnostics" ]; then
+  printf '%s\\n' "$diagnostics" >&2
+fi
+printf '%s' "$body" > "$output"
+exit "$exit_code"
 `,
   );
-  chmodSync(curl, 0o755);
+  chmodSync(wget, 0o755);
+
+  const timeout = join(bin, "timeout");
+  writeFileSync(
+    timeout,
+    `#!/bin/sh
+set -eu
+shift
+exec "$@"
+`,
+  );
+  chmodSync(timeout, 0o755);
 
   const yq = join(bin, "yq");
   writeFileSync(
@@ -91,17 +141,38 @@ esac
   return {
     agentManifest,
     versionManifest,
-    statusFile,
     callsFile,
+    payloadsFile,
     env: {
       ...process.env,
       PATH: `${bin}:${process.env.PATH ?? ""}`,
-      FAKE_CURL_STATUS_FILE: statusFile,
-      FAKE_CURL_CALLS_FILE: callsFile,
-      FAKE_CURL_EXIT_CODES_FILE: exitCodesFile,
+      FAKE_WGET_RESPONSES_FILE: responsesFile,
+      FAKE_WGET_CALLS_FILE: callsFile,
+      FAKE_WGET_PAYLOADS_FILE: payloadsFile,
       SCOPE_REGISTRATION_MAX_ATTEMPTS: "4",
     },
   };
+}
+
+function runFixture(
+  test: ReturnType<typeof fixture>,
+  extraArguments: string[] = [],
+) {
+  return spawnSync(
+    "sh",
+    [
+      script,
+      "http://scope-api",
+      test.agentManifest,
+      ...extraArguments,
+    ],
+    { encoding: "utf8", env: test.env },
+  );
+}
+
+function callCount(callsFile: string) {
+  const calls = readFileSync(callsFile, "utf8").trim();
+  return calls === "" ? 0 : calls.split("\n").length;
 }
 
 afterEach(() => {
@@ -112,132 +183,139 @@ afterEach(() => {
 
 describe("register-agent.sh", () => {
   it("retries readiness and idempotent POSTs only for transient failures", () => {
-    const test = fixture([503, 200, 503, 201, 200]);
-    const result = spawnSync(
-      "sh",
-      [
-        script,
-        "http://scope-api",
-        test.agentManifest,
-        test.versionManifest,
-      ],
-      { encoding: "utf8", env: test.env },
-    );
+    const test = fixture([
+      { statuses: [503], exitCode: 1, body: "starting" },
+      { statuses: [200] },
+      { statuses: [503], exitCode: 1, body: "retry agent" },
+      { statuses: [201], body: "agent created" },
+      { statuses: [200], body: "version created" },
+    ]);
+    const result = runFixture(test, [test.versionManifest]);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Registered agent test-worker");
     expect(result.stdout).toContain("Registered version test-worker@test-v1");
-    expect(readFileSync(test.callsFile, "utf8").trim().split("\n")).toHaveLength(
-      5,
-    );
+    expect(callCount(test.callsFile)).toBe(5);
   }, SCRIPT_TEST_TIMEOUT_MS);
 
-  it("fails immediately and non-zero on permanent agent errors", () => {
-    const test = fixture([200, 400, 201, 201]);
-    const result = spawnSync(
-      "sh",
-      [
-        script,
-        "http://scope-api",
-        test.agentManifest,
-        test.versionManifest,
-      ],
-      { encoding: "utf8", env: test.env },
-    );
+  it.each([408, 425, 429, 500, 502, 503, 504])(
+    "retries transient HTTP %s responses",
+    (status) => {
+      const test = fixture([
+        { statuses: [200] },
+        { statuses: [status], exitCode: 1 },
+        { statuses: [201] },
+      ]);
+      const result = runFixture(test);
 
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Permanent agent test-worker");
-    expect(readFileSync(test.callsFile, "utf8").trim().split("\n")).toHaveLength(
-      2,
-    );
-  }, SCRIPT_TEST_TIMEOUT_MS);
+      expect(result.status).toBe(0);
+      expect(callCount(test.callsFile)).toBe(3);
+    },
+    SCRIPT_TEST_TIMEOUT_MS,
+  );
 
-  it("fails immediately and non-zero on permanent version errors", () => {
-    const test = fixture([200, 200, 422, 201]);
-    const result = spawnSync(
-      "sh",
-      [
-        script,
-        "http://scope-api",
-        test.agentManifest,
-        test.versionManifest,
-      ],
-      { encoding: "utf8", env: test.env },
-    );
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain(
-      "Permanent version test-worker@test-v1 registration failure",
-    );
-    expect(readFileSync(test.callsFile, "utf8").trim().split("\n")).toHaveLength(
-      3,
-    );
-  }, SCRIPT_TEST_TIMEOUT_MS);
-
-  it("fails immediately on a permanent curl configuration error", () => {
-    const test = fixture([200], [3]);
-    const result = spawnSync(
-      "sh",
-      [script, "invalid://scope-api", test.agentManifest],
-      { encoding: "utf8", env: test.env },
-    );
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain(
-      "Permanent API readiness failure (curl exit 3)",
-    );
-    expect(readFileSync(test.callsFile, "utf8").trim().split("\n")).toHaveLength(1);
-  });
-
-  it("retries transient curl connection failures", () => {
-    const test = fixture([200, 200], [7, 0, 0]);
-    const result = spawnSync(
-      "sh",
-      [script, "http://scope-api", test.agentManifest],
-      { encoding: "utf8", env: test.env },
-    );
+  it("uses the final status after redirects", () => {
+    const test = fixture([
+      { statuses: [301, 200] },
+      { statuses: [307, 201], body: "created" },
+    ]);
+    const result = runFixture(test);
 
     expect(result.status).toBe(0);
-    expect(readFileSync(test.callsFile, "utf8").trim().split("\n")).toHaveLength(3);
+    expect(callCount(test.callsFile)).toBe(2);
+  });
+
+  it("fails immediately and preserves the response body on permanent errors", () => {
+    const test = fixture([
+      { statuses: [200] },
+      {
+        statuses: [422],
+        exitCode: 1,
+        body: '{"error":"invalid manifest"}',
+      },
+    ]);
+    const result = runFixture(test);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'Permanent agent test-worker registration failure (HTTP 422): {"error":"invalid manifest"}',
+    );
+    expect(callCount(test.callsFile)).toBe(2);
+  });
+
+  it.each([
+    ["DNS failure", 1, "bad address 'scope-api'", undefined],
+    ["connection failure", 1, "connection refused", undefined],
+    ["timeout", 143, "Terminated", undefined],
+    ["interrupted transfer", 1, "connection reset by peer", [200]],
+  ])(
+    "retries %s failures without a completed HTTP response",
+    (_, exitCode, diagnostics, statuses) => {
+      const test = fixture([
+        { statuses, exitCode, diagnostics },
+        { statuses: [200] },
+        { statuses: [201] },
+      ]);
+      const result = runFixture(test);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toContain("no HTTP response");
+      expect(result.stderr).toContain(diagnostics);
+      expect(callCount(test.callsFile)).toBe(3);
+    },
+  );
+
+  it("posts exact JSON bytes through a temporary file with the JSON content type", () => {
+    const test = fixture([{ statuses: [200] }, { statuses: [201] }]);
+    const result = runFixture(test);
+    const calls = readFileSync(test.callsFile, "utf8");
+    const payloads = readFileSync(test.payloadsFile, "utf8");
+
+    expect(result.status).toBe(0);
+    expect(calls).toContain("--header Content-Type: application/json");
+    expect(calls).toContain("--post-file");
+    expect(payloads).toBe(
+      '{"_id":"test-worker","name":"Test Worker","available":true}\n',
+    );
   });
 
   it("overrides agent availability in memory", () => {
-    const test = fixture([200, 200, 200]);
-    const result = spawnSync(
-      "sh",
-      [
-        script,
-        "http://scope-api",
-        test.agentManifest,
-        "--available",
-        "false",
-        test.versionManifest,
-      ],
-      { encoding: "utf8", env: test.env },
-    );
+    const test = fixture([
+      { statuses: [200] },
+      { statuses: [200] },
+      { statuses: [200] },
+    ]);
+    const result = runFixture(test, [
+      "--available",
+      "false",
+      test.versionManifest,
+    ]);
 
     expect(result.status).toBe(0);
-    expect(readFileSync(test.callsFile, "utf8")).toContain(
+    expect(readFileSync(test.payloadsFile, "utf8")).toContain(
       '{"_id":"test-worker","name":"Test Worker","available":false}',
     );
   });
 
   it("rejects invalid availability overrides before contacting the API", () => {
-    const test = fixture([200]);
+    const test = fixture([{ statuses: [200] }]);
+    const result = runFixture(test, ["--available", "sometimes"]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("--available must be true or false");
+    expect(callCount(test.callsFile)).toBe(0);
+  });
+
+  it("rejects unsupported URL schemes before contacting the API", () => {
+    const test = fixture([{ statuses: [200] }]);
     const result = spawnSync(
       "sh",
-      [
-        script,
-        "http://scope-api",
-        test.agentManifest,
-        "--available",
-        "sometimes",
-      ],
+      [script, "file:///tmp/api", test.agentManifest],
       { encoding: "utf8", env: test.env },
     );
 
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain("--available must be true or false");
-    expect(readFileSync(test.callsFile, "utf8")).toBe("");
+    expect(result.stderr).toContain("API URL must use http or https");
+    expect(callCount(test.callsFile)).toBe(0);
   });
 });

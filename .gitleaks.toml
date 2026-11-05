@@ -73,3 +73,18 @@ condition = "AND"
 regexTarget = "secret"
 paths = ['''^evaluations/static-prompts/datasets/manifest\.json$''']
 regexes = ['''^4f6776ac4602e279c8723acd9a6cb22fa504c95538ab9491e0b5acab267c6a6b$''']
+
+# Microsoft 1DS browser telemetry loads its SDK from
+# https://js.monitor.azure.com/ and sends ingestion traffic to
+# https://*.events.data.microsoft.com/. Its instrumentation identifier is
+# public routing metadata, not an authentication credential, and can rotate.
+[[allowlists]]
+description = "Microsoft 1DS public browser instrumentation identifier (generic-api-key false positive)"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''^website/src/scripts/analytics\.ts$''',
+  '''^website/tests/analytics\.spec\.ts$''',
+]
+regexes = ['''\binstrumentationKey\s*:\s*['"][0-9A-Fa-f]{32}-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}-\d+['"]''']

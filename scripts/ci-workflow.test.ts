@@ -48,9 +48,59 @@ const communityContributionWorkflow = parse(communityContributionWorkflowSource)
   permissions: Record<string, string>;
   jobs: Record<string, Job>;
 };
+const actionPinningWorkflow = parse(readFileSync(".github/workflows/pin-actions.yml", "utf8")) as {
+  on: {
+    push: { paths: string[] };
+    pull_request: { paths: string[] };
+    workflow_dispatch: null;
+  };
+  permissions: Record<string, string>;
+  jobs: Record<string, Job>;
+};
 const jobs = workflow.jobs;
 const directories: string[] = [];
 const trusted = "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository";
+const fullCommitSha = /^[0-9a-f]{40}$/i;
+
+interface WorkflowActionReference {
+  action: string;
+  line: number;
+  versionComment?: string;
+}
+
+// Extract external, local and container action references without parsing comments away.
+function workflowActionReferences(source: string): WorkflowActionReference[] {
+  return source.split("\n").flatMap((line, index) => {
+    const match = line.match(/^\s*(?:-\s*)?uses:\s*(?:(["'])([^"'#\s]+)\1|([^\s#]+))(?:\s+#(.*))?\s*$/);
+    if (!match) return [];
+
+    return [{
+      action: match[2] ?? match[3],
+      line: index + 1,
+      versionComment: match[4]?.trim(),
+    }];
+  });
+}
+
+// Report immutable-reference policy violations with source line numbers for CI output.
+function workflowActionViolations(source: string): string[] {
+  return workflowActionReferences(source).flatMap(({ action, line, versionComment }) => {
+    if (action.startsWith("./") || action.startsWith("docker://")) return [];
+
+    const separator = action.lastIndexOf("@");
+    const reference = separator >= 0 ? action.slice(separator + 1) : "";
+    const violations: string[] = [];
+
+    if (!fullCommitSha.test(reference)) {
+      violations.push(`line ${line}: ${action} must use a full 40-character commit SHA`);
+    }
+    if (!versionComment) {
+      violations.push(`line ${line}: ${action} must include a version comment`);
+    }
+
+    return violations;
+  });
+}
 
 function step(job: string, name: string): Step {
   const result = jobs[job].steps.find((candidate) => candidate.name === name);
@@ -62,12 +112,62 @@ afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
+describe("GitHub Action pinning", () => {
+  const sha = "a".repeat(40);
+
+  it.each([
+    `uses: actions/checkout@${sha} # v4.4.0`,
+    `uses: "actions/checkout@${sha}" # v4.4.0`,
+    `uses: dtolnay/rust-toolchain@${sha} # 1.94.1`,
+    "uses: ./path/to/local-action",
+    "uses: docker://alpine:3.22",
+  ])("accepts immutable, local or container reference: %s", (line) => {
+    expect(workflowActionViolations(line)).toEqual([]);
+  });
+
+  it.each([
+    ["uses: actions/checkout@v4 # v4", "full 40-character commit SHA"],
+    ["uses: actions/checkout@abcdef # v4", "full 40-character commit SHA"],
+    [`uses: actions/checkout@${sha}`, "version comment"],
+    [`uses: actions/checkout@${sha} #`, "version comment"],
+  ])("rejects invalid reference: %s", (line, expectedViolation) => {
+    expect(workflowActionViolations(line).join("\n")).toContain(expectedViolation);
+  });
+
+  it("pins every external action and reusable workflow in the repository", () => {
+    for (const file of readdirSync(".github/workflows").filter((entry) => /\.ya?ml$/.test(entry))) {
+      const source = readFileSync(join(".github/workflows", file), "utf8");
+      expect(workflowActionViolations(source), file).toEqual([]);
+    }
+  });
+
+  it("runs pinact as a least-privilege validation-only check", () => {
+    const job = actionPinningWorkflow.jobs["pin-actions"];
+    const validation = job.steps.find((candidate) => candidate.name === "Validate action pins");
+
+    expect(actionPinningWorkflow.permissions).toEqual({ contents: "read" });
+    expect(actionPinningWorkflow.on.workflow_dispatch).toBeNull();
+    for (const event of [actionPinningWorkflow.on.push, actionPinningWorkflow.on.pull_request]) {
+      expect(event.paths).toEqual([".github/workflows/**", ".github/pinact.yaml"]);
+    }
+    expect(validation?.uses).toMatch(/^suzuki-shunsuke\/pinact-action@[0-9a-f]{40}$/);
+    expect(validation?.with).toEqual({
+      config: ".github/pinact.yaml",
+      fix: "false",
+      github_token: "${{ github.token }}",
+      verify: "true",
+    });
+  });
+});
+
 describe("CI execution prerequisites", () => {
   it("selects integration checks for workflow changes through a dedicated filter", () => {
     const filtersStep = jobs["detect-changes"].steps.find((candidate) => candidate.uses?.startsWith("dorny/paths-filter@"));
     const filters = parse(filtersStep!.with!.filters) as Record<string, string[]>;
     expect(filters.ci).toContain(".github/workflows/ci.yml");
     expect(filters.ci).toContain("scripts/ci-workflow.test.ts");
+    expect(filters.typescript).toContain(".github/workflows/**");
+    expect(filters.typescript).toContain(".github/pinact.yaml");
     expect(filters.typescript).toContain("scripts/ci-workflow.test.ts");
     expect(filters.shared).not.toContain(".github/workflows/ci.yml");
     expect(jobs["detect-changes"].outputs?.ci).toBe("${{ steps.changes.outputs.ci }}");

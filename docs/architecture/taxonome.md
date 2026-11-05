@@ -4,6 +4,13 @@ The normative interoperable authoring/result/reference contract is
 [Trajectory Taxonomy Format](trajectory-taxonomy-format.md). This guide covers
 the Taxonome implementation, CLI, experiments, and evidence.
 
+For end-user workflows, start with the website's
+[Using Taxonome guide](../../website/src/content/docs/guides/taxonome.mdx).
+Its linked Reference pages cover exact CLI/format/handler contracts; the
+[default catalog reference](../../website/src/content/docs/reference/taxonome-elements.mdx)
+renders the canonical manifest, filenames and complete element YAML at
+website build time without loading the runtime or executing handlers.
+
 Taxonome is a **standalone, draft experimental slice**, not the production
 Observation model or a dependency on the Experiment stack. It loads authored
 taxonomy definitions from YAML, validates/upcasts ATIF v1.6-v1.8 trajectories,
