@@ -221,6 +221,10 @@ services:
     build:
       target: dev
 
+  register-handler-taxonomy:
+    build:
+      target: dev
+
   post-processor:
     build:
       target: dev

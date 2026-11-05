@@ -1,0 +1,8 @@
+id: auth_configured_correctly
+prompt: |
+  Authentication, connection, environment, and deployment settings are
+  configured properly (e.g. credentials/connection strings sourced from
+  environment or secret stores, correct endpoints, no hard-coded secrets, valid
+  deployment configuration).
+kind: observation
+taxonomy_element_id: dimension:configuration-correctness

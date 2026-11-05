@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import type { CriterionKind } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,10 @@ interface CriteriaFilterBarProps {
   emptyDescription?: string;
   /** Override the description template when criteria are selected (receives count) */
   selectedDescription?: (count: number) => string;
+  /** Optional kind metadata for rendering gate/observation filter chips. */
+  criteriaKinds?: Record<string, CriterionKind | undefined>;
+  selectedKinds?: CriterionKind[];
+  onToggleKind?: (kind: CriterionKind) => void;
   /** Override the noun used in the trigger/search controls (default: "criteria") */
   itemLabel?: string;
   /**
@@ -60,6 +65,9 @@ export function CriteriaFilterBar({
   emptyDescription = "Click criteria to filter runs and redefine success. Default: all criteria in each run must pass.",
   selectedDescription = (count: number) =>
     `Success = all ${count} selected criteria pass. Runs without these criteria are excluded.`,
+  criteriaKinds,
+  selectedKinds = [],
+  onToggleKind,
   itemLabel = "criteria",
   compact = false,
 }: CriteriaFilterBarProps) {
@@ -85,6 +93,14 @@ export function CriteriaFilterBar({
     return null;
   }
 
+  const selectedKindSet = new Set(selectedKinds);
+  const kindCounts = criteriaKinds
+    ? {
+        gate: availableCriteria.filter((id) => (criteriaKinds[id] ?? "gate") === "gate").length,
+        observation: availableCriteria.filter((id) => criteriaKinds[id] === "observation").length,
+      }
+    : undefined;
+
   const handleSelectAll = () => {
     if (!onSelectAll) return;
     onSelectAll(Array.from(new Set([...selectedCriteria, ...filtered])));
@@ -92,6 +108,20 @@ export function CriteriaFilterBar({
 
   const body = (
     <div className="flex flex-col gap-3">
+      {kindCounts && onToggleKind && (
+        <div className="flex flex-wrap gap-1.5">
+          {(["gate", "observation"] as const).map((kind) => (
+            <Badge
+              key={kind}
+              variant={selectedKindSet.has(kind) ? "default" : "outline"}
+              className="cursor-pointer capitalize transition-colors hover:bg-muted"
+              onClick={() => onToggleKind(kind)}
+            >
+              {kind} ({kindCounts[kind]})
+            </Badge>
+          ))}
+        </div>
+      )}
       <Popover
         open={open}
         onOpenChange={(next) => {

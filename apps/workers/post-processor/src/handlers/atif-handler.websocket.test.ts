@@ -53,6 +53,7 @@ describe("AtifHandler WebSocket HAR extraction (real atifact)", () => {
         }),
         updateOne: async () => ({ modifiedCount: 1 }),
       } as any,
+      criteriaCollection: {} as any,
       log: async () => undefined,
     };
   });

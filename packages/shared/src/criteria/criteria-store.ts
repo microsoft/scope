@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Collection } from 'mongodb';
-import { CriteriaConfig, CriteriaDocument, GateId } from '../types/types.js';
+import { CriteriaConfig, CriteriaDocument, CriterionKind, CriterionSubject, GateId, TaxonomyElementId } from '../types/types.js';
 import { DependencyGraph } from '../graph/dependency-graph.js';
 import { gatesSatisfyInvariant } from '../gates/gates.js';
 import {
@@ -63,9 +63,22 @@ export class CriteriaStore {
     prompt: string;
     dependsOn?: string[];
     gates?: GateId[];
+    kind?: CriterionKind;
+    taxonomyElementId?: TaxonomyElementId;
+    subject?: CriterionSubject;
   }): Promise<CriteriaDocument> {
-    const { projectId: inputProjectId, id, prompt, dependsOn = [], gates } = input;
-
+    const {
+      projectId: inputProjectId,
+      id,
+      prompt,
+      dependsOn = [],
+      gates,
+      taxonomyElementId,
+    } = input;
+    const kind: CriterionKind = input.kind ?? 'gate';
+    // Kind-dependent default: observation ⇒ "run" (whole-run), gate/legacy ⇒
+    // "iteration". Applied here (where kind is known) — not a flat schema default.
+    const subject: CriterionSubject = input.subject ?? (kind === 'observation' ? 'run' : 'iteration');
     // Guard against scope confusion: the uniqueness/dedup checks below run
     // through `scoped()` (i.e. against `this.projectId`), but the row is written
     // with the project id resolved here. If a caller ever constructs the store
@@ -93,6 +106,21 @@ export class CriteriaStore {
       );
     }
 
+    // taxonomyElementId only applies to observation criteria.
+    if (taxonomyElementId !== undefined && kind !== 'observation') {
+      throw new CriteriaValidationError(
+        `taxonomyElementId can only be set on observation criteria (got kind '${kind}')`
+      );
+    }
+
+    // subject "run" is only valid for observation criteria — gate criteria are
+    // always evaluated per iteration (their pass/fail feeds the per-turn loop).
+    if (subject !== 'iteration' && kind !== 'observation') {
+      throw new CriteriaValidationError(
+        `subject '${subject}' is not allowed for ${kind} criteria; gate criteria are always evaluated per iteration`
+      );
+    }
+
     // Check for duplicates among *active* criteria — scoped to this project so
     // the same id can exist in another project without a cross-project 409.
     const existing = await this.collection.findOne(this.scoped({ id, deletedAt: { $exists: false } }));
@@ -115,6 +143,11 @@ export class CriteriaStore {
       await this.validateNoCycles(id, dependsOn);
     }
 
+    // Validate same-kind dependencies (gate↔gate, observation↔observation).
+    if (dependsOn.length > 0) {
+      await this.validateSameKindDependencies(id, dependsOn, kind);
+    }
+
     // Validate the downward-closed gate-compatibility invariant.
     await this.validateGateCompatibility(id, dependsOn, gates);
 
@@ -124,6 +157,9 @@ export class CriteriaStore {
       prompt: prompt.trim(),
       dependsOn,
       ...(gates !== undefined && { gates }),
+      kind,
+      ...(taxonomyElementId !== undefined && { taxonomyElementId }),
+      subject,
       createdAt: new Date(),
     };
 
@@ -165,7 +201,7 @@ export class CriteriaStore {
   /** Update a criterion's prompt, dependencies and/or gate compatibility */
   async update(
     id: string,
-    patch: { prompt?: string; dependsOn?: string[]; gates?: GateId[] }
+    patch: { prompt?: string; dependsOn?: string[]; gates?: GateId[]; kind?: CriterionKind; taxonomyElementId?: TaxonomyElementId; subject?: CriterionSubject }
   ): Promise<CriteriaDocument> {
     const existing = await this.get(id);
     if (!existing) {
@@ -191,10 +227,39 @@ export class CriteriaStore {
       await this.validateDependentsRemainCompatible(id, effectiveGates);
     }
 
+    // Validate same-kind dependencies against the resulting kind + dependsOn.
+    const effectiveKind: CriterionKind = patch.kind ?? existing.kind ?? 'gate';
+    const resultingDependsOn = patch.dependsOn ?? existing.dependsOn ?? [];
+    if (resultingDependsOn.length > 0) {
+      await this.validateSameKindDependencies(id, resultingDependsOn, effectiveKind);
+    }
+
+    // taxonomyElementId only applies to observation criteria.
+    const effectiveTaxonomy =
+      patch.taxonomyElementId !== undefined ? patch.taxonomyElementId : existing.taxonomyElementId;
+    if (effectiveTaxonomy !== undefined && effectiveKind !== 'observation') {
+      throw new CriteriaValidationError(
+        `taxonomyElementId can only be set on observation criteria (got kind '${effectiveKind}')`
+      );
+    }
+
+    // subject "run" is only valid for observation criteria. Resolve the effective
+    // subject (kind-dependent default when neither patch nor existing set it).
+    const effectiveSubject: CriterionSubject =
+      patch.subject ?? existing.subject ?? (effectiveKind === 'observation' ? 'run' : 'iteration');
+    if (effectiveSubject !== 'iteration' && effectiveKind !== 'observation') {
+      throw new CriteriaValidationError(
+        `subject '${effectiveSubject}' is not allowed for ${effectiveKind} criteria; gate criteria are always evaluated per iteration`
+      );
+    }
+
     const update: Record<string, unknown> = { updatedAt: new Date() };
     if (patch.prompt !== undefined) update.prompt = patch.prompt.trim();
     if (patch.dependsOn !== undefined) update.dependsOn = patch.dependsOn;
     if (patch.gates !== undefined) update.gates = patch.gates;
+    if (patch.kind !== undefined) update.kind = patch.kind;
+    if (patch.taxonomyElementId !== undefined) update.taxonomyElementId = patch.taxonomyElementId;
+    if (patch.subject !== undefined) update.subject = patch.subject;
 
     await this.collection.updateOne(
       this.scoped({ id, deletedAt: { $exists: false } }),
@@ -257,7 +322,15 @@ export class CriteriaStore {
         );
       }
 
-      collected.set(id, { id: doc.id, prompt: doc.prompt, dependsOn: doc.dependsOn, ...(doc.gates !== undefined && { gates: doc.gates }) });
+      collected.set(id, {
+        id: doc.id,
+        prompt: doc.prompt,
+        dependsOn: doc.dependsOn,
+        ...(doc.gates !== undefined && { gates: doc.gates }),
+        ...(doc.kind !== undefined && { kind: doc.kind }),
+        ...(doc.taxonomyElementId !== undefined && { taxonomyElementId: doc.taxonomyElementId }),
+        ...(doc.subject !== undefined && { subject: doc.subject }),
+      });
 
       if (doc.dependsOn) {
         for (const parentId of doc.dependsOn) {
@@ -284,6 +357,9 @@ export class CriteriaStore {
       prompt: c.prompt,
       dependsOn: c.dependsOn,
       ...(c.gates !== undefined && { gates: c.gates }),
+      ...(c.kind !== undefined && { kind: c.kind }),
+      ...(c.taxonomyElementId !== undefined && { taxonomyElementId: c.taxonomyElementId }),
+      ...(c.subject !== undefined && { subject: c.subject }),
     }));
 
     const edges: { from: string; to: string }[] = [];
@@ -307,12 +383,16 @@ export class CriteriaStore {
     for (const config of configs) {
       const existing = await this.collection.findOne(this.scoped({ id: config.id }));
       if (!existing) {
+        const seedKind: CriterionKind = config.kind ?? 'gate';
         await this.collection.insertOne({
           ...(this.projectId ? { projectId: this.projectId } : {}),
           id: config.id,
           prompt: config.prompt,
           dependsOn: config.dependsOn || [],
           ...(config.gates !== undefined && { gates: config.gates }),
+          kind: seedKind,
+          ...(config.taxonomyElementId !== undefined && { taxonomyElementId: config.taxonomyElementId }),
+          subject: config.subject ?? (seedKind === 'observation' ? 'run' : 'iteration'),
           createdAt: new Date(),
         } as any);
         inserted++;
@@ -331,6 +411,52 @@ export class CriteriaStore {
         throw new CriteriaValidationError(`Dependency '${depId}' does not exist`);
       }
     }
+  }
+
+  /**
+   * Validate that every dependency shares the criterion's kind. Keeps the gate
+   * DAG closed under resolveWithAncestors and lets observation criteria form
+   * their own dependency chains. Missing parents are caught by
+   * validateDependencies, so they are skipped here. See issue #1156.
+   */
+  private async validateSameKindDependencies(
+    criterionId: string,
+    dependsOn: string[],
+    kind: CriterionKind,
+  ): Promise<void> {
+    for (const parentId of dependsOn) {
+      const parent = await this.get(parentId);
+      if (!parent) continue;
+      const parentKind = parent.kind ?? 'gate';
+      if (parentKind !== kind) {
+        throw new CriteriaValidationError(
+          `'${criterionId}' (kind '${kind}') cannot depend on '${parentId}' (kind '${parentKind}'). ` +
+            `A criterion may only depend on same-kind criteria.`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Resolve observation-criteria ids, asserting each is an active
+   * kind:"observation" criterion. Used by submit validation + pp-taxonomy.
+   * Throws CriteriaValidationError on a missing or non-observation id.
+   */
+  async resolveObservations(ids: string[]): Promise<CriteriaDocument[]> {
+    const resolved: CriteriaDocument[] = [];
+    for (const id of ids) {
+      const doc = await this.get(id);
+      if (!doc) {
+        throw new CriteriaValidationError(`Observation criterion '${id}' does not exist`);
+      }
+      if ((doc.kind ?? 'gate') !== 'observation') {
+        throw new CriteriaValidationError(
+          `Criterion '${id}' is not an observation (kind '${doc.kind ?? 'gate'}')`
+        );
+      }
+      resolved.push(doc);
+    }
+    return resolved;
   }
 
   /** Validate that adding edges would not introduce a cycle */

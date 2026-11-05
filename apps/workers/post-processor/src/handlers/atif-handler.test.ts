@@ -49,6 +49,7 @@ describe("AtifHandler", () => {
         }),
         updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
       } as any,
+      criteriaCollection: {} as any,
       log: vi.fn().mockResolvedValue(undefined),
     };
   });
