@@ -14,6 +14,7 @@ interface ProfilePickerProps {
   selectedProfileId: string | null;
   onSelect: (profileId: string | null) => void;
   placeholder?: string;
+  inputId?: string;
   workerNameById?: ReadonlyMap<string, string>;
 }
 
@@ -22,6 +23,7 @@ export function ProfilePicker({
   selectedProfileId,
   onSelect,
   placeholder = "Search existing profiles…",
+  inputId,
   workerNameById,
 }: ProfilePickerProps) {
   const [query, setQuery] = useState("");
@@ -102,6 +104,7 @@ export function ProfilePicker({
       <div className="flex items-center gap-2">
         <Search className="h-4 w-4 text-muted-foreground" />
         <Input
+          id={inputId}
           value={query}
           placeholder={placeholder}
           onChange={(event) => {
