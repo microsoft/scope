@@ -78,6 +78,38 @@ afterEach(() => {
 });
 
 describe("Layout", () => {
+  it.each(["0", "1"])("preserves section icons with sidebar expanded=%s", (expanded) => {
+    localStorage.setItem("scope:layout:sidebar-expanded", expanded);
+    renderLayout();
+
+    const sidebar = within(screen.getByLabelText("Primary navigation"));
+    const sections = [
+      ["Projects", "folder-kanban"],
+      ["Runs", "list"],
+      ["Statistics", "chart-column"],
+      ["Reports", "file-text"],
+      ["Insights", "lightbulb"],
+      ["Prompts", "message-square-text"],
+      ["Criteria", "flask-conical"],
+      ["Features", "tags"],
+      ["Profiles", "sliders-horizontal"],
+      ["Skills", "book-open"],
+      ["Codebases", "folder-git2"],
+      ["Resources", "boxes"],
+      ["MCP", "server"],
+      ["Extensions", "puzzle"],
+      ["Agents", "bot"],
+      ["Models", "cpu"],
+      ["Secrets", "key-round"],
+    ];
+    for (const [label, icon] of sections) {
+      expect(
+        sidebar.getByRole("link", { name: label }).querySelector(`.lucide-${icon}`),
+        label,
+      ).toBeTruthy();
+    }
+  });
+
   it("keeps the full-bleed shell when opening and closing a key preview", () => {
     renderLayout("/secrets/keys");
 
