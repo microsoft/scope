@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 // In-memory backing for the config file so tests never touch the real
 // ~/.config/scope/config.json. `existsSync` reports the config dir as present
@@ -93,5 +95,34 @@ describe("cli config — project selection", () => {
   it("requireProjectId throws an actionable error when unset", () => {
     expect(() => requireProjectId()).toThrowError(/No project selected/);
     expect(() => requireProjectId()).toThrowError(/project use <id>/);
+  });
+});
+
+describe("cli config — location", () => {
+  const original = process.env.XDG_CONFIG_HOME;
+  beforeEach(() => {
+    store = {};
+    delete process.env.SCOPE_PROJECT;
+    process.env.XDG_CONFIG_HOME = "/xdg";
+  });
+  afterEach(() => {
+    if (original === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = original;
+  });
+
+  it.skipIf(process.platform === "win32")("writes config.json under XDG_CONFIG_HOME", () => {
+    setSelectedProjectId("proj-xdg");
+    expect(Object.keys(store)).toEqual([join("/xdg", "scope", "config.json")]);
+  });
+
+  it.skipIf(process.platform === "win32")("falls back to the legacy ~/.config/scope/config.json until rewritten", () => {
+    const legacy = join(homedir(), ".config", "scope", "config.json");
+    store[legacy] = JSON.stringify({ selectedProjectId: "legacy-proj" });
+    expect(getSelectedProjectId()).toBe("legacy-proj");
+
+    setSelectedProjectId("new-proj");
+    expect(store[join("/xdg", "scope", "config.json")]).toContain("new-proj");
+    expect(store[legacy]).toContain("legacy-proj");
+    expect(getSelectedProjectId()).toBe("new-proj");
   });
 });

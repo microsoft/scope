@@ -17,7 +17,9 @@ For raw API calls, see
 
 - The `scope` CLI is
   [installed](/getting-started/install-cli/) and on your `PATH`.
-- `SCOPE_API_URL` points to your Scope deployment.
+- `SCOPE_API_URL` points to your Scope deployment, or a named
+  environment is selected with `scope env use`. See
+  [Configure the CLI](/getting-started/configure-cli/).
 
 ## Submit a run
 
