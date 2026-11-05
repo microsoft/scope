@@ -16,6 +16,48 @@ derives a localhost URL from `SCOPE_API_PORT` or uses `SCOPE_DEFAULT_API_URL`.
 
 ## Docker Development
 
+### NPM_CONFIG_REGISTRY
+**Default:** host npm registry for `pnpm docker:*`; otherwise `https://registry.npmjs.org/`
+**Type:** HTTP(S) URL
+
+Registry used for ordinary npm and pnpm package installation in Docker image
+builds. `scripts/dev-compose.sh` reads the host setting with
+`npm config get registry`, so a private package proxy remains a one-command
+workflow:
+
+```bash
+NPM_CONFIG_REGISTRY=https://packages.example.test/npm/ pnpm docker:dev:copilot
+```
+
+Trailing slashes are normalized during the pinned pnpm bootstrap. Registry URLs
+may point at authenticated/private package services, but credentials must be
+provided through the environment's standard npm authentication mechanism rather
+than embedded in the URL or build args. Credential-bearing URLs are rejected,
+and bootstrap diagnostics report only the endpoint origin.
+
+This setting is deliberately **not** copied to `COREPACK_NPM_REGISTRY`: package
+proxies that serve npm packuments are not necessarily compatible with
+Corepack's per-version metadata protocol.
+
+### COREPACK_NPM_REGISTRY
+**Default:** unset (Corepack's public default)
+**Type:** optional HTTP(S) URL
+
+Corepack-compatible metadata endpoint used only to bootstrap the pinned pnpm
+version in Docker images. Set it explicitly only when the endpoint supports
+Corepack metadata:
+
+```bash
+COREPACK_NPM_REGISTRY=https://corepack.example.test/ \
+  NPM_CONFIG_REGISTRY=https://packages.example.test/npm/ \
+  pnpm docker:dev:copilot
+```
+
+If Corepack fails, the pinned npm fallback uses `NPM_CONFIG_REGISTRY` and clears
+the Corepack override, keeping the two paths in separate failure domains. Normal
+`pnpm install` keeps pnpm's built-in package-fetch retries; Scope does not wrap
+it in an outer retry loop.
+
 ### API_DEBUG_PORT
 **Default:** `9200`
 **Type:** integer (Docker Compose development only)

@@ -50,13 +50,15 @@ x-worker-deps: &worker-deps
   judge:
     condition: service_started
 
-# npm/pnpm registry for the image builds. Defaults to the public registry, so
+# npm/pnpm registry for package installation. Defaults to the public registry, so
 # external contributors and CI need no configuration. scripts/dev-compose.sh
 # auto-detects the host's registry (npm config get registry, which reads ~/.npmrc)
 # and forwards it here, so engineers behind a private proxy (e.g. Microsoft's npm
-# proxy) build with no setup. Export NPM_CONFIG_REGISTRY to override the detected value.
+# proxy) build with no setup. Corepack metadata resolution stays on its default
+# registry unless COREPACK_NPM_REGISTRY explicitly selects a compatible endpoint.
 x-npm-build-args: &npm-build-args
   NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}
+  COREPACK_NPM_REGISTRY: ${COREPACK_NPM_REGISTRY:-}
 
 services:
   # ===========================================================================
