@@ -56,6 +56,12 @@ pnpm install                      # Install all workspace dependencies
 CI installs with `pnpm install --frozen-lockfile`; commit an updated `pnpm-lock.yaml` when you change
 dependencies.
 
+The workspace intentionally skips the optional `ssh2` and `cpu-features` native
+install scripts. Scope uses `ssh2` only transitively through Docker test tooling,
+and its supported JavaScript implementation preserves that behavior without a
+Python/compiler toolchain. Keep required dependency build scripts allowlisted in
+`pnpm-workspace.yaml`; do not replace this narrow policy with `--ignore-scripts`.
+
 ## Local development
 
 Local authentication requires your browser to trust a development certificate.
@@ -86,6 +92,123 @@ pnpm dev:portal                   # Portal only (native)
 pnpm dev:coder-acp-copilot        # A single worker natively (pnpm dev:<service-name>)
 pnpm open:portal                  # Open the portal in your browser
 ```
+
+The first Docker start compiles the Rust AI gateway inside its development
+container and can take several minutes. During development, the gateway may use
+all CPUs assigned to Docker or the Podman VM, while its memory remains limited
+to 2 GiB. Keep the Compose command running until the `coder-acp-copilot` logs
+show that it connected to MongoDB and ensured `queue-coder-acp-copilot`; runs
+submitted before that worker is ready remain pending. Later starts reuse the
+gateway's named Cargo target volume and are faster.
+
+### Prepare container storage for a clean rebuild
+
+Before a large clean Docker or Podman rebuild, inspect the container runtime's
+storage rather than relying only on host free space. Docker Desktop and Podman
+Machine commonly keep images, writable layers, build cache, and named volumes
+inside a VM or separate filesystem. That storage can fill independently while
+the host still appears to have ample capacity.
+
+A first clean Copilot-stack build needs substantial temporary and persistent
+runtime space because it pulls base images, installs dependencies, and compiles
+the Rust gateway before caches can be reused. Treat this as planning guidance,
+not a fixed minimum: usage varies with the platform, CPU architecture, enabled
+profiles, existing layers, and cache state. Confirm the runtime has comfortable
+headroom before starting instead of relying on a universal threshold.
+
+These commands identify the selected Docker daemon and inspect its object usage:
+
+```bash
+docker context show
+docker context inspect "$(docker context show)" \
+  --format 'Endpoint={{.Endpoints.docker.Host}}'
+docker info \
+  --format 'Name={{.Name}} OperatingSystem={{.OperatingSystem}} DockerRootDir={{.DockerRootDir}}'
+docker system df
+docker system df -v
+```
+
+`docker system df` reports Docker object usage, not the filesystem's total
+capacity or free space. Check the filesystem containing `DockerRootDir` on the
+actual daemon host:
+
+- For a native local Linux daemon, run
+  `docker_root="$(docker info --format '{{.DockerRootDir}}')" && df -h "$docker_root"`.
+- For an SSH, TCP, or other remote context, use the approved access path to
+  that daemon host and run `df -h` there. Running `df` on the CLI host does not
+  measure the remote daemon's storage.
+- For Docker Desktop, inspect **Settings > Resources > Advanced > Disk usage
+  limit** and **Disk image location**, then confirm the filesystem containing
+  that image has headroom. See Docker's
+  [Resources settings](https://docs.docker.com/desktop/settings-and-maintenance/settings/#resources).
+
+When Docker commands target a Podman socket, also inspect Podman directly.
+On macOS or Windows, check both the configured machine size and free space
+inside the running VM. Do not select the first listed machine: compare the
+active Docker context endpoint and Podman connection URI with the running
+machines, then set the verified machine name explicitly:
+
+```bash
+docker context inspect "$(docker context show)" \
+  --format 'Endpoint={{.Endpoints.docker.Host}}'
+podman system connection list
+podman machine list
+podman system df
+podman system df -v
+machine_name="<verified-running-machine>"
+test -n "$machine_name"
+podman machine ssh "$machine_name" \
+  df -h / /var /var/lib/containers
+```
+
+After `scripts/worktree-env.sh` or a `pnpm docker:*` command has generated
+`.env`, use the Compose project label to distinguish this worktree's resources
+from unrelated projects:
+
+```bash
+scope_project="$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env | tail -n 1)"
+test -n "$scope_project"
+docker ps -a --filter "label=com.docker.compose.project=$scope_project"
+docker compose images
+docker volume ls --filter "label=com.docker.compose.project=$scope_project"
+```
+
+`docker system df -v` also shows Docker build-cache usage, but cache records are
+not always attributable to one Compose project. `podman system df -v` reports
+images, containers, and volumes, including shared image-layer usage; it does not
+provide a separate Docker BuildKit-style build-cache section. Do not assume
+that all reclaimable or shared storage belongs to Scope.
+
+If storage is low, use this decision sequence:
+
+1. Inspect runtime and, when applicable, VM filesystem usage.
+2. Identify stopped containers, images, runtime-reported build-cache records,
+   and volumes that belong to this exact Scope worktree.
+3. Prefer removing only verified Scope resources. Ask the user before cleanup,
+   and do not recommend broad `system prune`, `volume prune`, wildcard removal,
+   or deletion of unrelated runtime resources.
+4. Re-run the inspection commands and retry the build only after confirming
+   adequate free space.
+
+The following are **destructive examples** for resources whose exact IDs or
+names have already been verified and whose removal the user approved:
+
+```bash
+docker container rm "$SCOPE_STOPPED_CONTAINER_ID"
+docker image rm --no-prune "$SCOPE_IMAGE_ID"
+docker volume rm "$SCOPE_VOLUME_NAME"
+
+# Native Podman equivalents
+podman rm "$SCOPE_STOPPED_CONTAINER_ID"
+podman rmi --no-prune "$SCOPE_IMAGE_ID"
+podman volume rm "$SCOPE_VOLUME_NAME"
+```
+
+Do not run these with unset variables, `--all`, `--force`, or glob-expanded
+names. Named volumes can contain local MongoDB, Azurite, authentication, gateway
+build, or worker workspace data; inspect and confirm their contents and impact
+before deleting them. If a Scope-specific build-cache record cannot be
+identified confidently, leave it in place rather than pruning shared cache.
 
 ### Debug the Docker development API
 
@@ -311,8 +434,10 @@ unblock a PR.
 
 ### 6. Close the loop
 
-Thank the contributor and link any follow-up work. The PR owner checks the post-merge result and
-coordinates a fix or revert if needed.
+Thank the contributor and link any follow-up work. Once merged, the author appears in the
+"Thank you" section of the [Contribute page](https://microsoft.github.io/scope/community/contribute/#thank-you)
+and on the landing page after the merge-triggered contribution-data workflow completes. The PR
+owner checks the post-merge result and coordinates a fix or revert if needed.
 
 If a contribution is not a fit, explain why and close it promptly. When a PR is waiting on the
 contributor after a clear request for information or changes, send a reminder after **two weeks

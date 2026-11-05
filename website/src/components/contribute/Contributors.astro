@@ -1,0 +1,63 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Thanks contributors: everyone (bots aside) who got a pull request merged.
+// The contribution-data workflow publishes the list to the website-data
+// branch, and the browser fetches it. See website/AGENTS.md.
+import '../../styles/contributions.css';
+import '../../styles/contributors.css';
+import { CONTRIBUTORS_DATA_URL, CONTRIBUTORS_GRAPH_URL } from '../../scripts/contributors';
+
+interface Props {
+	/** `wall` for the landing avatar wall, `grid` for the docs page cards. */
+	variant?: 'wall' | 'grid';
+	/**
+	 * Wall: maximum number of items, including the "+N" bubble.
+	 * Grid: cards shown before the "Show all" button.
+	 */
+	limit?: number;
+}
+
+const { variant = 'wall', limit } = Astro.props;
+const src = import.meta.env.PUBLIC_CONTRIBUTORS_URL || CONTRIBUTORS_DATA_URL;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const moreHref = `${base}/community/contribute/`;
+const skeletons = variant === 'wall' ? 8 : 3;
+const listId = `thanks-list-${variant}`;
+---
+
+<scope-contributors class={`thanks thanks--${variant} not-content`} data-variant={variant} data-limit={limit} data-src={src} data-more-href={moreHref} data-state="loading">
+	<slot />
+	<p class="contrib-sample-tag" data-sample-tag hidden>Sample data · dev only</p>
+	<ul class="thanks-list" id={listId} data-list aria-busy="true" aria-label="Contributors">
+		{
+			Array.from({ length: skeletons }, () => (
+				<li class="thanks-item thanks-skeleton" aria-hidden="true" />
+			))
+		}
+	</ul>
+	{
+		variant === 'grid' && (
+			<button type="button" class="thanks-show-all" data-show-all aria-controls={listId} hidden>
+				<span data-show-all-label>Show all contributors</span>
+				<span aria-hidden="true">&darr;</span>
+			</button>
+		)
+	}
+	<p class="contrib-message thanks-message--empty">
+		No pull request contributors are available yet.
+	</p>
+	<p class="contrib-message thanks-message--error">
+		We couldn't load the list. See
+		<a href={CONTRIBUTORS_GRAPH_URL} target="_blank" rel="noopener noreferrer">contributors on GitHub<span class="sr-only"> (opens in a new tab)</span></a>.
+	</p>
+	<p class="contrib-fallback">
+		See
+		<a href={CONTRIBUTORS_GRAPH_URL} target="_blank" rel="noopener noreferrer">contributors on GitHub<span class="sr-only"> (opens in a new tab)</span></a>.
+	</p>
+</scope-contributors>
+
+<script>
+	import '../../scripts/contributors-element';
+</script>

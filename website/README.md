@@ -26,7 +26,8 @@ development, contribution, and support guidance live under
 ├── src/
 │   ├── assets/
 │   ├── components/                  # Astro landing, interactive example, header, page title, site footer
-│   │   └── community/               # article/talk lists + landing teaser
+│   │   ├── community/               # article/talk lists + landing teaser
+│   │   └── contribute/              # contributor thanks (landing + page)
 │   ├── content/
 │   │   ├── docs/                    # all user-facing pages (.md / .mdx)
 │   │   │   ├── introduction/
@@ -37,13 +38,15 @@ development, contribution, and support guidance live under
 │   │   │   └── community/
 │   │   ├── articles/                # one YAML per published article
 │   │   └── talks/                   # one YAML per talk
+│   ├── data/                        # dev-only contributor sample
 │   ├── openapi/scope-openapi.json   # artifact generated from the API registry
 │   ├── plugins/
 │   │   ├── remark-base-path.mjs    # applies the deployment base to internal links
 │   │   └── remark-http-snippets.mjs # turns ```http blocks into multi-language tabs
 │   ├── scripts/
 │   │   ├── analytics.ts            # consent-gated website-only 1DS analytics
-│   │   └── flow-demo.ts            # progressive-enhancement example controller
+│   │   ├── flow-demo.ts             # progressive-enhancement example controller
+│   │   └── contributors*.ts         # contributor thanks: data helpers + custom element
 │   ├── styles/landing.css           # shared brand tokens + scoped landing styles
 │   └── content.config.ts
 ├── astro.config.mjs                 # sidebar, plugins, starlight-openapi config
@@ -191,9 +194,14 @@ table of contents, code examples, and previous/next navigation.
 - **Onboarding:** a concrete example before terminology, followed by
   separate Portal, CLI, and API entry points. Access requirements are
   explicit rather than promising instant access to a hosted service.
-- **Motion:** limited to the silent showreel and the interactive
-  example, with pause controls and reduced-motion support. The logo
-  and documentation chrome remain still.
+- **Motion:** limited to the silent showreel, the interactive
+  example, and the contributor avatars (pop-in, hover tooltips), with
+  pause controls and reduced-motion support. The logo and documentation
+  chrome remain still.
+- **Contribution:** a landing-page wall and full grid thank merged-PR
+  contributors, refreshed after merges from a data branch without a
+  redeploy. The publisher is `.github/workflows/contribution-data.yml`;
+  see "Contributors" in `AGENTS.md`.
 
 ### Showreel
 
