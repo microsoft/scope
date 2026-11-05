@@ -7,7 +7,6 @@ import { Link, useLocation, Outlet, matchPath } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   Activity,
-  Atom,
   Plus,
   Settings,
   Menu,
@@ -36,6 +35,8 @@ import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useFeatureFlags } from "@/contexts/FeatureFlagContext";
 import { useProjectContext } from "@/contexts/ProjectContext";
 import { navigationIcons } from "./navigation-icons";
+
+const ExperimentIcon = navigationIcons.experiments;
 
 interface NavItem {
   to: string;
@@ -80,7 +81,7 @@ const navGroups: NavGroup[] = [
     label: "Activity",
     scoped: true,
     items: [
-      { to: "/experiments", label: "Experiments", icon: Atom },
+      { to: "/experiments", label: "Experiments", icon: navigationIcons.experiments },
       { to: "/runs", label: "Runs", icon: navigationIcons.runs },
       { to: "/statistics", label: "Statistics", icon: navigationIcons.statistics },
       { to: "/reports", label: "Reports", icon: navigationIcons.reports },
@@ -391,7 +392,7 @@ function NewWorkflowLauncher({
               "bg-accent text-foreground ring-2 ring-ring ring-offset-1",
           )}
         >
-          <Atom className="h-4 w-4 shrink-0" />
+          <ExperimentIcon className="h-4 w-4 shrink-0" />
           <span className="truncate text-xs font-medium">Experiment</span>
         </Link>
       </div>
@@ -498,7 +499,7 @@ function NewWorkflowLauncher({
             "bg-accent text-foreground ring-2 ring-inset ring-ring",
         )}
       >
-        <Atom className="h-4 w-4 shrink-0" />
+        <ExperimentIcon className="h-4 w-4 shrink-0" />
         <span className="whitespace-nowrap">Experiment</span>
       </Link>
     </div>
@@ -826,7 +827,7 @@ export function Layout() {
                           onClick={() => setMobileOpen(false)}
                           className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                         >
-                          <Atom className="h-4 w-4" />
+                          <ExperimentIcon className="h-4 w-4" />
                           New Experiment
                         </Link>
                         <div className="my-2 h-px bg-border/60" aria-hidden />

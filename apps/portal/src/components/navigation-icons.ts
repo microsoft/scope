@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+  Atom,
   BarChart3,
   BookOpen,
   Bot,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 
 export const navigationIcons = {
+  experiments: Atom,
   runs: List,
   statistics: BarChart3,
   reports: FileText,
@@ -45,6 +47,7 @@ export const navigationIcons = {
 export type NavigationIconKey = keyof typeof navigationIcons;
 
 const listSectionByStorageKey = {
+  experiments: "experiments",
   runs: "runs",
   reports: "reports",
   "report-templates": "reports",
