@@ -26,6 +26,7 @@ import { api } from "@/lib/api";
 import { AgentBadge } from "@/components/AgentBadge";
 import { useStrictAgentCapabilities } from "@/hooks/useStrictAgentCapabilities";
 import {
+  agentSupportsExtensions,
   getActiveAgentVersions,
   isAgentAvailable,
   type CodingAgent,
@@ -74,7 +75,7 @@ export function ProfileCreateForm({
   const selectedAgent = agents.find((a: CodingAgent) => a._id === worker);
   const supportsMcpServers = !strictAgentCapabilities || selectedAgent?.capabilities?.supportsMcpServers === true;
   const supportsSkills = !strictAgentCapabilities || selectedAgent?.capabilities?.supportsSkills === true;
-  const supportsExtensions = !strictAgentCapabilities || selectedAgent?.capabilities?.supportsExtensions === true;
+  const supportsExtensions = agentSupportsExtensions(selectedAgent);
   const { capabilitiesMap, activeModelIds, capabilitiesLoaded } = useModelCapabilities(worker || undefined);
   const supportedModels = activeModelIds.length > 0
     ? activeModelIds

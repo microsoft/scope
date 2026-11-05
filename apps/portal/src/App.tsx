@@ -62,6 +62,7 @@ import { RunPreviewPanel } from "@/pages/RunPreviewPanel";
 import { Admin } from "@/pages/Admin";
 import { Projects } from "@/pages/Projects";
 import { FeatureRoute } from "@/components/FeatureRoute";
+import { ExtensionsRoute } from "@/components/ExtensionsRoute";
 import { ProjectGate } from "@/components/ProjectGate";
 import { HomeRoute } from "@/components/HomeRoute";
 import { useFavicon } from "@/hooks/useFavicon";
@@ -145,10 +146,10 @@ export function App() {
         <Route path="/resources/new" element={<ProjectGate><CreateResource /></ProjectGate>} />
         <Route path="/resources/:id" element={<ProjectGate><ResourceDetail /></ProjectGate>} />
         <Route path="/resources/:id/revisions/:revisionId" element={<ProjectGate><ResourceDetail /></ProjectGate>} />
-        <Route path="/extensions" element={<FeatureRoute featureKey="extensions"><ProjectGate><ExtensionList /></ProjectGate></FeatureRoute>}>
-          <Route path=":id/preview" element={<FeatureRoute featureKey="extensions"><ExtensionPreviewPanel /></FeatureRoute>} />
+        <Route path="/extensions" element={<ExtensionsRoute><ProjectGate><ExtensionList /></ProjectGate></ExtensionsRoute>}>
+          <Route path=":id/preview" element={<ExtensionsRoute><ExtensionPreviewPanel /></ExtensionsRoute>} />
         </Route>
-        <Route path="/extensions/:id" element={<FeatureRoute featureKey="extensions"><ExtensionDetail /></FeatureRoute>} />
+        <Route path="/extensions/:id" element={<ExtensionsRoute><ExtensionDetail /></ExtensionsRoute>} />
         <Route path="/profiles" element={<FeatureRoute featureKey="profiles"><ProjectGate><ProfileList /></ProjectGate></FeatureRoute>}>
           <Route path=":profileId/preview" element={<FeatureRoute featureKey="profiles"><ProfilePreviewPanel /></FeatureRoute>} />
         </Route>
