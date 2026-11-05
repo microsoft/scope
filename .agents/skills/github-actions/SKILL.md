@@ -1,6 +1,6 @@
 ---
 name: github-actions
-description: Use when creating, editing, reviewing, or troubleshooting GitHub Actions workflows in Scope, especially workflow files and external `uses:` references.
+description: Use when creating, editing, reviewing, or troubleshooting GitHub Actions workflows in Scope.
 metadata:
   version: "1.0.0"
 ---
