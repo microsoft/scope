@@ -26,7 +26,8 @@ development, contribution, and support guidance live under
 ├── src/
 │   ├── assets/
 │   ├── components/                  # Astro landing, interactive example, header, page title, site footer
-│   │   └── community/               # article/talk lists + landing teaser
+│   │   ├── community/               # article/talk lists + landing teaser
+│   │   └── contribute/              # contributor thanks (landing + page)
 │   ├── content/
 │   │   ├── docs/                    # all user-facing pages (.md / .mdx)
 │   │   │   ├── introduction/
@@ -37,13 +38,15 @@ development, contribution, and support guidance live under
 │   │   │   └── community/
 │   │   ├── articles/                # one YAML per published article
 │   │   └── talks/                   # one YAML per talk
+│   ├── data/                        # dev-only contributor sample
 │   ├── openapi/scope-openapi.json   # artifact generated from the API registry
 │   ├── plugins/
 │   │   ├── remark-base-path.mjs    # applies the deployment base to internal links
 │   │   └── remark-http-snippets.mjs # turns ```http blocks into multi-language tabs
 │   ├── scripts/
 │   │   ├── analytics.ts            # consent-gated website-only 1DS analytics
-│   │   └── flow-demo.ts            # progressive-enhancement example controller
+│   │   ├── flow-demo.ts             # progressive-enhancement example controller
+│   │   └── contributors*.ts         # contributor thanks: data helpers + custom element
 │   ├── styles/landing.css           # shared brand tokens + scoped landing styles
 │   └── content.config.ts
 ├── astro.config.mjs                 # sidebar, plugins, starlight-openapi config
@@ -102,6 +105,34 @@ from the root pnpm workspace.
 | `pnpm refresh:openapi` | Generate the OpenAPI snapshot from this monorepo's API |
 
 ## Authoring docs
+
+### Taxonome reference data
+
+The [Taxonome guide](src/content/docs/guides/taxonome.mdx) links the CLI,
+format, default taxonomy/elements, and handler reference pages.
+[ElementCatalog.astro](src/components/taxonome/ElementCatalog.astro)
+renders its file index and complete source disclosures from the canonical
+manifest and referenced YAML in
+[`packages/ax-taxonomy/taxonomy/`](../packages/ax-taxonomy/taxonomy/).
+
+The website-only loader in
+[taxonome-catalog.mjs](src/lib/taxonome-catalog.mjs) reads bounded local
+YAML as data. It does not import the runtime engine/catalog, resolve or
+execute handlers/plugins, initialize an SDK/model, or fetch a catalog.
+Keep this property: installing and building only `website/` must suffice
+when the checkout includes the canonical YAML and source-text files. Do not hand-maintain
+a second element list. Canonical YAML changes are included in the Pages
+workflow path filters.
+
+Catalog loader regressions run with `pnpm test`. Browser coverage in
+[taxonome.spec.ts](tests/taxonome.spec.ts) checks generated source fidelity,
+base-prefixed links, keyboard disclosures and accessibility.
+`CanonicalSource.astro` reads allowlisted implementation excerpts as text;
+the build pins their source root before Astro relocates prerender bundles.
+The Taxonome-only keyboard enhancement makes generated code frames
+focusable, and canonical source panels use high-contrast highlighting.
+
+### General authoring
 
 - Use `.md` for plain Markdown, `.mdx` whenever the page contains JSX
   (e.g. Starlight `<Tabs>`).
@@ -191,9 +222,14 @@ table of contents, code examples, and previous/next navigation.
 - **Onboarding:** a concrete example before terminology, followed by
   separate Portal, CLI, and API entry points. Access requirements are
   explicit rather than promising instant access to a hosted service.
-- **Motion:** limited to the silent showreel and the interactive
-  example, with pause controls and reduced-motion support. The logo
-  and documentation chrome remain still.
+- **Motion:** limited to the silent showreel, the interactive
+  example, and the contributor avatars (pop-in, hover tooltips), with
+  pause controls and reduced-motion support. The logo and documentation
+  chrome remain still.
+- **Contribution:** a landing-page wall and full grid thank merged-PR
+  contributors, refreshed after merges from a data branch without a
+  redeploy. The publisher is `.github/workflows/contribution-data.yml`;
+  see "Contributors" in `AGENTS.md`.
 
 ### Showreel
 

@@ -13,8 +13,12 @@ if [ "$#" -lt 2 ]; then
   exit 2
 fi
 
-command -v curl >/dev/null 2>&1 || {
-  echo "curl is required" >&2
+command -v wget >/dev/null 2>&1 || {
+  echo "wget is required" >&2
+  exit 2
+}
+command -v timeout >/dev/null 2>&1 || {
+  echo "timeout is required" >&2
   exit 2
 }
 command -v yq >/dev/null 2>&1 || {
@@ -25,6 +29,14 @@ command -v yq >/dev/null 2>&1 || {
 API_URL=${1%/}
 AGENT_MANIFEST=$2
 shift 2
+
+case "$API_URL" in
+  http://* | https://*) ;;
+  *)
+    echo "API URL must use http or https: $API_URL" >&2
+    exit 2
+    ;;
+esac
 
 AVAILABLE_OVERRIDE=
 if [ "${1:-}" = "--available" ]; then
@@ -63,11 +75,32 @@ fi
 
 TMP_DIR=$(mktemp -d)
 RESPONSE_FILE="$TMP_DIR/response"
-trap 'rm -f "$RESPONSE_FILE"; rmdir "$TMP_DIR"' EXIT HUP INT TERM
+DIAGNOSTICS_FILE="$TMP_DIR/wget-diagnostics"
+PAYLOAD_FILE="$TMP_DIR/request.json"
+trap 'rm -f "$RESPONSE_FILE" "$DIAGNOSTICS_FILE" "$PAYLOAD_FILE"; rmdir "$TMP_DIR"' EXIT HUP INT TERM
+
+REQUEST_STATUS=000
+REQUEST_EXIT=0
 
 response_body() {
   if [ -f "$RESPONSE_FILE" ]; then
     cat "$RESPONSE_FILE"
+  fi
+}
+
+request_diagnostics() {
+  if [ -s "$DIAGNOSTICS_FILE" ]; then
+    tail -n 3 "$DIAGNOSTICS_FILE" | tr '\n' ' '
+  else
+    printf 'no wget diagnostics'
+  fi
+}
+
+failure_details() {
+  if [ -s "$RESPONSE_FILE" ]; then
+    response_body
+  else
+    request_diagnostics
   fi
 }
 
@@ -80,27 +113,6 @@ is_transient_status() {
       return 1
       ;;
   esac
-}
-
-is_transient_curl_exit() {
-  case "$1" in
-    5 | 6 | 7 | 18 | 28 | 35 | 52 | 55 | 56)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-handle_curl_failure() {
-  curl_exit=$1
-  description=$2
-  if is_transient_curl_exit "$curl_exit"; then
-    return 0
-  fi
-  echo "Permanent $description failure (curl exit $curl_exit)" >&2
-  return 1
 }
 
 sleep_with_backoff() {
@@ -117,36 +129,78 @@ sleep_with_backoff() {
   sleep "$delay"
 }
 
+perform_request() {
+  method=$1
+  url=$2
+  payload=${3:-}
+
+  : > "$RESPONSE_FILE"
+  : > "$DIAGNOSTICS_FILE"
+  REQUEST_STATUS=000
+  REQUEST_EXIT=0
+
+  if [ "$method" = "POST" ]; then
+    printf '%s' "$payload" > "$PAYLOAD_FILE"
+    if timeout "$REQUEST_TIMEOUT_SECONDS" \
+      wget -S -O "$RESPONSE_FILE" \
+        -T "$CONNECT_TIMEOUT_SECONDS" \
+        --header "Content-Type: application/json" \
+        --post-file "$PAYLOAD_FILE" \
+        "$url" 2> "$DIAGNOSTICS_FILE"; then
+      :
+    else
+      REQUEST_EXIT=$?
+    fi
+  else
+    if timeout "$REQUEST_TIMEOUT_SECONDS" \
+      wget -S -O "$RESPONSE_FILE" \
+        -T "$CONNECT_TIMEOUT_SECONDS" \
+        "$url" 2> "$DIAGNOSTICS_FILE"; then
+      :
+    else
+      REQUEST_EXIT=$?
+    fi
+  fi
+
+  # wget -S writes every redirect response to stderr; the final HTTP line wins.
+  REQUEST_STATUS=$(
+    awk '/^  HTTP\/[0-9.]+ [0-9][0-9][0-9]/ { status=$2 } END { print status }' \
+      "$DIAGNOSTICS_FILE"
+  )
+  REQUEST_STATUS=${REQUEST_STATUS:-000}
+
+  # A received success or redirect header is not success if the transfer failed.
+  case "$REQUEST_STATUS:$REQUEST_EXIT" in
+    2??:0 | 3??:0) ;;
+    2??:* | 3??:*) REQUEST_STATUS=000 ;;
+  esac
+}
+
 wait_for_api() {
   attempt=1
   while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
-    status=000
-    if status=$(curl -sS --connect-timeout "$CONNECT_TIMEOUT_SECONDS" \
-      --max-time "$REQUEST_TIMEOUT_SECONDS" \
-      -o "$RESPONSE_FILE" -w "%{http_code}" "$API_URL/health"); then
-      :
-    else
-      curl_exit=$?
-      handle_curl_failure "$curl_exit" "API readiness" || return 1
-      status=000
-    fi
+    perform_request GET "$API_URL/health"
 
-    case "$status" in
+    case "$REQUEST_STATUS" in
       2??)
         return 0
         ;;
     esac
 
-    if ! is_transient_status "$status"; then
-      echo "Permanent API readiness failure (HTTP $status): $(response_body)" >&2
+    if ! is_transient_status "$REQUEST_STATUS"; then
+      echo "Permanent API readiness failure (HTTP $REQUEST_STATUS): $(failure_details)" >&2
       return 1
     fi
     if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
-      echo "API readiness failed after $MAX_ATTEMPTS attempts (last HTTP $status)" >&2
+      echo "API readiness failed after $MAX_ATTEMPTS attempts (last HTTP $REQUEST_STATUS, wget exit $REQUEST_EXIT): $(request_diagnostics)" >&2
       return 1
     fi
 
-    echo "API not ready (HTTP $status), retrying..." >&2
+    if [ "$REQUEST_STATUS" = "000" ]; then
+      echo "API not ready (no HTTP response, wget exit $REQUEST_EXIT): $(request_diagnostics); retrying..." >&2
+    else
+      echo "API not ready (HTTP $REQUEST_STATUS), retrying..." >&2
+    fi
     sleep_with_backoff "$attempt"
     attempt=$((attempt + 1))
   done
@@ -159,37 +213,29 @@ post_idempotent() {
   attempt=1
 
   while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
-    status=000
-    if status=$(curl -sS --connect-timeout "$CONNECT_TIMEOUT_SECONDS" \
-      --max-time "$REQUEST_TIMEOUT_SECONDS" \
-      -o "$RESPONSE_FILE" -w "%{http_code}" \
-      -X POST "$API_URL$path" \
-      -H "Content-Type: application/json" \
-      --data-binary "$payload"); then
-      :
-    else
-      curl_exit=$?
-      handle_curl_failure "$curl_exit" "$description registration" || return 1
-      status=000
-    fi
+    perform_request POST "$API_URL$path" "$payload"
 
-    case "$status" in
+    case "$REQUEST_STATUS" in
       2??)
         echo "Registered $description"
         return 0
         ;;
     esac
 
-    if ! is_transient_status "$status"; then
-      echo "Permanent $description registration failure (HTTP $status): $(response_body)" >&2
+    if ! is_transient_status "$REQUEST_STATUS"; then
+      echo "Permanent $description registration failure (HTTP $REQUEST_STATUS): $(failure_details)" >&2
       return 1
     fi
     if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
-      echo "$description registration failed after $MAX_ATTEMPTS attempts (last HTTP $status): $(response_body)" >&2
+      echo "$description registration failed after $MAX_ATTEMPTS attempts (last HTTP $REQUEST_STATUS, wget exit $REQUEST_EXIT): $(failure_details)" >&2
       return 1
     fi
 
-    echo "Transient $description registration failure (HTTP $status), retrying..." >&2
+    if [ "$REQUEST_STATUS" = "000" ]; then
+      echo "Transient $description registration transport failure (wget exit $REQUEST_EXIT): $(request_diagnostics); retrying..." >&2
+    else
+      echo "Transient $description registration failure (HTTP $REQUEST_STATUS), retrying..." >&2
+    fi
     sleep_with_backoff "$attempt"
     attempt=$((attempt + 1))
   done

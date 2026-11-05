@@ -466,8 +466,17 @@ gateway:
   healthcheck:
     test: ["CMD", "wget", "-q", "--spider", "http://localhost:18000/health"]
     interval: 5s
-    retries: 10
+    retries: 12
 ```
+
+The development override compiles the gateway under `cargo watch`, persists
+`/build/target` in the `gateway_target` named volume, removes the production CPU
+quota so compilation may use all CPUs assigned to the container runtime or
+Podman VM, and raises the memory limit to 2 GiB. Its health check has a
+600-second first-start grace period so a cold Cargo build cannot cause Compose
+to abandon dependent workers. The Copilot worker waits for the gateway to
+become healthy; until the worker connects to `queue-coder-acp-copilot`,
+submitted runs remain pending.
 
 Workers connect via `HTTP_PROXY=http://<sessionId>@gateway:18000` (session ID embedded as userinfo) and `DEV_PROXY_API_URL=http://gateway:18000`.
 

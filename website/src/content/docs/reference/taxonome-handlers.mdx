@@ -1,0 +1,110 @@
+---
+title: Taxonome code handlers
+description: Built-in deterministic handlers, explicit plugin resolution, the versioned plugin API, and handler correctness boundaries.
+---
+
+import CanonicalSource from '../../../components/taxonome/CanonicalSource.astro';
+
+Code elements use `implementation.type: deterministic`. Their YAML names a stable handler ID and optional configuration. The CLI composes the shipped handler registry with explicitly selected plugins before loading the taxonomy.
+
+Use the [practical guide](/guides/taxonome/#create-your-own-taxonomy-and-elements) for a complete new taxonomy, handler, fixture, and tests. The [elements reference](/reference/taxonome-elements/) displays the authored element contracts; this page explains their code implementations.
+
+## Shipped handlers
+
+The catalog package `ax-taxonomy` registers exactly these three `scope/` handlers:
+
+| Handler ID | Implementation | Behavior |
+| --- | --- | --- |
+| `scope/discovered-v1` | [Discovered implementation](#source-discovered) | Find recorded discovery events. |
+| `scope/malformed-invocation-v1` | [Malformed Invocation implementation](#source-malformed) | Find calls with explicit invalid input-validation evidence. |
+| `scope/timeout-v1` | [Timeout implementation](#source-timeout) | Find explicit timeouts or policy-exceeding interrupted calls. |
+
+The implementation cells name the canonical files; inspect the actual
+build-time source panels below without executing those modules.
+
+<span id="scope-discovered-v1"></span>
+
+### Discovered
+
+The handler reads `step.extra.scope.discoveries` and emits one occurrence per unique source, extension point, and discovery turn. Each occurrence cites a `discovery` reference.
+
+It does not infer discovery from available capabilities or agent prose. With no occurrences, a partial or unknown trajectory yields `indeterminate`; a complete trajectory yields completed negative. Configuration is a strict empty object.
+
+<span id="scope-malformed-invocation-v1"></span>
+
+### Malformed Invocation
+
+The handler reads each tool call's `extra.scope.input_validation`. Status `invalid` produces one occurrence citing the call and its recorded issues. Status `valid` contributes no finding; missing or `unknown` validation marks evidence incomplete.
+
+Any positive occurrences yield a positive assessment. With no positives, incomplete/unknown validation or an incomplete trajectory yields `indeterminate`; otherwise it returns completed negative. Configuration is a strict empty object. The handler does not infer malformed arguments from prose, call outcomes, or failed tool responses.
+
+<span id="scope-timeout-v1"></span>
+
+### Timeout
+
+The handler uses recorded `extra.scope` outcome and timing. It accepts optional positive finite `threshold_ms` configuration. An explicit `outcome: timeout` supplies a finding. A duration at or above the configured threshold also supplies a finding when progress was interrupted or the outcome is abandoned/pending.
+
+The handler uses recorded `duration_ms` or elapsed start/end time. Negative elapsed time or a disagreement greater than 1 ms between elapsed and recorded duration marks the evidence unknown. Missing or contradictory timing/outcome/policy evidence can yield `indeterminate` when no positive exists. A slow completed call alone does not establish a timeout.
+
+## Plugin resolution
+
+Keep imports out of taxonomy YAML. A handler reference such as `demo/question-step-v1` identifies behavior; a plugin specifier identifies the code you trust to implement it.
+
+The CLI accepts repeatable `--plugin` options with a compiled `.js`, `.mjs`, or `.cjs` local entry, or an installed package export. It resolves relative paths and packages from the invocation working directory. It does not scan directories, install packages, perform network lookup, or import YAML-provided paths.
+
+The loader accepts the named `taxonomePlugin` export or a default export. Prefer a named versioned export:
+
+```ts
+import { defineTaxonomePlugin } from "taxonomy-engine/plugins";
+import { questionStepHandler } from "./question-step.js";
+
+export const taxonomePlugin = defineTaxonomePlugin({
+  api_version: "scope/taxonome-plugin/v1",
+  provider: { name: "tutorial-questions", version: "1.0.0" },
+  handlers: { "demo/question-step-v1": questionStepHandler },
+});
+```
+
+The registry rejects duplicate IDs and invalid handler-ID syntax. External plugins cannot register reserved `scope/` IDs. Provider metadata records origin and optional version/entry integrity separately from the YAML-facing identity.
+
+## Handler contract
+
+Import `DeterministicHandler` from `taxonomy-engine/plugins` and `Assessment` from `taxonomy-engine`. Each handler supplies:
+
+| Member | Contract |
+| --- | --- |
+| `configSchema.parse(value)` | Validate untrusted YAML config and return normalized semantic configuration. Reject unsupported fields and invalid values. |
+| `evaluate(input, config)` | Synchronously return the shared assessment for frozen normalized ATIF and public taxonomy metadata. |
+
+Taxonomy metadata includes schema version, ID, version, digest, and surfaces. It does not expose mutable/private lookup maps. Use public helpers such as `atifContentText` rather than assuming messages contain only strings.
+
+Return references into the supplied normalized document. Do not return copied messages, execution errors, confidence, rationale, or arbitrary payloads. The engine validates the shared assessment shape, declared roles, cardinality, types, and constraints. A TypeScript return type alone does not establish validity.
+
+Keep implementations pure and do not mutate inputs. Unit tests should cover configuration defaults/rejection, positive and negative assessments, exact evidence paths, content-part input, and input immutability. For a mixed prompt/code taxonomy, test prompt eligibility through `evaluatePreconditions` without invoking a producer.
+
+## Trust boundary
+
+Importing a plugin executes its top-level code with the Taxonome process's permissions. Frozen inputs, typed config, and result validation protect correctness; they do not provide a security sandbox. Load only trusted compiled JavaScript.
+
+An unknown handler fails during taxonomy loading, including when you select only prompt elements from a manifest that also references custom code. Build the plugin and pass its real entry, such as `dist/handlers/index.js`.
+
+## Canonical source panels
+
+<CanonicalSource id="source-registry" file="packages/ax-taxonomy/src/index.ts" start={35} end={71} />
+<CanonicalSource id="source-discovered" file="packages/ax-taxonomy/src/handlers/discovered/handler.ts" />
+<CanonicalSource id="source-malformed" file="packages/ax-taxonomy/src/handlers/malformed-invocation/handler.ts" />
+<CanonicalSource id="source-timeout" file="packages/ax-taxonomy/src/handlers/timeout/handler.ts" />
+<CanonicalSource id="source-timeout-tests" file="packages/ax-taxonomy/src/handlers/timeout/handler.test.ts" start={65} end={112} />
+<CanonicalSource id="source-handler-contract" file="packages/taxonomy-engine/src/handlers.ts" start={29} end={82} />
+<CanonicalSource id="source-plugin-resolution" file="packages/taxonomy-engine/src/plugins.ts" start={64} end={129} />
+
+Display the three handler implementations above together with the registration map in `packages/ax-taxonomy/src/index.ts`. The generic plugin contract lives in `packages/taxonomy-engine/src/handlers.ts`; explicit loading lives in `packages/taxonomy-engine/src/plugins.ts`.
+
+The [Timeout source](#source-timeout) includes its exact config parser.
+The [canonical unit tests](#source-timeout-tests) cover the threshold
+boundary, partial and contradictory evidence; these panels are source
+text, not a claim that the website executes tests.
+
+Inspect each handler's configuration parser alongside its tests under the corresponding `packages/ax-taxonomy/src/handlers/` directory. Together with the registry contract, these sources show accepted configuration, exact evidence paths, negative/indeterminate cases, and rejected inputs.
+
+Keep the source panels tied to those files so readers can inspect the shipped implementation without a second hand-maintained code catalog. See [taxonomy format](/reference/taxonome-taxonomy/) for the assessment and evidence contracts that both code and prompt elements share.

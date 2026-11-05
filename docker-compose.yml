@@ -52,13 +52,15 @@ x-worker-deps: &worker-deps
   judge:
     condition: service_started
 
-# npm/pnpm registry for the image builds. Defaults to the public registry, so
+# npm/pnpm registry for package installation. Defaults to the public registry, so
 # external contributors and CI need no configuration. scripts/dev-compose.sh
 # auto-detects the host's registry (npm config get registry, which reads ~/.npmrc)
 # and forwards it here, so engineers behind a private proxy (e.g. Microsoft's npm
-# proxy) build with no setup. Export NPM_CONFIG_REGISTRY to override the detected value.
+# proxy) build with no setup. Corepack metadata resolution stays on its default
+# registry unless COREPACK_NPM_REGISTRY explicitly selects a compatible endpoint.
 x-npm-build-args: &npm-build-args
   NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}
+  COREPACK_NPM_REGISTRY: ${COREPACK_NPM_REGISTRY:-}
 
 services:
   # ===========================================================================
@@ -386,10 +388,17 @@ services:
       db-migrate:
         condition: service_completed_successfully
   register-agents:
-    image: alpine:3.21
+    image: docker.io/mikefarah/yq:4.54.1@sha256:4b3d9475d65571d28cbb19544d3820ec2945e4c8b2f18279394282b8dc3a592e
     depends_on:
       api:
         condition: service_healthy
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=1m,mode=1777
     volumes:
       - ./apps/workers:/workers:ro
       - ./scripts/register-agent.sh:/register-agent.sh:ro
@@ -402,7 +411,6 @@ services:
       - -c
       - |
         set -eu
-        apk add --no-cache curl yq > /dev/null 2>&1
 
         register_agent() {
           name="$$1"
@@ -584,6 +592,11 @@ services:
       dockerfile: apps/portal/Dockerfile
       args:
         <<: *npm-build-args
+        # Explicit metadata wins for immutable builds. If unavailable, Vite's
+        # default one-time Git lookup falls back to development placeholders.
+        GIT_COMMIT: "${GIT_COMMIT:-unknown}"
+        GIT_BRANCH: "${GIT_BRANCH:-unknown}"
+        BUILD_TIME: "${BUILD_TIME:-unknown}"
         # Vite embeds these public IdP settings into the production bundle.
         VITE_AUTH_CLIENT_ID: "${VITE_AUTH_CLIENT_ID:-cccccccc-0000-0000-0000-000000000001}"
         VITE_AUTH_AUTHORITY: "${VITE_AUTH_AUTHORITY:-https://localhost:${ENTRA_LOCAL_PORT:-8443}/${AUTH_TENANT_ID:-11111111-1111-1111-1111-111111111111}/v2.0}"
