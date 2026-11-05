@@ -99,6 +99,12 @@ export const Collapsed: Story = {
     await expect(
       canvas.getByText(/This is an AI evaluation platform\./),
     ).toBeVisible();
+    await expect(
+      canvas.getByRole("link", { name: "Runs" }).querySelector(".lucide-list"),
+    ).toBeTruthy();
+    await expect(
+      canvas.getByRole("link", { name: "Reports" }).querySelector(".lucide-file-text"),
+    ).toBeTruthy();
   },
 };
 
@@ -120,6 +126,9 @@ export const Expanded: Story = {
       criteriaLink.querySelector(".lucide-flask-conical"),
     ).not.toBeNull();
     await expect(experimentsLink.nextElementSibling).toBe(runsLink);
+    await expect(
+      canvas.getByRole("link", { name: "Runs" }).querySelector(".lucide-list"),
+    ).toBeTruthy();
   },
 };
 
