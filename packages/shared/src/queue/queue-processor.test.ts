@@ -554,8 +554,9 @@ describe("CodingAgentQueueProcessor pre-processing failures", () => {
 });
 
 // ─── Post-processor event-driven dispatch ────────────────────────────────────
-describe("CodingAgentQueueProcessor.enqueuePostProcessing", () => {
-  it("sends a post-processor queue message when postProcessorQueueName is configured", async () => {
+describe("CodingAgentQueueProcessor.notifyRunTerminal", () => {
+  it("sends a post-processor queue message via legacy fallback when SCHEDULER_URL is not set", async () => {
+    delete process.env.SCHEDULER_URL;
     const configWithPP: QueueProcessorConfig = {
       ...testConfig,
       postProcessorQueueName: "post-processor-queue",
@@ -565,7 +566,7 @@ describe("CodingAgentQueueProcessor.enqueuePostProcessing", () => {
     const sendMessage = vi.fn().mockResolvedValue({});
     (qp as any).postProcessorQueueClient = { sendMessage };
 
-    await (qp as any).enqueuePostProcessing("req-123", "run-456");
+    await (qp as any).notifyRunTerminal("req-123", "run-456");
 
     expect(sendMessage).toHaveBeenCalledTimes(1);
     const decoded = JSON.parse(
@@ -574,13 +575,15 @@ describe("CodingAgentQueueProcessor.enqueuePostProcessing", () => {
     expect(decoded).toEqual({ type: "atif", requestId: "req-123", runId: "run-456" });
   });
 
-  it("does nothing when postProcessorQueueClient is null", async () => {
+  it("does nothing when postProcessorQueueClient is null and SCHEDULER_URL not set", async () => {
+    delete process.env.SCHEDULER_URL;
     const qp = new CodingAgentQueueProcessor(testConfig, stubProcessor);
     expect((qp as any).postProcessorQueueClient).toBeNull();
-    await (qp as any).enqueuePostProcessing("req-123", "run-456");
+    await (qp as any).notifyRunTerminal("req-123", "run-456");
   });
 
   it("logs a warning but does not throw on queue send failure", async () => {
+    delete process.env.SCHEDULER_URL;
     const configWithPP: QueueProcessorConfig = {
       ...testConfig,
       postProcessorQueueName: "post-processor-queue",
@@ -591,7 +594,7 @@ describe("CodingAgentQueueProcessor.enqueuePostProcessing", () => {
     (qp as any).postProcessorQueueClient = { sendMessage };
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    await (qp as any).enqueuePostProcessing("req-123", "run-456");
+    await (qp as any).notifyRunTerminal("req-123", "run-456");
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("Failed to enqueue post-processing"),
       expect.any(Error),

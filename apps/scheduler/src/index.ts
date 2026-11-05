@@ -2,12 +2,13 @@
 // Licensed under the MIT License.
 
 import "dotenv/config";
-import http from "node:http";
 import { MongoClient } from "mongodb";
 import { QueueClient } from "@azure/storage-queue";
 import { DefaultAzureCredential } from "@azure/identity";
 import { RequestScheduler } from "./request-scheduler.js";
 import { PostProcessorDispatcher } from "./post-processor-dispatcher.js";
+import { HandlerDispatcher } from "./handler-dispatcher.js";
+import { createHttpServer, type NotifyHandler } from "./notify-routes.js";
 import { StuckRunReaper } from "./stuck-run-reaper.js";
 import { RedisHeartbeatStore, type HeartbeatStore } from "shared";
 import type { CodingAgentDocument, RequestDocument } from "shared";
@@ -44,6 +45,7 @@ const QUEUE_RECONCILIATION_INTERVAL_MS = parsePositiveInt(
   "SCHEDULER_QUEUE_RECONCILIATION_INTERVAL_MS",
 );
 const HEALTH_PORT = parseInt(process.env.PORT || "8080", 10);
+const API_URL = process.env.API_URL || "http://api:80";
 
 /**
  * Parse a positive-integer env var with validation. Returns `fallback` (with a
@@ -108,16 +110,6 @@ function createQueueClient(queueName: string): QueueClient {
   return new QueueClient(queueUrl, credential);
 }
 
-// ── Health Check Server ──────────────────────────────────────────────
-
-function createHealthServer(): http.Server {
-  const server = http.createServer((_req, res) => {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", service: "scheduler" }));
-  });
-  return server;
-}
-
 // ── Main ─────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -167,6 +159,14 @@ async function main(): Promise<void> {
     10,
   );
 
+  // Handler topology is deploy-static and invalidated on registration, so this
+  // TTL only backstops out-of-band/multi-replica changes — keep it well above
+  // the poll interval so the poll loop doesn't force a fresh read every cycle.
+  const handlerCacheTtlMs = parseInt(
+    process.env.SCHEDULER_HANDLER_CACHE_TTL_MS || "300000",
+    10,
+  );
+
   const postProcessorDispatcher = new PostProcessorDispatcher(
     collection,
     db,
@@ -175,6 +175,21 @@ async function main(): Promise<void> {
   );
   postProcessorDispatcher.start();
   console.log("[Scheduler] Post-processor dispatch loop started");
+
+  // Start the DAG-aware handler dispatcher (replaces legacy PostProcessorDispatcher)
+  const handlerDispatcher = new HandlerDispatcher(
+    collection,
+    db,
+    createQueueClient,
+    ppPollIntervalMs,
+    30,
+    API_URL,
+    handlerCacheTtlMs,
+  );
+  handlerDispatcher.start();
+  console.log(
+    `[Scheduler] Handler dispatcher (DAG) started (poll=${ppPollIntervalMs}ms, topologyCacheTtl=${handlerCacheTtlMs}ms)`,
+  );
 
   // Start the stuck-run reaper (authoritative backstop). Redis is non-fatal:
   // on misconfig or connection failure the reaper self-disables (its sweeps
@@ -212,10 +227,10 @@ async function main(): Promise<void> {
     );
   }
 
-  // Start health check server
-  const healthServer = createHealthServer();
-  healthServer.listen(HEALTH_PORT, () => {
-    console.log(`[Scheduler] Health check listening on :${HEALTH_PORT}`);
+  // Wire notify handler to the HandlerDispatcher
+  const httpServer = createHttpServer(handlerDispatcher);
+  httpServer.listen(HEALTH_PORT, () => {
+    console.log(`[Scheduler] HTTP server listening on :${HEALTH_PORT}`);
   });
 
   // Graceful shutdown
@@ -223,9 +238,10 @@ async function main(): Promise<void> {
     console.log("[Scheduler] Shutting down...");
     await scheduler.stop();
     await postProcessorDispatcher.stop();
+    await handlerDispatcher.stop();
     if (stuckRunReaper) await stuckRunReaper.stop();
     if (heartbeatStore) await heartbeatStore.close();
-    healthServer.close();
+    httpServer.close();
     await mongoClient.close();
     await shutdownTelemetry();
     console.log("[Scheduler] Shutdown complete");

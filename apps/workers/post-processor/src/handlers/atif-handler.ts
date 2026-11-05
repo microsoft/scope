@@ -5,6 +5,7 @@ import { writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PostProcessHandler, PostProcessorMessage, HandlerContext } from "../types.js";
+import { POST_PROCESSOR_VERSION } from "../version.js";
 
 /**
  * Extracts the blob name (path within the container) from a full blob storage URL.
@@ -30,6 +31,8 @@ function extractBlobName(url: string, container = "snapshots"): string | null {
  */
 export class AtifHandler implements PostProcessHandler {
   readonly type = "atif";
+  readonly version = POST_PROCESSOR_VERSION;
+  readonly autoBackfill = true;
 
   async process(message: PostProcessorMessage, ctx: HandlerContext): Promise<void> {
     const { requestId, runId, iteration } = message;

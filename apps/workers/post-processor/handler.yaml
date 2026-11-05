@@ -1,0 +1,10 @@
+# Post-process handler registration metadata.
+# Read by the generic register-handler script and POSTed to the
+# scheduler's POST /handlers/register endpoint on deploy.
+_id: pp-atif
+type: post-process-handler
+version: 1
+queue: post-processor-queue
+selector: atif
+autoBackfill: true
+dependsOn: []
