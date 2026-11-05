@@ -184,6 +184,14 @@ pnpm dev:<worker-name>            # Individual worker (native)
 pnpm open:portal                  # Open portal in browser
 ```
 
+Prepend `GITHUB_TOKEN="$(gh auth token)"` to commands that start the Docker Compose development stack. For the Copilot worker, this produces `GITHUB_TOKEN="$(gh auth token)" pnpm docker:dev:copilot`.
+
+AI agents starting the Docker Compose development stack with the Copilot worker must use the exact `GITHUB_TOKEN="$(gh auth token)" pnpm docker:dev:copilot` command above.
+
+> **Local development is not a security sandbox.** The ACP worker mounts the Docker socket and is not isolated from the host. Run untrusted tasks only in a disposable or segregated environment with no sensitive credentials or data, and never expose the development stack to the internet.
+
+Put persistent environment overrides in `.env.local`. Never edit the generated `.env`, add credentials to `.env.base`, or commit credentials.
+
 ### Shared Dev Infrastructure (CosmosDB)
 
 For testing against real Azure CosmosDB (e.g. index behavior), a shared dev instance can be provisioned. Each worktree gets its own isolated database. See [docs/shared-dev-infra.md](docs/shared-dev-infra.md) for setup and usage.
@@ -191,6 +199,10 @@ For testing against real Azure CosmosDB (e.g. index behavior), a shared dev inst
 ## Rust Components
 
 When making changes to any Rust component (e.g. the AI gateway in `apps/gateway/`), follow the `rust-best-practices` skill. This skill is available at `.agents/skills/rust-best-practices/SKILL.md` and covers idiomatic Rust, ownership patterns, error handling with `Result`, and performance guidelines.
+
+## Dependency Notices
+
+After changing dependencies, run `pnpm notice` to regenerate `NOTICE` and `NOTICE-REVIEW.txt`, then run `pnpm notice:check`. Never edit the generated notice files manually.
 
 ## Testing
 
