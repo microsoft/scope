@@ -745,8 +745,18 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "enum": [
               "compose",
               "empty",
+              "existing",
             ],
             "type": "string",
+          },
+          "requestIds": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "maxItems": 250000,
+            "type": "array",
           },
           "requests": {
             "default": [],
@@ -1694,6 +1704,54 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         },
         "required": [
           "data",
+        ],
+        "type": "object",
+      },
+      "ExperimentMembershipInput": {
+        "additionalProperties": false,
+        "properties": {
+          "expectedExperimentRevisionId": {
+            "minLength": 1,
+            "type": "string",
+          },
+          "requestIds": {
+            "items": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "maxItems": 250000,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "expectedExperimentRevisionId",
+          "requestIds",
+        ],
+        "type": "object",
+      },
+      "ExperimentMembershipResponse": {
+        "properties": {
+          "attachedRequestIds": {
+            "items": {
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "detachedRequestIds": {
+            "items": {
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "experiment": {
+            "$ref": "#/components/schemas/ExperimentResponse",
+          },
+        },
+        "required": [
+          "experiment",
+          "attachedRequestIds",
+          "detachedRequestIds",
         ],
         "type": "object",
       },
@@ -3348,6 +3406,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
           "experimentInitialRunId": {
+            "type": "string",
+          },
+          "experimentMembershipOperationId": {
+            "type": "string",
+          },
+          "experimentMembershipRevisionId": {
             "type": "string",
           },
           "experimentRequestIndex": {
@@ -6358,6 +6422,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             },
             "description": "Success",
           },
+          "400": {
+            "description": "Invalid request selection",
+          },
+          "404": {
+            "description": "Request not found",
+          },
           "409": {
             "description": "Experiment identity conflict",
           },
@@ -6707,6 +6777,120 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Download structured JSON for an exact Experiment report",
         "tags": [
           "Reports",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/requests": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentMembershipInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentMembershipResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment or request not found",
+          },
+          "409": {
+            "description": "Stale revision or membership conflict",
+          },
+        },
+        "summary": "Remove requests from an Experiment",
+        "tags": [
+          "Experiments",
+        ],
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentMembershipInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentMembershipResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment or request not found",
+          },
+          "409": {
+            "description": "Stale revision or membership conflict",
+          },
+        },
+        "summary": "Move standalone requests into an Experiment",
+        "tags": [
+          "Experiments",
         ],
       },
     },
@@ -10580,15 +10764,44 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                     "deleted": {
                       "type": "number",
                     },
+                    "membershipRevision": {
+                      "properties": {
+                        "experimentId": {
+                          "type": "string",
+                        },
+                        "experimentRevisionId": {
+                          "type": "string",
+                        },
+                        "revisionNumber": {
+                          "type": "integer",
+                        },
+                      },
+                      "required": [
+                        "experimentId",
+                        "experimentRevisionId",
+                        "revisionNumber",
+                      ],
+                      "type": "object",
+                    },
+                    "notFound": {
+                      "items": {
+                        "type": "string",
+                      },
+                      "type": "array",
+                    },
                   },
                   "required": [
                     "deleted",
+                    "notFound",
                   ],
                   "type": "object",
                 },
               },
             },
             "description": "Success",
+          },
+          "409": {
+            "description": "Deletion spans Experiments or membership changed",
           },
         },
         "summary": "Bulk soft-delete requests",
@@ -11007,12 +11220,38 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "application/json": {
                 "schema": {
                   "properties": {
-                    "message": {
+                    "deleted": {
+                      "enum": [
+                        true,
+                      ],
+                      "type": "boolean",
+                    },
+                    "id": {
                       "type": "string",
+                    },
+                    "membershipRevision": {
+                      "properties": {
+                        "experimentId": {
+                          "type": "string",
+                        },
+                        "experimentRevisionId": {
+                          "type": "string",
+                        },
+                        "revisionNumber": {
+                          "type": "integer",
+                        },
+                      },
+                      "required": [
+                        "experimentId",
+                        "experimentRevisionId",
+                        "revisionNumber",
+                      ],
+                      "type": "object",
                     },
                   },
                   "required": [
-                    "message",
+                    "id",
+                    "deleted",
                   ],
                   "type": "object",
                 },
@@ -11022,6 +11261,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "404": {
             "description": "Not found",
+          },
+          "409": {
+            "description": "Membership changed",
+          },
+          "410": {
+            "description": "Already deleted",
           },
         },
         "summary": "Soft-delete request",

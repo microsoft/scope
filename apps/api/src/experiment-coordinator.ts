@@ -19,6 +19,7 @@ import {
   type RequestDocument,
   type ServiceHandlerDocument,
 } from "shared";
+import { ExperimentMembershipCoordinator } from "./experiment-membership.js";
 
 export interface ExperimentCoordinatorCollections {
   requests: Collection<RequestDocument>;
@@ -129,6 +130,7 @@ function sameProjection(
 export class ExperimentCoordinator {
   private readonly store: ExperimentStore;
   private readonly payloads: FixedPayloadStore;
+  private readonly membership: ExperimentMembershipCoordinator;
 
   constructor(
     private readonly collections: ExperimentCoordinatorCollections,
@@ -140,6 +142,7 @@ export class ExperimentCoordinator {
       chunks: collections.chunks,
     });
     this.payloads = new FixedPayloadStore(collections.chunks);
+    this.membership = new ExperimentMembershipCoordinator(collections);
   }
 
   async reconcile(
@@ -151,9 +154,18 @@ export class ExperimentCoordinator {
       let experiment = await this.store.get(projectId, experimentId);
       if (!experiment) return null;
       if (experiment.execution.rollover) {
-        const repaired = await this.store.repairRollover(projectId, experimentId);
-        if (!repaired) return null;
-        experiment = repaired;
+        if (experiment.execution.rollover.reason === "membership") {
+          experiment = (
+            await this.membership.repair(projectId, experimentId)
+          ).experiment;
+        } else {
+          const repaired = await this.store.repairRollover(
+            projectId,
+            experimentId,
+          );
+          if (!repaired) return null;
+          experiment = repaired;
+        }
         rolled = true;
       }
 
@@ -346,6 +358,24 @@ export class ExperimentCoordinator {
         } as Document,
         { $set: { experimentFinalizedAt: new Date() } } as Document,
       );
+      recovered += 1;
+    }
+    return recovered;
+  }
+
+  async recoverInterruptedMemberships(limit = 30): Promise<number> {
+    const candidates = await this.collections.experiments
+      .find({
+        finalizedAt: { $exists: true },
+        "execution.rollover.reason": "membership",
+      } as Document)
+      .sort({ _id: 1 })
+      .limit(limit)
+      .project({ _id: 1, projectId: 1 })
+      .toArray();
+    let recovered = 0;
+    for (const candidate of candidates) {
+      await this.membership.repair(candidate.projectId, candidate._id);
       recovered += 1;
     }
     return recovered;

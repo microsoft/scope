@@ -567,6 +567,12 @@ export function registerExperimentCommands(program: Command): void {
           .option("--description <text>", "Experiment description")
           .option("--empty", "Create an explicit empty experiment")
           .option(
+            "--request-id <id>",
+            "Create from an existing standalone request (repeatable)",
+            collectRepeatable,
+            [],
+          )
+          .option(
             "--preview",
             "Print the composition and request body without creating",
           )
@@ -598,13 +604,46 @@ export function registerExperimentCommands(program: Command): void {
           );
         }
       }
-      const built = options.empty ? undefined : buildRequest(options);
+      const requestIds = Array.isArray(options.requestId)
+        ? options.requestId as string[]
+        : [];
+      if (options.empty && requestIds.length > 0) {
+        throw new Error("--empty cannot be combined with --request-id");
+      }
+      if (requestIds.length > 0) {
+        const conflicting = [
+          "scenario",
+          "message",
+          "worker",
+          "criteria",
+          "profile",
+          "profileVariationsFile",
+          "count",
+        ].filter((key) => options[key] !== undefined);
+        if (conflicting.length > 0) {
+          throw new Error(
+            `--request-id cannot be combined with run configuration options: ${conflicting.join(", ")}`,
+          );
+        }
+      }
+      const built =
+        options.empty || requestIds.length > 0
+          ? undefined
+          : buildRequest(options);
       const body = options.empty
-        ? { mode: "empty" as const, metadata, requests: [] }
-        : {
+        ? { mode: "empty" as const, metadata, requests: [], requestIds: [] }
+        : requestIds.length > 0
+          ? {
+              mode: "existing" as const,
+              metadata,
+              requests: [],
+              requestIds,
+            }
+          : {
             mode: "compose" as const,
             metadata,
             requests: [built!.request],
+            requestIds: [],
           };
       const expandedRunCount = built
         ? built.profileCount * built.occurrences
@@ -678,6 +717,85 @@ export function registerExperimentCommands(program: Command): void {
       process.exitCode = 1;
     }
   });
+
+  const membershipAction = (
+    command: Command,
+    method: "POST" | "DELETE",
+    verb: "added" | "removed",
+  ) => {
+    withProjectOption(
+      command
+        .argument("<id>", "Experiment ID")
+        .requiredOption(
+          "--revision <id>",
+          "Expected current Experiment revision ID",
+        )
+        .requiredOption(
+          "--request-id <id>",
+          "Request ID (repeatable)",
+          collectRepeatable,
+          [],
+        )
+        .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
+    ).action(async (id, options) => {
+      try {
+        const projectId = requireProjectId(options.project);
+        const requestIds = options.requestId as string[];
+        const response = await apiFetch(
+          options.url,
+          `/experiments/${encodeURIComponent(id)}/requests`,
+          {
+            method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              expectedExperimentRevisionId: options.revision,
+              requestIds,
+            }),
+            projectId,
+          },
+        );
+        if (!response.ok) await throwApiError(response);
+        const result = asRecord(
+          await json(response),
+          `experiment membership ${verb}`,
+        );
+        const updated = parseExperiment(result.experiment);
+        console.log(
+          successText(
+            `${requestIds.length} request${requestIds.length === 1 ? "" : "s"} ${verb}`,
+          ),
+        );
+        console.log(
+          `${label("Revision:")} ${value(updated.revision.experimentRevisionId)} (${value(`r${updated.revision.revisionNumber}`)})`,
+        );
+        console.log(
+          `${label("Execution:")} ${value(updated.execution.experimentExecutionId)}`,
+        );
+      } catch (error) {
+        console.error(
+          errorText("Error:"),
+          error instanceof Error ? error.message : error,
+        );
+        process.exitCode = 1;
+      }
+    });
+  };
+
+  membershipAction(
+    experiment
+      .command("add")
+      .alias("move")
+      .description("Move standalone requests into an Experiment"),
+    "POST",
+    "added",
+  );
+  membershipAction(
+    experiment
+      .command("remove")
+      .description("Remove requests from an Experiment to standalone status"),
+    "DELETE",
+    "removed",
+  );
 
   withProjectOption(
     withOutputOption(

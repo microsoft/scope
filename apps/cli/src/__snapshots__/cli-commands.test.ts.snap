@@ -202,6 +202,14 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
   },
   "experiment": {
     "subcommands": {
+      "add": {
+        "options": [
+          "--project",
+          "--request-id",
+          "--revision",
+          "--url",
+        ],
+      },
       "create": {
         "options": [
           "--agent-version",
@@ -226,6 +234,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--profile-variations-file",
           "--project",
           "--reasoning-effort",
+          "--request-id",
           "--resource-param",
           "--resources",
           "--scenario",
@@ -264,6 +273,14 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
         "options": [
           "--from-start",
           "--project",
+          "--url",
+        ],
+      },
+      "remove": {
+        "options": [
+          "--project",
+          "--request-id",
+          "--revision",
           "--url",
         ],
       },

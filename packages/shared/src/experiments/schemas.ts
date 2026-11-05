@@ -138,7 +138,7 @@ const ExperimentExecutionBaseSchema = z
     discardReason: z.string().max(2_048).optional(),
     supersededAt: z.coerce.date().optional(),
     supersededByExperimentExecutionId: IdSchema.optional(),
-    supersededReason: z.enum(["rollover", "retry"]).optional(),
+    supersededReason: z.enum(["rollover", "retry", "membership"]).optional(),
     requestStateUpdate: z
       .object({
         updateId: IdSchema,
@@ -156,7 +156,8 @@ export const ExperimentExecutionSchema: z.ZodType = ExperimentExecutionBaseSchem
     rollover: z
       .object({
         nextExecution: ExperimentExecutionBaseSchema,
-        reason: z.enum(["rollover", "retry"]),
+        nextRevision: ExperimentRevisionSchema.optional(),
+        reason: z.enum(["rollover", "retry", "membership"]),
         claimedAt: z.coerce.date(),
       })
       .strict()
