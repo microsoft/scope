@@ -1130,6 +1130,64 @@ describe("API Endpoints", () => {
     });
   });
 
+  describe("POST /api/v1/reports/trigger", () => {
+    it.each([
+      { name: "no active templates", templates: [] },
+      {
+        name: "no matching triggers",
+        templates: [{
+          id: "other-task",
+          projectId: TEST_PROJECT_ID,
+          trigger: { type: "taskPrompt", taskPromptIds: ["other-task-prompt"] },
+        }],
+      },
+    ])("returns an honest zero result with $name without creating or queueing reports", async ({ templates }) => {
+      vi.mocked(mocks.collection.findOne).mockResolvedValue({
+        _id: "r1",
+        projectId: TEST_PROJECT_ID,
+        run: { _id: "attempt-1", status: "done", outcome: "succeeded" },
+      });
+      vi.mocked(mocks.reportTemplateCollection.find).mockReturnValue(
+        createMockCollection(templates).find(),
+      );
+
+      const res = await request(testServer())
+        .post("/api/v1/reports/trigger")
+        .send({ requestId: "r1" });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ triggered: 0, reports: [] });
+      expect(mocks.reportCollection.insertOne).not.toHaveBeenCalled();
+      expect(mocks.reportQueueClient.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it("queues a report only for the matching template", async () => {
+      vi.mocked(mocks.collection.findOne).mockResolvedValue({
+        _id: "r1",
+        projectId: TEST_PROJECT_ID,
+        run: { _id: "attempt-1", status: "done", outcome: "succeeded" },
+      });
+      vi.mocked(mocks.reportTemplateCollection.find).mockReturnValue(
+        createMockCollection([
+          { id: "always", projectId: TEST_PROJECT_ID, trigger: { type: "always" } },
+          { id: "other-task", projectId: TEST_PROJECT_ID, trigger: { type: "taskPrompt", taskPromptIds: ["other-task-prompt"] } },
+        ]).find(),
+      );
+
+      const res = await request(testServer())
+        .post("/api/v1/reports/trigger")
+        .send({ requestId: "r1" });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({
+        triggered: 1,
+        reports: [{ id: expect.any(String), requestId: "r1", templateId: "always", status: "pending" }],
+      });
+      expect(mocks.reportCollection.insertOne).toHaveBeenCalledTimes(1);
+      expect(mocks.reportQueueClient.sendMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // ===================================================================
   // Report Templates endpoints
   // ===================================================================
