@@ -9,27 +9,10 @@ import {
   Activity,
   Atom,
   Plus,
-  List,
-  FlaskConical,
-  BarChart3,
-  Tags,
-  FileText,
-  KeyRound,
-  Bot,
-  Server,
-  Lightbulb,
-  Cpu,
-  MessageSquareText,
   Settings,
   Menu,
-  BookOpen,
-  FolderGit2,
-  FolderKanban,
   GitBranch,
   Plug,
-  Puzzle,
-  Boxes,
-  SlidersHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -52,6 +35,7 @@ import { UserMenu } from "./UserMenu";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useFeatureFlags } from "@/contexts/FeatureFlagContext";
 import { useProjectContext } from "@/contexts/ProjectContext";
+import { navigationIcons } from "./navigation-icons";
 
 interface NavItem {
   to: string;
@@ -97,10 +81,10 @@ const navGroups: NavGroup[] = [
     scoped: true,
     items: [
       { to: "/experiments", label: "Experiments", icon: Atom },
-      { to: "/runs", label: "Runs", icon: List },
-      { to: "/statistics", label: "Statistics", icon: BarChart3 },
-      { to: "/reports", label: "Reports", icon: FileText },
-      { to: "/insights", label: "Insights", icon: Lightbulb },
+      { to: "/runs", label: "Runs", icon: navigationIcons.runs },
+      { to: "/statistics", label: "Statistics", icon: navigationIcons.statistics },
+      { to: "/reports", label: "Reports", icon: navigationIcons.reports },
+      { to: "/insights", label: "Insights", icon: navigationIcons.insights },
     ],
   },
   {
@@ -108,12 +92,12 @@ const navGroups: NavGroup[] = [
     label: "Library",
     scoped: true,
     items: [
-      { to: "/task-prompts", label: "Prompts", icon: MessageSquareText },
-      { to: "/criteria", label: "Criteria", icon: FlaskConical },
-      { to: "/prompt-features", label: "Features", icon: Tags },
-      { to: "/profiles", label: "Profiles", icon: SlidersHorizontal, featureKey: "profiles" },
-      { to: "/skills", label: "Skills", icon: BookOpen, featureKey: "skills" },
-      { to: "/codebases", label: "Codebases", icon: FolderGit2 },
+      { to: "/task-prompts", label: "Prompts", icon: navigationIcons.prompts },
+      { to: "/criteria", label: "Criteria", icon: navigationIcons.criteria },
+      { to: "/prompt-features", label: "Features", icon: navigationIcons.features },
+      { to: "/profiles", label: "Profiles", icon: navigationIcons.profiles, featureKey: "profiles" },
+      { to: "/skills", label: "Skills", icon: navigationIcons.skills, featureKey: "skills" },
+      { to: "/codebases", label: "Codebases", icon: navigationIcons.codebases },
     ],
   },
   {
@@ -121,9 +105,9 @@ const navGroups: NavGroup[] = [
     label: "Integrations",
     scoped: true,
     items: [
-      { to: "/resources", label: "Resources", icon: Boxes },
-      { to: "/mcp-servers", label: "MCP", icon: Server, featureKey: "mcp" },
-      { to: "/extensions", label: "Extensions", icon: Puzzle, featureKey: "extensions" },
+      { to: "/resources", label: "Resources", icon: navigationIcons.resources },
+      { to: "/mcp-servers", label: "MCP", icon: navigationIcons.mcp, featureKey: "mcp" },
+      { to: "/extensions", label: "Extensions", icon: navigationIcons.extensions, featureKey: "extensions" },
     ],
   },
   {
@@ -132,9 +116,9 @@ const navGroups: NavGroup[] = [
     id: "platform",
     label: "Platform",
     items: [
-      { to: "/agents", label: "Agents", icon: Bot, featureKey: "agents" },
-      { to: "/models", label: "Models", icon: Cpu, featureKey: "models" },
-      { to: "/secrets", label: "Secrets", icon: KeyRound, featureKey: "tokens" },
+      { to: "/agents", label: "Agents", icon: navigationIcons.agents, featureKey: "agents" },
+      { to: "/models", label: "Models", icon: navigationIcons.models, featureKey: "models" },
+      { to: "/secrets", label: "Secrets", icon: navigationIcons.secrets, featureKey: "tokens" },
     ],
   },
 ];
@@ -720,7 +704,7 @@ export function Layout() {
               <SidebarIconLink
                 to="/projects"
                 label="Projects"
-                icon={FolderKanban}
+                icon={navigationIcons.projects}
                 active={location.pathname.startsWith("/projects")}
                 expanded={sidebarExpanded}
               />
