@@ -136,8 +136,10 @@ refs and any preset parameters. A run may still fill parameters left unset by th
 profile by sending a matching resource entry at the same position, but a
 different value for a profile-pinned parameter is reported through the same
 profile conflict response used for worker/model/MCP/skills/extensions. Grouped
-profile-variation submissions apply the same positional rule per variation:
-`profileVersion.resources ?? requestedResources`.
+profile-variation submissions are intentionally stricter: request-level
+`resources` are rejected, and every profile must independently provide complete
+resource bindings. The API resolves each profile against a fresh run request so
+the base profile's bindings cannot leak into another comparison member.
 
 The worker then runs the lifecycle in a fixed order. **Each of these orderings is
 load-bearing — moving one reintroduces a specific bug:**

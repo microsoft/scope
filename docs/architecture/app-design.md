@@ -467,8 +467,13 @@ Profile fan-out mode is also supported for comparative runs:
 
 1. User selects a base `profileId` (optionally pinned via `profileId@version`) and a `profileVariations[]` array of profile spec strings to compare against (e.g. `["def456", "ghi789@2"]`)
 2. API parses each spec, validates every variation upfront, then expands one submit call into multiple requests under one shared `submissionId`
-3. Each expanded request resolves configuration from its variation profile; unpinned specs resolve to `latestVersion`
+3. The base is the first comparison member, not an inheritance source. The API starts from the same shared run intent for every member and resolves worker, model, reasoning effort, agent version, MCP servers, skills, extensions, and resources independently from that member's profile; unpinned specs resolve to `latestVersion`
 4. Expanded requests persist `profileId` and `profileVersionId` on each `RequestDocument` for indexing and traceability
+
+Request-level profile-managed fields are rejected in fan-out mode. Portal and
+CLI submit only shared intent (scenario, gates, codebase, count, priority, and
+AGENTS.md); they do not materialize baseline profile values into the request.
+This keeps API, CLI, and Portal submissions behaviorally identical.
 
 ## Runs List Query API
 
