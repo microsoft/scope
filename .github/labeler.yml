@@ -1,3 +1,7 @@
+"area: api":
+  - changed-files:
+      - any-glob-to-any-file: "apps/api/**"
+
 "area: cicd":
   - changed-files:
       - any-glob-to-any-file:
@@ -55,6 +59,14 @@
           - "apps/scheduler/**"
           - "docs/architecture/queue-scheduler.md"
 
+"area: shared":
+  - changed-files:
+      - any-glob-to-any-file: "packages/shared/**"
+
+"area: website":
+  - changed-files:
+      - any-glob-to-any-file: "website/**"
+
 "area: worker":
   - changed-files:
       - any-glob-to-any-file:
@@ -87,8 +99,8 @@
   - changed-files:
       - any-glob-to-any-file:
           - "**/*.rs"
-          - "Cargo.toml"
-          - "Cargo.lock"
+          - "**/Cargo.toml"
+          - "**/Cargo.lock"
           - "apps/gateway/**"
 
 "topic: security":
@@ -119,7 +131,10 @@
       - any-glob-to-any-file:
           - "apps/portal/src/**/*.tsx"
           - "apps/portal/src/**/*.css"
-          - "website/src/**"
+          - "website/src/assets/**"
+          - "website/src/components/**"
+          - "website/src/scripts/**"
+          - "website/src/styles/**"
 
 "type: dependencies":
   - changed-files:
@@ -129,9 +144,11 @@
           - "website/package.json"
           - "website/pnpm-lock.yaml"
           - "website/pnpm-workspace.yaml"
-          - "Cargo.toml"
-          - "Cargo.lock"
+          - "**/Cargo.toml"
+          - "**/Cargo.lock"
           - "**/package.json"
+          - "**/pyproject.toml"
+          - "**/uv.lock"
 
 "type: documentation":
   - changed-files:
