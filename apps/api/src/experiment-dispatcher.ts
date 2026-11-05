@@ -16,6 +16,7 @@ import {
   type ExperimentDispatchMessage,
   type ExperimentTemplateDispatchMessage,
 } from "./experiment-coordinator.js";
+import { ExperimentLifecycleCoordinator } from "./experiment-lifecycle.js";
 
 export class ExperimentDispatcher {
   private interval: ReturnType<typeof setInterval> | null = null;
@@ -23,6 +24,7 @@ export class ExperimentDispatcher {
   private scanAfterExperimentId: string | null = null;
   private readonly queueClients = new Map<string, QueueClient>();
   private readonly coordinator: ExperimentCoordinator;
+  private readonly lifecycle: ExperimentLifecycleCoordinator;
 
   constructor(
     private readonly requests: Collection<RequestDocument>,
@@ -47,6 +49,13 @@ export class ExperimentDispatcher {
       },
       (service, message) => this.enqueue(service, message),
     );
+    this.lifecycle = new ExperimentLifecycleCoordinator({
+      requests,
+      reports: db.collection("reports"),
+      experiments,
+      executions,
+      chunks,
+    });
   }
 
   start(): void {
@@ -127,14 +136,25 @@ export class ExperimentDispatcher {
     try {
       await this.coordinator.recoverInterruptedCreations(this.batchSize);
       await this.coordinator.recoverInterruptedMemberships(this.batchSize);
+      await this.lifecycle.repairActive(this.batchSize);
       const candidates = await this.experiments
         .find(
           this.scanAfterExperimentId
             ? {
                 _id: { $gt: this.scanAfterExperimentId },
                 finalizedAt: { $exists: true },
+                deletedAt: { $exists: false },
+                "lifecycle.phase": {
+                  $nin: ["deleting", "deleted", "restoring"],
+                },
               }
-            : { finalizedAt: { $exists: true } },
+            : {
+                finalizedAt: { $exists: true },
+                deletedAt: { $exists: false },
+                "lifecycle.phase": {
+                  $nin: ["deleting", "deleted", "restoring"],
+                },
+              },
         )
         .sort({ _id: 1 })
         .limit(this.batchSize)

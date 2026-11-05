@@ -156,8 +156,8 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
       };
 
       // Update status to "generating" and set reporter
-      await withRetry(() => this.collection.updateOne(
-        { _id: reportId } as any,
+      const claimed = await withRetry(() => this.collection.updateOne(
+        { _id: reportId, deletedAt: { $exists: false } } as any,
         {
           $set: {
             status: "generating",
@@ -166,6 +166,9 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
           },
         } as any
       ));
+      if (claimed.matchedCount === 0) {
+        throw new Error(`Report ${reportId} is deleted or stale`);
+      }
 
       await log("info", `Reporter: ${reporter.agentId}@${reporter.agentVersion}, model: ${reporter.model}`);
 
@@ -188,8 +191,8 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
       trackMetric({ name: "report_generator.llm_session_duration_ms", value: Date.now() - llmStart, properties: { service: "report-generator" } });
 
       // --- Persist report content ---
-      await withRetry(() => this.collection.updateOne(
-        { _id: reportId } as any,
+      const persisted = await withRetry(() => this.collection.updateOne(
+        { _id: reportId, deletedAt: { $exists: false } } as any,
         {
           $set: {
             status: "completed",
@@ -198,6 +201,9 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
           },
         } as any
       ));
+      if (persisted.matchedCount === 0) {
+        throw new Error(`Report ${reportId} is deleted or stale`);
+      }
 
       await log("info", `Report completed (${content.length} chars)`, { final: true });
       trackMetric({ name: "report_generator.generation_duration_ms", value: Date.now() - generationStart, properties: { service: "report-generator" } });

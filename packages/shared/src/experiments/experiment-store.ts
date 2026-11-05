@@ -262,6 +262,22 @@ export class ExperimentStore {
       _id: experimentId,
       projectId,
       finalizedAt: { $exists: true },
+      deletedAt: { $exists: false },
+      "lifecycle.phase": {
+        $nin: ["deleting", "deleted", "restoring"],
+      },
+    } as Document);
+    return raw ? parseExperiment(raw) : null;
+  }
+
+  async getIncludingDeleted(
+    projectId: string,
+    experimentId: string,
+  ): Promise<ExperimentDocument | null> {
+    const raw: unknown = await this.collections.experiments.findOne({
+      _id: experimentId,
+      projectId,
+      finalizedAt: { $exists: true },
     } as Document);
     return raw ? parseExperiment(raw) : null;
   }
@@ -270,11 +286,20 @@ export class ExperimentStore {
     projectId: string;
     limit?: number;
     afterExperimentId?: string;
+    includeDeleted?: boolean;
   }): Promise<ExperimentPage> {
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
     const filter: Document = {
       projectId: input.projectId,
       finalizedAt: { $exists: true },
+      ...(input.includeDeleted
+        ? {}
+        : {
+            deletedAt: { $exists: false },
+            "lifecycle.phase": {
+              $nin: ["deleting", "deleted", "restoring"],
+            },
+          }),
       ...(input.afterExperimentId
         ? { _id: { $gt: input.afterExperimentId } }
         : {}),
@@ -299,8 +324,11 @@ export class ExperimentStore {
     projectId: string;
     experimentId: string;
     experimentExecutionId: string;
+    includeDeleted?: boolean;
   }): Promise<ExperimentExecution | null> {
-    const experiment = await this.get(input.projectId, input.experimentId);
+    const experiment = input.includeDeleted
+      ? await this.getIncludingDeleted(input.projectId, input.experimentId)
+      : await this.get(input.projectId, input.experimentId);
     if (
       experiment?.execution.experimentExecutionId ===
       input.experimentExecutionId
@@ -319,8 +347,11 @@ export class ExperimentStore {
     projectId: string;
     experimentId: string;
     experimentExecutionId: string;
+    includeDeleted?: boolean;
   }): Promise<ExperimentRequestState[] | null> {
-    const experiment = await this.get(input.projectId, input.experimentId);
+    const experiment = input.includeDeleted
+      ? await this.getIncludingDeleted(input.projectId, input.experimentId)
+      : await this.get(input.projectId, input.experimentId);
     const execution =
       experiment?.execution.experimentExecutionId ===
       input.experimentExecutionId
@@ -378,6 +409,9 @@ export class ExperimentStore {
         "execution.version": input.expectedExecutionVersion,
         "execution.frozenAt": { $exists: false },
         "execution.rollover": { $exists: false },
+        "lifecycle.phase": {
+          $nin: ["deleting", "deleted", "restoring"],
+        },
         [`${path}.status`]: "queued",
         [`${path}.version`]: input.handlerVersion,
         [`${path}.claimToken`]: input.claimToken,
@@ -426,6 +460,9 @@ export class ExperimentStore {
         "execution.version": input.expectedExecutionVersion,
         "execution.rollover": { $exists: false },
         "execution.frozenAt": { $exists: false },
+        "lifecycle.phase": {
+          $nin: ["deleting", "deleted", "restoring"],
+        },
         [`${path}.status`]: "processing",
         [`${path}.version`]: input.handlerVersion,
         [`${path}.claimToken`]: input.claimToken,
@@ -468,6 +505,9 @@ export class ExperimentStore {
         "execution.version": input.expectedExecutionVersion,
         "execution.frozenAt": { $exists: false },
         "execution.rollover": { $exists: false },
+        "lifecycle.phase": {
+          $nin: ["deleting", "deleted", "restoring"],
+        },
       } as Document,
       {
         $set: {
@@ -503,6 +543,9 @@ export class ExperimentStore {
         "execution.version": input.expectedExecutionVersion,
         "execution.frozenAt": { $exists: false },
         "execution.rollover": { $exists: false },
+        "lifecycle.phase": {
+          $nin: ["deleting", "deleted", "restoring"],
+        },
         [`${path}.status`]: "queued",
         [`${path}.templateVersionId`]: input.templateVersionId,
         [`${path}.claimToken`]: input.claimToken,
@@ -545,6 +588,9 @@ export class ExperimentStore {
         "execution.version": input.expectedExecutionVersion,
         "execution.frozenAt": { $exists: false },
         "execution.rollover": { $exists: false },
+        "lifecycle.phase": {
+          $nin: ["deleting", "deleted", "restoring"],
+        },
         [`${path}.status`]: "processing",
         [`${path}.templateVersionId`]: input.templateVersionId,
         [`${path}.claimToken`]: input.claimToken,
@@ -583,6 +629,9 @@ export class ExperimentStore {
         "execution.frozenAt": { $exists: false },
         "execution.rollover": { $exists: false },
         "execution.requestStateUpdate": { $exists: false },
+        "lifecycle.phase": {
+          $nin: ["deleting", "deleted", "restoring"],
+        },
       } as Document,
       {
         $set: {

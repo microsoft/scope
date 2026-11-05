@@ -507,6 +507,16 @@ authoritative. Direct deletion of a member publishes a removal revision and
 clears that field before soft deletion. Only legacy composition inputs that
 overlap Experiment creation are deprecated.
 
+Deleting an Experiment is an asynchronous recoverable lifecycle operation, not
+a direct document removal. The root becomes non-dispatchable immediately and
+stores a stable operation ID, phase, progress, blockers, and CAS
+`stateVersion`. Exact request and report targets are snapshotted through the
+same deterministic fixed-payload storage used by execution vectors. Cascaded
+children store operation provenance; records deleted independently are never
+claimed or restored. Restore revives matching children first, then the
+Experiment, and finally reconciles the current request/run vector. Immutable
+execution history and report artifacts are retained throughout.
+
 Request-level profile-managed fields are rejected in fan-out mode. Portal and
 CLI submit only shared intent (scenario, gates, codebase, count, priority, and
 AGENTS.md); they do not materialize baseline profile values into the request.

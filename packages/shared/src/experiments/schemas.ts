@@ -237,6 +237,45 @@ export const ExperimentDocumentSchema = z
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
     finalizedAt: z.coerce.date().optional(),
+    deletedAt: z.coerce.date().optional(),
+    lifecycle: z
+      .object({
+        operationId: IdSchema,
+        phase: z.enum(["deleting", "deleted", "restoring", "restored"]),
+        stateVersion: z.number().int().positive(),
+        targets: ExperimentFixedRequestPayloadSchema,
+        targetFingerprint: IdSchema,
+        progress: z
+          .object({
+            expectedRequests: z.number().int().nonnegative(),
+            completedRequests: z.number().int().nonnegative(),
+            expectedReports: z.number().int().nonnegative(),
+            completedReports: z.number().int().nonnegative(),
+          })
+          .strict(),
+        blocking: z
+          .array(
+            z
+              .object({
+                kind: z.enum(["request", "report", "experiment"]),
+                id: IdSchema,
+                reason: z.enum([
+                  "target-missing",
+                  "target-conflict",
+                  "reconciliation-failed",
+                ]),
+                error: ErrorSchema.optional(),
+              })
+              .strict(),
+          )
+          .max(32),
+        deleteRequestedAt: z.coerce.date(),
+        deleteCompletedAt: z.coerce.date().optional(),
+        restoreRequestedAt: z.coerce.date().optional(),
+        restoreCompletedAt: z.coerce.date().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { api } from "@/lib/api";
 import experimentsListMeta, {
+  DeletedVisibility,
   SharedListInteractions,
 } from "./ExperimentsList.stories";
 
@@ -43,8 +44,45 @@ beforeAll(() => {
     configurable: true,
     value: IntersectionObserverMock,
   });
-  vi.mocked(api.listExperiments).mockResolvedValue({
-    items: [
+  vi.mocked(api.listExperiments).mockImplementation(async (options) => ({
+    items: options?.includeDeleted
+      ? [{
+          experimentId: "experiment-deleted",
+          projectId: "demo-project",
+          metadata: { name: "Deleted benchmark" },
+          revision: {
+            experimentRevisionId: "revision-deleted",
+            revisionNumber: 1,
+            memberCount: 4,
+          },
+          execution: {
+            experimentExecutionId: "execution-deleted",
+            attemptNumber: 2,
+            requestCount: 4,
+            requests: [],
+            handlerProgress: {},
+            blocking: [],
+            createdAt: "2026-10-16T10:00:00.000Z",
+          },
+          readiness: "done",
+          blocking: [],
+          createdRequestIds: [],
+          createdAt: "2026-10-16T09:00:00.000Z",
+          deletedAt: "2026-10-16T12:00:00.000Z",
+          lifecycle: {
+            operationId: "operation-delete",
+            phase: "deleted",
+            stateVersion: 3,
+            progress: {
+              expectedRequests: 4,
+              completedRequests: 4,
+              expectedReports: 1,
+              completedReports: 1,
+            },
+            blocking: [],
+          },
+        }]
+      : [
       {
         experimentId: "experiment-alpha",
         projectId: "demo-project",
@@ -91,8 +129,8 @@ beforeAll(() => {
         createdRequestIds: [],
         createdAt: "2026-10-16T09:00:00.000Z",
       },
-    ],
-  });
+      ],
+  }));
 });
 
 describe("ExperimentsList stories", () => {
@@ -111,6 +149,32 @@ describe("ExperimentsList stories", () => {
       </QueryClientProvider>,
     );
     const play = SharedListInteractions.play as unknown as
+      | ((context: {
+          canvas: ReturnType<typeof within>;
+          canvasElement: HTMLElement;
+        }) => Promise<void>)
+      | undefined;
+    await play?.({
+      canvas: within(container),
+      canvasElement: container,
+    });
+  });
+
+  it("runs the deleted visibility interaction", async () => {
+    const StoryRender = experimentsListMeta.component;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <div className="h-[760px]">
+            <StoryRender />
+          </div>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const play = DeletedVisibility.play as unknown as
       | ((context: {
           canvas: ReturnType<typeof within>;
           canvasElement: HTMLElement;

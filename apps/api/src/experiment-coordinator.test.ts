@@ -265,6 +265,126 @@ describe("ExperimentCoordinator", () => {
     );
   });
 
+  it("soft-deletes an uncommitted report when lifecycle deletion wins the CAS", async () => {
+    const initial = experiment([], {
+      handlerSummary: {
+        "pp-readout": {
+          status: "done",
+          version: 1,
+          updatedAt: now,
+        },
+      },
+      reportTemplates: {},
+      report: {
+        reportId: "readout-1",
+        url: "/api/v1/reports/readout-1",
+        updatedAt: now,
+      },
+    });
+    initial.revision.reportTemplateIds = [];
+    const deleting = structuredClone(initial);
+    deleting.lifecycle = {
+      operationId: "operation-1",
+      phase: "deleting",
+      stateVersion: 1,
+      targets: {
+        storage: "inline",
+        entryCount: 0,
+        payloadFingerprint: fingerprintExperimentPayload([]),
+        payloadVersion: 1,
+        entries: [],
+      },
+      targetFingerprint: fingerprintExperimentPayload([]),
+      progress: {
+        expectedRequests: 0,
+        completedRequests: 0,
+        expectedReports: 0,
+        completedReports: 0,
+      },
+      blocking: [],
+      deleteRequestedAt: now,
+    };
+    const template = {
+      _id: "always",
+      projectId: "project-1",
+      id: "always",
+      subject: "experiment",
+      name: "Always",
+      userPrompt: "Summarize",
+      trigger: { type: "always" as const },
+      enabled: true,
+      currentVersionId: "always:v1",
+      currentVersion: 1,
+      contentFingerprint: "always-fingerprint",
+      createdAt: now,
+    };
+    const updateMany = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    vi.spyOn(
+      ExperimentStore.prototype,
+      "updateReportTemplateSummaries",
+    ).mockResolvedValue(null);
+    vi.spyOn(
+      ExperimentStore.prototype,
+      "getIncludingDeleted",
+    ).mockResolvedValue(deleting);
+    const coordinator = new ExperimentCoordinator(
+      {
+        requests: {} as Collection<RequestDocument>,
+        experiments: {} as Collection<ExperimentDocument>,
+        executions: {} as Collection<ExperimentExecutionHistoryDocument>,
+        chunks: {} as Collection,
+        services: {
+          find: vi.fn().mockReturnValue(cursor([{
+            _id: "pp-readout",
+            type: "experiment-handler",
+            version: 1,
+            queue: "queue-readout",
+            selector: "readout",
+            autoBackfill: false,
+            dependsOn: [],
+            dependencyMode: "all-runs",
+          }])),
+        } as unknown as Collection<ServiceHandlerDocument>,
+        reportTemplates: {
+          find: vi.fn().mockReturnValue(cursor([template])),
+        } as unknown as Collection,
+        reportTemplateVersions: {} as Collection,
+        reports: {
+          insertOne: vi.fn().mockResolvedValue({ acknowledged: true }),
+          findOne: vi.fn(),
+          updateMany,
+        } as unknown as Collection,
+      },
+      vi.fn(),
+    );
+
+    const dispatched = await (
+      coordinator as unknown as {
+        dispatchReadyReportTemplates(
+          experiment: ExperimentDocument,
+          requests: readonly ExperimentRequestState[],
+          requestById: ReadonlyMap<string, RequestDocument>,
+        ): Promise<boolean>;
+      }
+    ).dispatchReadyReportTemplates(initial, [], new Map());
+
+    expect(dispatched).toBe(false);
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-1",
+        status: "pending",
+        deletedAt: { $exists: false },
+      }),
+      {
+        $set: {
+          deletedAt: expect.any(Date),
+        },
+      },
+    );
+  });
+
   it("projects authoritative run status and dispatches an exact execution message", async () => {
     const initialRequest: ExperimentRequestState = {
       requestId: "request-1",

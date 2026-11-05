@@ -345,6 +345,11 @@ export interface RequestDocument {
   personaInstructions?: string;  // Resolved persona prose (from traits.yaml)
   persona?: Persona;             // Original persona object for traceability
   deletedAt?: Date;              // Soft-delete timestamp (null/absent = active)
+  deletionProvenance?: {
+    kind: "experiment";
+    experimentId: string;
+    operationId: string;
+  };
   taskPromptId?: string;            // Materialized UUIDv5 of scenario.task (FK → TaskPromptDocument._id)
   /**
   * FK → TaskPromptDocument._id of an AGENTS.md-typed prompt to deliver into
@@ -893,6 +898,12 @@ export interface ReportDocument {
   insightReferences?: InsightReference[];  // Insights discovered/referenced by this report
   createdAt: Date;
   updatedAt?: Date;
+  deletedAt?: Date;
+  deletionProvenance?: {
+    kind: "experiment";
+    experimentId: string;
+    operationId: string;
+  };
 }
 
 /** Queue message payload for report generation */
