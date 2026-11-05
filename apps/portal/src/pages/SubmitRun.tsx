@@ -307,6 +307,7 @@ export function SubmitRun() {
   const selectedBaseProfileVersion = selectedProfileId
     ? profileVersions.find((version) => version.version === selectedProfileVersion) ?? selectedBaseProfile?.version
     : undefined;
+  const profileControlsResources = (selectedBaseProfileVersion?.resources?.length ?? 0) > 0;
   const topProfiles = selectableProfileList.slice(0, 3);
 
   // ─── Effects ────────────────────────────────────────────────────────────
@@ -1023,50 +1024,6 @@ export function SubmitRun() {
                 </Button>
               </div>
               <CodebasePicker selected={selectedCodebaseSpec} onChange={setSelectedCodebaseSpec} />
-            </div>
-          )}
-
-          {/* ─── Resources (optional, discreet) ───────────────────────────── */}
-          {!(resourcesOpen || selectedResourceSpecs.length > 0) ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-xs text-muted-foreground"
-              onClick={() => setResourcesOpen(true)}
-            >
-              <Boxes className="h-3.5 w-3.5" />
-              Add resources
-            </Button>
-          ) : (
-            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Label className="text-xs">
-                    Resources{" "}
-                    <span className="font-normal text-muted-foreground">(optional)</span>
-                  </Label>
-                  <HelpTooltip text="Optional lifecycle dependencies. Pick bare resources to pin their latest revision at submit time, or choose a specific immutable revision." />
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
-                  onClick={() => {
-                    setSelectedResourceSpecs([]);
-                    setResourcesOpen(false);
-                  }}
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Remove
-                </Button>
-              </div>
-              <ResourcePicker
-                selected={selectedResourceSpecs}
-                onChange={setSelectedResourceSpecs}
-                profileBindings={selectedBaseProfileVersion?.resources ?? []}
-              />
             </div>
           )}
 
@@ -1861,6 +1818,41 @@ export function SubmitRun() {
           </div>
         </CollapsibleCard>
       )}
+
+      {/* ─── Resources (collapsible) ───────────────────────────────────── */}
+      <CollapsibleCard
+        icon={Boxes}
+        title="Resources"
+        help={
+          <HelpTooltip text="Lifecycle dependencies provisioned before the agent starts. Bare resources pin their latest revision at submit time; explicit revisions remain immutable." />
+        }
+        summary={
+          selectedResourceSpecs.length === 0
+            ? "None selected"
+            : `${selectedResourceSpecs.length} resource${selectedResourceSpecs.length === 1 ? "" : "s"} selected`
+        }
+        open={resourcesOpen}
+        onOpenChange={setResourcesOpen}
+        disabled={profileControlsResources}
+      >
+        <div className="space-y-2">
+          {profileControlsResources && (
+            <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span>
+                The selected profile controls the resource list, revisions, and preset parameter values.
+                Parameters the profile leaves unset remain editable for this run.
+              </span>
+            </div>
+          )}
+          <ResourcePicker
+            selected={selectedResourceSpecs}
+            onChange={setSelectedResourceSpecs}
+            profileBindings={selectedBaseProfileVersion?.resources ?? []}
+            bindingsLocked={profileControlsResources}
+          />
+        </div>
+      </CollapsibleCard>
 
       {/* ─── Skills (collapsible) ──────────────────────────────────────── */}
       {showSkills && <CollapsibleCard

@@ -75,9 +75,14 @@ renamed rather than the item: its siblings, MCP and Extensions, name *things*, s
 anything other than Resources would have hidden it from anyone looking for it.
 
 Run detail surfaces the pinned bindings, their resolved parameter values, `run.resources` and
-`run.mcpRegistered` (see [Run observability](#run-observability)). Parameters a profile has
-preset render **locked**, not merely pre-filled — an editable field whose value the API rejects
-at submit would be a lie in the UI.
+`run.mcpRegistered` (see [Run observability](#run-observability)). The run submission wizard
+places Resources with the other agent/runtime integrations beside MCP Servers and Skills. When a
+profile declares resources, it owns the binding list, revision choices, and preset parameter
+values: those controls render visibly locked and cannot be added, removed, replaced, or
+overridden. Parameter gaps the profile leaves unset remain editable because the single-profile
+API contract permits the run to fill them. A profile that declares no resources leaves resource
+configuration run-owned and editable. Showing profile-owned values as editable would be a lie in
+the UI because the API rejects the apparent override.
 
 ## Run observability
 
