@@ -1,0 +1,11 @@
+[
+  "$.steps[*]",
+  "$..steps",
+  "$.steps[?(@.source)]",
+  "$.steps[0:2]",
+  "$.steps[0,1]",
+  "$.steps[-1]",
+  "$.steps[(@.length-1)]",
+  "$.constructor",
+  "$.steps[0].__proto__"
+]

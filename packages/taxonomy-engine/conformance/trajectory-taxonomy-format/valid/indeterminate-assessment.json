@@ -1,0 +1,7 @@
+{
+  "element_id": "malformed",
+  "assessment": {
+    "state": "indeterminate",
+    "reason": "Input validation evidence is incomplete."
+  }
+}

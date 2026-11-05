@@ -1,0 +1,9 @@
+schema_version: scope/taxonomy/v1
+id: acme-agent-behavior
+version: 1.0.0
+surfaces:
+  - id: surface-mcp
+    label: MCP
+elements:
+  - path: elements/retry-loop.yaml
+  - path: elements/repeated-request.yaml

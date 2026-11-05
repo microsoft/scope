@@ -1,0 +1,19 @@
+{
+  "expected_code": "reference_constraint_mismatch",
+  "element_id": "owned",
+  "assessment": {
+    "state": "completed",
+    "observed": true,
+    "occurrences": [
+      {
+        "evidence": [
+          { "role": "call", "path": "$.steps[1].tool_calls[1]" },
+          {
+            "role": "result",
+            "path": "$.steps[1].observation.results[0]"
+          }
+        ]
+      }
+    ]
+  }
+}

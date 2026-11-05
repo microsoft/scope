@@ -1,0 +1,76 @@
+{
+  "context": {
+    "run_id": "run-9201",
+    "scenario": {
+      "id": "auth",
+      "label": "Authentication",
+      "task": "Configure auth and query account"
+    },
+    "profile": {
+      "id": "fixture",
+      "label": "Fixture agent"
+    },
+    "completeness": "complete",
+    "sources": [
+      {
+        "id": "account",
+        "label": "account/query",
+        "surface_id": "surface-mcp"
+      },
+      {
+        "id": "auth-cli",
+        "label": "authctl",
+        "surface_id": "surface-cli"
+      }
+    ]
+  },
+  "results": [
+    {
+      "schema_version": "taxonome.observation.v1",
+      "element_id": "beh-timeout",
+      "implementation": "deterministic",
+      "result": {
+        "state": "completed",
+        "observed": true,
+        "occurrences": [
+          {
+            "source": {
+              "id": "account",
+              "label": "account/query",
+              "surface_id": "surface-mcp"
+            },
+            "related_turns": [
+              2
+            ],
+            "tool_call_id": "p-a1"
+          },
+          {
+            "source": {
+              "id": "account",
+              "label": "account/query",
+              "surface_id": "surface-mcp"
+            },
+            "related_turns": [
+              3
+            ],
+            "tool_call_id": "p-a2"
+          },
+          {
+            "source": {
+              "id": "auth-cli",
+              "label": "authctl",
+              "surface_id": "surface-cli"
+            },
+            "related_turns": [
+              4
+            ],
+            "tool_call_id": "p-b1"
+          }
+        ]
+      }
+    }
+  ],
+  "metadata": {
+    "strategy": "deterministic"
+  }
+}

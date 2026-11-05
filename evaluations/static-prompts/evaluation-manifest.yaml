@@ -20,3 +20,28 @@ qualityFamilies:
     variants: [default, persona, descendant-guard]
   - id: run-report
     variants: [default, append, override-control]
+standaloneFamilies:
+  - id: taxonome-skipped-invocation
+    variants: [default]
+    transport: copilot-sdk
+    adapter: adapter/standalone.ts
+    inputs: ../../packages/ax-taxonomy/fixtures/skipped-invocation-inputs.jsonl
+    ground-truth: ../../packages/ax-taxonomy/fixtures/skipped-invocation-ground-truth.json
+    command: pnpm --dir packages/ax-taxonomy eval -- --element beh-skipped-invocation --split test --json
+    rubric: exact state/polarity and occurrence grouping, declared discovery role/cardinality, definite JSONPath resolution/type validity, initial-vs-repair production composition
+  - id: taxonome-wrong-discovery
+    variants: [default]
+    transport: copilot-sdk
+    adapter: adapter/standalone.ts
+    inputs: ../../packages/ax-taxonomy/fixtures/wrong-discovery-inputs.jsonl
+    ground-truth: ../../packages/ax-taxonomy/fixtures/wrong-discovery-ground-truth.json
+    command: pnpm --dir packages/ax-taxonomy eval -- --element beh-wrong-discovery --split test --json
+    rubric: task relevance of recorded discoveries, exact state/polarity and occurrence grouping, declared discovery role/cardinality, definite JSONPath resolution/type validity, initial-vs-repair production composition
+  - id: taxonome-content-misused
+    variants: [default]
+    transport: copilot-sdk
+    adapter: adapter/standalone.ts
+    inputs: ../../packages/ax-taxonomy/fixtures/content-misused-inputs.jsonl
+    ground-truth: ../../packages/ax-taxonomy/fixtures/content-misused-ground-truth.json
+    command: pnpm --dir packages/ax-taxonomy eval -- --element beh-content-misused --split test --json
+    rubric: returned-content application correctness, exact state/polarity and occurrence grouping, returned_content/misuse role cardinality, definite JSONPath resolution/type/order validity, initial-vs-repair production composition

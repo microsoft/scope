@@ -1,0 +1,19 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "timeout-example",
+  "agent": { "name": "synthetic-example" },
+  "steps": [
+    { "step_id": 1, "source": "user", "message": "Query the service." },
+    {
+      "step_id": 2,
+      "source": "agent",
+      "message": "Calling query.",
+      "tool_calls": [{
+        "tool_call_id": "query-1",
+        "function_name": "query",
+        "arguments": {},
+        "extra": { "outcome": "timeout", "duration_ms": 5000 }
+      }]
+    }
+  ]
+}

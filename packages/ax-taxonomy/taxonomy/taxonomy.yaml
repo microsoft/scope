@@ -1,0 +1,27 @@
+schema_version: scope/taxonomy/v1
+id: agent-behavior
+version: 3.0.0
+surfaces:
+  - id: surface-skills
+    label: Skills
+  - id: surface-mcp
+    label: MCP
+  - id: surface-instructions
+    label: Instructions
+  - id: surface-docs
+    label: Documentation
+  - id: surface-cli
+    label: CLI
+  - id: surface-errors
+    label: Errors
+  - id: surface-auth
+    label: Authentication
+  - id: surface-base-model
+    label: Base model
+elements:
+  - path: elements/discovered.yaml
+  - path: elements/skipped-invocation.yaml
+  - path: elements/wrong-discovery.yaml
+  - path: elements/content-misused.yaml
+  - path: elements/malformed-invocation.yaml
+  - path: elements/timeout.yaml

@@ -1,0 +1,35 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "session-9f31",
+  "agent": {
+    "name": "fixture-agent",
+    "version": "1.0.0"
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "source": "user",
+      "message": "Generate the report and save it to reports/result.json."
+    },
+    {
+      "step_id": 2,
+      "source": "agent",
+      "message": "Where should I save the report?"
+    }
+  ],
+  "extra": {
+    "scope": {
+      "schema_version": "scope.atif-extension.v1",
+      "trajectory_state": "complete",
+      "task": "Generate and save the report.",
+      "run": {
+        "id": "run-9f31",
+        "scenario_id": "scenario-9f31",
+        "scenario_label": "Scenario 9F31",
+        "profile_id": "profile-9f31",
+        "profile_label": "Profile 9F31"
+      },
+      "available_sources": []
+    }
+  }
+}

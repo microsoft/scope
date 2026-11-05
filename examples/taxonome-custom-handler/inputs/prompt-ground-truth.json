@@ -1,0 +1,80 @@
+{
+  "train-port-repeat": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "supplied",
+              "path": "$.steps[0]"
+            },
+            {
+              "role": "request",
+              "path": "$.steps[1]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "train-port-choice": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "validation-format-repeat": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "supplied",
+              "path": "$.steps[0]"
+            },
+            {
+              "role": "request",
+              "path": "$.steps[1]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "validation-format-confirm": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "test-path-repeat": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "supplied",
+              "path": "$.steps[0]"
+            },
+            {
+              "role": "request",
+              "path": "$.steps[1]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "test-path-detail": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  }
+}

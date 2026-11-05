@@ -1,0 +1,24 @@
+schema_version: scope/taxonomy/v1
+id: beh-skipped-invocation
+label: Skipped Invocation
+description: The agent discovers a task-relevant extension point but never uses it.
+category_id: behavior-category-invocation
+implementation:
+  type: prompt
+  prompt: >-
+    Assess Skipped Invocation: the agent discovers a task-relevant extension
+    point but never uses it before the run ends. Include referenced files whose
+    reading instructions apply to the task. A configured or available source is
+    not discovered unless the Scope ATIF extension records a discovery event.
+    For every distinct finding, cite exactly one recorded discovery using role
+    discovery and its absolute normalized-ATIF JSONPath.
+preconditions:
+  requires_recorded_discovery: true
+  requires_complete_trajectory: true
+  requires_task: true
+output:
+  evidence_roles:
+    discovery:
+      type: scope.discovery
+      max: 1
+      description: Task-relevant discovery that the agent skipped invoking.

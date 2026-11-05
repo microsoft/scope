@@ -1,0 +1,7 @@
+{
+  "element_id": "malformed",
+  "assessment": {
+    "state": "inapplicable",
+    "reason": "The trajectory contains no tool invocation."
+  }
+}

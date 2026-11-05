@@ -1,0 +1,18 @@
+schema_version: scope/taxonomy/v1
+id: invalid-cardinality
+version: 1.0.0
+surfaces: []
+elements:
+  - id: invalid
+    label: Invalid
+    implementation:
+      type: prompt
+      prompt: Invalid cardinality.
+    preconditions: {}
+    output:
+      evidence_roles:
+        evidence:
+          type: atif.step
+          min: 2
+          max: 1
+          description: Invalid cardinality.

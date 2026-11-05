@@ -1,0 +1,211 @@
+{
+  "format": "scope/taxonome-ax/v2",
+  "taxonomy": {
+    "schema_version": "scope/taxonomy/v1",
+    "id": "acme-agent-behavior",
+    "version": "1.0.0",
+    "digest": "c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328"
+  },
+  "element_id": "acme-repeated-request",
+  "contract_hash": "45dad89fa891502f5d3fb416a069fc0ab66a365b61d57c26879eceab7659d6ac",
+  "corpus_hash": "563face0f8e6792caa2563a89ecf3a97469b33f8695711380d40bbcc632361f1",
+  "model": "gpt-5.6-sol-fast",
+  "ax_version": "25.3.2",
+  "sdk_version": "1.0.1",
+  "train_ids": [
+    "case-01",
+    "case-02"
+  ],
+  "validation_ids": [
+    "case-03",
+    "case-04"
+  ],
+  "settings": {
+    "maxMetricCalls": 12,
+    "seed": 42,
+    "bootstrap": true
+  },
+  "transport_settings": {
+    "reasoning_effort": "low",
+    "sampling": "sdk-managed",
+    "ax_sampling_hints_applied": false
+  },
+  "optimized": {
+    "bestScore": 1,
+    "stats": {
+      "totalCalls": 2,
+      "successfulDemos": 0,
+      "estimatedTokenUsage": 0,
+      "earlyStopped": false,
+      "resourceUsage": {
+        "totalTokens": 0,
+        "totalTime": 0,
+        "avgLatencyPerEval": 0,
+        "costByModel": {}
+      },
+      "convergenceInfo": {
+        "converged": true,
+        "finalImprovement": 0,
+        "stagnationRounds": 0,
+        "convergenceThreshold": 0
+      },
+      "bestScore": 0,
+      "bestConfiguration": {}
+    },
+    "componentMap": {
+      "acme-repeated-request@prompt::description": "Assess Repeated Information Request. Mark observed only when the agent asks the user to provide a concrete fact that an earlier user turn already supplied clearly and completely. Cite the supplying user turn and the later agent request in related_turns. Do not count confirmation, paraphrasing, requests for different details, or genuinely ambiguous requirements.\n\nAuthored output schema: {\"oneOf\":[{\"type\":\"object\",\"properties\":{\"state\":{\"const\":\"completed\"},\"observed\":{\"const\":true},\"occurrences\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"related_turns\":{\"type\":\"array\",\"items\":{\"type\":\"integer\",\"minimum\":1},\"minItems\":2}},\"required\":[\"related_turns\"],\"additionalProperties\":false},\"minItems\":1}},\"required\":[\"state\",\"observed\",\"occurrences\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"state\":{\"const\":\"completed\"},\"observed\":{\"const\":false}},\"required\":[\"state\",\"observed\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"state\":{\"enum\":[\"indeterminate\",\"inapplicable\"]},\"reason\":{\"type\":\"string\"}},\"required\":[\"state\",\"reason\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"state\":{\"const\":\"error\"},\"error\":{\"type\":\"string\"}},\"required\":[\"state\",\"error\"],\"additionalProperties\":false}]}\n\nEvidence requirements: {\"requires_discovery_event\":false,\"complete_for_negative\":true,\"requires_task\":true}",
+      "acme-repeated-request@prompt::instruction": ""
+    },
+    "selectorState": {
+      "acme-repeated-request@prompt::description": {
+        "proposals": 0,
+        "accepts": 0,
+        "lastAcceptIter": -1,
+        "stagnation": 0
+      },
+      "acme-repeated-request@prompt::instruction": {
+        "proposals": 0,
+        "accepts": 0,
+        "lastAcceptIter": -1,
+        "stagnation": 0
+      }
+    },
+    "demos": [
+      {
+        "traces": [
+          {
+            "evidence": "{\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"session-c248\",\"agent\":{\"name\":\"fixture-agent\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Configure the telemetry exporter and choose an appropriate port.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"I will use the standard OTLP port 4317.\"}],\"extra\":{\"scope\":{\"schema_version\":\"scope.atif-extension.v1\",\"trajectory_state\":\"complete\",\"task\":\"Configure the telemetry exporter.\",\"run\":{\"id\":\"run-c248\",\"scenario_id\":\"scenario-c248\",\"scenario_label\":\"Scenario C248\",\"profile_id\":\"profile-c248\",\"profile_label\":\"Profile C248\"},\"available_sources\":[]}}},\"taxonomy\":{\"schema_version\":\"scope/taxonomy/v1\",\"id\":\"acme-agent-behavior\",\"version\":\"1.0.0\",\"digest\":\"c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328\",\"surfaces\":[{\"id\":\"surface-mcp\",\"label\":\"MCP\"}]}}",
+            "observation": {
+              "state": "completed",
+              "observed": false
+            }
+          },
+          {
+            "evidence": "{\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"session-a13f\",\"agent\":{\"name\":\"fixture-agent\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Configure the telemetry exporter. Use port 4317.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"Which port should the telemetry exporter use?\"}],\"extra\":{\"scope\":{\"schema_version\":\"scope.atif-extension.v1\",\"trajectory_state\":\"complete\",\"task\":\"Configure the telemetry exporter.\",\"run\":{\"id\":\"run-a13f\",\"scenario_id\":\"scenario-a13f\",\"scenario_label\":\"Scenario A13F\",\"profile_id\":\"profile-a13f\",\"profile_label\":\"Profile A13F\"},\"available_sources\":[]}}},\"taxonomy\":{\"schema_version\":\"scope/taxonomy/v1\",\"id\":\"acme-agent-behavior\",\"version\":\"1.0.0\",\"digest\":\"c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328\",\"surfaces\":[{\"id\":\"surface-mcp\",\"label\":\"MCP\"}]}}",
+            "observation": {
+              "state": "completed",
+              "observed": true,
+              "occurrences": [
+                {
+                  "related_turns": [
+                    1,
+                    2
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "evidence": "{\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"session-c248\",\"agent\":{\"name\":\"fixture-agent\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Configure the telemetry exporter and choose an appropriate port.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"I will use the standard OTLP port 4317.\"}],\"extra\":{\"scope\":{\"schema_version\":\"scope.atif-extension.v1\",\"trajectory_state\":\"complete\",\"task\":\"Configure the telemetry exporter.\",\"run\":{\"id\":\"run-c248\",\"scenario_id\":\"scenario-c248\",\"scenario_label\":\"Scenario C248\",\"profile_id\":\"profile-c248\",\"profile_label\":\"Profile C248\"},\"available_sources\":[]}}},\"taxonomy\":{\"schema_version\":\"scope/taxonomy/v1\",\"id\":\"acme-agent-behavior\",\"version\":\"1.0.0\",\"digest\":\"c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328\",\"surfaces\":[{\"id\":\"surface-mcp\",\"label\":\"MCP\"}]}}",
+            "observation": {
+              "state": "completed",
+              "observed": false
+            }
+          }
+        ],
+        "programId": "acme-repeated-request@prompt"
+      }
+    ],
+    "examples": [
+      {
+        "evidence": "{\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"session-a13f\",\"agent\":{\"name\":\"fixture-agent\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Configure the telemetry exporter. Use port 4317.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"Which port should the telemetry exporter use?\"}],\"extra\":{\"scope\":{\"schema_version\":\"scope.atif-extension.v1\",\"trajectory_state\":\"complete\",\"task\":\"Configure the telemetry exporter.\",\"run\":{\"id\":\"run-a13f\",\"scenario_id\":\"scenario-a13f\",\"scenario_label\":\"Scenario A13F\",\"profile_id\":\"profile-a13f\",\"profile_label\":\"Profile A13F\"},\"available_sources\":[]}}},\"taxonomy\":{\"schema_version\":\"scope/taxonomy/v1\",\"id\":\"acme-agent-behavior\",\"version\":\"1.0.0\",\"digest\":\"c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328\",\"surfaces\":[{\"id\":\"surface-mcp\",\"label\":\"MCP\"}]}}",
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "related_turns": [
+                1,
+                2
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "evidence": "{\"atif\":{\"schema_version\":\"ATIF-v1.7\",\"session_id\":\"session-c248\",\"agent\":{\"name\":\"fixture-agent\"},\"steps\":[{\"step_id\":1,\"source\":\"user\",\"message\":\"Configure the telemetry exporter and choose an appropriate port.\"},{\"step_id\":2,\"source\":\"agent\",\"message\":\"I will use the standard OTLP port 4317.\"}],\"extra\":{\"scope\":{\"schema_version\":\"scope.atif-extension.v1\",\"trajectory_state\":\"complete\",\"task\":\"Configure the telemetry exporter.\",\"run\":{\"id\":\"run-c248\",\"scenario_id\":\"scenario-c248\",\"scenario_label\":\"Scenario C248\",\"profile_id\":\"profile-c248\",\"profile_label\":\"Profile C248\"},\"available_sources\":[]}}},\"taxonomy\":{\"schema_version\":\"scope/taxonomy/v1\",\"id\":\"acme-agent-behavior\",\"version\":\"1.0.0\",\"digest\":\"c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328\",\"surfaces\":[{\"id\":\"surface-mcp\",\"label\":\"MCP\"}]}}",
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    ],
+    "optimizerType": "GEPA",
+    "optimizationTime": 3117,
+    "totalRounds": 30,
+    "converged": true
+  },
+  "metric_trace": [
+    {
+      "case_id": "case-02",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "case-01",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "related_turns": [
+                1,
+                2
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "case-02",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    },
+    {
+      "case_id": "case-03",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": true,
+          "occurrences": [
+            {
+              "related_turns": [
+                1,
+                2
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "case-04",
+      "score": 1,
+      "errors": [],
+      "prediction": {
+        "observation": {
+          "state": "completed",
+          "observed": false
+        }
+      }
+    }
+  ]
+}

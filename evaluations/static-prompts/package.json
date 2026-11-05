@@ -19,6 +19,8 @@
     "report": "pnpm check:uv && uv run python -m static_prompt_evals.report"
   },
   "dependencies": {
+    "ax-taxonomy": "workspace:*",
+    "taxonomy-engine": "workspace:*",
     "shared": "workspace:*",
     "telemetry": "workspace:*",
     "yaml": "^2.8.1"

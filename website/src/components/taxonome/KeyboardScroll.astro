@@ -1,0 +1,15 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+---
+
+<script>
+	// Markdown code frames are rendered after rehype. Enhance only pages importing this component.
+	function enableKeyboardScrolling() {
+		for (const element of document.querySelectorAll<HTMLElement>('.sl-markdown-content pre, .sl-markdown-content table')) {
+			if (!element.hasAttribute('tabindex')) element.tabIndex = 0;
+		}
+	}
+	enableKeyboardScrolling();
+	document.addEventListener('astro:page-load', enableKeyboardScrolling);
+</script>

@@ -1,0 +1,22 @@
+{
+  "det-input-malformed": {
+    "beh-malformed-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "call",
+              "path": "$.steps[1].tool_calls[0]"
+            },
+            {
+              "role": "issue",
+              "path": "$.steps[1].tool_calls[0].extra.scope.input_validation.issues[0]"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

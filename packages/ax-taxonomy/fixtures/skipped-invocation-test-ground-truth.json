@@ -1,0 +1,80 @@
+{
+  "final-login": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "final-called": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "final-conditional": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "final-two": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[1].extra.scope.discoveries[0]"
+            }
+          ]
+        },
+        {
+          "evidence": [
+            {
+              "role": "discovery",
+              "path": "$.steps[2].extra.scope.discoveries[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "final-partial-mixed": {
+    "beh-skipped-invocation": {
+      "state": "indeterminate",
+      "reason": "Reviewed expected indeterminate assessment."
+    },
+    "beh-timeout": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "call",
+              "path": "$.steps[1].tool_calls[0]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "final-available-only": {
+    "beh-skipped-invocation": {
+      "state": "completed",
+      "observed": false
+    }
+  }
+}

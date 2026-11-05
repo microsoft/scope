@@ -1,0 +1,18 @@
+{
+  "det-input-timeout": {
+    "beh-timeout": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "call",
+              "path": "$.steps[1].tool_calls[0]"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
