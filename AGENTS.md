@@ -178,6 +178,7 @@ Built on `mongo-migrate-ts`. Migrations are TypeScript files with `up()` and `do
 - Write for humans: descriptive names, small focused functions, simple control flow, minimal abstraction.
 - Separate logical steps with blank lines; avoid dense one-liners and unrelated statements packed together.
 - Give every non-trivial function and logical code block a short comment explaining what it does; add intent, assumptions, invariants, or surprising reasons where useful.
+- Apply the same rule to tests: comment non-trivial fixture setup, user-flow phases, and invariant assertions. A descriptive test name does not replace intent comments inside a multi-step test; avoid generic `Arrange` / `Act` / `Assert` labels and comments that merely repeat the next line.
 - Document function parameters, types, and their fields/properties with concise JSDoc/TSDoc explaining meaning, constraints, units, optionality, and defaults where relevant.
 - Do not narrate trivial or self-evident code. Document public contracts and failure behavior when names and types are insufficient.
 - Follow local conventions and formatters; review readability as well as correctness.
