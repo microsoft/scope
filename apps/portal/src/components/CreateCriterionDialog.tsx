@@ -28,13 +28,25 @@ interface CreateCriterionDialogProps {
   lockedGates?: GateId[];
   /** Pre-populated criteria kind (defaults to gate) */
   defaultKind?: CriterionKind;
+  /** Specialized creation experience for inline observation entry points. */
+  mode?: "criteria" | "observation";
 }
 
-export function CreateCriterionDialog({ open, onOpenChange, onCreated, defaultGates, lockedGates, defaultKind }: CreateCriterionDialogProps) {
+export function CreateCriterionDialog({
+  open,
+  onOpenChange,
+  onCreated,
+  defaultGates,
+  lockedGates,
+  defaultKind,
+  mode = "criteria",
+}: CreateCriterionDialogProps) {
+  const observationMode = mode === "observation";
   const wizard = useCriteriaWizard({
     initialGates: defaultGates,
     lockedGates,
-    initialKind: defaultKind,
+    initialKind: observationMode ? "observation" : defaultKind,
+    entityLabel: observationMode ? "Observation" : "Criterion",
     onSuccess: (id) => {
       onCreated(id);
       handleOpenChange(false);
@@ -65,14 +77,20 @@ export function CreateCriterionDialog({ open, onOpenChange, onCreated, defaultGa
         {wizard.step === 1 ? (
           <>
             <DialogHeader>
-              <DialogTitle>New Criteria</DialogTitle>
+              <DialogTitle>{observationMode ? "New Observation" : "New Criteria"}</DialogTitle>
               <DialogDescription>
-                Describe the behavior to evaluate
+                {observationMode
+                  ? "Describe the behavior to observe"
+                  : "Describe the behavior to evaluate"}
               </DialogDescription>
             </DialogHeader>
 
             <div className="py-2">
-              <CriteriaWizardStep1 wizard={wizard} idPrefix="dialog-" />
+              <CriteriaWizardStep1
+                wizard={wizard}
+                idPrefix="dialog-"
+                observationMode={observationMode}
+              />
             </div>
 
             <DialogFooter>
@@ -90,14 +108,16 @@ export function CreateCriterionDialog({ open, onOpenChange, onCreated, defaultGa
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>Review & Create</DialogTitle>
+              <DialogTitle>
+                {observationMode ? "Review & Create Observation" : "Review & Create"}
+              </DialogTitle>
               <DialogDescription>
                 {wizard.behavior}
               </DialogDescription>
             </DialogHeader>
 
             <div className="py-2">
-              <CriteriaWizardStep2 wizard={wizard} />
+              <CriteriaWizardStep2 wizard={wizard} observationMode={observationMode} />
             </div>
 
             <DialogFooter className="flex-row justify-between sm:justify-between">
@@ -120,7 +140,7 @@ export function CreateCriterionDialog({ open, onOpenChange, onCreated, defaultGa
                 ) : (
                   <Sparkles className="h-4 w-4" />
                 )}
-                Create
+                {observationMode ? "Create Observation" : "Create"}
               </Button>
             </DialogFooter>
           </>
