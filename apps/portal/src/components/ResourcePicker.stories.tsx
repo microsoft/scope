@@ -40,10 +40,12 @@ function ResourcePickerHarness({
   initial,
   profileBindings = [],
   bindingsLocked = false,
+  disabled = false,
 }: {
   initial: ResourceBindingSpec[];
   profileBindings?: ResourceBindingSpec[];
   bindingsLocked?: boolean;
+  disabled?: boolean;
 }) {
   const [selected, setSelected] = useState(initial);
   const [scopeReady, setScopeReady] = useState(false);
@@ -64,6 +66,7 @@ function ResourcePickerHarness({
         onChange={setSelected}
         profileBindings={profileBindings}
         bindingsLocked={bindingsLocked}
+        disabled={disabled}
       />
     </div>
   );
@@ -110,6 +113,24 @@ export const ProfileManaged: Story = {
       initial={profileBindings}
       profileBindings={profileBindings}
       bindingsLocked
+    />
+  ),
+};
+
+export const VariationModeLocked: Story = {
+  args: {
+    selected: profileBindings,
+    profileBindings,
+    bindingsLocked: true,
+    disabled: true,
+    onChange: () => {},
+  },
+  render: () => (
+    <ResourcePickerHarness
+      initial={profileBindings}
+      profileBindings={profileBindings}
+      bindingsLocked
+      disabled
     />
   ),
 };

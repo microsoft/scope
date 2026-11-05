@@ -82,7 +82,11 @@ values: those controls render visibly locked and cannot be added, removed, repla
 overridden. Parameter gaps the profile leaves unset remain editable because the single-profile
 API contract permits the run to fill them. A profile that declares no resources leaves resource
 configuration run-owned and editable. Showing profile-owned values as editable would be a lie in
-the UI because the API rejects the apparent override.
+the UI because the API rejects the apparent override. Once a comparison variation is added,
+request-level resources are no longer submitted: every selected profile must independently provide
+complete resource bindings and required parameters. The wizard therefore removes any existing
+run-owned resource edits with a visible warning and disables all resource edits while variation
+mode remains active.
 
 ## Run observability
 

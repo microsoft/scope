@@ -105,6 +105,28 @@ function randomVariationColor(): string {
   return VARIATION_COLORS[Math.floor(Math.random() * VARIATION_COLORS.length)];
 }
 
+/**
+ * Compares ordered resource binding specs, including their parameter values.
+ *
+ * @param left Current run-level resource configuration.
+ * @param right Profile-owned resource configuration.
+ */
+function resourceBindingSpecsEqual(
+  left: ResourceBindingSpec[],
+  right: ResourceBindingSpec[],
+): boolean {
+  if (left.length !== right.length) return false;
+
+  return left.every((binding, index) => {
+    const other = right[index];
+    if (!other || binding.ref !== other.ref) return false;
+
+    const params = Object.entries(binding.params ?? {}).sort(([a], [b]) => a.localeCompare(b));
+    const otherParams = Object.entries(other.params ?? {}).sort(([a], [b]) => a.localeCompare(b));
+    return JSON.stringify(params) === JSON.stringify(otherParams);
+  });
+}
+
 interface GalleryCardProps {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
@@ -137,11 +159,22 @@ interface CollapsibleCardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   disabled?: boolean;
+  disabledReason?: string;
   help?: React.ReactNode;
   children: React.ReactNode;
 }
 
-function CollapsibleCard({ icon: Icon, title, summary, open, onOpenChange, disabled, help, children }: CollapsibleCardProps) {
+function CollapsibleCard({
+  icon: Icon,
+  title,
+  summary,
+  open,
+  onOpenChange,
+  disabled,
+  disabledReason,
+  help,
+  children,
+}: CollapsibleCardProps) {
   return (
     <Card className="relative">
       <button
@@ -158,7 +191,7 @@ function CollapsibleCard({ icon: Icon, title, summary, open, onOpenChange, disab
             </p>
             <p className="truncate text-xs text-muted-foreground">
               {summary}
-              {disabled && " — locked by profile"}
+              {disabled && ` — ${disabledReason ?? "locked by profile"}`}
             </p>
           </div>
         </div>
@@ -308,6 +341,9 @@ export function SubmitRun() {
     ? profileVersions.find((version) => version.version === selectedProfileVersion) ?? selectedBaseProfile?.version
     : undefined;
   const profileControlsResources = (selectedBaseProfileVersion?.resources?.length ?? 0) > 0;
+  const variationModeActive = Boolean(
+    selectedProfileId && variationDrafts.some((variation) => variation.profileId.trim().length > 0),
+  );
   const topProfiles = selectableProfileList.slice(0, 3);
 
   // ─── Effects ────────────────────────────────────────────────────────────
@@ -457,19 +493,30 @@ export function SubmitRun() {
   };
 
   const addVariationDraft = () => {
-    setVariationDrafts((prev) => {
-      const used = new Set(prev.map((v) => v.profileId).filter(Boolean));
-      const nextProfile = selectableProfileList.find((p) => p._id !== selectedProfileId && !used.has(p._id));
-      if (!nextProfile) {
-        toast.info("All available profiles are already used in variations.");
-        return prev;
-      }
-      return [...prev, {
-        profileId: nextProfile._id,
-        profileVersion: nextProfile.latestVersion,
-        color: randomVariationColor(),
-      }];
-    });
+    const used = new Set(variationDrafts.map((variation) => variation.profileId).filter(Boolean));
+    const nextProfile = selectableProfileList.find(
+      (profile) => profile._id !== selectedProfileId && !used.has(profile._id),
+    );
+    if (!nextProfile) {
+      toast.info("All available profiles are already used in variations.");
+      return;
+    }
+
+    // Variation requests resolve each profile independently and omit request-level
+    // resources, so remove edits that the API would otherwise silently ignore.
+    const profileResourceSpecs = selectedBaseProfileVersion?.resources ?? [];
+    if (!resourceBindingSpecsEqual(selectedResourceSpecs, profileResourceSpecs)) {
+      toast.warning(
+        "Run-owned resource edits were removed. Profile variations resolve resources independently, so every selected profile must provide complete resource bindings and required parameters.",
+      );
+      setSelectedResourceSpecs(profileResourceSpecs);
+    }
+
+    setVariationDrafts((previous) => [...previous, {
+      profileId: nextProfile._id,
+      profileVersion: nextProfile.latestVersion,
+      color: randomVariationColor(),
+    }]);
   };
 
   const updateVariationDraft = (index: number, patch: Partial<VariationDraft>) => {
@@ -1833,10 +1880,19 @@ export function SubmitRun() {
         }
         open={resourcesOpen}
         onOpenChange={setResourcesOpen}
-        disabled={profileControlsResources}
+        disabled={variationModeActive || profileControlsResources}
+        disabledReason={variationModeActive ? "managed independently by each profile" : undefined}
       >
         <div className="space-y-2">
-          {profileControlsResources && (
+          {variationModeActive ? (
+            <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span>
+                Profile variations resolve resources independently. Every selected profile must provide complete
+                resource bindings and required parameters; run-owned resource edits are unavailable in variation mode.
+              </span>
+            </div>
+          ) : profileControlsResources ? (
             <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
               <span>
@@ -1844,12 +1900,13 @@ export function SubmitRun() {
                 Parameters the profile leaves unset remain editable for this run.
               </span>
             </div>
-          )}
+          ) : null}
           <ResourcePicker
             selected={selectedResourceSpecs}
             onChange={setSelectedResourceSpecs}
             profileBindings={selectedBaseProfileVersion?.resources ?? []}
             bindingsLocked={profileControlsResources}
+            disabled={variationModeActive}
           />
         </div>
       </CollapsibleCard>

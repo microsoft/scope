@@ -18,6 +18,15 @@ vi.mock("@/hooks/useVisibleGates", () => ({
   useVisibleGates: () => ["select"],
 }));
 
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
+
 vi.mock("@/lib/api", () => ({
   api: {
     getVersion: vi.fn(async () => ({ strictAgentCapabilities: true })),
@@ -36,6 +45,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { SubmitRun } from "./SubmitRun";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
@@ -213,6 +223,35 @@ describe("SubmitRun profile variation payload", () => {
         },
       }],
     }));
+  });
+
+  it("discards and disables run-owned resource edits when a variation is added", async () => {
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <SubmitRun />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Fill a parameter gap that is valid for a single-profile run, then switch
+    // into comparison mode where request-level resources are not submitted.
+    const baseProfileInput = await screen.findByPlaceholderText("Search existing profiles…");
+    fireEvent.change(baseProfileInput, { target: { value: "Baseline profile" } });
+    await user.click(screen.getByRole("listitem"));
+    const scenarioParameter = await screen.findByLabelText("SCENARIO") as HTMLInputElement;
+    fireEvent.change(scenarioParameter, { target: { value: "custom-scenario" } });
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(
+      "Run-owned resource edits were removed. Profile variations resolve resources independently, so every selected profile must provide complete resource bindings and required parameters.",
+    ));
+    expect(scenarioParameter.disabled).toBe(true);
+    expect(scenarioParameter.value).toBe("default-scenario");
+    expect(screen.getByText(
+      "Profile variations resolve resources independently. Every selected profile must provide complete resource bindings and required parameters; run-owned resource edits are unavailable in variation mode.",
+    )).toBeTruthy();
   });
 
   it("does not copy baseline profile-managed configuration into the shared request", async () => {
