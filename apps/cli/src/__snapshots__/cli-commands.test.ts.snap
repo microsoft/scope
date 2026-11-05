@@ -557,6 +557,13 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
   },
   "report": {
     "subcommands": {
+      "eligibility": {
+        "options": [
+          "--id",
+          "--output",
+          "--url",
+        ],
+      },
       "generate": {
         "options": [
           "--id",
