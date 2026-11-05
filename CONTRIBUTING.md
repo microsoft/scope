@@ -56,6 +56,12 @@ pnpm install                      # Install all workspace dependencies
 CI installs with `pnpm install --frozen-lockfile`; commit an updated `pnpm-lock.yaml` when you change
 dependencies.
 
+The workspace intentionally skips the optional `ssh2` and `cpu-features` native
+install scripts. Scope uses `ssh2` only transitively through Docker test tooling,
+and its supported JavaScript implementation preserves that behavior without a
+Python/compiler toolchain. Keep required dependency build scripts allowlisted in
+`pnpm-workspace.yaml`; do not replace this narrow policy with `--ignore-scripts`.
+
 ## Local development
 
 Local authentication requires your browser to trust a development certificate.
