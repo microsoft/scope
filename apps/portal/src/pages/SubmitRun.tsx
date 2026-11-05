@@ -1610,32 +1610,22 @@ export function SubmitRun() {
                     <div className="flex items-end gap-2">
                       <div className="flex-1 space-y-1">
                         <Label className="text-xs">Variation #{index + 1}</Label>
-                        <Select
-                          value={draft.profileId || undefined}
-                          onValueChange={(value) => {
+                        <ProfilePicker
+                          profiles={availableProfiles}
+                          selectedProfileId={draft.profileId || null}
+                          placeholder={selectedVariationProfile
+                            ? `${selectedVariationProfile.name}${selectedVariationIsUnavailable ? " (unavailable)" : ""}`
+                            : "Search profiles…"}
+                          workerNameById={agentNameById}
+                          onSelect={(value) => {
+                            if (!value) return;
                             const selectedProfile = profileList.find((p) => p._id === value);
                             updateVariationDraft(index, {
                               profileId: value,
                               profileVersion: selectedProfile?.latestVersion,
                             });
                           }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select profile" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {selectedVariationIsUnavailable && selectedVariationProfile && (
-                              <SelectItem value={selectedVariationProfile._id} disabled>
-                                {selectedVariationProfile.name} (unavailable)
-                              </SelectItem>
-                            )}
-                            {availableProfiles.map((p) => (
-                              <SelectItem key={p._id} value={p._id}>
-                                {p.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        />
                         {!draft.profileId && hasAvailableProfiles && (
                           <p className="text-xs text-muted-foreground">Select a profile for this variation.</p>
                         )}

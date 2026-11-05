@@ -470,6 +470,11 @@ Profile fan-out mode is also supported for comparative runs:
 3. Each expanded request resolves configuration from its variation profile; unpinned specs resolve to `latestVersion`
 4. Expanded requests persist `profileId` and `profileVersionId` on each `RequestDocument` for indexing and traceability
 
+On the Portal submit form, base and variation profiles use the same searchable
+picker. Variation choices exclude the base and profiles already used by another
+variation; changing a variation updates its selected version to that profile's
+latest version.
+
 ## Runs List Query API
 
 `GET /api/v1/requests` powers the Portal **Runs** list and `scope run list`. All
