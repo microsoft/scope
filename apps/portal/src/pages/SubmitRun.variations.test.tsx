@@ -18,6 +18,15 @@ vi.mock("@/hooks/useVisibleGates", () => ({
   useVisibleGates: () => ["select"],
 }));
 
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
+
 vi.mock("@/lib/api", () => ({
   api: {
     getVersion: vi.fn(async () => ({ strictAgentCapabilities: true })),
@@ -36,6 +45,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { SubmitRun } from "./SubmitRun";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
@@ -68,13 +78,13 @@ const agent: CodingAgent = {
 };
 
 /**
- * Builds a profile fixture with one profile-managed repository binding.
+ * Builds a profile fixture with an optional profile-managed repository binding.
  *
  * @param id Stable profile identifier used in submitted references.
  * @param name Display name selected through the profile picker.
- * @param repo Repository parameter value owned by this profile.
+ * @param repo Optional repository parameter value owned by this profile.
  */
-function profile(id: string, name: string, repo: string): ProfileWithVersion {
+function profile(id: string, name: string, repo?: string): ProfileWithVersion {
   return {
     _id: id,
     name,
@@ -87,7 +97,7 @@ function profile(id: string, name: string, repo: string): ProfileWithVersion {
       workerType: agent._id,
       model: "gpt-5.6-sol",
       agentVersion: "1.0",
-      resources: [{ ref: resourceRef, params: { REPO: repo } }],
+      ...(repo ? { resources: [{ ref: resourceRef, params: { REPO: repo } }] } : {}),
       createdAt,
     },
   };
@@ -96,6 +106,7 @@ function profile(id: string, name: string, repo: string): ProfileWithVersion {
 const profiles = [
   profile("baseline", "Baseline profile", "baseline/repository"),
   profile("comparison", "Comparison profile", "comparison/repository"),
+  profile("run-owned-resources", "Run-owned resources profile"),
 ];
 
 const resource: ResourceDocument = {
@@ -118,7 +129,10 @@ const resourceRevision: ResourceRevisionDocument = {
   ref: resourceRef,
   setup: { sh: "echo ready" },
   exports: [],
-  parameters: [{ name: "REPO", required: true }],
+  parameters: [
+    { name: "REPO", required: true },
+    { name: "SCENARIO", required: false, default: "default-scenario" },
+  ],
   contentSha256: "sha",
   createdAt,
 };
@@ -147,6 +161,99 @@ afterEach(() => {
 });
 
 describe("SubmitRun profile variation payload", () => {
+  it("keeps resources editable when the selected profile does not manage them", async () => {
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <SubmitRun />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const baseProfileInput = await screen.findByPlaceholderText("Search existing profiles…");
+    fireEvent.change(baseProfileInput, { target: { value: "Run-owned resources profile" } });
+    await user.click(screen.getByRole("listitem"));
+    await user.click(screen.getByRole("button", { name: /Resources/ }));
+
+    expect(await screen.findByPlaceholderText("Search resources…")).toBeTruthy();
+    expect(screen.getByText("Create a resource")).toBeTruthy();
+  });
+
+  it("locks profile-managed resource bindings while keeping unset parameters editable", async () => {
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <SubmitRun />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const baseProfileInput = await screen.findByPlaceholderText("Search existing profiles…");
+    fireEvent.change(baseProfileInput, { target: { value: "Baseline profile" } });
+    await user.click(screen.getByRole("listitem"));
+
+    const profileParameter = await screen.findByLabelText("REPO") as HTMLInputElement;
+    expect(profileParameter.disabled).toBe(true);
+    expect(profileParameter.value).toBe("baseline/repository");
+
+    const runParameter = screen.getByLabelText("SCENARIO") as HTMLInputElement;
+    expect(runParameter.disabled).toBe(false);
+    const agentSectionTitle = screen.getByText("Agent");
+    const resourcesSectionTitle = screen.getByText("Resources");
+    const resourcesFollowAgent = agentSectionTitle.compareDocumentPosition(resourcesSectionTitle)
+      & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(resourcesFollowAgent).not.toBe(0);
+    expect(screen.queryByPlaceholderText("Search resources…")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+
+    fireEvent.change(runParameter, { target: { value: "custom-scenario" } });
+    fireEvent.change(screen.getByLabelText("Task *"), { target: { value: "Build a demo" } });
+    fireEvent.change(screen.getByLabelText("Max iterations"), { target: { value: "1" } });
+    await user.click(screen.getByRole("button", { name: /Submit 5 Runs/ }));
+
+    await waitFor(() => expect(api.submitRun).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.submitRun).mock.calls[0][0]).toEqual(expect.objectContaining({
+      resources: [{
+        ref: resourceRef,
+        params: {
+          REPO: "baseline/repository",
+          SCENARIO: "custom-scenario",
+        },
+      }],
+    }));
+  });
+
+  it("discards and disables run-owned resource edits when a variation is added", async () => {
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <SubmitRun />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Fill a parameter gap that is valid for a single-profile run, then switch
+    // into comparison mode where request-level resources are not submitted.
+    const baseProfileInput = await screen.findByPlaceholderText("Search existing profiles…");
+    fireEvent.change(baseProfileInput, { target: { value: "Baseline profile" } });
+    await user.click(screen.getByRole("listitem"));
+    const scenarioParameter = await screen.findByLabelText("SCENARIO") as HTMLInputElement;
+    fireEvent.change(scenarioParameter, { target: { value: "custom-scenario" } });
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(
+      "Run-owned resource edits were removed. Profile variations resolve resources independently, so every selected profile must provide complete resource bindings and required parameters.",
+    ));
+    expect(scenarioParameter.disabled).toBe(true);
+    expect(scenarioParameter.value).toBe("default-scenario");
+    expect(screen.getByText(
+      "Profile variations resolve resources independently. Every selected profile must provide complete resource bindings and required parameters; run-owned resource edits are unavailable in variation mode.",
+    )).toBeTruthy();
+  });
+
   it("does not copy baseline profile-managed configuration into the shared request", async () => {
     const user = userEvent.setup();
     render(
