@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Download, Search, X, ChevronDown, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArtifactDownloadButton } from "@/components/ArtifactDownloadButton";
 
 // ---------------------------------------------------------------------------
 // Types (inline HAR 1.2 subset — no shared dep needed for the portal)
@@ -193,7 +193,7 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
 
   if (error) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
+      <div role="alert" className="text-center py-8 text-destructive">
         Failed to load HAR data: {error instanceof Error ? error.message : String(error)}
       </div>
     );
@@ -217,15 +217,16 @@ export function HarNetworkViewer({ runId, iteration, attemptRunId }: HarNetworkV
         <span className="text-muted-foreground">{formatBytes(totalSize)} transferred</span>
         <span className="text-muted-foreground">{formatMs(totalTime)} total</span>
         <div className="flex-1" />
-        <Button
+        <ArtifactDownloadButton
           variant="outline"
           size="sm"
           className="gap-1.5"
-          onClick={() => window.open(attemptRunId ? api.runHarUrl(runId, attemptRunId, iteration) : api.harUrl(runId, iteration), "_blank")}
+          url={attemptRunId ? api.runHarUrl(runId, attemptRunId, iteration) : api.harUrl(runId, iteration)}
+          filename={`${runId}${iteration ? `-iteration-${iteration}` : ""}.har`}
         >
           <Download className="h-3 w-3" />
           Download HAR
-        </Button>
+        </ArtifactDownloadButton>
       </div>
 
       {/* Filter bar */}

@@ -265,6 +265,7 @@ not open the PR against the fork unless the user explicitly asks you to.
 | [docs/architecture/prompt-evaluations.md](docs/architecture/prompt-evaluations.md) | Static prompt quality, datasets, commands, and maintenance rules |
 | [docs/architecture/data-organization-projects.md](docs/architecture/data-organization-projects.md) | Projects (a single container) to isolate/group data within a cluster; composes with data-tags and auth-rbac |
 | [docs/architecture/auth-rbac.md](docs/architecture/auth-rbac.md) | Explicit-login IdP auth, Redis user-access cache, Portal handshake; deferred RBAC/internal-token roadmap |
+| [docs/architecture/authenticated-media.md](docs/architecture/authenticated-media.md) | Client-bound authenticated video delivery, progressive ranges, lifecycle and browser/deployment acceptance |
 | [docs/architecture/vscode-web-worker.md](docs/architecture/vscode-web-worker.md) | XState chat machine, GitHub auth flow, ARIA snapshots |
 | [docs/architecture/token-manager.md](docs/architecture/token-manager.md) | Token storage, validation, round-robin distribution |
 | [docs/architecture/criteria-provider.md](docs/architecture/criteria-provider.md) | CriteriaProvider abstraction, filesystem vs REST backends |

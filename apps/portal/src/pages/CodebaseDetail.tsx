@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { CodebaseRevisionDocument } from "@/types";
 import { Button } from "@/components/ui/button";
+import { ArtifactDownloadButton } from "@/components/ArtifactDownloadButton";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -210,11 +211,11 @@ export function CodebaseDetail() {
                 <CardDescription>Immutable snapshot seeded into a run workspace.</CardDescription>
               </div>
               {selectedRevision && (
-                <Button asChild variant="outline" size="sm" className="gap-1.5">
-                  <a href={`/api/v1/codebase-revisions/${selectedRevision._id}/archive`} download={`${selectedRevision.ref.replace(/[^a-zA-Z0-9_.@-]/g, "_")}.tar.gz`}>
+                <ArtifactDownloadButton variant="outline" size="sm" className="gap-1.5"
+                  url={`/api/v1/codebase-revisions/${selectedRevision._id}/archive`}
+                  filename={`${selectedRevision.ref.replace(/[^a-zA-Z0-9_.@-]/g, "_")}.tar.gz`}>
                     <Download className="h-4 w-4" /> Download
-                  </a>
-                </Button>
+                </ArtifactDownloadButton>
               )}
             </div>
           </CardHeader>
@@ -247,9 +248,11 @@ export function CodebaseDetail() {
                 {selectedRevision.creator && <Detail label="Creator"><span className="text-xs">{selectedRevision.creator}</span></Detail>}
                 {selectedRevision.contentSha256 && <Detail className="sm:col-span-2" label="Content SHA-256"><span className="break-all font-mono text-xs">{selectedRevision.contentSha256}</span></Detail>}
                 <Detail className="sm:col-span-2" label="Archive">
-                  <a href={`/api/v1/codebase-revisions/${selectedRevision._id}/archive`} className="inline-flex items-center gap-1 break-all font-mono text-xs text-primary hover:underline">
+                  <ArtifactDownloadButton url={`/api/v1/codebase-revisions/${selectedRevision._id}/archive`}
+                    filename={`${selectedRevision.ref.replace(/[^a-zA-Z0-9_.@-]/g, "_")}.tar.gz`}
+                    variant="link" className="h-auto whitespace-normal p-0 break-all font-mono text-xs text-left">
                     {`${window.location.origin}/api/v1/codebase-revisions/${selectedRevision._id}/archive`} <Download className="h-3 w-3 shrink-0" />
-                  </a>
+                  </ArtifactDownloadButton>
                 </Detail>
                 <Detail className="sm:col-span-2" label="Revision ID"><span className="break-all font-mono text-xs text-muted-foreground">{selectedRevision._id}</span></Detail>
               </dl>
