@@ -1,6 +1,6 @@
 ---
 name: github-actions
-description: Pin and validate GitHub Actions in Scope. Use when editing or reviewing workflows, changing `uses:` references, or fixing the action-pinning check.
+description: Use when creating, editing, reviewing, or troubleshooting GitHub Actions workflows in Scope, especially workflow files and external `uses:` references.
 metadata:
   version: "1.0.0"
 ---
