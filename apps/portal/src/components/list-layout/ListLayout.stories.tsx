@@ -53,6 +53,21 @@ export const Reports: Story = {
   },
 };
 
+export const Experiments: Story = {
+  args: {
+    title: "Experiments",
+    description: "Benchmark experiment compositions",
+    filterRail: <div className="p-4">Experiment filters</div>,
+    railStorageKey: "experiments",
+    children: <div>Experiment table</div>,
+  },
+  play: async ({ canvas }) => {
+    await expect(
+      canvas.getByLabelText("Open filters").querySelector(".lucide-atom"),
+    ).toBeTruthy();
+  },
+};
+
 export const UnknownSection: Story = {
   args: {
     title: "Custom list",

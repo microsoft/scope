@@ -466,7 +466,7 @@ apiRoute(testApp, registry, {
 apiRoute(testApp, registry, {
   method: "get", path: "/api/v1/analysis", tags: ["Requests"],
   summary: "Compute pass@k / success@T metrics",
-  query: z.object({ worker: z.string().optional(), taskPromptId: z.string().optional(), criteria: z.string().optional(), submissionId: z.string().optional(), k: z.string().optional() }),
+  query: z.object({ worker: z.string().optional(), taskPromptId: z.string().optional(), criteria: z.string().optional(), experimentId: z.string().optional(), k: z.string().optional() }),
   response: z.object({}).passthrough().describe("Analysis metrics"), handler: noop,
 });
 apiRoute(testApp, registry, {

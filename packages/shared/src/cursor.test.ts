@@ -18,8 +18,10 @@ describe("encodeCursor / decodeCursor", () => {
   });
 
   it("preserves colons in values", () => {
-    const encoded = encodeCursor({ submissionId: "sub:with:colons" });
-    expect(decodeCursor(encoded)).toEqual({ submissionId: "sub:with:colons" });
+    const encoded = encodeCursor({ experimentId: "experiment:with:colons" });
+    expect(decodeCursor(encoded)).toEqual({
+      experimentId: "experiment:with:colons",
+    });
   });
 
   it("throws on missing tilde", () => {

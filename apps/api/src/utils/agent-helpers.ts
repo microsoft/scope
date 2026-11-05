@@ -41,7 +41,7 @@ export interface ValidateAgentTargetOptions {
 }
 
 /**
- * Resolve a submission target entirely from the agent registry.
+ * Resolve a request target entirely from the agent registry.
  *
  * Existence, deletion, explicit availability, active version, and advertised
  * queue are always enforced. Capability flags are enforced only while the

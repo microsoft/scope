@@ -384,7 +384,20 @@ export interface RequestDocument {
   agentVersion?: string;          // Agent software version prefix (e.g. "copilot-0.0.415") — FK → AgentVersion.agentVersion
   profileId?: string;             // FK → ProfileDocument._id (the profile lineage)
   profileVersionId?: string;      // FK → ProfileVersionDocument._id (exact version used)
-  submissionId?: string;           // FK → SubmissionDocument._id
+  submissionId?: string;          // Legacy request-batch correlation identifier (not a resource FK)
+  experimentId?: string;           // FK → ExperimentDocument._id
+  /** Expected native request count for interrupted ExperimentDocument finalization.
+   * Historical/imported requests omit it and remain view-only if their parent
+   * experiment document is missing. */
+  experimentExpectedRequestCount?: number;
+  /** Stable position within the experiment's immutable request vector. */
+  experimentRequestIndex?: number;
+  /** Run id minted for the experiment's first execution. It remains unchanged
+   * across request retries so recovery can rebuild the exact initial vector. */
+  experimentInitialRunId?: string;
+  /** Set after the parent ExperimentDocument has been idempotently finalized.
+   * Missing on interrupted native writes so the scheduler can recover them. */
+  experimentFinalizedAt?: Date;
   /** Scheduling priority. Higher = processed first. Default: 0. */
   priority: number;
   /**
@@ -567,6 +580,30 @@ export interface HandlerServiceDocument {
   dependsOn: string[];
 }
 
+export interface ExperimentHandlerServiceDocument {
+  _id: string;
+  type: "experiment-handler";
+  version: number;
+  queue: string;
+  selector: string;
+  autoBackfill: boolean;
+  dependsOn: string[];
+  dependencyMode: "all-runs";
+}
+
+export type ServiceHandlerDocument =
+  | HandlerServiceDocument
+  | ExperimentHandlerServiceDocument;
+
+export interface ExperimentQueueMessagePayload {
+  type: string;
+  experimentId: string;
+  experimentExecutionId: string;
+}
+
+export const LEGACY_REQUEST_COMPOSITION_DEPRECATION_ID =
+  "legacy-request-composition" as const;
+
 /**
  * Field names whose values move from `RequestDocument` (top-level, legacy
  * shape) into `RequestDocument.run: RunState` (new shape introduced for
@@ -700,7 +737,12 @@ export interface QueueProcessorConfig extends BaseQueueProcessorConfig {
 
 // --- Runs grouping types (shared between API and portal) ---
 
-export type GroupByKey = "none" | "task" | "submissionId" | "profile";
+export type GroupByKey =
+  | "none"
+  | "task"
+  | "submissionId"
+  | "experimentId"
+  | "profile";
 
 export interface AggregateStats {
   min: number;
@@ -719,6 +761,7 @@ export interface GroupUniformValues {
   extensions?: string[];
   status?: "pending" | "processing" | "done";
   submissionId?: string;
+  experimentId?: string;
   task?: string;
 }
 

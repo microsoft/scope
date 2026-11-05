@@ -29,8 +29,17 @@ execution attempt). A retry creates a new run on the same request.
 ## Open the submit form
 
 From the Portal navigation, click **New Run** (the form name in the
-Portal — it submits a request). The form is split into the three
-sections above.
+Portal — it submits a request). In the collapsed desktop sidebar, hovering or
+focusing this primary action expands the launcher to also expose **New
+Experiment**; the expanded sidebar and mobile navigation show both actions
+directly. The form is split into the three sections above.
+
+**New Run** remains the permanent path for one request, whether it
+uses a profile or inline configuration. For named multi-run
+composition, open **Experiments** and select **New Experiment**. The
+Experiment form starts with metadata and scenario selection. Leaving
+the scenario empty creates an empty Experiment; selecting a scenario
+reveals the run configuration and an exact expanded-run count.
 
 ## 1. Write the task prompt
 
@@ -95,6 +104,11 @@ Click **Submit**. The Portal navigates to the request detail page.
 The request is assigned a unique ID and queued; a run is created when
 a worker picks it up.
 
+If you use occurrences greater than one or add profile variations in
+**New Run**, the Portal preserves the existing expansion behavior and shows
+neutral contextual guidance beside those controls. New compositions should use
+[New Experiment](/guides/creating-experiments/).
+
 ## Watch a run
 
 The request detail page has these tabs:
@@ -140,3 +154,5 @@ This is useful for sampling variability of an agent on the same prompt.
 - Save your favorite setup as a [profile](/guides/defining-profiles/).
 - Seed an existing project with a
   [codebase](/guides/managing-codebases/).
+- Create and inspect a named
+  [Experiment](/guides/creating-experiments/).

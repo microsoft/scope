@@ -118,6 +118,7 @@ When you run a command:
 | `031-migrate-services-to-handler-dag` | Replaces the legacy single `post-processor` service row with per-handler service registrations and dependencies |
 | `032-add-handler-status-index` | Adds a handler-specific dispatch index for `pp-atif` polling |
 | `033-backfill-handler-status` | Backfills `run.handlerStatus.pp-atif` from deprecated `run.postProcessorStatus` / `run.postProcessorVersion` fields |
+| `034-create-experiment-storage-indexes` | Adds the project paging and immutable execution-history indexes for canonical Experiment storage; request payload chunks remain point-read by deterministic `_id` only |
 
 ### Migration 029: users identity uniqueness
 

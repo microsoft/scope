@@ -66,6 +66,22 @@ describe("ListLayout", () => {
     ).toBeTruthy();
   });
 
+  it("uses the Experiment section icon for Experiment lists", () => {
+    render(
+      <ListLayout
+        title="Experiments"
+        filterRail={<div>filters</div>}
+        railStorageKey="experiments"
+      >
+        <div>table-content</div>
+      </ListLayout>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Open filters" }).querySelector(".lucide-atom"),
+    ).toBeTruthy();
+  });
+
   it.each([undefined, "", "custom-list", "__proto__", "constructor", "toString"])(
     "preserves the generic filter icon for storage key %s",
     (railStorageKey) => {

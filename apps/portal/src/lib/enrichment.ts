@@ -12,14 +12,14 @@ export type PostProcessorStatus = "queued" | "processing" | "done" | "failed";
  *
  * Each post-processor handler overwrites that scalar on its own completion, so
  * it flips to "done" as soon as the FIRST handler (pp-atif) finishes — even
- * while pp-taxonomy is still computing observations. The "Enriched" badge (and
+ * while pp-observations is still computing observations. The "Enriched" badge (and
  * the run-detail poller) must instead stay "Enriching…" until every handler in
  * the DAG is terminal.
  *
- * Known topology: pp-atif always runs; pp-taxonomy is expected whenever the run
+ * Known topology: pp-atif always runs; pp-observations is expected whenever the run
  * has configured observations. We treat taxonomy as still-pending until
- * pp-taxonomy reaches a terminal state, which also covers the brief window
- * after pp-atif finishes but before the scheduler has dispatched pp-taxonomy
+ * pp-observations reaches a terminal state, which also covers the brief window
+ * after pp-atif finishes but before the scheduler has dispatched pp-observations
  * (so it isn't yet present in `handlerStatus`).
  *
  * Falls back to the legacy `postProcessorStatus` scalar for runs that predate
@@ -36,7 +36,7 @@ export function deriveEnrichmentStatus(
     return run.postProcessorStatus;
   }
   const statuses = Object.values(handlerStatus).map((h) => h?.status);
-  const taxonomyStatus = handlerStatus["pp-taxonomy"]?.status;
+  const taxonomyStatus = handlerStatus["pp-observations"]?.status;
   const taxonomyPending =
     hasConfiguredObservations && taxonomyStatus !== "done" && taxonomyStatus !== "failed";
   if (taxonomyPending || statuses.some((s) => s === "queued" || s === "processing")) {

@@ -956,7 +956,7 @@ describe("run import/export — round-trip (export → import)", () => {
 describe("run import — task-prompt entity creation (#832)", () => {
   // Task-prompt entities back features, report triggers, group-by-task,
   // the runs-list task filter and the criteria/MDP analysis. The submission
-  // flow (POST /api/v1/requests) materializes them via
+  // request flow (POST /api/v1/requests) materializes them via
   // taskPromptStore.findOrCreate(scenario.task). Imported runs used to skip
   // this step entirely \u2014 `taskPromptId` was preserved from `run.yaml` but
   // no row was ever created, leaving a dangling reference.
@@ -1003,6 +1003,7 @@ describe("run import — task-prompt entity creation (#832)", () => {
     // The inserted request points at it.
     const inserted = reqCollection.docs.get(id);
     expect(inserted.taskPromptId).toBe(expectedId);
+    expect(inserted.submissionId).toEqual(expect.any(String));
   });
 
   it("reuses an existing task prompt and does not create a duplicate", async () => {
