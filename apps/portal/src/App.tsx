@@ -65,6 +65,7 @@ import { FeatureRoute } from "@/components/FeatureRoute";
 import { ProjectGate } from "@/components/ProjectGate";
 import { HomeRoute } from "@/components/HomeRoute";
 import { useFavicon } from "@/hooks/useFavicon";
+import { AccessAdministration } from "@/pages/AccessAdministration";
 
 export function App() {
   useFavicon();
@@ -116,6 +117,7 @@ export function App() {
         <Route path="/task-prompts/:id" element={<TaskPromptDetail />} />
         <Route path="/statistics" element={<ProjectGate><Statistics /></ProjectGate>} />
         <Route path="/projects" element={<Projects />} />
+        <Route path="/access" element={<AccessAdministration />} />
         <Route path="/secrets" element={<Navigate to="/secrets/keys" replace />} />
         <Route path="/secrets/keys" element={<FeatureRoute featureKey="tokens"><TokenList /></FeatureRoute>}>
           <Route path=":id/preview" element={<FeatureRoute featureKey="tokens"><TokenPreviewPanel /></FeatureRoute>} />

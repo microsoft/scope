@@ -58,7 +58,8 @@ erDiagram
 
     CODEBASE {
         string _id "fresh UUID"
-        string slug "unique URL-safe identifier"
+        string projectId "immutable project scope"
+        string slug "project-local lookup key"
         string name "display name"
         string sourceType "git | archive"
         string source "git only: owner/repo"
@@ -69,6 +70,7 @@ erDiagram
 
     CODEBASE_REVISION {
         string _id "fresh UUID"
+        string projectId "copied from parent"
         string codebaseId "FK to codebases"
         string slug "denormalized parent slug"
         number revisionNumber "1,2,3..."
@@ -78,7 +80,7 @@ erDiagram
     }
 ```
 
-- **Codebase** — Mutable metadata in the `codebases` collection. It has a fresh UUID `_id`, a unique `slug`, display `name`, optional `description`, `sourceType`, Git-only `source` (`owner/repo`) and `defaultBranch`, `revisionCounter`, `latestRevisionId`, optional `creator`, timestamps, and optional `deletedAt` for soft deletion.
+- **Codebase** — Mutable metadata in the `codebases` collection. It has a fresh UUID `_id`, immutable `projectId`, a project-local `slug`, display `name`, optional `description`, `sourceType`, Git-only `source` (`owner/repo`) and `defaultBranch`, `revisionCounter`, `latestRevisionId`, optional `creator`, timestamps, and optional `deletedAt` for soft deletion.
 - **CodebaseRevision** — Immutable snapshot in the `codebase-revisions` collection. It has a fresh UUID `_id`, `codebaseId`, denormalized `slug`, sequential `revisionNumber`, canonical `ref`, `sourceType`, provenance fields, `archiveUrl`, optional size/file metadata, optional `creator`, `resolvedAt`, and `createdAt`.
 - **Request.codebaseRevisionId** — Optional foreign key to `CodebaseRevisionDocument._id`. When present, workers seed the run workspace from that revision before the agent starts.
 
@@ -98,13 +100,30 @@ Codebase revisions can be addressed in three forms:
 
 `parseCodebaseRevisionRef()` accepts `{slug}@r{N}` and bare `{slug}`. Inputs containing `@` but not the `@r{N}` shape are invalid.
 
+Slug/ref resolution always includes the authorized project. A raw UUID still
+requires matching project membership and consistent revision/parent project IDs;
+it is not an access capability. Those authorization/reference checks do not depend
+on changing the database's codebase uniqueness policy.
+
+The `(projectId, slug)` / `(projectId, ref)` unique-index upgrade is deferred to
+[#1521](https://github.com/microsoft/scope/issues/1521), not an RBAC migration or
+readiness prerequisite. The proposed migration 032 is absent from automatic
+discovery. Existing global or project-local unique indexes are preserved, as are
+authentic historical 032 ledger entries on databases that already applied it.
+Different projects can reuse the same slug/ref only when existing constraints
+permit it; legacy global unique indexes still prevent this. If no applicable
+unique index exists, concurrent same-project creates can produce duplicate
+slugs/refs despite application prechecks. RBAC does not repair or certify that
+pre-existing schema condition. Native Mongo tests do not establish Cosmos
+compatibility. See the [migration release boundary](db-migrations.md#rbac-release-boundary-codebase-uniqueness-is-deferred).
+
 ## Lifecycle
 
 ### 1. Registration
 
 Codebases are created through `POST /api/v1/codebases`. Git codebases are created from JSON metadata: they require a `source` in `owner/repo` form and may include a `defaultBranch` hint. After persisting the codebase, the API **best-effort resolves the latest revision** in the same request, so a new git codebase starts with a usable snapshot (`firstRevision` is included in the response). Unlike the archive path, a resolve failure (bad repo, network, GitHub rate limit) does **not** fail creation — a git codebase is valid with zero revisions, so the API logs a warning and returns the created codebase without a revision; the user can resolve manually later. Archive codebases are created **atomically with their first revision**: the create request must be `multipart/form-data` and include the `archive` file alongside the metadata fields. The API creates the codebase and then its first revision in the same request; if the archive is missing or fails to materialize into a revision, the just-created codebase is hard-deleted (rollback) and a `400` is returned. This guarantees an archive codebase never exists without at least one revision. Subsequent revisions are added through `POST /api/v1/codebases/:id/upload`.
 
-The codebase store derives a URL-safe slug from `slug` or `name`, ensures uniqueness by appending `-2`, `-3`, and so on, and initializes `revisionCounter` to `0`. Soft-deleted codebases still reserve their slugs so historical refs remain stable. The rollback path uses `CodebaseStore.hardDelete()` instead of a soft delete, so a codebase that failed its atomic create leaves no reserved slug behind.
+The codebase store derives a URL-safe slug from `slug` or `name`, checks for existing slugs within the project and appends `-2`, `-3`, and so on, and initializes `revisionCounter` to `0`. It retries recognized duplicate-slug errors when a database constraint arbitrates concurrent inserts; prechecks alone are not race-safe when that constraint is absent. Soft-deleted codebases still reserve their slugs in these checks so historical refs remain stable. The rollback path uses `CodebaseStore.hardDelete()` instead of a soft delete, so a codebase that failed its atomic create leaves no reserved slug behind.
 
 ### 2. Resolution
 
@@ -142,7 +161,11 @@ The Portal's codebase-revision download controls use the shared authenticated
 artifact transport, not raw links or the stored blob origin. They pin the
 revision UUID and selected project, carry the existing IdP bearer and cancel on
 account/project changes. See [artifact delivery](../research/realtime-data-flow.md#authenticated-artifact-delivery).
-Worker seeding is unchanged.
+
+With membership RBAC enforced, these HTTP reads require authorized credentials.
+Service/OBO issuance is deferred: workers without a suitable bearer fail closed,
+not through an anonymous exemption. Native Mongo and controller tests do not
+validate real authenticated worker execution; see [Authentication & RBAC](auth-rbac.md).
 
 When a worker dequeues a request, `QueueProcessor` runs setup first so the worker-specific `workspacePath` is available. If `RequestDocument.codebaseRevisionId` is set, it then:
 

@@ -10,6 +10,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProjectProvider } from "@/contexts/ProjectContext";
 import { PROJECT_STORAGE_KEY } from "@/lib/project-scope";
 import { HomeRoute } from "./HomeRoute";
+import { AuthContext } from "@/contexts/AuthContext";
+import { signedInAuth } from "@/contexts/authFixtures";
 
 // The picker lists projects via `api.listProjects`; return one so we can also
 // exercise the pick -> forward path. Keep the rest of the facade real.
@@ -46,14 +48,14 @@ function renderHome(initial = "/") {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <ProjectProvider>
+      <AuthContext.Provider value={signedInAuth}><ProjectProvider>
         <MemoryRouter initialEntries={[initial]}>
           <Routes>
             <Route path="/" element={<HomeRoute />} />
             <Route path="/statistics" element={<div>Statistics page</div>} />
           </Routes>
         </MemoryRouter>
-      </ProjectProvider>
+      </ProjectProvider></AuthContext.Provider>
     </QueryClientProvider>,
   );
 }

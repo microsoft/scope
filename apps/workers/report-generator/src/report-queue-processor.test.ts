@@ -377,6 +377,7 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
   let mockUpdateOne: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    mockCreateSession.mockClear();
     capturedEventHandler = undefined;
     log = vi.fn().mockResolvedValue(undefined);
     processor = new ReportQueueProcessor(makeConfig());
@@ -415,18 +416,21 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
     } as import("shared").ReportDocument;
   }
 
-  it("throws when report has no templateId", async () => {
+  it("blocks legacy queued jobs before template lookup or inference", async () => {
     const doc = makeReportDoc({ templateId: undefined });
 
-    await expect(
-      (processor as any).handleRequest(doc, makeMessage(), "pop-1", log)
-    ).rejects.toThrow("has no templateId");
-
-    // Status should NOT be set to "generating" since template validation fails first
-    expect(mockUpdateOne).not.toHaveBeenCalled();
+    const stop = vi.fn().mockReturnValue("pop-1");
+    const handle: (doc: import("shared").ReportDocument, message: ReturnType<typeof makeMessage>, heartbeat: { stop: () => string }, logger: typeof log) => Promise<void> = Reflect.get(processor, "handleRequest");
+    await handle.call(processor, doc, makeMessage(), { stop }, log);
+    expect(mockUpdateOne).toHaveBeenCalledWith({ _id: doc._id }, {
+      $set: { status: "failed", error: "report_generation_disabled", updatedAt: expect.any(Date) },
+    });
+    expect(stop).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalled();
   });
 
-  it("throws when templateId points to a non-existent template", async () => {
+  it("blocks jobs with a template without fetching it or enqueuing replacement work", async () => {
     const doc = makeReportDoc({ templateId: "nonexistent-template" });
 
     // Mock fetch to return 404 (fetchReportTemplate returns null)
@@ -436,15 +440,12 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(
-      (processor as any).handleRequest(doc, makeMessage(), "pop-1", log)
-    ).rejects.toThrow("Report template 'nonexistent-template' not found");
-
-    // Template lookup must be scoped to the report's project (templates are
-    // project-scoped; a slug-only lookup is rejected by the API).
-    const requestedUrl = String(fetchMock.mock.calls[0][0]);
-    expect(requestedUrl).toContain("/report-templates/nonexistent-template");
-    expect(requestedUrl).toContain("projectId=proj-1");
+    const handle: (doc: import("shared").ReportDocument, message: ReturnType<typeof makeMessage>, heartbeat: { stop: () => string }, logger: typeof log) => Promise<void> = Reflect.get(processor, "handleRequest");
+    await handle.call(processor, doc, makeMessage(), { stop: () => "pop-1" }, log);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockUpdateOne).toHaveBeenCalledWith({ _id: doc._id }, expect.objectContaining({
+      $set: expect.objectContaining({ status: "failed", error: "report_generation_disabled" }),
+    }));
   });
 });
 

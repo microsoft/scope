@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect } from "storybook/test";
+import { expect, screen, userEvent } from "storybook/test";
+import { AuthContext } from "@/contexts/AuthContext";
+import { signedInAuth } from "@/contexts/authFixtures";
 
 import { AgentBadge } from "./AgentBadge";
 import type { CodingAgent } from "@/types";
@@ -18,6 +20,12 @@ const activeAgent: CodingAgent = {
 const meta = {
   component: AgentBadge,
   tags: ["ai-generated", "needs-work"],
+  decorators: [
+    Story => <AuthContext.Provider value={{
+      ...signedInAuth, user: signedInAuth.user && { ...signedInAuth.user, role: "admin",
+        capabilities: { ...signedInAuth.user.capabilities, platformAdmin: true } },
+    }}><Story /></AuthContext.Provider>,
+  ],
   args: {
     agentId: activeAgent._id,
     agent: activeAgent,
@@ -56,6 +64,18 @@ export const Unavailable: Story = {
 
 export const SelectionControl: Story = {
   args: { triggerLink: false },
+};
+
+export const ProjectMember: Story = {
+  render: args => <AuthContext.Provider value={signedInAuth}><AgentBadge {...args} /></AuthContext.Provider>,
+  play: async ({ canvas }) => {
+    const label = canvas.getByText(activeAgent.name);
+    await expect(label.closest("a")).toBeNull();
+    await userEvent.hover(label);
+    await expect((await screen.findAllByText(activeAgent._id))[0]).toBeVisible();
+    await expect(screen.queryByRole("link", { name: /View agent/ })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("link")).not.toBeInTheDocument();
+  },
 };
 
 export const Unknown: Story = {

@@ -7,7 +7,8 @@ import { apiClient } from "./api-client";
 
 vi.mock("./api-client", () => ({ apiClient: vi.fn() }));
 
-const user = { id: "11111111-2222-4333-8444-555555555555", role: "user" };
+const user = { id: "11111111-2222-4333-8444-555555555555", role: "user",
+  capabilities: { platformAdmin: false, reportsEnabled: false, memberships: [] } };
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -23,10 +24,28 @@ describe("current user API", () => {
     expect(await api[operation]({ signal: controller.signal })).toEqual(user);
     expect(apiClient).toHaveBeenCalledWith("/api/v1/users/me", {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers: expect.any(Headers),
       cache: "no-store",
       signal: controller.signal,
     });
+    const headers = vi.mocked(apiClient).mock.calls[0][1]?.headers;
+    if (!(headers instanceof Headers)) throw new Error("Expected Headers");
+    expect(headers.get("Content-Type")).toBe("application/json");
+  });
+
+  it.each([
+    undefined,
+    { platformAdmin: true, reportsEnabled: true, memberships: [] },
+    { platformAdmin: "true", reportsEnabled: false, memberships: [] },
+    { platformAdmin: false, reportsEnabled: false, memberships: [
+      { projectId: "p", role: "reader", permissions: ["content:read", "content:write"], revision: 1 },
+    ] },
+    { platformAdmin: false, reportsEnabled: false, memberships: [
+      { projectId: "p", role: "owner", permissions: ["*"], revision: 1 },
+    ] },
+  ])("fails closed on missing or malformed capabilities: %j", async capabilities => {
+    vi.mocked(apiClient).mockResolvedValue(new Response(JSON.stringify({ ...user, capabilities })));
+    await expect(api.getCurrentUser()).rejects.toThrow("Invalid access capabilities");
   });
 
   it("keeps HTTP status and code without changing existing error messages", async () => {

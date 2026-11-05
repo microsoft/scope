@@ -29,6 +29,7 @@ apiRoute(ctx.app, ctx.registry, {
   path: "/api/v1/task-prompts/generate",
   tags: ["Task Prompts"],
   summary: "Generate task prompts",
+  query: ProjectIdQuerySchema,
   body: z.object({
     description: z.string().optional(),
     existingPrompt: z.string().optional(),
@@ -46,9 +47,10 @@ apiRoute(ctx.app, ctx.registry, {
       return;
     }
 
-    // Fetch recent task prompts as context (avoid duplicates)
+    // Fetch the project's recent task prompts as context (avoid duplicates)
     const recentPrompts = await ctx.taskPromptCollection
       .find({
+        projectId: getQueryProjectId(req),
         deletedAt: { $exists: false },
         $or: [{ type: "select" }, { type: { $exists: false } }],
       })
@@ -123,14 +125,8 @@ apiRoute(ctx.app, ctx.registry, {
 
 // GET /api/v1/task-prompts/:id/content — get the resolved plain-text body
 // (inline or downloaded from blob). Used by workers to fetch AGENTS.md / task text.
-//
-// NOTE: This returns any prompt body by ID with no authorization check. That is
-// consistent with the rest of the API, which has no auth/tenancy model today
-// (see index.ts: just cors() + express.json()). Because prompts are globally
-// content-addressed and deduplicated via taskPromptStore.findOrCreate, this route
-// implicitly assumes a trusted-network, single-tenant deployment. If auth or
-// multi-tenancy is ever introduced, revisit this: the dedup store is NOT tenant-safe
-// and this endpoint would leak prompt bodies across tenants.
+// Project authorization is enforced by the route guard, which resolves the
+// prompt's projectId from the document before the handler runs.
 apiRoute(ctx.app, ctx.registry, {
   method: "get",
   path: "/api/v1/task-prompts/:id/content",
@@ -257,15 +253,15 @@ apiRoute(ctx.app, ctx.registry, {
       return;
     }
 
-    // Scope candidate features to the prompt's own type: task prompts get task
-    // features; AGENTS.md prompts get agents.md features. Absent type ⇒ select.
+    // Scope candidate features to the prompt's own project and type: task prompts
+    // get task features; AGENTS.md prompts get agents.md features. Absent type ⇒ select.
     const promptType = taskPrompt.type ?? "select";
     const typeFilter: Record<string, unknown> =
       promptType === "select"
         ? { $or: [{ type: "select" }, { type: { $exists: false } }] }
         : { type: promptType };
     const allFeatures = await ctx.promptFeatureCollection
-      .find({ deletedAt: { $exists: false }, ...typeFilter })
+      .find({ projectId: taskPrompt.projectId, deletedAt: { $exists: false }, ...typeFilter })
       .toArray();
 
     const featureConfigs = allFeatures.map(f => ({ id: f.id, prompt: f.prompt }));

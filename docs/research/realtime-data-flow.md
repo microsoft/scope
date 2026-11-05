@@ -18,9 +18,8 @@ GET /api/v1/reports/:id/logs?fromStart=true
 Defined in `apps/api/src/routes/requests/logs.ts` and `routes/reports.ts`.
 `fromStart=true` replays append-blob logs before switching to live streaming;
 terminal runs/reports replay and then send `done`. Historical attempts use the
-per-run URL. These endpoints use the existing IdP bearer verification,
-active-user lookup and project-scoped resource resolution. Delivery does not
-introduce membership authorization or change the existing anonymous rollout.
+per-run URL. These endpoints use the same verified bearer and canonical
+project authorization as other protected reads.
 
 ### Server-Side Flow
 
@@ -59,6 +58,9 @@ sequenceDiagram
 - **Redis pub/sub** is the primary log transport (`logs:<requestId>`); a worker
   log with `data.final === true` also sends `done` and closes the stream.
 - **MongoDB Change Stream** is a **completion detector only** — watches for run status `done` or report status `completed`/`failed`
+- **Authorization lease** rechecks canonical authority every second and closes a
+  denied/unverifiable stream; its deadline is at most 20 seconds and cannot
+  outlive the verified token. A late authority response cannot revive it.
 - Cleanup on client disconnect (`req.on("close")`)
 
 ### Portal Consumer
@@ -87,7 +89,7 @@ statuses do not enter that transient retry loop; `401` remains owned by the
 common transport.
 
 There are **no SSE event IDs or supported resume cursors**. Once a stream is
-accepted, unexpected EOF or network
+accepted, EOF (including lease expiry/revocation/authority outage) or network
 failure disconnects with an explicit error; it never silently reconnects and
 duplicates replay or drops live logs. Reload the page to deliberately replay
 stored logs. Server `done`/`timeout`/`error` events never reconnect.

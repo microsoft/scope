@@ -5,6 +5,7 @@ import type { AuthContextValue } from "./AuthContext";
 
 /** Deterministic contexts for isolated stories/tests; never perform a handshake. */
 export const signedOutAuth: AuthContextValue = {
+  authEnabled: true,
   account: null,
   user: null,
   status: "signed-out",
@@ -14,6 +15,10 @@ export const signedOutAuth: AuthContextValue = {
   login: async () => {},
   logout: async () => {},
   retry: () => {},
+};
+
+export const anonymousAuth: AuthContextValue = {
+  ...signedOutAuth, authEnabled: false, status: "ready", isReady: true,
 };
 
 export const signedInAuth: AuthContextValue = {
@@ -32,6 +37,11 @@ export const signedInAuth: AuthContextValue = {
   user: {
     id: "11111111-2222-4333-8444-555555555555",
     role: "user",
+    capabilities: {
+      platformAdmin: false, reportsEnabled: false,
+      memberships: [{ projectId: "demo-project", role: "contributor",
+        permissions: ["content:read", "content:write", "content:delete"], revision: 1 }],
+    },
     name: "Alice Anderson",
     displayName: "Alice Anderson",
     username: "alice@entralocal.dev",

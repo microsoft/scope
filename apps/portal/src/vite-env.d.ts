@@ -9,9 +9,9 @@ interface ImportMetaEnv {
   /** Show the Pass@k metrics table on the Statistics page (default: hidden) */
   readonly VITE_SHOW_PASS_AT_K?: string;
   /**
-   * Local-dev-only opt-out for the auth feature. Set to `"false"` to disable
-   * sign-in for `vite dev` builds only. Integration/production are controlled at
-   * runtime via `SCOPE_AUTH_ENABLED` (see `ScopeRuntimeConfig.authEnabled`),
+   * Local-dev auth/RBAC mode, coordinated with the API. Vite gives the canonical
+   * shell SCOPE_AUTH_ENABLED precedence over this legacy flag. Built images use
+   * runtime `SCOPE_AUTH_ENABLED` (see `ScopeRuntimeConfig.authEnabled`),
    * because the built image is promoted int→prod. Auth is ON by default.
    * See apps/portal/src/lib/auth/authConfig.ts.
    */

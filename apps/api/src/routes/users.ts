@@ -3,10 +3,11 @@
 
 import { z } from "zod";
 import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
-import { AuthError } from "shared";
+import { AuthError, AccessCapabilitiesSchema } from "shared";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { apiRoute } from "../openapi/api-route.js";
 import type { RouteContext } from "../route-context.js";
+import { Authorization } from "../auth/authorization.js";
 
 extendZodWithOpenApi(z);
 
@@ -18,10 +19,11 @@ const UserMeResponseSchema = z
     displayName: z.string().optional(),
     idp: z.string().optional(),
     idpTenant: z.string().optional(),
+    capabilities: AccessCapabilitiesSchema,
   })
   .openapi("UserMeResponse");
 
-function userMeResponse(user: AuthenticatedUser): z.infer<typeof UserMeResponseSchema> {
+function userMeResponse(user: AuthenticatedUser): Omit<z.infer<typeof UserMeResponseSchema>, "capabilities"> {
   return {
     id: user.id,
     role: user.role,
@@ -57,7 +59,7 @@ export function registerUsersRoutes(ctx: RouteContext): void {
       }
       const user = await resolver.resolveExisting(req.auth.identity);
       req.user = user;
-      res.json(userMeResponse(user));
+      res.json({ ...userMeResponse(user), capabilities: await new Authorization(ctx.db).capabilities(req) });
     },
   });
 
@@ -67,7 +69,8 @@ export function registerUsersRoutes(ctx: RouteContext): void {
     tags: ["Users"],
     summary: "Enroll the authenticated user",
     security: [{ bearerAuth: [] }],
-    description: "JIT-enroll the authenticated user, refresh their profile and lastLoginAt, apply bootstrap-admin rules, and warm the access cache. Use this only after an explicit IdP login; do not prefetch, poll, or automatically retry transient failures.",
+    description: "JIT-enroll the authenticated user with the default user role, refresh their profile and lastLoginAt, and warm the access cache. Login never grants administrative privileges. Use this only after an explicit IdP login; do not prefetch, poll, or automatically retry transient failures.",
+    body: z.object({}).strict().optional(),
     response: UserMeResponseSchema,
     successStatus: 200,
     errorResponses: {
@@ -86,7 +89,7 @@ export function registerUsersRoutes(ctx: RouteContext): void {
       }
       const user = await resolver.enrollOnLogin(req.auth.identity, req.auth.token);
       req.user = user;
-      res.json(userMeResponse(user));
+      res.json({ ...userMeResponse(user), capabilities: await new Authorization(ctx.db).capabilities(req) });
     },
   });
 }

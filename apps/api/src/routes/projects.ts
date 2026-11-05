@@ -9,6 +9,9 @@ import {
 } from "shared";
 import { apiRoute } from "../openapi/api-route.js";
 import type { RouteContext } from "../route-context.js";
+import { Authorization } from "../auth/authorization.js";
+import { operationId } from "./access.js";
+import { createHash } from "node:crypto";
 
 /**
  * Projects CRUD.
@@ -20,6 +23,7 @@ import type { RouteContext } from "../route-context.js";
  * it and its data from the default listings; restoring brings everything back.
  */
 export function registerProjectsRoutes(ctx: RouteContext): void {
+  const authority = () => new Authorization(ctx.db, ctx.authEnabled);
   // List all projects (newest first). Pass `?includeDeleted=true` to also return
   // soft-deleted projects (so the Portal/CLI can offer a restore affordance).
   apiRoute(ctx.app, ctx.registry, {
@@ -32,13 +36,16 @@ export function registerProjectsRoutes(ctx: RouteContext): void {
         .enum(["true", "false"])
         .optional()
         .describe("When true, include soft-deleted projects in the result"),
+      controlPlane: z.enum(["true", "false"]).optional(),
     }),
     response: z.array(ProjectResponseSchema),
     handler: async (req, res, next) => {
       try {
         const includeDeleted = req.query.includeDeleted === "true";
         const projects = await ctx.projectStore.list({ includeDeleted });
-        res.json(projects.map((p) => ({ ...p, id: p._id })));
+        const memberships = ctx.authEnabled === false ? [] : await authority().memberships(req.user!.id);
+        const visible = ctx.authEnabled === false || req.query.controlPlane === "true" ? projects : projects.filter(p => memberships.some(m => m.projectId === p._id));
+        res.json(visible.map((p) => ({ ...p, id: p._id })));
       } catch (error) {
         next(error);
       }
@@ -51,14 +58,25 @@ export function registerProjectsRoutes(ctx: RouteContext): void {
     path: "/api/v1/projects",
     tags: ["Projects"],
     summary: "Create a project",
-    body: CreateProjectInputSchema,
+    body: CreateProjectInputSchema.strict(),
     response: ProjectResponseSchema,
     successStatus: 201,
     errorResponses: { 400: { description: "Invalid input" } },
     handler: async (req, res, next) => {
       try {
-        const project = await ctx.projectStore.create(req.body);
-        res.status(201).json({ ...project, id: project._id });
+        const id = operationId(req);
+        const hash = createHash("sha256").update(`project:${id}`).digest("hex");
+        const projectId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+        const result = await authority().operations.execute({
+          _id: id, actor: req.user!.id, reason: ctx.authEnabled === false ? "Anonymous project creation (authentication disabled)" : "Platform-admin project creation",
+          collection: "projects", targetId: projectId, expectedRevision: 0,
+          change: { name: req.body.name, ...(req.body.description !== undefined ? { description: req.body.description } : {}) },
+          unset: [], initial: {},
+          ...(ctx.authEnabled === false ? {} : { creatorMembershipOperationId: `project-creator:${hash}` }),
+        });
+        if (result.state === "pending") { res.status(202).json(result); return; }
+        const project = await ctx.projectStore.get(projectId);
+        res.status(201).json({ ...project, id: projectId, operationId: result.operationId });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (/name is required/i.test(message)) {
@@ -98,12 +116,19 @@ export function registerProjectsRoutes(ctx: RouteContext): void {
     path: "/api/v1/projects/:id",
     tags: ["Projects"],
     summary: "Update a project",
-    body: UpdateProjectInputSchema,
+    body: UpdateProjectInputSchema.extend({ revision: z.number().int().nonnegative() }).strict(),
     response: ProjectResponseSchema,
     errorResponses: { 404: { description: "Project not found" } },
     handler: async (req, res, next) => {
       try {
-        const updated = await ctx.projectStore.update(req.params.id, req.body);
+        const result = await authority().operations.execute({
+          _id: operationId(req), actor: req.user!.id, reason: ctx.authEnabled === false ? "Anonymous project settings update (authentication disabled)" : "Project settings update",
+          collection: "projects", targetId: req.params.id, expectedRevision: req.body.revision,
+          change: { ...(req.body.name !== undefined ? { name: req.body.name } : {}), ...(req.body.description !== undefined ? { description: req.body.description } : {}) },
+          unset: [], condition: { deletedAt: { $exists: false } },
+        });
+        if (result.state === "pending") { res.status(202).json(result); return; }
+        const updated = await ctx.projectStore.get(req.params.id);
         if (!updated) {
           res.status(404).json({ error: "Project not found" });
           return;
@@ -122,6 +147,7 @@ export function registerProjectsRoutes(ctx: RouteContext): void {
     path: "/api/v1/projects/:id",
     tags: ["Projects"],
     summary: "Soft-delete a project",
+    body: z.object({ revision: z.number().int().nonnegative() }).strict(),
     response: z.any(),
     rawResponse: true,
     successStatus: 204,
@@ -130,11 +156,12 @@ export function registerProjectsRoutes(ctx: RouteContext): void {
     },
     handler: async (req, res, next) => {
       try {
-        const ok = await ctx.projectStore.softDelete(req.params.id);
-        if (!ok) {
-          res.status(404).json({ error: "Project not found" });
-          return;
-        }
+        const result = await authority().operations.execute({
+          _id: operationId(req), actor: req.user!.id, reason: ctx.authEnabled === false ? "Anonymous project deletion (authentication disabled)" : "Platform-admin project deletion",
+          collection: "projects", targetId: req.params.id, expectedRevision: req.body.revision,
+          change: { deletedAt: "$operationTime" }, unset: [],
+        });
+        if (result.state === "pending") { res.status(202).json(result); return; }
         res.status(204).send();
       } catch (error) {
         next(error);
@@ -149,6 +176,7 @@ export function registerProjectsRoutes(ctx: RouteContext): void {
     path: "/api/v1/projects/:id/restore",
     tags: ["Projects"],
     summary: "Restore a soft-deleted project",
+    body: z.object({ revision: z.number().int().nonnegative() }).strict(),
     response: ProjectResponseSchema,
     errorResponses: { 404: { description: "Project not found" } },
     handler: async (req, res, next) => {
@@ -158,12 +186,13 @@ export function registerProjectsRoutes(ctx: RouteContext): void {
           res.status(404).json({ error: "Project not found" });
           return;
         }
-        // Already active: nothing to restore, return the current document.
-        if (!existing.deletedAt) {
-          res.json({ ...existing, id: existing._id });
-          return;
-        }
-        const restored = await ctx.projectStore.restore(req.params.id);
+        const result = await authority().operations.execute({
+          _id: operationId(req), actor: req.user!.id, reason: ctx.authEnabled === false ? "Anonymous project restoration (authentication disabled)" : "Platform-admin project restoration",
+          collection: "projects", targetId: req.params.id, expectedRevision: req.body.revision,
+          change: {}, unset: ["deletedAt"],
+        });
+        if (result.state === "pending") { res.status(202).json(result); return; }
+        const restored = await ctx.projectStore.get(req.params.id);
         if (!restored) {
           res.status(404).json({ error: "Project not found" });
           return;

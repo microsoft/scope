@@ -7,7 +7,7 @@ MongoDB migration framework powered by [mongo-migrate-ts](https://github.com/myc
 Migrations live in `packages/db-migrations/`. Each migration is a TypeScript file that exports a named class implementing the `MigrationInterface` from `mongo-migrate-ts`. Migrations are:
 
 - **Ordered** — discovered alphabetically by filename, applied in that order
-- **Tracked** — a `_migrations` collection records which migrations have been applied (stores `className` and `timestamp`)
+- **Tracked** — a `_migrations` collection records which migrations have been applied (stores `file`, `className`, and `timestamp`)
 - **Reversible** — each migration implements both `up()` and `down()`
 - **Idempotent** — designed to be safe to re-run (upserts, `$setOnInsert`, guards)
 
@@ -78,7 +78,7 @@ Defaults match the `docker-compose.yml` local dev environment, so no configurati
 - **RU-paced backfill** — use `batchUpdate(col, filter, update, label)` from `../batch-update.js` (collects `_id`s, then `updateMany({_id:{$in:batch}}, update)` in small batches with 429 retry). Static update only.
 - **Per-document backfill referencing `_id`** — when the new value derives from each doc's own `_id` (e.g. `keyId = _id`), `batchUpdate` can't express it. Use a paced `bulkWrite` loop of `updateOne` ops instead (mirror `025-create-projects`), reusing `BATCH_SIZE`/`sleep`/`getRetryAfterMs` for pacing and 429 handling.
 - **Idempotent index create** — wrap `createIndex` in try/catch and tolerate "already exists" codes (`85`/`86`/`68`); rethrow real failures so validation surfaces them.
-- **Unique-index swap** — before creating a composite **unique** index on a non-empty collection, `$group`/`$match` to assert no duplicate keys exist first (a pre-existing collision fails index creation on Cosmos). Drop the old index tolerating "not found" (`26`/`27`). `down()` for index ops is log-only by convention.
+- **Unique-index changes** — first verify backend support and existing index/data compatibility. Native MongoDB can support an in-place swap after duplicate detection, but Cosmos MongoDB Continuous-backup accounts require unique indexes at collection creation and do not support adding or dropping them later. Do not apply a native index-swap recipe to those accounts. `down()` for index ops is log-only by convention.
 
 ## How It Works
 
@@ -95,6 +95,9 @@ When you run a command:
 2. `down --last` — reverts the last applied migration, removes its record
 3. `status` — prints a table showing applied (`up`) and pending migrations
 4. `new` — scaffolds a new migration file in the migrations directory
+
+All commands, including `status`, first attempt to create the migration-ledger
+lookup indexes. The CLI is **not read-only inventory**.
 
 ## Existing Migrations
 
@@ -114,6 +117,7 @@ When you run a command:
 | `027-uuid-keys-mcp-profileversions` | Opaque UUID `_id` + reference key for `mcp-servers` (`slug`) and `profile-versions` (`ref`) with `{projectId,slug}` / `{projectId,ref}` indexes; drops dead `prompt-feature-extractions` (see [db.md](db.md#per-project-entity-keying-migration-027)) |
 | `028-isolate-mcp-secrets-per-project` | Reconciles the token-manager `mcp-secrets` unique index — drops the legacy global-unique `{mcpId,name}` and (re)creates the per-project `{projectId,mcpId,name}` (see [token-manager.md](token-manager.md#mcp-secrets)) |
 | `029-create-users-collection` | Creates the database-enforced unique identity index for authentication; uses Cosmos collection-creation extensions for continuous-backup accounts and preserves native MongoDB index creation (see below) |
+| `031-create-project-memberships` | Verifies mandatory project/user membership uniqueness, creates retained administrative-operation lookup indexes without TTL, and disables pending report generation without granting legacy access |
 
 ### Migration 029: users identity uniqueness
 
@@ -157,6 +161,40 @@ exercise actual uniqueness, concurrency, reruns, and non-destructive failures.
 **Live CosmosDB verification of the non-sparse email-index behavior is still
 required.** See the [shared infrastructure guide](../shared-dev-infra.md) for
 selecting a real account; use isolated test data for acceptance checks.
+
+### RBAC release boundary: codebase uniqueness is deferred
+
+RBAC requires migrations through **031**, including mandatory users identity
+uniqueness (029) and project/user membership uniqueness (031). Neither requirement
+has a non-unique fallback.
+
+The proposed `032-scope-codebase-uniqueness.ts` has been removed from both
+`src/migrations/` and `REQUIRED_MIGRATIONS`. It is not merely optional readiness:
+the automatic CLI and Compose/Kubernetes migration images no longer discover or
+execute its codebase index swap. The separate, Cosmos-safe project-local slug/ref
+schema upgrade is tracked in [#1521](https://github.com/microsoft/scope/issues/1521).
+Do not restore the old migration as a workaround or reuse its historical filename.
+
+This release **does not change existing codebase indexes**. A database with
+legacy global slug/ref uniqueness keeps it, including its cross-project naming
+restriction. A database with project-local unique indexes keeps those instead.
+If uniqueness is absent, RBAC does not install it: application check-then-insert
+slug allocation is not a concurrent database uniqueness guarantee. Project-scoped
+authorization and parent/reference validation remain enforced independently.
+See [codebase addressing](codebases.md#revision-addressing).
+
+Some native-Mongo test databases already applied 032. Retain their genuine ledger
+entry and installed indexes; do not delete/forge history or undo constraints to
+make them resemble a fresh database. Readiness accepts extra historical entries
+and still requires every active migration. Do not use `migrate:down` to undo the
+removed migration; recover by a reviewed compatible application rollout, without
+reopening anonymous access.
+
+Regression coverage runs the real CLI on a fresh isolated native database through
+031 and reruns it, checks readiness with and without historical 032, preserves
+existing constraints, and exercises concurrent slug/ref inserts with legacy,
+project-local, and absent unique indexes. These checks do not establish live
+Cosmos index compatibility or cross-replica authorization freshness.
 
 ## CI/CD
 

@@ -243,7 +243,7 @@ services:
       - entra_local_ca:/ca
 
   # entra-local-init — one-shot: registers the dev Portal origin as an SPA
-  # redirect URI on the seeded "Sample SPA" app so sign-in works with no manual
+  # redirect URI and API profile claims so sign-in and user labels work with no manual
   # portal step. Idempotent (tolerates an already-registered URI). Talks to the
   # emulator over the compose network (https://entra-local:8443/admin/api); the
   # shared CA and entra-local certificate SAN keep TLS verification enabled.
@@ -258,6 +258,29 @@ services:
         const uri = 'http://localhost:' + (process.env.PORTAL_PORT || '5100');
         const base = 'https://entra-local:8443/admin/api/apps/' + appId + '/redirectUris';
         const body = JSON.stringify({ uri, type: 'spa' });
+        const configureProfileClaims = async () => {
+          const url = 'https://entra-local:8443/admin/api/apps/cccccccc-0000-0000-0000-000000000005';
+          const check = (response) => {
+            if (!response.ok) throw Object.assign(new Error('Profile claim configuration HTTP ' + response.status), {
+              permanent: response.status >= 400 && response.status < 500 && response.status !== 429,
+            });
+          };
+          const current = await fetch(url, { signal: AbortSignal.timeout(5000) });
+          check(current);
+          const app = await current.json();
+          const optionalClaims = app.optionalClaims || { idToken: [], accessToken: [] };
+          const accessToken = [...(optionalClaims.accessToken || [])];
+          for (const name of ['given_name', 'family_name', 'email', 'preferred_username']) {
+            if (!accessToken.some(claim => claim.name === name)) accessToken.push({ name, essential: false });
+          }
+          const updated = await fetch(url, {
+            method: 'PATCH', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ optionalClaims: { ...optionalClaims, accessToken } }),
+            signal: AbortSignal.timeout(5000),
+          });
+          check(updated);
+          console.log('configured signed API profile claims');
+        };
         const post = () => new Promise((res, rej) => {
           const r = require('https').request(base, { method: 'POST', headers: { 'content-type': 'application/json' } }, (rsp) => {
             let d = ''; rsp.on('data', c => d += c); rsp.on('end', () => res({ status: rsp.statusCode, body: d }));
@@ -268,10 +291,15 @@ services:
           for (let i = 0; i < 60; i++) {
             try {
               const { status, body } = await post();
-              if (status === 201) { console.log('registered redirect URI', uri); return; }
-              if (status === 409) { console.log('redirect URI already registered', uri); return; }
+              if (status === 201 || status === 409) {
+                console.log(status === 201 ? 'registered redirect URI' : 'redirect URI already registered', uri);
+                await configureProfileClaims(); return;
+              }
               console.log('attempt', i, 'status', status, body);
-            } catch (e) { console.log('attempt', i, 'waiting for entra-local:', e.code || e.message); }
+            } catch (e) {
+              if (e.permanent) { console.error(e.message); process.exit(1); }
+              console.log('attempt', i, 'waiting for entra-local:', e.code || e.message);
+            }
             await new Promise(r => setTimeout(r, 2000));
           }
           console.error('failed to register redirect URI after retries'); process.exit(1);
@@ -346,6 +374,7 @@ services:
       TOKEN_MANAGER_URL: http://token-manager:80
       AZURE_STORAGE_QUEUE_REPORT: report-queue
       SCOPE_STRICT_AGENT_CAPABILITIES: ${SCOPE_STRICT_AGENT_CAPABILITIES:-false}
+      SCOPE_AUTH_ENABLED: "${SCOPE_AUTH_ENABLED-${VITE_AUTH_ENABLED_LOCAL-true}}"
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITHUB_MODELS_API_KEY: ${GITHUB_MODELS_API_KEY:-${GITHUB_TOKEN}}
       GIT_COMMIT: ${GIT_COMMIT:-development}
@@ -362,8 +391,6 @@ services:
       AUTH_API_CLIENT_ID: "${AUTH_API_CLIENT_ID:-cccccccc-0000-0000-0000-000000000005}"
       AUTH_PORTAL_CLIENT_ID: "${AUTH_PORTAL_CLIENT_ID:-cccccccc-0000-0000-0000-000000000001}"
       AUTH_SCOPES: "${AUTH_SCOPES:-api://cccccccc-0000-0000-0000-000000000005/access_as_user}"
-      AUTH_BOOTSTRAP_ADMINS: "${AUTH_BOOTSTRAP_ADMINS:-entra:11111111-1111-1111-1111-111111111111/aaaaaaaa-0000-0000-0000-000000000001}"
-      AUTH_BOOTSTRAP_TENANTS: "${AUTH_BOOTSTRAP_TENANTS:-11111111-1111-1111-1111-111111111111}"
       AUTH_USER_CACHE_TTL_SECONDS: "${AUTH_USER_CACHE_TTL_SECONDS:-300}"
       NODE_TLS_REJECT_UNAUTHORIZED: "1"
       NODE_EXTRA_CA_CERTS: "${NODE_EXTRA_CA_CERTS-/ca/rootCA.pem}"
@@ -594,7 +621,7 @@ services:
     ports:
       - "${PORTAL_PORT:-5100}:80"
     environment:
-      SCOPE_AUTH_ENABLED: "${SCOPE_AUTH_ENABLED:-true}"
+      SCOPE_AUTH_ENABLED: "${SCOPE_AUTH_ENABLED-${VITE_AUTH_ENABLED_LOCAL-true}}"
     depends_on:
       api:
         condition: service_started

@@ -22,7 +22,7 @@ export async function resolveRunForRequest(
     return { run: request.run, request };
   }
   const historical = await getHistoricalRun({ runsCollection: ctx.runsCollection }, runId);
-  if (!historical || historical.requestId !== requestId) {
+  if (!historical || historical.requestId !== requestId || historical.projectId !== request.projectId) {
     return { error: "Run not found for this request", status: 404 };
   }
   return { run: historical, request };

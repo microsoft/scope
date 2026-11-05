@@ -13,9 +13,8 @@ export interface VerifiedAuthContext {
 /**
  * The principal set on `req.user` for every request.
  *
- * This is identity only. Authorization (roles/permissions enforcement) is NOT
- * part of this milestone — `role` is carried as advisory metadata, never used
- * to allow or deny a request here.
+ * This snapshot may come from the identity cache. Authorization rereads the
+ * canonical users/membership authority rather than trusting its cached role.
  */
 export interface AuthenticatedUser {
   /** Scope User ID (UUID) for authenticated users, or "anonymous". */
@@ -40,6 +39,7 @@ declare global {
     interface Request {
       auth?: VerifiedAuthContext;
       user?: AuthenticatedUser;
+      authorizedProjectId?: string;
     }
   }
 }

@@ -49,6 +49,10 @@ import { registerProfilesRoutes } from "./routes/profiles.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { ProjectScopeError } from "./utils/project-scope.js";
 import { registerUsersRoutes } from "./routes/users.js";
+import { Authorization } from "./auth/authorization.js";
+import { resolveAuthEnabledFlag } from "shared/rbac";
+import { AccessError } from "./auth/admin-operations.js";
+import { registerAccessRoutes } from "./routes/access.js";
 import type { RouteContext } from "./route-context.js";
 import type {
   CriteriaDocument,
@@ -77,7 +81,6 @@ const mcpSecretClient: McpSecretClient | null = TOKEN_MANAGER_URL
 
 const app: Express = express();
 app.use(cors());
-app.use(express.json());
 
 // Configuration from environment
 // K8s: MONGO_CONNECTION_STRING from secret, STORAGE_CONNECTION_STRING from secret
@@ -90,6 +93,7 @@ const queueReport = process.env.AZURE_STORAGE_QUEUE_REPORT || "report-queue";
 const strictAgentCapabilities =
   process.env.SCOPE_STRICT_AGENT_CAPABILITIES?.toLowerCase() === "true";
 const port = parseInt(process.env.PORT || "3000", 10);
+let authEnabled = resolveAuthEnabledFlag(process.env.SCOPE_AUTH_ENABLED);
 
 // MongoDB clients
 let mongoClient: MongoClient;
@@ -121,6 +125,7 @@ let profileEnricher: ProfileEnricher | null = null;
 let userStore: UserStore | null = null;
 let userAccessCache: UserAccessCache | null = null;
 let userAccessResolver: UserAccessService | null = null;
+let authorization: Authorization | null = null;
 let skillResolver: SkillResolver;
 let codebaseCollection: Collection<CodebaseDocument>;
 let codebaseRevisionCollection: Collection<CodebaseRevisionDocument>;
@@ -170,14 +175,12 @@ async function initializeClients(): Promise<void> {
   profileVersionCollection = db.collection<ProfileVersionDocument>("profile-versions");
 
   usersCollection = db.collection<UserDocument>("users");
+  authorization = new Authorization(db, authEnabled);
   const authRuntime = loadAuthConfigFromEnv();
   if (authRuntime) {
     authProvider = authRuntime.provider;
     profileEnricher = authRuntime.enricher;
-    userStore = new UserStore(usersCollection, {
-      bootstrapAdmins: authRuntime.bootstrapAdmins,
-      bootstrapTenants: authRuntime.bootstrapTenants,
-    });
+    userStore = new UserStore(usersCollection);
     userAccessCache = new RedisUserAccessCache({
       redisHost: process.env.REDIS_HOST || "",
       redisPort: parseInt(process.env.REDIS_PORT || "6379", 10),
@@ -193,7 +196,7 @@ async function initializeClients(): Promise<void> {
     });
     console.log(`Auth enabled: provider=${authProvider.id}`);
   } else {
-    console.log("Auth not configured — all requests will be treated as anonymous");
+    console.warn("SCOPE_AUTH_ENABLED=false: authentication and project RBAC are disabled. Network callers have unrestricted application access; identity administration remains unavailable.");
   }
 
   codebaseCollection = db.collection<CodebaseDocument>("codebases");
@@ -313,6 +316,7 @@ const routeCtx: RouteContext = {
   get resourceResolver() { return resourceResolver; },
   get projectStore() { return projectStore; },
   get reportQueueClient() { return reportQueueClient; },
+  get authEnabled() { return authEnabled; },
   get blobStorage() { return blobStorage; },
   get heartbeatStore() { return heartbeatStore; },
   strictAgentCapabilities,
@@ -321,17 +325,27 @@ const routeCtx: RouteContext = {
 };
 
 // ─── Route registration ───────────────────────────────────────────────────────
+app.locals.authorization = () => authorization;
 app.use("/api/v1/users/me", (_req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   next();
 });
 app.use(
   createAuthMiddleware({
-    getProvider: () => authProvider,
+    getProvider: () => authEnabled ? authProvider : null,
   }),
 );
+app.use(express.json());
 registerUsersRoutes(routeCtx);
-app.use(createUserAccessMiddleware(() => userAccessResolver));
+app.use(createUserAccessMiddleware(() => authEnabled ? userAccessResolver : null));
+app.use((req, res, next) => {
+  if (authEnabled && req.path.startsWith("/api/v1/") && !["/api/v1/version"].includes(req.path) && !req.user?.isAuthenticated) {
+    res.status(401).json({ error: "Authentication required", code: "authentication_required" });
+    return;
+  }
+  next();
+});
+registerAccessRoutes(routeCtx);
 
 // Secrets/proxy routes must be registered first (before :id param routes)
 registerSecretsRoutes(routeCtx);
@@ -365,6 +379,10 @@ registerFeatureFlagRoutes(routeCtx);
 // Error handler
 app.use(authErrorHandler);
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  if (err instanceof AccessError) {
+    res.status(err.status).json({ error: err.message, code: err.code });
+    return;
+  }
   if (err instanceof ProjectScopeError) {
     res.status(err.status).json({ error: err.message });
     return;
@@ -419,7 +437,9 @@ async function main(): Promise<void> {
 export { app };
 
 export interface TestDependencies {
+  authEnabled?: boolean;
   db?: Db;
+  projectStore?: ProjectStore;
   collection?: Collection<RequestDocument>;
   runsCollection?: Collection<RunHistoryDocument>;
   criteriaCollection?: Collection<CriteriaDocument>;
@@ -460,7 +480,10 @@ export interface TestDependencies {
 
 /** @internal — used by tests only to inject mock dependencies */
 export function _injectTestDependencies(deps: TestDependencies): void {
+  if (deps.authEnabled !== undefined) authEnabled = deps.authEnabled;
   if (deps.db) db = deps.db;
+  if (deps.db || deps.authEnabled !== undefined) authorization = new Authorization(db, authEnabled);
+  if (deps.projectStore) projectStore = deps.projectStore;
   if (deps.collection) collection = deps.collection;
   if (deps.runsCollection) runsCol = deps.runsCollection;
   if (deps.criteriaCollection) criteriaCollection = deps.criteriaCollection;

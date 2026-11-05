@@ -94,6 +94,9 @@ export function resetApiClient(): void {
 }
 
 const authHook: BeforeRequestHook = async ({ request }) => {
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && !request.headers.has("Idempotency-Key")) {
+    request.headers.set("Idempotency-Key", crypto.randomUUID());
+  }
   const signal = sessionSignal
     ? AbortSignal.any([request.signal, sessionSignal])
     : request.signal;

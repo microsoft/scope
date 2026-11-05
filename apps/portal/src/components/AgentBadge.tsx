@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 import type { CodingAgent } from "@/types";
 
 const AGENT_CATALOG_QUERY_KEY = ["agents", "include-deleted"] as const;
@@ -66,10 +67,12 @@ export function AgentBadge({
   className,
   children,
 }: AgentBadgeProps) {
-  const { agentById, isLoading } = useAgentCatalog(!preloadedAgent);
+  const { user, authEnabled, isReady } = useAuth();
+  const { agentById, isLoading } = useAgentCatalog(!preloadedAgent && isReady);
   const agent = preloadedAgent ?? (agentId ? agentById.get(agentId) : undefined);
   const label = agent?.name ?? (isLoading ? "Loading agent…" : "Unknown agent");
-  const canNavigate = !!agentId && !!agent;
+  const canNavigate = !!agentId && !!agent &&
+    (!authEnabled || (isReady && Boolean(user?.capabilities?.platformAdmin)));
 
   const content = children ?? (
     variant === "badge" ? (

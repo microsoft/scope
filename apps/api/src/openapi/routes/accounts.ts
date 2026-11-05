@@ -14,6 +14,7 @@ registry.registerPath({
   path: "/api/v1/accounts",
   tags: ["Accounts"],
   summary: "Create account",
+  security: [{ bearerAuth: [] }],
   request: {
     body: {
       content: {
@@ -37,6 +38,7 @@ registry.registerPath({
   path: "/api/v1/accounts",
   tags: ["Accounts"],
   summary: "List accounts",
+  security: [{ bearerAuth: [] }],
   responses: {
     200: {
       description: "Success",
@@ -53,6 +55,7 @@ registry.registerPath({
   path: "/api/v1/accounts/{id}",
   tags: ["Accounts"],
   summary: "Get account",
+  security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.string() }),
   },
@@ -72,6 +75,7 @@ registry.registerPath({
   path: "/api/v1/accounts/{id}",
   tags: ["Accounts"],
   summary: "Update account",
+  security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.string() }),
     body: {
@@ -96,6 +100,7 @@ registry.registerPath({
   path: "/api/v1/accounts/{id}",
   tags: ["Accounts"],
   summary: "Delete account",
+  security: [{ bearerAuth: [] }],
   request: {
     params: z.object({ id: z.string() }),
   },

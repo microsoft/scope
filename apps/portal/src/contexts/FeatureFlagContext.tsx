@@ -6,7 +6,6 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { FeatureFlag } from "@/types";
 import { AuthContext } from "./AuthContext";
-import { isAuthEnabled } from "@/lib/auth/msalInstance";
 
 interface FeatureFlagContextValue {
   /** All feature flags from the API */
@@ -25,7 +24,7 @@ const FeatureFlagContext = createContext<FeatureFlagContextValue>({
 
 export function FeatureFlagProvider({ children }: { children: ReactNode }) {
   const auth = useContext(AuthContext);
-  const enabled = !isAuthEnabled || Boolean(auth?.isReady && auth.isAuthenticated);
+  const enabled = Boolean(auth?.isReady && (!auth.authEnabled || auth.user?.capabilities?.platformAdmin));
   const { data: flags = [], isLoading } = useQuery({
     queryKey: ["feature-flags"],
     queryFn: api.listFeatureFlags,

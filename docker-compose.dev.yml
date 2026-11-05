@@ -110,6 +110,8 @@ services:
   # ===========================================================================
 
   portal:
+    # Vite compiles on demand; the production nginx CPU limit stalls cold loads.
+    cpus: "1.0"
     # dev target (Vite dev server + esbuild dep-optimization) OOMs at 512m; needs headroom above prod 128m runtime limit
     mem_limit: 1g
     build:
@@ -131,17 +133,16 @@ services:
       VITE_AUTH_REDIRECT_URI: "${VITE_AUTH_REDIRECT_URI:-}"
       VITE_AUTH_POST_LOGOUT_REDIRECT_URI: "${VITE_AUTH_POST_LOGOUT_REDIRECT_URI:-}"
       VITE_AUTH_CACHE_LOCATION: "${VITE_AUTH_CACHE_LOCATION:-localStorage}"
-      # Auth feature toggle (see ENV_VARIABLES.md → "Feature toggle"). Auth is ON
-      # by default. To iterate on the Portal locally WITHOUT sign-in (e.g. before
-      # the API verifies tokens), export VITE_AUTH_ENABLED_LOCAL=false. This flag
-      # governs local dev only; integration/production are toggled at runtime via
-      # SCOPE_AUTH_ENABLED on their deploy overlays.
-      VITE_AUTH_ENABLED_LOCAL: "${VITE_AUTH_ENABLED_LOCAL:-true}"
+      # One setting controls API authentication/RBAC and Portal sign-in.
+      # The legacy local flag remains an alias when SCOPE_AUTH_ENABLED is unset.
+      VITE_AUTH_ENABLED_LOCAL: "${SCOPE_AUTH_ENABLED-${VITE_AUTH_ENABLED_LOCAL-true}}"
     depends_on:
       entra-local:
         condition: service_healthy
+        required: false
       entra-local-init:
         condition: service_completed_successfully
+        required: false
     develop:
       watch:
         - action: sync

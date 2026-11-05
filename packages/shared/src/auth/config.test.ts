@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { describe, expect, it } from "vitest";
-import { bootstrapAdminKey, loadAuthConfigFromEnv } from "./config.js";
+import { loadAuthConfigFromEnv } from "./config.js";
 
 const TENANT = "11111111-1111-1111-1111-111111111111";
 const SUBJECT = "aaaaaaaa-0000-0000-0000-000000000001";
@@ -17,8 +17,19 @@ function baseEnv(): NodeJS.ProcessEnv {
 }
 
 describe("loadAuthConfigFromEnv", () => {
-  it("returns null when AUTH_* is not configured", () => {
-    expect(loadAuthConfigFromEnv({})).toBeNull();
+  it("fails closed when auth is enabled by default without IdP configuration", () => {
+    expect(() => loadAuthConfigFromEnv({})).toThrow(/AUTH_PROVIDER, AUTH_AUTHORITY, AUTH_API_CLIENT_ID/);
+  });
+
+  it.each(["false", "0", "no", "off", " FALSE "])("explicitly disables auth and ignores unused IdP settings with %j", value => {
+    expect(loadAuthConfigFromEnv({ SCOPE_AUTH_ENABLED: value })).toBeNull();
+    expect(loadAuthConfigFromEnv({
+      SCOPE_AUTH_ENABLED: value, AUTH_PROVIDER: "unused", AUTH_USER_CACHE_TTL_SECONDS: "unused",
+    })).toBeNull();
+  });
+
+  it.each(["", "typo", "true", "1", "on", "yes"])("does not let %j bypass missing IdP configuration", value => {
+    expect(() => loadAuthConfigFromEnv({ SCOPE_AUTH_ENABLED: value })).toThrow(/Incomplete authentication configuration/);
   });
 
   it("throws when any required variable is missing", () => {
@@ -46,8 +57,6 @@ describe("loadAuthConfigFromEnv", () => {
     expect(runtime).not.toBeNull();
     expect(runtime?.provider.id).toBe("entra");
     expect(runtime?.enricher).toBeDefined();
-    expect(runtime?.bootstrapAdmins.size).toBe(0);
-    expect(runtime?.bootstrapTenants.size).toBe(0);
     expect(runtime?.userCacheTtlSeconds).toBe(300);
   });
 
@@ -68,11 +77,11 @@ describe("loadAuthConfigFromEnv", () => {
     })).toThrow(/AUTH_USER_CACHE_TTL_SECONDS must be a positive safe integer/);
   });
 
-  it("does not enable IdP configuration when only a valid cache TTL is set", () => {
-    expect(loadAuthConfigFromEnv({ AUTH_USER_CACHE_TTL_SECONDS: "60" })).toBeNull();
+  it("requires explicit opt-out even when only a valid cache TTL is set", () => {
+    expect(() => loadAuthConfigFromEnv({ AUTH_USER_CACHE_TTL_SECONDS: "60" })).toThrow(/Incomplete authentication configuration/);
   });
 
-  it("validates a supplied cache TTL even with authentication disabled", () => {
+  it("validates a supplied cache TTL when authentication defaults to enabled", () => {
     expect(() => loadAuthConfigFromEnv({ AUTH_USER_CACHE_TTL_SECONDS: "0" }))
       .toThrow(/AUTH_USER_CACHE_TTL_SECONDS/);
   });
@@ -93,35 +102,11 @@ describe("loadAuthConfigFromEnv", () => {
     expect(runtime?.provider.id).toBe("entra");
   });
 
-  it("parses bootstrap admins and tenants as trimmed, non-empty sets", () => {
-    const runtime = loadAuthConfigFromEnv({
-      ...baseEnv(),
-      AUTH_BOOTSTRAP_ADMINS: ` entra:${TENANT}/${SUBJECT} , , entra:${TENANT}/other `,
-      AUTH_BOOTSTRAP_TENANTS: `${TENANT}, `,
-    });
-    expect(runtime?.bootstrapAdmins).toEqual(
-      new Set([
-        bootstrapAdminKey("entra", TENANT, SUBJECT),
-        `entra:${TENANT}/other`,
-      ]),
-    );
-    expect(runtime?.bootstrapTenants).toEqual(new Set([TENANT]));
+  it.each(["AUTH_BOOTSTRAP_ADMINS", "AUTH_BOOTSTRAP_TENANTS"])("rejects retired %s rather than silently suggesting login can grant admin", key => {
+    expect(() => loadAuthConfigFromEnv({ ...baseEnv(), [key]: `entra:${TENANT}/${SUBJECT}` }))
+      .toThrow(/retired.*operator bootstrap-admin/);
   });
-
-  it("requires a tenant allowlist when bootstrap admins are configured", () => {
-    expect(() =>
-      loadAuthConfigFromEnv({
-        ...baseEnv(),
-        AUTH_BOOTSTRAP_ADMINS: `entra:${TENANT}/${SUBJECT}`,
-      }),
-    ).toThrow(/AUTH_BOOTSTRAP_TENANTS is required/);
-  });
-});
-
-describe("bootstrapAdminKey", () => {
-  it("formats the identity triple as `${idp}:${tenant}/${subject}`", () => {
-    expect(bootstrapAdminKey("entra", TENANT, SUBJECT)).toBe(
-      `entra:${TENANT}/${SUBJECT}`,
-    );
+  it("accepts cleared retired settings without granting any bootstrap behavior", () => {
+    expect(loadAuthConfigFromEnv({ ...baseEnv(), AUTH_BOOTSTRAP_ADMINS: "", AUTH_BOOTSTRAP_TENANTS: " " })?.provider.id).toBe("entra");
   });
 });

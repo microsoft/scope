@@ -13,7 +13,7 @@ import { apiRoute } from "../openapi/api-route.js";
 import type { PromptFeatureDocument, RouteContext } from "../route-context.js";
 import { extractPromptFeatures, generatePromptFeaturePrompt, isLlmAvailable as isPromptFeatureLlmAvailable } from "../prompt-feature-llm.js";
 import { isInferenceError } from "../llm-token.js";
-import { ProjectIdQuerySchema, OptionalProjectIdQuerySchema, getQueryProjectId, getOptionalQueryProjectId } from "../utils/project-scope.js";
+import { ProjectIdQuerySchema, getQueryProjectId } from "../utils/project-scope.js";
 
 export function registerPromptFeaturesRoutes(ctx: RouteContext): void {
 
@@ -25,7 +25,7 @@ apiRoute(ctx.app, ctx.registry, {
   path: "/api/v1/prompt-features/generate-prompt",
   tags: ["Prompt Features"],
   summary: "Generate prompt feature from behavior",
-  query: OptionalProjectIdQuerySchema,
+  query: ProjectIdQuerySchema,
   body: z.object({
     behavior: z.string(),
     currentId: z.string().optional(),
@@ -47,9 +47,8 @@ apiRoute(ctx.app, ctx.registry, {
       return;
     }
 
-    const genProjectId = getOptionalQueryProjectId(req);
     const allFeatures = await ctx.promptFeatureCollection
-      .find({ ...(genProjectId ? { projectId: genProjectId } : {}), deletedAt: { $exists: false } })
+      .find({ projectId: getQueryProjectId(req), deletedAt: { $exists: false } })
       .project({ id: 1, prompt: 1, _id: 0 })
       .toArray();
 
@@ -138,7 +137,7 @@ apiRoute(ctx.app, ctx.registry, {
   path: "/api/v1/prompt-features/extract-from-text",
   tags: ["Prompt Features"],
   summary: "Extract features from text",
-  query: OptionalProjectIdQuerySchema,
+  query: ProjectIdQuerySchema,
   body: z.object({
     text: z.string(),
     model: z.string().optional(),
@@ -167,14 +166,14 @@ apiRoute(ctx.app, ctx.registry, {
 
     // Scope candidate features to the requested type (default = select,
     // including legacy features with no `type`).
-    const extractProjectId = getOptionalQueryProjectId(req);
+    const extractProjectId = getQueryProjectId(req);
     const promptType = type ?? "select";
     const typeFilter: Record<string, unknown> =
       promptType === "select"
         ? { $or: [{ type: "select" }, { type: { $exists: false } }] }
         : { type: promptType };
     const allFeatures = await ctx.promptFeatureCollection
-      .find({ ...(extractProjectId ? { projectId: extractProjectId } : {}), deletedAt: { $exists: false }, ...typeFilter })
+      .find({ projectId: extractProjectId, deletedAt: { $exists: false }, ...typeFilter })
       .toArray();
 
     const featureConfigs = allFeatures.map(f => ({ id: f.id, prompt: f.prompt }));

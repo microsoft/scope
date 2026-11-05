@@ -77,21 +77,25 @@ it("the real bootstrap/provider tree sends no flags, favicon or page requests be
     const url = new URL(request.url);
     const path = url.pathname + url.search;
     requests.push(`${request.method} ${path}`);
+    if (path === "/api/v1/version") return Promise.resolve(Response.json({ authEnabled: true }));
     if (request.method === "POST" && path === "/api/v1/users/me") return lookup;
     return Promise.resolve(new Response("[]"));
   });
   vi.stubGlobal("fetch", fetchMock);
   await act(async () => { await import("./main"); });
-  await waitFor(() => expect(requests).toEqual(["POST /api/v1/users/me"]));
+  await waitFor(() => expect(requests).toEqual(["GET /api/v1/version", "POST /api/v1/users/me"]));
   expect(screen.queryByText("Bootstrapped app")).toBeNull();
 
   await act(async () => resolve(new Response(JSON.stringify({
-    id: "11111111-2222-4333-8444-555555555555", role: "user",
+    id: "11111111-2222-4333-8444-555555555555", role: "admin",
+    capabilities: { platformAdmin: true, reportsEnabled: false, memberships: [
+      { projectId: "demo-project", role: "contributor", permissions: ["content:read", "content:write", "content:delete"], revision: 1 },
+    ] },
   }))));
   await screen.findByText("Bootstrapped app");
   await waitFor(() => expect(requests).toEqual(expect.arrayContaining([
     "GET /api/v1/feature-flags", "GET /api/v1/version", "GET /api/v1/projects",
   ])));
-  expect(requests[0]).toBe("POST /api/v1/users/me");
+  expect(requests.slice(0, 2)).toEqual(["GET /api/v1/version", "POST /api/v1/users/me"]);
   expect(requests.filter((entry) => entry.includes("/users/me"))).toHaveLength(1);
 });

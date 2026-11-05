@@ -33,6 +33,17 @@ const stubProcessor: WorkerProcessor = {
   },
 };
 
+it("never calls the report API from the automatic coder completion trigger", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    const qp = new CodingAgentQueueProcessor({ ...testConfig, apiBaseUrl: "http://api.invalid" }, stubProcessor);
+    const trigger: (id: string) => Promise<void> = Reflect.get(qp, "triggerReportGeneration");
+    await trigger.call(qp, "accepted-fixture");
+    expect(fetchMock).not.toHaveBeenCalled();
+  } finally { vi.unstubAllGlobals(); }
+});
+
 describe("CodingAgentQueueProcessor.getVersionFields", () => {
   afterEach(() => {
     vi.unstubAllEnvs();

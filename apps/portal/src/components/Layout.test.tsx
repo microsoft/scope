@@ -7,8 +7,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Link, MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { AuthContext } from "@/contexts/AuthContext";
-import { signedInAuth } from "@/contexts/authFixtures";
+import { AuthContext, type AuthContextValue } from "@/contexts/AuthContext";
+import { anonymousAuth, signedInAuth } from "@/contexts/authFixtures";
+import { projectPermissions } from "shared/rbac";
 import { ProjectProvider } from "@/contexts/ProjectContext";
 import { PROJECT_STORAGE_KEY } from "@/lib/project-scope";
 import { Layout } from "./Layout";
@@ -28,9 +29,17 @@ beforeAll(() => {
   );
 });
 
+const adminAuth: AuthContextValue = {
+  ...signedInAuth,
+  user: signedInAuth.user && { ...signedInAuth.user, capabilities: {
+    ...signedInAuth.user.capabilities, platformAdmin: true,
+    memberships: signedInAuth.user.capabilities.memberships.map(membership => ({ ...membership, projectId: "proj-1" })),
+  } },
+};
+
 function renderLayout(
   path = "/runs",
-  { projectId = "proj-1" }: { projectId?: string | null } = {},
+  { projectId = "proj-1", auth = adminAuth }: { projectId?: string | null; auth?: AuthContextValue } = {},
 ) {
   // Layout gates project-scoped nav on a selected project, so seed one by
   // default; pass { projectId: null } to exercise the no-project state.
@@ -42,7 +51,7 @@ function renderLayout(
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AuthContext.Provider value={signedInAuth}>
+      <AuthContext.Provider value={auth}>
         <ThemeProvider defaultTheme="light">
           <ProjectProvider>
             <MemoryRouter initialEntries={[path]}>
@@ -217,5 +226,56 @@ describe("Layout", () => {
     // Navigated to the (stubbed) home route, and Layout left the selection alone.
     expect(screen.getByText("Home page")).toBeTruthy();
     expect(localStorage.getItem(PROJECT_STORAGE_KEY)).toBe("proj-1");
+  });
+
+  it.each(["reader", "contributor", "admin"] as const)("hides platform navigation for project %s in desktop and mobile", role => {
+    localStorage.setItem("scope:layout:sidebar-expanded", "1");
+    const auth: AuthContextValue = { ...signedInAuth, user: signedInAuth.user && { ...signedInAuth.user,
+      capabilities: { ...signedInAuth.user.capabilities, memberships: [{
+        projectId: "proj-1", role, permissions: projectPermissions(role), revision: 1,
+      }] },
+    } };
+    renderLayout("/runs", { auth });
+    const sidebar = screen.getByLabelText("Primary navigation");
+    expect(within(sidebar).queryByText("Platform")).toBeNull();
+    for (const name of ["Agents", "Models", "Secrets", "Admin"]) {
+      expect(within(sidebar).queryByRole("link", { name })).toBeNull();
+    }
+    expect(within(sidebar).getByRole("link", { name: "Runs" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
+    const mobile = screen.getByRole("dialog");
+    expect(within(mobile).queryByText("Platform")).toBeNull();
+    for (const name of ["Agents", "Models", "Secrets", "Admin"]) {
+      expect(within(mobile).queryByRole("link", { name })).toBeNull();
+    }
+    expect(within(mobile).getByRole("link", { name: "Runs" })).toBeTruthy();
+  });
+
+  it("shows global platform navigation for an admin with no memberships or selection", () => {
+    const auth: AuthContextValue = { ...adminAuth, user: adminAuth.user && { ...adminAuth.user,
+      capabilities: { ...adminAuth.user.capabilities, memberships: [] },
+    } };
+    renderLayout("/runs", { auth, projectId: null });
+    for (const name of ["Agents", "Models", "Secrets", "Admin"]) {
+      expect(screen.getByRole("link", { name })).toBeTruthy();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
+    expect(within(screen.getByRole("dialog")).getByRole("link", { name: "Admin" })).toBeTruthy();
+  });
+
+  it("hides platform links while capabilities are resolving", () => {
+    renderLayout("/runs", { auth: { ...adminAuth, isReady: false, status: "resolving" } });
+    for (const name of ["Agents", "Models", "Secrets", "Admin"]) {
+      expect(screen.queryByRole("link", { name })).toBeNull();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Toggle navigation" }));
+    expect(within(screen.getByRole("dialog")).queryByRole("link", { name: "Admin" })).toBeNull();
+  });
+
+  it("preserves platform navigation with authentication explicitly disabled", () => {
+    renderLayout("/runs", { auth: anonymousAuth });
+    for (const name of ["Agents", "Models", "Secrets", "Admin"]) {
+      expect(screen.getByRole("link", { name })).toBeTruthy();
+    }
   });
 });

@@ -88,22 +88,36 @@ flowchart TB
 Configured human callers send the **IdP access token unchanged** on each API call.
 The API verifies its signature/claims before resolving an active Scope UUID and role
 through Redis (hit: no Mongo) or an exact `(idp, tid, oid)` Mongo lookup (miss/outage).
-Only `POST /api/v1/users/me` performs JIT/profile/`lastLoginAt`/bootstrap writes.
-Every GET is read-only. Enrollment responses use no-store, and clients must not 
-prefetch or poll the POST.
+Only `POST /api/v1/users/me` performs ordinary-user enrollment and profile/`lastLoginAt`
+writes. Login never promotes or re-enables an account; first-admin bootstrap and
+lockout/operation repair are explicit operator commands. Every GET is read-only.
+Enrollment responses use no-store, and clients must not prefetch or poll the POST.
 
 The Portal calls that POST first after an IdP callback; cached-account
 reloads use plain `/users/me`. All application queries wait for the handshake, and
-the API response—not MSAL claims—owns the Scope identity/role. Enrolled CLI bearers
-remain compatible; new identities must explicitly enroll. Full RBAC/ownership,
-interactive CLI login, and Scope internal-token plans are deferred; existing public
-and anonymous rollout behavior is preserved.
+the API response—not MSAL claims—owns the Scope identity/role/capabilities. Enrolled
+CLI bearers remain compatible; new identities must explicitly enroll. Fixed
+reader/contributor/admin project memberships govern content independently from
+platform administration. Platform administrators have no project-content bypass;
+project creation grants the creator an audited project-admin membership.
+Project admins manage memberships only in their own projects, including bounded
+enrolled-user discovery. Ownership, interactive CLI login and internal service
+tokens remain deferred.
 
 The access cache has a fixed/non-sliding TTL (`AUTH_USER_CACHE_TTL_SECONDS`, default
 300 seconds), is namespaced by the Mongo database and identity tuple, and never
-stores tokens. DB-only role/disable changes can remain stale until expiry; Redis
-failure falls back to Mongo. See [Authentication & RBAC](auth-rbac.md) for the method
-walkthrough, failures, cache isolation, and implemented/deferred boundary.
+stores tokens. It is not authorization authority: protected routes and capabilities
+reread canonical users, memberships and durable operation completion. Log streams
+revalidate with bounded, token-capped leases; the Portal refreshes capabilities and
+clears stale queries. Unavailable authority fails closed, not anonymous.
+
+`SCOPE_AUTH_ENABLED` defaults on and controls API enforcement and Portal sign-in
+together. Only an explicit opt-out permits unrestricted trusted local/test access;
+project scoping remains enforced and identity administration stays unavailable.
+New report generation is disabled across producers, API, CLI, Portal and consumer
+until service authorization is available; stored reports remain project-readable.
+See [Authentication & RBAC](auth-rbac.md) for the current policy, operator procedures,
+failure behavior and production release gates.
 
 ### Benchmark execution
 

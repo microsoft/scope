@@ -1222,6 +1222,7 @@ export type RunSortDir = "asc" | "desc";
  * `id` mirrors `_id`.
  */
 export interface Project {
+  revision?: number;
   _id: string;
   /** Mirror of `_id` added by the API response. */
   id?: string;
@@ -1242,6 +1243,7 @@ export interface CreateProjectRequest {
 
 /** Body for updating a project (`PATCH /projects/:id`). */
 export interface UpdateProjectRequest {
+  revision?: number;
   name?: string;
   description?: string;
 }

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { Command } from "commander";
+import { REPORT_GENERATION_ENABLED } from "shared/rbac";
 import EventSource from "eventsource";
 import { configureHelp } from "../utils/helpFormatter.js";
 import { banner, colorLevel, dimTimestamp, errorText, successText, label, value, warnBanner } from "../utils/style.js";
@@ -25,12 +26,17 @@ configureHelp(report);
 
 report
   .command("generate")
-  .description("Generate a report for a benchmark run")
+  .description("Unavailable: new report generation is disabled during the RBAC MVP")
   .requiredOption("-i, --id <requestId>", "Run ID to generate a report for")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
   .option("--stream", "Stream report generation logs in real time", true)
   .option("--no-stream", "Do not stream logs after submission")
   .action(async (options) => {
+    if (!REPORT_GENERATION_ENABLED) {
+      console.error(errorText("New report generation is disabled during the RBAC MVP. Stored reports remain readable."));
+      process.exitCode = 1;
+      return;
+    }
     try {
       const response = await apiFetch(options.url, `/reports`, {
         method: "POST",

@@ -12,9 +12,9 @@ CONFIG_PATH="/usr/share/nginx/html/config.js"
 
 # Auth feature toggle for this environment (integration/production). Auth is ON
 # by default (secure by default); set SCOPE_AUTH_ENABLED=false on the overlay to
-# disable sign-in until that environment's API verifies tokens. Coerced to a
+# disable sign-in and RBAC together with the API's matching setting. Coerced to a
 # real JS boolean literal for window.__SCOPE_CONFIG__.authEnabled.
-case "$(printf '%s' "${SCOPE_AUTH_ENABLED:-true}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+case "$(printf '%s' "${SCOPE_AUTH_ENABLED:-true}" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" in
   false|0|no|off) AUTH_ENABLED=false ;;
   *) AUTH_ENABLED=true ;;
 esac

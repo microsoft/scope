@@ -165,7 +165,8 @@ describe("CodebaseRevisionStore", () => {
     const first = await revisionStore.createRevision(revisionInput(codebase));
     const second = await revisionStore.createRevision(revisionInput(codebase));
 
-    await expect(revisionStore.getByRef("pamela-fox-site@r1")).resolves.toEqual(first);
+    await expect(revisionStore.getByRef("proj-test", "pamela-fox-site@r1")).resolves.toEqual(first);
+    await expect(revisionStore.getByRef("another-project", "pamela-fox-site@r1")).resolves.toBeNull();
     await expect(revisionStore.getLatest(codebase._id)).resolves.toEqual(second);
     await expect(revisionStore.listByCodebase(codebase._id)).resolves.toEqual([second, first]);
   });
@@ -190,7 +191,7 @@ describe("CodebaseRevisionStore", () => {
 
     // Direct id/ref/number lookups still resolve so runs keep working.
     await expect(revisionStore.get(first._id)).resolves.toMatchObject({ _id: first._id });
-    await expect(revisionStore.getByRef(second.ref)).resolves.toMatchObject({ _id: second._id });
+    await expect(revisionStore.getByRef("proj-test", second.ref)).resolves.toMatchObject({ _id: second._id });
     await expect(revisionStore.getByNumber(codebase._id, 1)).resolves.toMatchObject({ _id: first._id });
   });
 

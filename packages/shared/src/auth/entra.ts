@@ -132,7 +132,8 @@ export class EntraIdAuthProvider implements AuthProvider {
 
     const email =
       asString(payload.email) ?? asString(payload.preferred_username);
-    const displayName = asString(payload.name);
+    const displayName = asString(payload.name) ??
+      ([asString(payload.given_name), asString(payload.family_name)].filter(Boolean).join(" ").trim() || undefined);
     const emailVerified =
       typeof payload.email_verified === "boolean"
         ? payload.email_verified
@@ -143,6 +144,7 @@ export class EntraIdAuthProvider implements AuthProvider {
       idpTenant,
       idpSubject,
       email,
+      alias: asString(payload.preferred_username) ?? asString(payload.upn),
       displayName,
       emailVerified,
     };

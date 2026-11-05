@@ -20,6 +20,7 @@ export class ClaimsProfileEnricher implements ProfileEnricher {
   ): Promise<UserProfile> {
     return {
       email: identity.email,
+      ...(identity.alias !== undefined ? { alias: identity.alias } : {}),
       displayName: identity.displayName,
       emailVerified: identity.emailVerified,
     };
