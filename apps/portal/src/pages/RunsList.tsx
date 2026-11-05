@@ -50,6 +50,8 @@ import {
 import { useShiftModifier } from "@/hooks/useShiftModifier";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useStrictAgentCapabilities } from "@/hooks/useStrictAgentCapabilities";
+import { CliCommand } from "@/components/CliCommand";
+import { buildRunList, buildRunBulk } from "@/lib/cli/buildCommand";
 import { useModelCapabilities, ModelSelectItems } from "@/components/ReasoningEffortSelect";
 import { formatDate, formatId, formatDuration, truncate, cn } from "@/lib/utils";
 import { isAgentAvailable, isAgentVersionAvailable, STATUS_LIST, OUTCOME_LIST } from "@/types";
@@ -617,6 +619,72 @@ export function RunsList() {
   const sortBy =
     state.sort && SERVER_SORT_FIELDS.has(state.sort as RunSortField) ? (state.sort as RunSortField) : undefined;
   const sortDir = sortBy ? state.sortDir : undefined;
+
+  // Equivalent `scope run list` for the "Copy as CLI" affordance. Built from the
+  // same values the runs query sends, so the CLI returns the same result set.
+  const runListCli = useMemo(
+    () =>
+      buildRunList({
+        workers,
+        statuses,
+        outcomes,
+        models,
+        os: osList,
+        priorities,
+        agentVersions: versions,
+        profiles,
+        task: taskPromptId,
+        criteria,
+        search: searchValue,
+        createdAfter,
+        createdBefore,
+        submissionId,
+        turns: turnsValue !== undefined ? turnsRaw : undefined,
+        turnsOp,
+        maxIter: maxIterValue !== undefined ? maxIterRaw : undefined,
+        maxIterOp,
+        sortBy,
+        sortDir,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      workers.join(","),
+      statuses.join(","),
+      outcomes.join(","),
+      models.join(","),
+      osList.join(","),
+      priorities.join(","),
+      versions.join(","),
+      profiles.join(","),
+      taskPromptId,
+      criteria,
+      searchValue,
+      createdAfter,
+      createdBefore,
+      submissionId,
+      turnsValue,
+      turnsRaw,
+      turnsOp,
+      maxIterValue,
+      maxIterRaw,
+      maxIterOp,
+      sortBy,
+      sortDir,
+    ],
+  );
+  // Equivalent CLI for the current bulk selection. `delete` is the primary
+  // command; the other bulk actions the CLI supports are listed as notes.
+  const bulkCli = useMemo(() => {
+    const cmd = buildRunBulk("delete", [...selectedIds]);
+    return {
+      ...cmd,
+      notes: [
+        ...cmd.notes,
+        "Download the same runs as one archive with `scope run download-batch -i <ids…>`; `scope run retry -i <id>` (add `-f` to force) takes one id per call.",
+        "Pause, resume, priority and re-submit are Portal-only for now.",
+      ],
+    };
+  }, [selectedIds]);
 
   // Shared server-side filter arguments for the flat list, grouped list, and the
   // per-group member fetch. Categorical dimensions are full multi-value arrays.
@@ -1945,6 +2013,7 @@ export function RunsList() {
             value={groupBy}
             onChange={(next) => state.setFilter("groupBy", next === "none" ? null : next)}
           />
+          <CliCommand command={runListCli} />
         </div>
       }
       filterRail={
@@ -2192,6 +2261,7 @@ export function RunsList() {
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
+          <CliCommand command={bulkCli} title="Bulk action from the CLI" />
         </BulkActionBar>
 
         {groupBy === "none" ? (
