@@ -830,10 +830,41 @@ Base URL of the Scope API. The report-generator worker calls this to fetch run d
 Timeout for the Copilot SDK session used by the report-generator worker. If the LLM takes longer than this to generate a report, the session will be terminated and the report marked as failed.
 
 ### GIT_COMMIT
-**Default:** `development`
+**Default:** Portal Git lookup, then `development`; service-specific defaults may differ
 **Type:** string
 
-Git commit hash embedded in reporter metadata. Automatically set during CI/CD builds. Used to track which version of the report-generator produced a given report.
+Git commit hash embedded in build metadata. For Portal builds, a valid explicit
+value takes precedence over the one-time Git lookup. If neither produces a
+valid hash, the Portal embeds `development`. The report generator also uses
+this value to track which version produced a report.
+
+### GIT_BRANCH
+**Default:** Portal Git lookup, then an empty branch
+**Type:** string
+
+Git branch embedded in Portal build metadata. A valid explicit value takes
+precedence over the one-time Git lookup. Invalid, secret-like, or unavailable
+values fall through to Git and then an empty branch.
+
+### BUILD_TIME
+**Default:** current Portal build/start time when not supplied
+**Type:** ISO-8601 timestamp
+
+Build timestamp embedded in service metadata. Portal builds accept it
+explicitly when available; invalid values are replaced with the current Vite
+build/start timestamp.
+
+### PORTAL_GIT_INFO_ENABLED
+**Default:** enabled
+**Type:** boolean string
+
+Controls Portal Git metadata extraction. Only the exact value `false` disables
+Git lookup; unset or any other value preserves the default. The Docker Compose
+development overlay sets this to `false` because its minimal Portal container
+does not contain a Git repository. Disabled development uses
+`commit=development`, an empty branch, and the normal explicit/current
+`BUILD_TIME` behavior. Integration and production builds leave lookup enabled;
+valid `GIT_COMMIT` and `GIT_BRANCH` build inputs still take precedence.
 
 ## Scheduler Configuration
 

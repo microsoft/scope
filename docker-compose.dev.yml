@@ -116,9 +116,9 @@ services:
       target: dev
     environment:
       VITE_API_PROXY_TARGET: http://api:80
-      GIT_BRANCH: ${GIT_BRANCH:-}
-      GIT_COMMIT: ${GIT_COMMIT:-}
-      BUILD_TIME: ${BUILD_TIME:-}
+      # The minimal dev image has no Git repository. Skip extraction instead of
+      # emitting misleading startup output; immutable builds keep it enabled.
+      PORTAL_GIT_INFO_ENABLED: "false"
       # Dev auth: point MSAL at the entra-local emulator over HTTPS (mkcert-
       # trusted) using the per-worktree host port. redirectUri/postLogoutRedirectUri
       # default to window.location.origin, so they auto-match this worktree's
