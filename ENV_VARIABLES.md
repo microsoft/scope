@@ -1024,16 +1024,18 @@ token.
 > `sha256:70584ef110914d100409cb3d63a63548ccdde10ca780f9751755f1482dec5d7e`
 > was probed with verified TLS and publishes the configured external issuer on
 > every JWK. Earlier warnings about missing metadata do not establish that this
-> image is incompatible. The [devcontainer spike](docs/architecture/devcontainer.md)
-> records the limited evidence; browser PKCE and Portal/API login remain unverified.
+> image is incompatible. The [devcontainer](docs/architecture/devcontainer.md)
+> records the evidence, including a working browser sign-in through the Codespaces
+> forward in Kind mode.
 > Do not remove key-issuer checks to accommodate an incompatible emulator.
 
-> **Experimental dev-edge inputs.** Only `pnpm dev:spike` consumes `PUBLIC_ORIGIN`,
+> **Experimental dev-edge inputs.** Only the devcontainer commands (`pnpm dev:up`,
+> `pnpm dev:spike`) consume `PUBLIC_ORIGIN`,
 > `EDGE_PORT` (Codespaces HTTP, 8080), `EDGE_TLS_PORT` (local HTTPS, 8443), and
 > `SPIKE_ENTRA_PORT` (private loopback TLS, 18443). Codespaces origins are resolved
 > from `CODESPACE_NAME` and `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN` at runtime.
-> Process environment overrides defaults; the spike does not read `.env.local`
-> or generated `.env`. This is not yet a shared full-stack precedence contract.
+> `pnpm dev:up` resolves process environment > `.env.local` > generated `.env` >
+> defaults; `pnpm dev:spike` reads only the process environment.
 
 > **Local dev TLS.** Compose trusts the emulator's mkcert CA through a read-only
 > public-CA mount and `NODE_EXTRA_CA_CERTS`; the certificate covers the internal
