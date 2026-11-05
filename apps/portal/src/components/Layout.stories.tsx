@@ -41,6 +41,12 @@ export const Collapsed: Story = {
     await expect(
       canvas.getByText(/This is an AI evaluation platform\./),
     ).toBeVisible();
+    await expect(
+      canvas.getByRole("link", { name: "Runs" }).querySelector(".lucide-list"),
+    ).toBeTruthy();
+    await expect(
+      canvas.getByRole("link", { name: "Reports" }).querySelector(".lucide-file-text"),
+    ).toBeTruthy();
   },
 };
 
@@ -51,6 +57,9 @@ export const Expanded: Story = {
     await expect(canvas.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
     // With a project selected, scoped nav is present.
     await expect(canvas.getByRole("link", { name: "Runs" })).toBeVisible();
+    await expect(
+      canvas.getByRole("link", { name: "Runs" }).querySelector(".lucide-list"),
+    ).toBeTruthy();
   },
 };
 
