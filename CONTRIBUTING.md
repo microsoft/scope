@@ -87,6 +87,14 @@ pnpm dev:coder-acp-copilot        # A single worker natively (pnpm dev:<service-
 pnpm open:portal                  # Open the portal in your browser
 ```
 
+The first Docker start compiles the Rust AI gateway inside its development
+container and can take several minutes. During development, the gateway may use
+all CPUs assigned to Docker or the Podman VM, while its memory remains limited
+to 2 GiB. Keep the Compose command running until the `coder-acp-copilot` logs
+show that it connected to MongoDB and ensured `queue-coder-acp-copilot`; runs
+submitted before that worker is ready remain pending. Later starts reuse the
+gateway's named Cargo target volume and are faster.
+
 ### Debug the Docker development API
 
 `pnpm docker:dev:portal` starts the API with the Node inspector enabled. To

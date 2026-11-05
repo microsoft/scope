@@ -245,10 +245,11 @@ services:
     build:
       target: dev
     # The dev stage compiles the Rust gateway in-container via `cargo watch`.
-    # A cold `cargo build` peaks well above the prod 512m runtime cap and would
-    # thrash/OOM at that limit (rustc stalls near the cap at ~2% CPU), so give it
-    # headroom — mirrors the 1g dev bump the other in-container-compiled services
-    # (api, judge, portal, ...) already get.
+    # Do not inherit the production 0.5 CPU / 512m runtime caps: a cold build can
+    # otherwise outlive the health window and prevent dependent workers from
+    # starting. Let rustc use all CPUs assigned to the container runtime or
+    # Podman VM while keeping memory bounded.
+    cpus: !reset null
     mem_limit: 2g
     # Persist the cargo `target/` cache in a named volume so the cold build only
     # happens once and survives container recreation. Re-declare the base
@@ -256,12 +257,11 @@ services:
     volumes:
       - gateway_cert:/certs
       - gateway_target:/build/target
-    # A cold cargo build takes several minutes on the very first run (empty cache,
-    # throttled to the base `cpus: 0.5`); the base `start_period: 120s` is enough
-    # once the target/ cache volume is populated but not on a fresh volume. Bump
-    # it for the dev profile only.
+    # A cold cargo build takes several minutes on the first run with an empty
+    # target cache. Keep a generous dev-only grace period for slower machines;
+    # subsequent starts reuse the named target volume and become healthy sooner.
     healthcheck:
-      start_period: 360s
+      start_period: 600s
     develop:
       watch:
         - action: sync
