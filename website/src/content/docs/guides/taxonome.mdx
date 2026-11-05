@@ -1,0 +1,525 @@
+---
+title: Analyze trajectories with Taxonome
+description: Run a taxonomy against ATIF trajectories, inspect evidence, evaluate prompt elements, and author a custom taxonomy and code handler.
+---
+
+import KeyboardScroll from '../../../components/taxonome/KeyboardScroll.astro';
+
+<KeyboardScroll />
+
+Taxonome evaluates recorded agent trajectories against an explicit taxonomy. Start with code elements to inspect recorded evidence without credentials. Use prompt elements for judgments that need a model, then evaluate those judgments against reviewed expectations before relying on them.
+
+Taxonome is experimental. A finding describes the supplied trajectory and taxonomy; it does not establish task success or detector accuracy. This guide covers the standalone CLI, not a production Scope integration.
+
+## Set up the repository CLI
+
+Use a Scope checkout with its workspace dependencies installed. Follow the repository's contributor setup for Node.js and pnpm. Run the examples below from the repository root unless a section changes directory.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm --silent taxonome --help
+pnpm --silent taxonome run --help
+```
+
+The repository script runs the current TypeScript CLI. These instructions do not require a published global npm package. The commands are `run`, `eval`, `optimize`, and `readout`; pass `--taxonomy` to choose the manifest.
+
+Keep both stdout and stderr attached to your terminal. Taxonome sends progress to stderr and results to stdout. Run the commands directly, without pipes, redirects, `tee`, capture wrappers, or forced-color settings, so you retain native progress and color. Use native `--output-dir` and `--markdown` options to save supported outputs.
+
+The [CLI reference](/reference/taxonome-cli/) lists options and defaults. The [elements reference](/reference/taxonome-elements/) displays the shipped definitions and source.
+
+## Run code elements without a model
+
+The shipped Discovered, Malformed Invocation, and Timeout elements use deterministic handlers. Select them to run without model credentials:
+
+```bash
+export TAXONOMY="packages/ax-taxonomy/taxonomy/taxonomy.yaml"
+export ATIF="packages/ax-taxonomy/fixtures/deterministic-elements.atif.json"
+
+pnpm --silent taxonome run "$ATIF" \
+  --taxonomy "$TAXONOMY" \
+  --elements beh-discovered,beh-malformed-invocation,beh-timeout
+```
+
+Read each assessment alongside its evidence. `completed` with `observed: false` means the detector returned a negative. `indeterminate` means the available evidence cannot support a decision. A failed evaluation means execution or validation failed; do not count it as a negative.
+
+Plain inputs must declare a supported ATIF version and satisfy that version's schema. Taxonome validates ATIF v1.6, v1.7, or v1.8 before converting to normalized v1.8. Evidence paths refer to this normalized document. See [taxonomy and evidence contracts](/reference/taxonome-taxonomy/).
+
+## Process a Scope archive
+
+Place a downloaded Scope archive at `submission.tar.gz` in the repository root. For a multi-run archive, supply an output directory:
+
+```bash
+export TAXONOMY="packages/ax-taxonomy/taxonomy/taxonomy.yaml"
+export ARCHIVE="./submission.tar.gz"
+export RESULTS="./taxonome-results"
+
+pnpm --silent taxonome run "$ARCHIVE" \
+  --taxonomy "$TAXONOMY" \
+  --elements beh-discovered,beh-malformed-invocation,beh-timeout \
+  --output-dir "$RESULTS" \
+  --concurrency 4
+```
+
+Taxonome first shows archive scan progress, then a row for each run. Each worker evaluates that run's selected elements in taxonomy order. `DONE`, `RUN`, and `WAIT` count selected elements; `ACTIVE` identifies the current prompt or code element.
+
+Run the same command again to resume compatible successes. Taxonome marks those runs `RESUMED` and preserves their result files. Compatibility includes run identity, retained-evidence hash, taxonomy digest, element selection, model, and artifact contracts. Use `--force` only when you intend to recompute the roots.
+
+### Select several files
+
+Create `inputs.txt` in your editor, with one literal local path per line:
+
+```text
+packages/ax-taxonomy/fixtures/deterministic-elements.atif.json
+submission.tar.gz
+```
+
+Paths resolve from your command's working directory, not the list file's directory. Taxonome does not expand globs inside the list. Supply exactly one positional input or one `--files-from` option:
+
+```bash
+export TAXONOMY="packages/ax-taxonomy/taxonomy/taxonomy.yaml"
+export INPUT_LIST="./inputs.txt"
+export RESULTS="./taxonome-file-results"
+
+pnpm --silent taxonome run --files-from "$INPUT_LIST" \
+  --taxonomy "$TAXONOMY" \
+  --elements beh-discovered,beh-malformed-invocation,beh-timeout \
+  --output-dir "$RESULTS" \
+  --concurrency 4
+```
+
+Use `--null` only for a list you saved with NUL-delimited records. Empty interior records and invalid UTF-8 fail parsing. Taxonome deduplicates canonical file paths; unavailable listed inputs produce selection failures rather than invented results.
+
+## Build a readout from saved results
+
+Supply the exact source archive or ATIF files as evidence. Readout revalidates taxonomy identity, input binding, typed paths, and role constraints before counting findings:
+
+```bash
+export TAXONOMY="packages/ax-taxonomy/taxonomy/taxonomy.yaml"
+export ARCHIVE="./submission.tar.gz"
+export RESULTS="./taxonome-results"
+
+pnpm --silent taxonome readout "$RESULTS/*.json" \
+  --taxonomy "$TAXONOMY" \
+  --inputs "$ARCHIVE" \
+  --markdown "$RESULTS/readout.md"
+```
+
+Keep the glob quoted so Taxonome resolves it. Readout prints JSON to stdout and writes the Markdown preview through `--markdown`. Count occurrences as findings: several evidence references inside one occurrence still describe one finding. Inspect coverage, indeterminate assessments, and failed runs alongside positive counts.
+
+## Run prompt elements
+
+Authenticate GitHub CLI using an account entitled to the chosen Copilot model:
+
+```bash
+gh auth login
+```
+
+Taxonome first uses a nonempty `COPILOT_GITHUB_TOKEN`, then `GH_TOKEN`, then `GITHUB_TOKEN`. If none exists, it reads the active account through `gh auth token`. Clear stale overrides in your shell if they select the wrong account. Do not put credentials in taxonomy YAML or fixture files.
+
+This example evaluates Wrong Discovery on one shipped reviewed input corpus:
+
+```bash
+export TAXONOMY="packages/ax-taxonomy/taxonomy/taxonomy.yaml"
+export MODEL="gpt-5.6-sol-fast"
+export INPUTS="packages/ax-taxonomy/fixtures/wrong-discovery-inputs.jsonl"
+export GROUND_TRUTH="packages/ax-taxonomy/fixtures/wrong-discovery-ground-truth.json"
+
+pnpm --silent taxonome eval \
+  --taxonomy "$TAXONOMY" \
+  --model "$MODEL" \
+  --inputs "$INPUTS" \
+  --ground-truth "$GROUND_TRUTH" \
+  --element beh-wrong-discovery \
+  --split test \
+  --concurrency 4
+```
+
+Eligible prompt evaluations can make model calls. Preconditions can resolve an input before model execution, so selecting a prompt does not guarantee a call. Evaluation compares detector assessments with reviewed expectations. A negative or indeterminate assessment can pass when the expectation calls for it. `passed` and `total` count input executions, including `--samples` repetitions; they do not count successful coding tasks or model calls.
+
+The interactive dashboard distinguishes prompt and code elements and tracks completed, passing, failing, running, and waiting work. Ctrl-C stops scheduling, aborts active prompt requests, and closes runtimes. Inspect failure details after the dashboard finalizes.
+
+## Optimize and replay a prompt
+
+Keep reviewed input identities and ground truth separate. Each JSONL row declares `id`, `family`, `originating_run`, `split`, `provenance`, `elements`, and `atif`. Use disjoint `train`, `validation`, and `test` splits, without family or originating-run leakage. Reserve `test` for final evaluation.
+
+Create the destination directory before optimizing. Choose a new artifact filename; Taxonome will not overwrite an existing artifact.
+
+```bash
+mkdir -p artifacts/taxonome
+
+export TAXONOMY="packages/ax-taxonomy/taxonomy/taxonomy.yaml"
+export MODEL="gpt-5.6-sol-fast"
+export INPUTS="packages/ax-taxonomy/fixtures/wrong-discovery-inputs.jsonl"
+export GROUND_TRUTH="packages/ax-taxonomy/fixtures/wrong-discovery-ground-truth.json"
+export ARTIFACT="./artifacts/taxonome/wrong-discovery.ax.json"
+
+pnpm --silent taxonome optimize \
+  --taxonomy "$TAXONOMY" \
+  --model "$MODEL" \
+  --inputs "$INPUTS" \
+  --ground-truth "$GROUND_TRUTH" \
+  --element beh-wrong-discovery \
+  --output "$ARTIFACT" \
+  --max-metric-calls 12
+```
+
+The implementation runs bounded Ax bootstrap plus GEPA optimization with student and teacher transports. It scores candidate outputs against reviewed expectations and evidence contracts. `--max-metric-calls` bounds Ax's search; it is not a cumulative SDK-call or spending limit. Taxonome has no cumulative budget or ledger option.
+
+Replay the saved program on the held-out split:
+
+```bash
+export TAXONOMY="packages/ax-taxonomy/taxonomy/taxonomy.yaml"
+export MODEL="gpt-5.6-sol-fast"
+export INPUTS="packages/ax-taxonomy/fixtures/wrong-discovery-inputs.jsonl"
+export GROUND_TRUTH="packages/ax-taxonomy/fixtures/wrong-discovery-ground-truth.json"
+export ARTIFACT="./artifacts/taxonome/wrong-discovery.ax.json"
+
+pnpm --silent taxonome eval \
+  --taxonomy "$TAXONOMY" \
+  --model "$MODEL" \
+  --inputs "$INPUTS" \
+  --ground-truth "$GROUND_TRUTH" \
+  --element beh-wrong-discovery \
+  --split test \
+  --artifact "$ARTIFACT"
+```
+
+An artifact restores optimized instructions and demonstrations, not cached answers. Compatibility checks include the taxonomy digest, element, model, and prompt contract. Old or mismatched artifacts fail rather than falling back to the authored prompt. Reoptimize after an incompatible contract change. A score on a small fixture corpus does not establish accuracy on your own trajectories.
+
+## Create your own taxonomy and elements
+
+This lesson authors new files under `examples/tutorial-questions/`. It does not modify the shipped catalog. You will create a prompt that assesses repeated clarification and a code element that detects question steps. The code detector does not establish that a question repeats or is unnecessary.
+
+### Define the manifest and elements
+
+Create `examples/tutorial-questions/taxonomy.yaml`:
+
+```yaml
+schema_version: scope/taxonomy/v1
+id: tutorial-questions
+version: 1.0.0
+surfaces:
+  - id: surface-base-model
+    label: Base model
+elements:
+  - path: elements/repeated-question.yaml
+  - path: elements/question-step.yaml
+```
+
+Create `elements/repeated-question.yaml` under that directory:
+
+```yaml
+schema_version: scope/taxonomy/v1
+id: demo-repeated-question
+label: Repeated Question
+description: The agent asks the same clarification after the user already answered it.
+implementation:
+  type: prompt
+  prompt: >-
+    Assess whether the agent repeats the same clarification question after the
+    user has already supplied the answer, without a new task-relevant reason.
+    For each finding cite exactly the two agent-question steps in one occurrence
+    using role question and their absolute normalized-ATIF JSONPaths.
+preconditions:
+  requires_complete_trajectory: true
+  requires_task: true
+  requires_recorded_discovery: false
+output:
+  evidence_roles:
+    question:
+      type: atif.step
+      min: 2
+      max: 2
+      description: The two agent steps asking the repeated clarification.
+```
+
+The prompt requires a complete trajectory and task context. It does not require recorded discovery events. Each positive occurrence must cite exactly two typed step references.
+
+Create `elements/question-step.yaml`:
+
+```yaml
+schema_version: scope/taxonomy/v1
+id: demo-question-step
+label: Question Step
+description: The agent emits a question meeting the authored minimum length.
+implementation:
+  type: deterministic
+  handler: demo/question-step-v1
+  config:
+    min_chars: 8
+preconditions:
+  requires_complete_trajectory: false
+  requires_task: false
+  requires_recorded_discovery: false
+output:
+  evidence_roles:
+    question:
+      type: atif.step
+      max: 1
+      description: One agent question step.
+```
+
+### Implement the code handler
+
+Create `src/handlers/index.ts`:
+
+```ts
+import { z } from "zod";
+import { atifContentText, type Assessment } from "taxonomy-engine";
+import {
+  defineTaxonomePlugin,
+  type DeterministicHandler,
+} from "taxonomy-engine/plugins";
+
+export const configSchema = z.object({
+  min_chars: z.number().int().positive().default(1),
+}).strict();
+
+export const questionStepHandler: DeterministicHandler<
+  z.infer<typeof configSchema>,
+  Assessment
+> = {
+  configSchema,
+  evaluate(input, config) {
+    const occurrences = input.atif.steps.flatMap((step, index) => {
+      const text = atifContentText(step.message).trim();
+      return step.source === "agent" &&
+        text.length >= config.min_chars && text.endsWith("?")
+        ? [{ evidence: [{ role: "question", path: `$.steps[${index}]` }] }]
+        : [];
+    });
+    return occurrences.length
+      ? { state: "completed", observed: true, occurrences }
+      : { state: "completed", observed: false };
+  },
+};
+
+export const taxonomePlugin = defineTaxonomePlugin({
+  api_version: "scope/taxonome-plugin/v1",
+  provider: { name: "tutorial-questions", version: "1.0.0" },
+  handlers: { "demo/question-step-v1": questionStepHandler },
+});
+```
+
+Use the public `atifContentText` helper to read string or text-part content. Return paths into the supplied ATIF, not copied messages. The engine validates the assessment and typed role contract after your handler returns.
+
+### Add a fictional trajectory
+
+Create `fixtures/repeated-question.atif.json`:
+
+```json
+{
+  "schema_version": "ATIF-v1.8",
+  "session_id": "tutorial-questions",
+  "agent": { "name": "Tutorial agent", "version": "1.0.0" },
+  "steps": [
+    { "step_id": 1, "source": "user", "message": "Build an in-memory notes API on port 3000." },
+    { "step_id": 2, "source": "agent", "message": "Which port should the API use?" },
+    { "step_id": 3, "source": "user", "message": "Use port 3000, as requested." },
+    { "step_id": 4, "source": "agent", "message": "Which port should the API use?" },
+    { "step_id": 5, "source": "agent", "message": "I will proceed on port 3000." }
+  ],
+  "extra": {
+    "scope": {
+      "schema_version": "scope.atif-extension.v1",
+      "trajectory_state": "complete",
+      "task": "Build an in-memory notes API on port 3000.",
+      "available_sources": []
+    }
+  }
+}
+```
+
+### Configure the lesson package
+
+Create `package.json`:
+
+```json
+{
+  "name": "tutorial-questions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --config vitest.config.mjs --reporter=default"
+  },
+  "dependencies": {
+    "taxonomy-engine": "workspace:*",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "typescript": "^5.6.2",
+    "vitest": "^4.1.0"
+  }
+}
+```
+
+The repository includes `examples/*` in its pnpm workspace. Create `tsconfig.json` so the compiled plugin lands at `dist/handlers/index.js`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"]
+}
+```
+
+Create `vitest.config.mjs`:
+
+```js
+export default {
+  cacheDir: "./validation/vite-cache",
+  test: { include: ["tests/**/*.test.ts"], environment: "node" },
+};
+```
+
+### Test without a model
+
+Create `tests/question-step.test.ts`:
+
+```ts
+import { readFile } from "node:fs/promises";
+import { describe, expect, it } from "vitest";
+import {
+  createHandlerRegistry,
+  evaluate,
+  evaluatePreconditions,
+  ingestAtif,
+  loadTaxonomy,
+} from "taxonomy-engine";
+import { configSchema, taxonomePlugin } from "../src/handlers/index.js";
+
+async function setup() {
+  const registry = createHandlerRegistry();
+  registry.register(taxonomePlugin.handlers, {
+    name: "tutorial-questions",
+    origin: "local",
+  });
+  const taxonomy = await loadTaxonomy(
+    new URL("../taxonomy.yaml", import.meta.url).pathname,
+    { handlers: registry },
+  );
+  const raw: unknown = JSON.parse(await readFile(
+    new URL("../fixtures/repeated-question.atif.json", import.meta.url), "utf8",
+  ));
+  return { taxonomy, atif: ingestAtif(raw).atif };
+}
+
+describe("new question-step taxonomy", () => {
+  it("validates config and preserves the handler default", () => {
+    expect(configSchema.parse({})).toEqual({ min_chars: 1 });
+    expect(() => configSchema.parse({ min_chars: 0 })).toThrow();
+    expect(() => configSchema.parse({ min_chars: 8, extra: true })).toThrow();
+  });
+
+  it("grounds both questions without mutating input", async () => {
+    const input = await setup();
+    const before = JSON.stringify(input.atif);
+    const [result] = await evaluate(input, ["demo-question-step"]);
+    expect(result.status).toBe("succeeded");
+    if (result.status !== "succeeded") throw new Error(result.error.message);
+    expect(result.result).toEqual({
+      state: "completed", observed: true,
+      occurrences: [1, 3].map(index => ({
+        evidence: [{ role: "question", path: `$.steps[${index}]` }],
+      })),
+    });
+    expect(JSON.stringify(input.atif)).toBe(before);
+  });
+
+  it("returns a negative for statements", async () => {
+    const input = await setup();
+    for (const step of input.atif.steps) step.message = "A statement.";
+    const [result] = await evaluate(input, ["demo-question-step"]);
+    expect(result).toMatchObject({
+      status: "succeeded", result: { state: "completed", observed: false },
+    });
+  });
+
+  it("supports mixed text content", async () => {
+    const input = await setup();
+    input.atif.steps[1].message = [
+      { type: "text", text: "Which port should the API use?" },
+    ];
+    const [result] = await evaluate(input, ["demo-question-step"]);
+    expect(result).toMatchObject({
+      status: "succeeded", result: { state: "completed", observed: true },
+    });
+  });
+
+  it("makes the prompt eligible without invoking a producer", async () => {
+    const input = await setup();
+    const element = input.taxonomy.elementById.get("demo-repeated-question");
+    if (!element) throw new Error("Missing authored prompt element");
+    expect(evaluatePreconditions(input.atif, element)).toBeUndefined();
+  });
+});
+```
+
+Install the new workspace package's dependencies from the repository root, then compile and test it:
+
+```bash
+pnpm install
+pnpm --filter taxonomy-engine... build
+pnpm --filter tutorial-questions build
+pnpm --filter tutorial-questions test
+```
+
+The dependency build supplies the engine's declared `dist` type exports for the lesson's TypeScript compiler. Use your installed package tools; do not copy pnpm `.bin` wrapper scripts into a different directory.
+
+The eligibility test checks the prompt's preconditions without calling a model. It does not test the prompt's semantic judgment. The positive code test expects question steps at zero-based indices 1 and 3.
+
+### Run the new code element
+
+From the repository root:
+
+```bash
+export TUTORIAL="./examples/tutorial-questions"
+
+pnpm --silent taxonome run "$TUTORIAL/fixtures/repeated-question.atif.json" \
+  --taxonomy "$TUTORIAL/taxonomy.yaml" \
+  --plugin "$TUTORIAL/dist/handlers/index.js" \
+  --elements demo-question-step
+```
+
+The YAML handler ID stays `demo/question-step-v1`; `--plugin` selects the trusted compiled implementation. Omitting the plugin leaves that ID unresolved.
+
+After authenticating, run the prompt element as a separate model-backed experiment:
+
+```bash
+export TUTORIAL="./examples/tutorial-questions"
+export MODEL="gpt-5.6-sol-fast"
+
+pnpm --silent taxonome run "$TUTORIAL/fixtures/repeated-question.atif.json" \
+  --taxonomy "$TUTORIAL/taxonomy.yaml" \
+  --plugin "$TUTORIAL/dist/handlers/index.js" \
+  --elements demo-repeated-question \
+  --model "$MODEL"
+```
+
+Pass the plugin even for this prompt-only selection because Taxonome resolves the manifest's code handlers during loading. For your own evaluation corpus, author reviewed JSONL inputs and separate ground truth; do not reuse this one fixture as train, validation, and test.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| Unknown command | Use the current four-command CLI and inspect `--help`; there are no `list` or `validate` commands. |
+| Unknown deterministic handler | Compile the plugin and pass its actual `dist/handlers/index.js` entry. Check the stable ID against YAML. Taxonome does not scan for plugins. |
+| Model authentication fails | Check token override precedence and the active GitHub CLI account. Code-only runs do not need credentials. |
+| Prompt returns a negative without a call | Inspect preconditions. Recorded-discovery gating can resolve an otherwise eligible complete prompt input with no discoveries as negative. |
+| Prompt is indeterminate | Check trajectory completeness and task context before changing the prompt. |
+| Evidence validation fails | Check absolute normalized paths, declared role types/cardinality, and relationship constraints. Array positions differ from ATIF `step_id` values. |
+| Readout rejects results | Use the matching manifest and exact original inputs. Do not edit saved results to bypass identity or evidence checks. |
+| Optimization rejects an artifact or output path | Match taxonomy, element, model, and contract; choose a fresh output filename. |
+| Progress loses color or in-place updates | Run directly in a real terminal with stdout and stderr attached; check `NO_COLOR`. |
+
+Use the [taxonomy reference](/reference/taxonome-taxonomy/) for schema details and the [handler reference](/reference/taxonome-handlers/) for built-in behavior and plugin trust boundaries.

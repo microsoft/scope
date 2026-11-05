@@ -1,0 +1,127 @@
+---
+title: Taxonome CLI
+description: Commands, options, input selection, output behavior, and compatibility checks for the standalone Taxonome CLI.
+---
+
+import CanonicalSource from '../../../components/taxonome/CanonicalSource.astro';
+
+Use [Analyze trajectories with Taxonome](/guides/taxonome/) for a workflow. This reference describes the repository CLI implemented in `apps/taxonome/src/cli.ts`. Run it from the Scope repository root:
+
+```bash
+pnpm --silent taxonome --help
+pnpm --silent taxonome run --help
+pnpm --silent taxonome eval --help
+pnpm --silent taxonome optimize --help
+pnpm --silent taxonome readout --help
+```
+
+Run commands with stdout and stderr attached to a real terminal. The examples retain native progress and color; do not pipe, redirect, capture, or wrap Taxonome output. Native output-file options save supported artifacts without replacing terminal streams.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `run [input]` | Evaluate selected elements against plain ATIF JSON, a Scope `.tar.gz` archive, or a file list. |
+| `eval` | Compare assessments with reviewed ground truth over declared evaluation inputs. |
+| `optimize` | Optimize one prompt element with Ax bootstrap and GEPA; write a compatible program artifact. |
+| `readout <results...>` | Revalidate saved results and exact input evidence, then compute deterministic counts. |
+
+Choose a taxonomy with `--taxonomy`; the CLI does not infer a default manifest. There are no `list` or `validate` commands.
+
+## Shared execution options
+
+These options apply to `run`, `eval`, and `optimize`:
+
+| Option | Contract |
+| --- | --- |
+| `--taxonomy <path>` | Required YAML manifest. |
+| `--plugin <specifier>` | Repeatable trusted compiled JavaScript path or installed package export. Resolve from the invocation working directory. |
+| `--model <id>` | Copilot model ID; current default `gpt-5.6-sol-fast`. Pin the same ID for comparisons and artifact replay. |
+| `--json` | Emit the full machine-readable shape on stdout. Progress and diagnostics remain on stderr. |
+| `--artifact <path>` | Repeatable compatible prompt artifact for `run` and `eval`. `optimize` rejects this replay option. |
+
+Each artifact's embedded `element_id` scopes replay. Duplicate artifacts, artifacts for unselected/code elements, historical formats, and taxonomy/model/contract mismatches fail before model submission.
+
+## `run`
+
+Supply exactly one positional input or one `--files-from` option.
+
+| Option | Contract |
+| --- | --- |
+| `[input]` | Plain supported ATIF JSON or a Scope `.tar.gz` archive. |
+| `--files-from <path>` | One UTF-8 literal-path list; `-` denotes stdin. Requires `--output-dir`. |
+| `--null` | Use NUL-delimited list records instead of LF/CRLF. Requires `--files-from`. |
+| `--elements <ids>` | Comma-separated element IDs; defaults to all elements in the loaded taxonomy. |
+| `--output-dir <path>` | Required for multi-run archives and file-list mode; destination for per-root results/errors. |
+| `--concurrency <n>` | Concurrent archive runs, integer 1 through 16; default 4. Each run evaluates elements in taxonomy order. |
+| `--force` | Recompute roots instead of resuming compatible successful outputs. |
+
+File-list records are literal paths, not patterns. Relative records resolve from the invocation working directory. Taxonome deduplicates canonical paths, rejects empty interior records and invalid UTF-8, and reports unavailable/non-file selections. Use an on-disk list for the terminal workflow rather than a pipeline.
+
+Compatible successful batch outputs resume without rewriting their result files. The compatibility key includes request/run identity, retained evidence, taxonomy digest, selected IDs, model, and artifact contracts. Error records do not establish a successful negative assessment.
+
+## `eval`
+
+| Option | Contract |
+| --- | --- |
+| `--inputs <pattern>` | Repeatable JSONL input path or quoted glob. |
+| `--ground-truth <pattern>` | Repeatable reviewed ground-truth JSON path or quoted glob. |
+| `--element <id>` | One stable element selector; filters inputs to those declaring that element. Repeated selectors fail before input resolution. |
+| `--split <split>` | `train`, `validation`, `test`, or `all`; default `all`. |
+| `--samples <n>` | Independent repetitions, integer 1 through 10; default 1. |
+| `--concurrency <n>` | Global evaluation worker count, integer 1 through 16; default 4. |
+
+Taxonome resolves, sorts, and deduplicates matching files. Inputs and reviewed expectations join by input ID and element ID. Without a selector, it evaluates each input's declared elements.
+
+Each JSONL input carries `id`, `family`, `originating_run`, `split`, `provenance`, `elements`, and `atif`. Ground truth maps input IDs to element IDs and expected shared assessments. Keep labels separate from model-visible evidence. Deterministic unit tests are not a dataset split.
+
+A passing evaluation means agreement with the reviewed expectation under the evaluator's checks. It does not mean `observed: true`, task success, or one SDK call. Authoritative preconditions can resolve evaluations without a model call; prompt replay restores a program, not cached answers.
+
+## `optimize`
+
+| Option | Contract |
+| --- | --- |
+| `--inputs <pattern>` | Repeatable input paths or quoted globs with disjoint splits. |
+| `--ground-truth <pattern>` | Repeatable reviewed ground-truth paths or quoted globs. |
+| `--element <id>` | Required prompt element ID. Code elements cannot be optimized. |
+| `--output <path>` | Required new artifact file. Parent directory must exist; existing files are not overwritten. |
+| `--max-metric-calls <n>` | Ax search cap, integer 1 through 100; default 48. |
+
+Optimization requires eligible complete train and validation inputs. It rejects family or originating-run overlap between those splits. The implementation uses bounded bootstrap plus GEPA, seed 42, and separate student and teacher transports with the selected model. Test inputs do not supply the train/validation optimization examples.
+
+The artifact format is `scope/taxonome-ax/v2`. Replay checks the taxonomy digest, selected element, model, and prompt contract, including assessment/evidence and ingestion policies. Historical `taxonome.ax.v1` artifacts are incompatible. Reoptimize rather than editing identity fields to bypass checks.
+
+`--max-metric-calls` is not a cumulative model-call or spending limit. Taxonome has no cumulative budget or ledger option. An optimization score does not establish performance beyond the reviewed corpus.
+
+### Prompt execution and optimization source
+
+<CanonicalSource id="source-prompt-contract" file="packages/taxonomy-engine/src/prompt.ts" start={23} end={50} />
+<CanonicalSource id="source-runtime-correction" file="packages/taxonomy-engine/src/copilot.ts" start={493} end={566} />
+<CanonicalSource id="source-raw-metric" file="packages/taxonomy-engine/src/optimization-v2.ts" start={103} end={164} />
+<CanonicalSource id="source-ax-optimization" file="packages/taxonomy-engine/src/optimization-v2.ts" start={239} end={380} />
+
+The Ax prompt program and the executor's scoped assertion validate parsed
+assessments with at most one correction retry. Invalid output requires a
+complete replacement assessment; there is no outer engine repair loop.
+
+The optimizer in `packages/taxonomy-engine/src/optimization-v2.ts` disables those correction retries while scoring raw candidates. Its scoring checks the shared assessment and typed evidence contracts before comparing reviewed expectations. Invalid candidate output receives zero fitness rather than a repaired score. Inspect `scoreOptimizationCandidate` and `optimizePromptElementV2` in the canonical source panels for the current scoring dimensions and bootstrap/GEPA configuration.
+
+## `readout`
+
+| Argument or option | Contract |
+| --- | --- |
+| `<results...>` | Result files, directories, or quoted globs. |
+| `--taxonomy <path>` | Required manifest for digest and role-contract verification. |
+| `--inputs <pattern>` | Repeatable exact ATIF files, local Scope archives, or quoted globs for evidence verification. |
+| `--plugin <specifier>` | Repeatable plugin needed to resolve a custom deterministic taxonomy. |
+| `--markdown <path>` | Write a Markdown preview; stdout still contains JSON. |
+
+Readout has no `--json` switch because it emits JSON by default. It rechecks exact-input binding, assessments, typed references, and constraints rather than trusting result payloads. Failed runs produce a nonzero exit status. Inspect failures and coverage as well as occurrence totals.
+
+## Credentials and terminal behavior
+
+Code-only evaluation needs no credentials. Prompt execution uses the first nonempty `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`, otherwise the active `gh auth token`. Authenticate through `gh auth login` when using that fallback. Model initialization is lazy for `run`/`eval`; preconditions may avoid a model call.
+
+Human-readable output is the default for `run`, `eval`, and `optimize`. Interactive evaluation displays a fixed dashboard; prompt/code rows and execution states have distinct native colors. `NO_COLOR` disables color. Non-TTY stderr uses append-only lifecycle events. `--json` keeps stdout ANSI-free while progress remains on stderr. Keep both streams attached in interactive examples.
+
+Ctrl-C stops new scheduling, aborts active prompt requests, closes runtimes, restores terminal state, and returns a nonzero status. Evaluation mismatches and execution/cleanup failures also yield nonzero status. Check diagnostics instead of interpreting any nonzero exit as a detector finding.
