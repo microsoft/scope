@@ -67,6 +67,13 @@ const agent: CodingAgent = {
   createdAt,
 };
 
+/**
+ * Builds a profile fixture with one profile-managed repository binding.
+ *
+ * @param id Stable profile identifier used in submitted references.
+ * @param name Display name selected through the profile picker.
+ * @param repo Repository parameter value owned by this profile.
+ */
 function profile(id: string, name: string, repo: string): ProfileWithVersion {
   return {
     _id: id,
@@ -119,6 +126,8 @@ const resourceRevision: ResourceRevisionDocument = {
 let queryClient: QueryClient;
 
 beforeEach(() => {
+  // Recreate the API fixtures and query cache for each rendered wizard so
+  // profile selection state cannot leak between tests.
   vi.mocked(api.listAgents).mockResolvedValue([agent]);
   vi.mocked(api.listProfiles).mockResolvedValue(profiles);
   vi.mocked(api.listProfileVersions).mockImplementation(async (profileId) => [
@@ -148,11 +157,14 @@ describe("SubmitRun profile variation payload", () => {
       </QueryClientProvider>,
     );
 
+    // Select the baseline and comparison profiles through the same controls a
+    // user exercises in the submission wizard.
     const baseProfileInput = await screen.findByPlaceholderText("Search existing profiles…");
     fireEvent.change(baseProfileInput, { target: { value: "Baseline profile" } });
     await user.click(screen.getByRole("listitem"));
     await user.click(screen.getByRole("button", { name: "Add" }));
 
+    // Supply only run-wide inputs, then submit the comparative request.
     fireEvent.change(screen.getByLabelText("Task *"), { target: { value: "Build a demo" } });
     fireEvent.change(screen.getByLabelText("Max iterations"), { target: { value: "1" } });
     await user.click(screen.getByRole("button", { name: /Submit 10 Runs/ }));
@@ -160,6 +172,8 @@ describe("SubmitRun profile variation payload", () => {
     await waitFor(() => expect(api.submitRun).toHaveBeenCalledOnce());
     const payload = vi.mocked(api.submitRun).mock.calls[0][0];
 
+    // The Portal sends profile references but leaves every profile-managed
+    // field for independent API resolution.
     expect(payload).toEqual(expect.objectContaining({
       profileId: "baseline@1",
       profileVariations: ["comparison@1"],

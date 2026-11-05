@@ -2233,6 +2233,8 @@ describe("API Endpoints", () => {
     });
 
     it("rejects shared resources in variation mode before resolving profiles", async () => {
+      // Model a required profile-owned binding so a request-level copy is
+      // unambiguously invalid during comparative fan-out.
       const resourceRevision = {
         _id: "resource-revision-1",
         resourceId: "resource-1",
@@ -2270,6 +2272,8 @@ describe("API Endpoints", () => {
         }),
       );
 
+      // Validation must reject the ambiguous shared override before any
+      // profile-specific request is materialized.
       const res = await request(testServer())
         .post(`/api/v1/requests?projectId=${TEST_PROJECT_ID}`)
         .send({
@@ -2287,6 +2291,8 @@ describe("API Endpoints", () => {
       expect(mocks.collection.insertMany).not.toHaveBeenCalled();
     });
 
+    // Every profile-managed request field follows the same no-shared-overrides
+    // contract in variation mode.
     it.each([
       ["model", "m1"],
       ["reasoningEffort", "high"],
@@ -2324,6 +2330,8 @@ describe("API Endpoints", () => {
     });
 
     it("resolves each variation profile's resources without leaking base values", async () => {
+      // Give each profile a distinct required value so cross-profile leakage is
+      // directly observable in the persisted request documents.
       const resourceRevision = {
         _id: "resource-revision-1",
         resourceId: "resource-1",
@@ -2377,6 +2385,9 @@ describe("API Endpoints", () => {
       expect(res.status).toBe(201);
       const docs = (mocks.collection.insertMany as any).mock.calls[0][0];
       expect(docs).toHaveLength(2);
+
+      // Both requests share the comparative submission, but each must retain
+      // only the resource value resolved from its own profile.
       expect(docs.map((doc: { profileId: string; resources: Array<{ params: Record<string, string> }> }) => ({
         profileId: doc.profileId,
         repo: doc.resources[0].params.REPO,

@@ -248,6 +248,8 @@ describe("run submit", () => {
       status: "pending",
       variations: [],
     });
+
+    // Exercise the file-based variation input used by the real CLI command.
     const tempDir = mkdtempSync(join(tmpdir(), "scope-profile-variations-"));
     const variationsPath = join(tempDir, "variations.json");
     writeFileSync(variationsPath, JSON.stringify(["comparison-profile@1"]));
@@ -273,6 +275,8 @@ describe("run submit", () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
 
+    // The thin client sends run-wide inputs and profile references, leaving
+    // profile-managed configuration for the API to resolve.
     const { url, body } = captureSubmit();
     expect(url).toBe("http://localhost:3100/api/v1/requests?projectId=proj-test");
     expect(body).toEqual({
@@ -285,6 +289,9 @@ describe("run submit", () => {
 
   it("rejects profile-managed options before submitting variations", async () => {
     mockFetchWith({});
+
+    // Combine representative profile-managed flags with a real variations file
+    // to verify local validation of the conflicting CLI contract.
     const tempDir = mkdtempSync(join(tmpdir(), "scope-profile-variations-"));
     const variationsPath = join(tempDir, "variations.json");
     writeFileSync(variationsPath, JSON.stringify(["comparison-profile@1"]));
@@ -318,6 +325,7 @@ describe("run submit", () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
 
+    // Invalid profile-managed overrides must fail before any network request.
     expect(lastRequest).toBeUndefined();
     expect(errorLines.join("\n")).toContain("--model, --resources cannot be used with --profile-variations-file");
   });
