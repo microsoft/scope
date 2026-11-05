@@ -1,0 +1,50 @@
+name: Deploy-to-Azure drift check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/azure/**"
+      - ".github/workflows/deploy-azure-drift.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "deploy/azure/**"
+      - ".github/workflows/deploy-azure-drift.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-azuredeploy-drift:
+    name: Check azuredeploy.json matches main.bicep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: |
+          az bicep install
+          az bicep version
+
+      - name: Rebuild azuredeploy.json from main.bicep
+        run: |
+          az bicep build --file deploy/azure/main.bicep --outfile /tmp/azuredeploy.rebuilt.json
+
+      - name: Diff rebuilt template against committed azuredeploy.json
+        run: |
+          if ! diff -u deploy/azure/azuredeploy.json /tmp/azuredeploy.rebuilt.json; then
+            echo "::error::deploy/azure/azuredeploy.json is out of date with deploy/azure/main.bicep." \
+              "Run 'az bicep build --file deploy/azure/main.bicep --outfile deploy/azure/azuredeploy.json' and commit the result."
+            exit 1
+          fi
+          echo "azuredeploy.json is up to date with main.bicep."
+
+      - name: Lint Bicep modules
+        run: |
+          for f in deploy/azure/main.bicep deploy/azure/modules/*.bicep; do
+            echo "Building $f"
+            az bicep build --file "$f" --outfile /tmp/lint-check.json
+          done
