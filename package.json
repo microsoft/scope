@@ -88,15 +88,7 @@
     "vscode-web:auto-auth-state": "pnpm --filter github-cookie-updater start",
     "worktrees:clean": "pnpm worktrees:clean:docker && pnpm worktrees:clean:worktrees",
     "worktrees:clean:worktrees": "tsx scripts/clean-worktrees.ts",
-    "worktrees:clean:docker": "tsx scripts/clean-compose.ts",
-    "k3d:up": "scripts/worktree-env.sh && ./scripts/k3d-up.sh",
-    "k3d:up:claude": "scripts/worktree-env.sh && ./scripts/k3d-up.sh --worker=claude",
-    "k3d:up:all": "scripts/worktree-env.sh && ./scripts/k3d-up.sh --worker=all",
-    "k3d:down": "scripts/worktree-env.sh && ./scripts/k3d-down.sh",
-    "k3d:build": "scripts/worktree-env.sh && ./scripts/k3d-build.sh",
-    "k3d:build:claude": "scripts/worktree-env.sh && ./scripts/k3d-build.sh --worker=claude",
-    "k3d:build:all": "scripts/worktree-env.sh && ./scripts/k3d-build.sh --worker=all",
-    "k3d:logs": "kubectl -n scoped logs -f --all-containers --prefix -l app.kubernetes.io/part-of=scoped --max-log-requests=20"
+    "worktrees:clean:docker": "tsx scripts/clean-compose.ts"
   },
   "devDependencies": {
     "@d2t/vitest-ctrf-json-reporter": "^1.3.0",
