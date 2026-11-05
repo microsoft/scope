@@ -33,59 +33,59 @@ describe("deriveEnrichmentStatus", () => {
     expect(deriveEnrichmentStatus(run, false)).toBe("done");
   });
 
-  it("does NOT flip to done after pp-atif while pp-taxonomy is still pending (the bug)", () => {
-    // Observations configured, pp-atif done, pp-taxonomy not yet dispatched.
+  it("does NOT flip to done after pp-atif while pp-observations is still pending (the bug)", () => {
+    // Observations configured, pp-atif done, pp-observations not yet dispatched.
     const beforeDispatch = makeRun({
       postProcessorStatus: "done", // legacy scalar already flipped — must be ignored
       handlerStatus: { "pp-atif": { status: "done" } },
     });
     expect(deriveEnrichmentStatus(beforeDispatch, true)).toBe("processing");
 
-    // pp-taxonomy queued.
+    // pp-observations queued.
     const queued = makeRun({
       postProcessorStatus: "done",
-      handlerStatus: { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "queued" } },
+      handlerStatus: { "pp-atif": { status: "done" }, "pp-observations": { status: "queued" } },
     });
     expect(deriveEnrichmentStatus(queued, true)).toBe("processing");
 
-    // pp-taxonomy processing.
+    // pp-observations processing.
     const processing = makeRun({
       postProcessorStatus: "done",
-      handlerStatus: { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "processing" } },
+      handlerStatus: { "pp-atif": { status: "done" }, "pp-observations": { status: "processing" } },
     });
     expect(deriveEnrichmentStatus(processing, true)).toBe("processing");
   });
 
-  it("flips to done only once both pp-atif and pp-taxonomy are done", () => {
+  it("flips to done only once both pp-atif and pp-observations are done", () => {
     const run = makeRun({
-      handlerStatus: { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "done" } },
+      handlerStatus: { "pp-atif": { status: "done" }, "pp-observations": { status: "done" } },
     });
     expect(deriveEnrichmentStatus(run, true)).toBe("done");
   });
 
   it("reports failed when a handler failed and nothing is still in flight", () => {
     const run = makeRun({
-      handlerStatus: { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "failed" } },
+      handlerStatus: { "pp-atif": { status: "done" }, "pp-observations": { status: "failed" } },
     });
     expect(deriveEnrichmentStatus(run, true)).toBe("failed");
   });
 
   it("prefers processing over failed while another handler is still running", () => {
     const run = makeRun({
-      handlerStatus: { "pp-atif": { status: "processing" }, "pp-taxonomy": { status: "failed" } },
+      handlerStatus: { "pp-atif": { status: "processing" }, "pp-observations": { status: "failed" } },
     });
     expect(deriveEnrichmentStatus(run, true)).toBe("processing");
   });
 
-  it("treats a no-op pp-taxonomy (no observations) as part of the DAG", () => {
-    // No observations configured, but pp-taxonomy still runs as a no-op handler.
+  it("treats a no-op pp-observations (no observations) as part of the DAG", () => {
+    // No observations configured, but pp-observations still runs as a no-op handler.
     const stillRunning = makeRun({
-      handlerStatus: { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "processing" } },
+      handlerStatus: { "pp-atif": { status: "done" }, "pp-observations": { status: "processing" } },
     });
     expect(deriveEnrichmentStatus(stillRunning, false)).toBe("processing");
 
     const allDone = makeRun({
-      handlerStatus: { "pp-atif": { status: "done" }, "pp-taxonomy": { status: "done" } },
+      handlerStatus: { "pp-atif": { status: "done" }, "pp-observations": { status: "done" } },
     });
     expect(deriveEnrichmentStatus(allDone, false)).toBe("done");
   });

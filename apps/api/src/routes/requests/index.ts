@@ -37,6 +37,7 @@ import {
   isCriterionCompatibleWithGate,
   orderGates,
   computeTaskPromptId,
+  ensureNativeSubmission,
 } from "shared";
 import type {
   ProfileDocument,
@@ -844,6 +845,7 @@ apiRoute(ctx.app, ctx.registry, {
       const variationResults: Array<{ profileId: string; label?: string; ids: string[] }> = [];
       const agentsMdPromptId = await resolveAgentsMdPromptId();
       const agentsMdFields = buildAgentsMdFields(agentsMdPromptId);
+      const expectedRequestCount = resolved.length * count;
 
       for (const r of resolved) {
         const newIds: string[] = [];
@@ -878,6 +880,9 @@ apiRoute(ctx.app, ctx.registry, {
             profileVersionId: r.profileVersion.ref ?? r.profileVersion._id,
             ...(persistedVariationGates ? { gates: persistedVariationGates } : {}),
             submissionId,
+            submissionExpectedRequestCount: expectedRequestCount,
+            submissionRequestIndex: newDocs.length,
+            submissionInitialRunId: runId,
             ...agentsMdFields,
             run: { _id: runId, attemptNumber: 1, status: "pending", logsUrl: ctx.blobStorage.getLogsBlobUrl(`${requestId}/runs/${runId}/run.jsonl`) },
           };
@@ -891,6 +896,20 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       await ctx.requestCollection.insertMany(newDocs);
+      await ensureNativeSubmission({
+        collections: { submissions: ctx.submissionCollection },
+        submissionId,
+        projectId,
+        requests: newDocs.map((doc) => ({
+          requestId: doc._id,
+          runId: doc.run!._id,
+        })),
+        createdAt: newDocs[0]?.createdAt,
+      });
+      await ctx.requestCollection.updateMany(
+        { _id: { $in: allNewIds }, submissionId },
+        { $set: { submissionFinalizedAt: new Date() } },
+      );
 
       res.status(201).json({
         ids: allNewIds,
@@ -1274,7 +1293,7 @@ apiRoute(ctx.app, ctx.registry, {
       : undefined;
 
     // Persisted observation-criteria selection (issue #1156); deduped, evaluated
-    // by the pp-taxonomy post-processor. Absent/empty = no observations evaluated.
+    // by the pp-observations post-processor. Absent/empty = no observations evaluated.
     const persistedObservations: string[] | undefined = observationsProvided
       ? [...new Set(resolvedObservations)]
       : undefined;
@@ -1316,6 +1335,9 @@ apiRoute(ctx.app, ctx.registry, {
           ...(persistedGates ? { gates: persistedGates } : {}),
           ...(persistedObservations ? { observations: persistedObservations } : {}),
           submissionId,
+          submissionExpectedRequestCount: count,
+          submissionRequestIndex: i,
+          submissionInitialRunId: runId,
           ...agentsMdFields,
           // Mint a distinct run id for the first attempt. Blob artifacts
           // are scoped under `{requestId}/runs/{runId}/...` so retries
@@ -1327,6 +1349,20 @@ apiRoute(ctx.app, ctx.registry, {
 
       // Bulk insert all documents — scheduler will dispatch to queues
       await ctx.requestCollection.insertMany(newDocs);
+      await ensureNativeSubmission({
+        collections: { submissions: ctx.submissionCollection },
+        submissionId,
+        projectId,
+        requests: newDocs.map((doc) => ({
+          requestId: doc._id,
+          runId: doc.run!._id,
+        })),
+        createdAt: newDocs[0]?.createdAt,
+      });
+      await ctx.requestCollection.updateMany(
+        { _id: { $in: newIds }, submissionId },
+        { $set: { submissionFinalizedAt: new Date() } },
+      );
 
       console.log(`Created ${count} ${mode} requests for ${workerType} (priority: ${requestedPriority ?? 0})`);
 
@@ -1379,6 +1415,9 @@ apiRoute(ctx.app, ctx.registry, {
       ...(persistedGates ? { gates: persistedGates } : {}),
       ...(persistedObservations ? { observations: persistedObservations } : {}),
       submissionId,
+      submissionExpectedRequestCount: 1,
+      submissionRequestIndex: 0,
+      submissionInitialRunId: runId,
       ...agentsMdFields,
       // Mint a distinct run id for the first attempt. Blob artifacts
       // are scoped under `{requestId}/runs/{runId}/...` so retries
@@ -1388,6 +1427,17 @@ apiRoute(ctx.app, ctx.registry, {
 
     // Store in MongoDB — scheduler will dispatch to queue
     await ctx.requestCollection.insertOne(requestDoc);
+    await ensureNativeSubmission({
+      collections: { submissions: ctx.submissionCollection },
+      submissionId,
+      projectId,
+      requests: [{ requestId, runId }],
+      createdAt: requestDoc.createdAt,
+    });
+    await ctx.requestCollection.updateOne(
+      { _id: requestId, submissionId },
+      { $set: { submissionFinalizedAt: new Date() } },
+    );
 
     console.log(`Created ${mode} request ${requestId} for ${workerType} (priority: ${requestedPriority ?? 0})`);
 
@@ -2206,6 +2256,9 @@ apiRoute(ctx.app, ctx.registry, {
           ...(original.agentsMdPromptId ? { agentsMdPromptId: original.agentsMdPromptId } : {}),
           ...(original.agentsMdParentIds && original.agentsMdParentIds.length > 0 ? { agentsMdParentIds: original.agentsMdParentIds } : {}),
           submissionId,
+          submissionExpectedRequestCount: originalRuns.length * count,
+          submissionRequestIndex: newDocs.length,
+          submissionInitialRunId: runId,
           // Bulk re-submit creates a brand-new request — mint a distinct
           // run id for the first attempt so blob artifacts live under
           // `{requestId}/runs/{runId}/...` (independent of the original run).
@@ -2219,6 +2272,20 @@ apiRoute(ctx.app, ctx.registry, {
     // Insert all new documents — scheduler will dispatch to queues
     if (newDocs.length > 0) {
       await ctx.requestCollection.insertMany(newDocs);
+      await ensureNativeSubmission({
+        collections: { submissions: ctx.submissionCollection },
+        submissionId,
+        projectId: newDocs[0].projectId,
+        requests: newDocs.map((doc) => ({
+          requestId: doc._id,
+          runId: doc.run!._id,
+        })),
+        createdAt: newDocs[0].createdAt,
+      });
+      await ctx.requestCollection.updateMany(
+        { _id: { $in: newIds }, submissionId },
+        { $set: { submissionFinalizedAt: new Date() } },
+      );
     }
 
     console.log(`Bulk re-submitted ${newIds.length} runs from ${originalRuns.length} originals (count=${count})`);
@@ -3129,6 +3196,24 @@ apiRoute(ctx.app, ctx.registry, {
       { _id: { $in: ids }, deletedAt: { $exists: false } },
     ).toArray();
     const requestMap = new Map(requests.map((r) => [r._id, r]));
+    const affectedSubmissionIds = [
+      ...new Set(
+        requests.flatMap((request) =>
+          request.submissionId ? [request.submissionId] : [],
+        ),
+      ),
+    ];
+    if (affectedSubmissionIds.length > 0) {
+      await ctx.submissionCollection.updateMany(
+        { _id: { $in: affectedSubmissionIds } },
+        {
+          $set: {
+            "run.reconcileAfter": new Date(Date.now() + 60_000),
+            updatedAt: new Date(),
+          },
+        },
+      );
+    }
 
     const results: Array<{ requestId: string; runId?: string; attemptNumber?: number; error?: string }> = [];
     let retried = 0;
@@ -3208,6 +3293,16 @@ apiRoute(ctx.app, ctx.registry, {
       console.log(`Bulk retry: request ${id} → attempt ${newAttemptNumber} (runId=${newRunId})`);
       results.push({ requestId: id, runId: newRunId, attemptNumber: newAttemptNumber });
       retried++;
+    }
+
+    if (affectedSubmissionIds.length > 0) {
+      await ctx.submissionCollection.updateMany(
+        { _id: { $in: affectedSubmissionIds } },
+        {
+          $unset: { "run.reconcileAfter": "" },
+          $set: { updatedAt: new Date() },
+        },
+      );
     }
 
     res.status(201).json({ retried, skipped, results });

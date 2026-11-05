@@ -34,7 +34,7 @@ const hasToken = !!process.env.GITHUB_TOKEN;
 const JUDGE_MODEL = process.env.JUDGE_MODEL || "gpt-5.4-mini";
 
 /**
- * Realistic ATIF trajectory (the exact shape pp-taxonomy downloads and forwards
+ * Realistic ATIF trajectory (the exact shape pp-observations downloads and forwards
  * via `fromAtif`): a system + user step, then agent steps that install
  * `left-pad`, use it, and uninstall it before finishing. Each agent step pairs
  * its `tool_calls[]` with the matching same-step `observation.results[]` by

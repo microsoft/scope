@@ -667,13 +667,7 @@ export function SubmitRun() {
   const submitMutation = useMutation({
     mutationFn: api.submitRun,
     onSuccess: (data) => {
-      if ("ids" in data && data.ids.length > 1) {
-        navigate("/runs");
-      } else if ("id" in data) {
-        navigate(`/runs/${data.id}`);
-      } else {
-        navigate("/runs");
-      }
+      navigate(`/submissions/${data.submissionId}`);
     },
   });
 

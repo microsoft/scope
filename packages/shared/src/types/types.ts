@@ -204,7 +204,7 @@ export interface ConversationTurn {
   timestamp: Date;
   criteriaResults?: CriterionResult[];  // Per-criterion breakdown from DAG evaluation
   /** Per-iteration observation results (kind:"observation" criteria), recorded
-   *  by the pp-taxonomy post-processor. Same shape as criteriaResults but never
+   *  by the pp-observations post-processor. Same shape as criteriaResults but never
    *  gates the agent. Empty/absent when no observations were selected. #1156. */
   observationResults?: CriterionResult[];
   harUrl?: string;         // Blob storage URL to the HAR file for this turn
@@ -385,6 +385,18 @@ export interface RequestDocument {
   profileId?: string;             // FK → ProfileDocument._id (the profile lineage)
   profileVersionId?: string;      // FK → ProfileVersionDocument._id (exact version used)
   submissionId?: string;           // FK → SubmissionDocument._id
+  /** Expected native request count for interrupted SubmissionDocument finalization.
+   * Historical/imported requests omit it and remain view-only if their parent
+   * submission document is missing. */
+  submissionExpectedRequestCount?: number;
+  /** Stable position within the native submission's immutable request vector. */
+  submissionRequestIndex?: number;
+  /** Run id minted for the submission's first attempt. It remains unchanged
+   * across request retries so recovery can rebuild the exact initial vector. */
+  submissionInitialRunId?: string;
+  /** Set after the parent SubmissionDocument has been idempotently finalized.
+   * Missing on interrupted native writes so the scheduler can recover them. */
+  submissionFinalizedAt?: Date;
   /** Scheduling priority. Higher = processed first. Default: 0. */
   priority: number;
   /**
@@ -396,7 +408,7 @@ export interface RequestDocument {
   gates?: GateConfig[];
   /**
    * Observation-criteria ids (kind:"observation") selected at submit. The
-   * pp-taxonomy post-processor evaluates exactly this set after the run
+   * pp-observations post-processor evaluates exactly this set after the run
    * completes and writes per-turn `observationResults`. Empty/absent = none.
    * See issue #1156.
    */
@@ -532,7 +544,7 @@ export interface RunState {
   handlerStatus?: Record<string, HandlerRunStatus>;
   /** Whole-run observation results — one entry per selected `subject:"run"`
    *  observation criterion, evaluated once against the final snapshot + the
-   *  merged trajectory across all iterations by pp-taxonomy. Per-iteration
+   * merged trajectory across all iterations by pp-observations. Per-iteration
    *  (`subject:"iteration"`) observations live on `turn.observationResults`
    *  instead. Empty/absent when no run-subject observations were selected. #1156. */
   observationResults?: CriterionResult[];
@@ -565,6 +577,118 @@ export interface HandlerServiceDocument {
   selector: string;
   autoBackfill: boolean;
   dependsOn: string[];
+}
+
+export interface SubmissionHandlerServiceDocument {
+  _id: string;
+  type: "submission-handler";
+  version: number;
+  queue: string;
+  selector: string;
+  autoBackfill: boolean;
+  dependsOn: string[];
+  dependencyMode: "all-runs";
+}
+
+export type ServiceHandlerDocument =
+  | HandlerServiceDocument
+  | SubmissionHandlerServiceDocument;
+
+export interface SubmissionRequestRef {
+  requestId: string;
+  runId: string;
+}
+
+export type SubmissionHandlerState = "waiting" | "ready" | "failed" | "blocked";
+
+export interface SubmissionDependencyProjection {
+  requestId: string;
+  runId: string;
+  handlerId: string;
+  state: SubmissionHandlerState;
+  version?: number;
+  updatedAt?: Date;
+  error?: string;
+}
+
+export interface SubmissionBlockingDetail {
+  requestId: string;
+  runId: string;
+  handlerId: string;
+  reason:
+    | "request-missing"
+    | "run-changed"
+    | "dependency-not-ready"
+    | "dependency-failed"
+    | "dependency-blocked";
+  error?: string;
+}
+
+export interface SubmissionReportPointer {
+  reportId?: string;
+  url?: string;
+  updatedAt?: Date;
+}
+
+export interface SubmissionRolloverClaim {
+  nextSubmissionRunId: string;
+  vectorFingerprint: string;
+  requests: SubmissionRequestRef[];
+  reason: "request-vector-changed" | "manual-retry";
+  claimedAt: Date;
+}
+
+export interface SubmissionRunState {
+  _id: string;
+  attemptNumber: number;
+  vectorFingerprint: string;
+  requests: SubmissionRequestRef[];
+  createdAt: Date;
+  updatedAt?: Date;
+  startedAt?: Date;
+  finishedAt?: Date;
+  dependencyProjection: SubmissionDependencyProjection[];
+  handlerStatus?: Record<string, HandlerRunStatus>;
+  blocking: SubmissionBlockingDetail[];
+  report?: SubmissionReportPointer;
+  /** Internal scheduler hold used by bulk request retry so one completed
+   * replacement batch produces one vector rollover. Expiry self-heals crashes. */
+  reconcileAfter?: Date;
+  /** Internal resumable rollover claim. Its CAS winner exclusively determines
+   * the immutable archive's successor metadata. */
+  rollover?: SubmissionRolloverClaim;
+  supersededAt?: Date;
+  supersededBySubmissionRunId?: string;
+  supersededReason?: "request-vector-changed" | "manual-retry";
+}
+
+export interface SubmissionDocument {
+  _id: string;
+  submissionId: string;
+  projectId: string;
+  requestIds: string[];
+  createdAt: Date;
+  updatedAt?: Date;
+  run: SubmissionRunState;
+}
+
+export interface SubmissionRunHistoryDocument extends SubmissionRunState {
+  submissionId: string;
+  projectId: string;
+}
+
+export type SubmissionReadiness =
+  | "waiting"
+  | "ready"
+  | "blocked"
+  | "processing"
+  | "done"
+  | "failed";
+
+export interface SubmissionQueueMessagePayload {
+  type: string;
+  submissionId: string;
+  submissionRunId: string;
 }
 
 /**

@@ -1350,7 +1350,12 @@ export function RunsList() {
       hidden: columnVisibility.isHidden("submission"),
       cell: (r) =>
         r.submissionId ? (
-          <ShortId id={r.submissionId} label="submission ID" />
+          <Link
+            to={`/submissions/${r.submissionId}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <ShortId id={r.submissionId} label="submission ID" />
+          </Link>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         ),
@@ -2666,31 +2671,36 @@ export function RunsList() {
                       ? (profileNameById.get(groupKey) ?? formatId(groupKey))
                       : groupKey;
                   return (
-                    <button
-                      type="button"
-                      onClick={() => toggleGroupExpansion(groupKey)}
-                      className="w-full bg-muted/30 px-4 py-3 text-sm flex items-center justify-between gap-3 hover:bg-muted/40 transition-colors"
-                      aria-expanded={expanded}
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        {expanded ? (
-                          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                        )}
-                        <span className="min-w-0 truncate font-semibold">
-                          <span className="text-muted-foreground">{groupLabel}:</span> {groupDisplayKey}
-                        </span>
-                      </div>
+                    <div className="w-full bg-muted/30 px-4 py-3 text-sm flex items-center justify-between gap-3 hover:bg-muted/40 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupExpansion(groupKey)}
+                        className="flex min-w-0 items-center gap-2 text-left"
+                        aria-expanded={expanded}
+                      >
+                          {expanded ? (
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                          )}
+                          <span className="min-w-0 truncate font-semibold">
+                            <span className="text-muted-foreground">{groupLabel}:</span> {groupDisplayKey}
+                          </span>
+                      </button>
                       <div className="flex shrink-0 items-center gap-3">
+                        {groupBy === "submissionId" && groupKey !== "no-submission" && (
+                          <Link
+                            to={`/submissions/${groupKey}`}
+                            className="text-xs font-medium text-primary hover:underline"
+                          >
+                            View submission
+                          </Link>
+                        )}
                         <span className="text-xs text-muted-foreground font-normal">
                           {runs.length} run{runs.length !== 1 ? "s" : ""}
                         </span>
-                        <span className="text-xs text-muted-foreground font-normal">
-                          {expanded ? "Click to collapse" : "Click to expand"}
-                        </span>
                       </div>
-                    </button>
+                    </div>
                   );
                 },
               }}

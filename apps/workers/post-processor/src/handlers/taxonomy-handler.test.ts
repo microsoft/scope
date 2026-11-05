@@ -32,7 +32,7 @@ function makeCtx(
   } as any;
 }
 
-const msg: PostProcessorMessage = { type: "taxonomy", requestId: "req-1", runId: "run-1" };
+const msg: PostProcessorMessage = { type: "observations", requestId: "req-1", runId: "run-1" };
 
 describe("TaxonomyHandler", () => {
   let judge: { evaluate: ReturnType<typeof vi.fn> };
@@ -41,8 +41,8 @@ describe("TaxonomyHandler", () => {
     judge = { evaluate: vi.fn() };
   });
 
-  it("has type 'taxonomy'", () => {
-    expect(new TaxonomyHandler(judge as unknown as JudgeClient).type).toBe("taxonomy");
+  it("has type 'observations'", () => {
+    expect(new TaxonomyHandler(judge as unknown as JudgeClient).type).toBe("observations");
   });
 
   it("no-ops when no observations are selected", async () => {

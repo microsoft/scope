@@ -3,8 +3,13 @@
 
 import { Collection, Db } from "mongodb";
 import { QueueClient } from "@azure/storage-queue";
-import type { RequestDocument, HandlerServiceDocument, HandlerRunStatus } from "shared";
-import { DependencyGraph, withRetry } from "shared";
+import type {
+  RequestDocument,
+  HandlerServiceDocument,
+  HandlerRunStatus,
+  ServiceHandlerDocument,
+} from "shared";
+import { DependencyGraph, isHandlerDagDrained, withRetry } from "shared";
 import type { RetryOptions } from "shared";
 import type { NotifyHandler } from "./notify-routes.js";
 
@@ -151,7 +156,27 @@ export class HandlerDispatcher implements NotifyHandler {
     await this.maybeTriggerReports(requestId, runId);
   }
 
-  async registerHandler(doc: HandlerServiceDocument): Promise<void> {
+  async registerHandler(doc: ServiceHandlerDocument): Promise<void> {
+    if (doc.type === "submission-handler") {
+      const postProcessHandlers = await this.loadHandlers(true);
+      for (const dependency of doc.dependsOn) {
+        if (!postProcessHandlers.some((handler) => handler._id === dependency)) {
+          throw new Error(
+            `Submission handler '${doc._id}' depends on unknown run handler '${dependency}'`,
+          );
+        }
+      }
+      const { _id, ...fields } = doc;
+      await this.db.collection("services").updateOne(
+        { _id } as any,
+        { $set: { ...fields, dependsOn: [...fields.dependsOn], updatedAt: new Date() } } as any,
+        { upsert: true },
+      );
+      console.log(
+        `[HandlerDispatcher] Registered submission handler ${_id} (version=${doc.version}, queue=${doc.queue}, dependsOn=[${doc.dependsOn.join(", ")}])`,
+      );
+      return;
+    }
     // Validate the resulting topology has no cycles before persisting. Read
     // fresh (bypass the cache) so validation reflects any concurrent registrations.
     const existing = await this.loadHandlers(true);
@@ -183,43 +208,12 @@ export class HandlerDispatcher implements NotifyHandler {
 
   // ── Report trigger on DAG drain ─────────────────────────────────────
 
-  /**
-   * A handler is "terminal" for a run when it can produce no further work:
-   * it has succeeded (`done`), failed (`failed`), or is permanently blocked
-   * because one of its transitive dependencies failed (so it can never run).
-   */
-  private isHandlerTerminal(
-    handlerId: string,
-    graph: DependencyGraph,
-    handlerStatus: Record<string, HandlerRunStatus> | undefined,
-  ): boolean {
-    const status = handlerStatus?.[handlerId]?.status;
-    if (status === "done" || status === "failed") return true;
-
-    // Not yet dispatched/processed — terminal only if blocked by a failed
-    // ancestor (any transitive dependency that failed).
-    if (status === undefined) {
-      for (const ancestorId of graph.getAncestors(handlerId)) {
-        if (handlerStatus?.[ancestorId]?.status === "failed") return true;
-      }
-    }
-
-    // "queued" or "processing" — still active.
-    return false;
-  }
-
-  /**
-   * The DAG is drained for a run when every registered handler is terminal.
-   * Vacuously true when there are no handlers.
-   */
   private isDagDrained(
     handlers: HandlerServiceDocument[],
-    graph: DependencyGraph,
+    _graph: DependencyGraph,
     handlerStatus: Record<string, HandlerRunStatus> | undefined,
   ): boolean {
-    return handlers.every((h) =>
-      this.isHandlerTerminal(h._id, graph, handlerStatus),
-    );
+    return isHandlerDagDrained(handlers, handlerStatus);
   }
 
   /**
@@ -239,12 +233,11 @@ export class HandlerDispatcher implements NotifyHandler {
     if ((run as any).reportsTriggeredAt) return;
 
     const handlers = await this.loadHandlers();
-    const graph = this.buildGraph(handlers);
     const handlerStatus = (run as any).handlerStatus as
       | Record<string, HandlerRunStatus>
       | undefined;
 
-    if (!this.isDagDrained(handlers, graph, handlerStatus)) return;
+    if (!this.isDagDrained(handlers, this.buildGraph(handlers), handlerStatus)) return;
 
     // Atomically claim the trigger so concurrent notify/poll paths fire once.
     const claimed = await this.collection.findOneAndUpdate(

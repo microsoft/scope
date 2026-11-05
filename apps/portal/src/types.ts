@@ -126,7 +126,7 @@ export interface OsInfo {
 
 /**
  * Per-handler post-processing status in the DAG (issue #1147). Keys in
- * `RunState.handlerStatus` are handler IDs (e.g. "pp-atif", "pp-taxonomy").
+ * `RunState.handlerStatus` are handler IDs (e.g. "pp-atif", "pp-observations").
  */
 export interface HandlerRunStatus {
   status: "queued" | "processing" | "done" | "failed";
@@ -173,7 +173,7 @@ export interface RunState {
   postProcessorStatus?: "queued" | "processing" | "done" | "failed";
   /**
    * Per-handler post-processing status keyed by handler ID (e.g. "pp-atif",
-   * "pp-taxonomy"). Drives the aggregate "Enriched" badge so it only flips to
+   * "pp-observations"). Drives the aggregate "Enriched" badge so it only flips to
    * done once every handler in the DAG is terminal — not after the first
    * handler (pp-atif) completes. The legacy `postProcessorStatus` scalar only
    * tracks pp-atif and is kept for backward compatibility.
@@ -223,6 +223,71 @@ export interface Run {
   gates?: GateConfig[];
   observations?: string[];
   gateSummaries?: GateRunSummary[];
+}
+
+export type SubmissionReadiness =
+  | "waiting"
+  | "ready"
+  | "blocked"
+  | "processing"
+  | "done"
+  | "failed";
+
+export interface SubmissionDependencyProjection {
+  requestId: string;
+  runId: string;
+  handlerId: string;
+  state: "waiting" | "ready" | "failed" | "blocked";
+  version?: number;
+  updatedAt?: string;
+  error?: string;
+}
+
+export interface SubmissionBlockingDetail {
+  requestId: string;
+  runId: string;
+  handlerId: string;
+  reason:
+    | "request-missing"
+    | "run-changed"
+    | "dependency-failed"
+    | "dependency-blocked";
+  error?: string;
+}
+
+export interface SubmissionRequestSummary {
+  requestId: string;
+  runId: string;
+  task: string;
+  status: string;
+  outcome?: string;
+  workerType: string;
+  model?: string;
+  profileId?: string;
+}
+
+export interface Submission {
+  submissionId: string;
+  projectId: string;
+  requestIds: string[];
+  createdAt: string;
+  updatedAt?: string;
+  submissionRunId: string;
+  attemptNumber: number;
+  readiness: SubmissionReadiness;
+  requests: SubmissionRequestSummary[];
+  dependencyProjection: SubmissionDependencyProjection[];
+  blocking: SubmissionBlockingDetail[];
+  handlerProgress?: Record<
+    string,
+    {
+      status: "queued" | "processing" | "done" | "failed";
+      version?: number;
+      updatedAt?: string;
+      error?: string;
+    }
+  >;
+  report?: { reportId?: string; url?: string; updatedAt?: string };
 }
 
 export interface CursorPaginatedResponse<T> {

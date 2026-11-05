@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import http from "node:http";
-import type { HandlerServiceDocument } from "shared";
+import type { ServiceHandlerDocument } from "shared";
 
 /**
  * Maximum accepted request body size for the scheduler's HTTP endpoints.
@@ -28,7 +28,7 @@ export interface NotifyHandler {
     handlerId: string,
     status: "done" | "failed",
   ): Promise<void>;
-  registerHandler(doc: HandlerServiceDocument): Promise<void>;
+  registerHandler(doc: ServiceHandlerDocument): Promise<void>;
 }
 
 interface RunTerminalRequest {
@@ -98,7 +98,7 @@ function parseHandlerCompleteRequest(body: unknown): HandlerCompleteRequest | nu
   };
 }
 
-function parseHandlerRegisterRequest(body: unknown): HandlerServiceDocument | null {
+function parseHandlerRegisterRequest(body: unknown): ServiceHandlerDocument | null {
   if (!isRecord(body)) {
     return null;
   }
@@ -115,7 +115,7 @@ function parseHandlerRegisterRequest(body: unknown): HandlerServiceDocument | nu
 
   if (
     !isNonEmptyString(_id) ||
-    type !== "post-process-handler" ||
+    (type !== "post-process-handler" && type !== "submission-handler") ||
     typeof version !== "number" ||
     !Number.isFinite(version) ||
     !isNonEmptyString(queue) ||
@@ -127,15 +127,23 @@ function parseHandlerRegisterRequest(body: unknown): HandlerServiceDocument | nu
     return null;
   }
 
-  return {
+  const common = {
     _id,
-    type,
     version,
     queue,
     selector,
     autoBackfill,
     dependsOn: dependsOn as string[],
   };
+  if (type === "submission-handler") {
+    if (body.dependencyMode !== "all-runs") return null;
+    return {
+      ...common,
+      type,
+      dependencyMode: "all-runs",
+    };
+  }
+  return { ...common, type };
 }
 
 export function readJsonBody(
@@ -262,7 +270,7 @@ export function createHttpServer(
         if (!parsedBody) {
           sendJson(res, 400, {
             error:
-              "Invalid handler registration: _id, type='post-process-handler', version (number), queue, selector, autoBackfill (boolean), and dependsOn (string[]) are required",
+              "Invalid handler registration: _id, supported type, version, queue, selector, autoBackfill, dependsOn, and submission dependencyMode when applicable are required",
           });
           return;
         }

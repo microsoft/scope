@@ -47,6 +47,7 @@ import { registerInsightsRoutes } from "./routes/insights.js";
 import { registerSecretsRoutes } from "./routes/secrets.js";
 import { registerProfilesRoutes } from "./routes/profiles.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
+import { registerSubmissionsRoutes } from "./routes/submissions.js";
 import { ProjectScopeError } from "./utils/project-scope.js";
 import { registerUsersRoutes } from "./routes/users.js";
 import { shutdownPortalCopilotClientPool } from "./copilot-client-pool.js";
@@ -59,6 +60,8 @@ import type {
   InsightDocument,
   RequestDocument,
   RunHistoryDocument,
+  SubmissionDocument,
+  SubmissionRunHistoryDocument,
   CodingAgentDocument,
   ModelDocument,
   McpServerDocument,
@@ -97,6 +100,8 @@ let mongoClient: MongoClient;
 let db: Db;
 let collection: Collection<RequestDocument>;
 let runsCol: Collection<RunHistoryDocument>;
+let submissionCollection: Collection<SubmissionDocument>;
+let submissionRunsCollection: Collection<SubmissionRunHistoryDocument>;
 let projectCollection: Collection<ProjectDocument>;
 let projectStore: ProjectStore;
 let criteriaCollection: Collection<CriteriaDocument>;
@@ -144,6 +149,8 @@ async function initializeClients(): Promise<void> {
   db = mongoClient.db(mongoDatabase);
   collection = db.collection<RequestDocument>(mongoCollection);
   runsCol = db.collection<RunHistoryDocument>("runs");
+  submissionCollection = db.collection<SubmissionDocument>("submissions");
+  submissionRunsCollection = db.collection<SubmissionRunHistoryDocument>("submission-runs");
   projectCollection = db.collection<ProjectDocument>("projects");
   projectStore = new ProjectStore(projectCollection);
   criteriaCollection = db.collection<CriteriaDocument>("criteria");
@@ -277,6 +284,8 @@ const routeCtx: RouteContext = {
   get db() { return db; },
   get requestCollection() { return collection; },
   get runsCollection() { return runsCol; },
+  get submissionCollection() { return submissionCollection; },
+  get submissionRunsCollection() { return submissionRunsCollection; },
   get projectCollection() { return projectCollection; },
   get criteriaCollection() { return criteriaCollection; },
   get promptFeatureCollection() { return promptFeatureCollection; },
@@ -338,6 +347,7 @@ app.use(createUserAccessMiddleware(() => userAccessResolver));
 registerSecretsRoutes(routeCtx);
 registerSystemRoutes(routeCtx);
 registerProjectsRoutes(routeCtx);
+registerSubmissionsRoutes(routeCtx);
 registerRequestsRoutes(routeCtx);
 registerRequestsCancelRoutes(routeCtx);
 registerRequestsLogsRoutes(routeCtx);
@@ -424,6 +434,8 @@ export interface TestDependencies {
   db?: Db;
   collection?: Collection<RequestDocument>;
   runsCollection?: Collection<RunHistoryDocument>;
+  submissionCollection?: Collection<SubmissionDocument>;
+  submissionRunsCollection?: Collection<SubmissionRunHistoryDocument>;
   criteriaCollection?: Collection<CriteriaDocument>;
   promptFeatureCollection?: Collection<PromptFeatureDocument>;
   reportCollection?: Collection<ReportDocument>;
@@ -465,6 +477,8 @@ export function _injectTestDependencies(deps: TestDependencies): void {
   if (deps.db) db = deps.db;
   if (deps.collection) collection = deps.collection;
   if (deps.runsCollection) runsCol = deps.runsCollection;
+  if (deps.submissionCollection) submissionCollection = deps.submissionCollection;
+  if (deps.submissionRunsCollection) submissionRunsCollection = deps.submissionRunsCollection;
   if (deps.criteriaCollection) criteriaCollection = deps.criteriaCollection;
   if (deps.promptFeatureCollection) promptFeatureCollection = deps.promptFeatureCollection;
   if (deps.reportCollection) reportCollection = deps.reportCollection;
