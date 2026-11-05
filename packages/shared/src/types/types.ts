@@ -858,14 +858,24 @@ export interface Reporter {
   agentVersion: string;  // @github/copilot-sdk package version
 }
 
+export interface StructuredReportArtifact {
+  schemaId: string;
+  schemaVersion: string;
+  contentType: "application/json";
+  url: string;
+}
+
 /** Report document stored in MongoDB */
 export interface ReportDocument {
   _id: string;           // UUID
-  requestId: string;     // FK → RequestDocument._id
+  requestId?: string;    // FK → RequestDocument._id for run reports
+  experimentId?: string; // FK → ExperimentDocument._id for Experiment reports
+  experimentExecutionId?: string; // Exact immutable Experiment execution
   projectId: string;     // FK → ProjectDocument._id (denormalized from request)
   templateId?: string;   // FK → ReportTemplateDocument.id (slug of template that generated this report)
   reporter?: Reporter;   // Set by the worker when it picks up the job
   content?: string;      // Generated markdown report
+  structuredArtifact?: StructuredReportArtifact;
   status: ReportStatus;
   error?: string;
   insightReferences?: InsightReference[];  // Insights discovered/referenced by this report

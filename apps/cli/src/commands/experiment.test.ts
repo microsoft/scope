@@ -212,4 +212,61 @@ describe("experiment commands", () => {
       "http://localhost:3100/api/v1/experiments/experiment-1/retry?projectId=project-1",
     );
   });
+
+  it("retrieves structured JSON for one exact experiment execution", async () => {
+    const requests: CapturedRequest[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
+      requests.push({
+        url: request.url,
+        method: request.method,
+        body: await request.text(),
+      });
+      const structured = request.url.endsWith(
+        "/structured?projectId=project-1",
+      );
+      return new Response(JSON.stringify(
+        structured
+          ? { meta: { experimentExecutionId: "execution-1" } }
+          : [{
+              id: "report-1",
+              experimentId: "experiment-1",
+              experimentExecutionId: "execution-1",
+              status: "completed",
+              createdAt: "2026-01-01T00:00:00.000Z",
+            }],
+      ), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }));
+    const output: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((...parts: unknown[]) => {
+      output.push(parts.map(String).join(" "));
+    });
+
+    await makeProgram().parseAsync(
+      [
+        "experiment",
+        "reports",
+        "experiment-1",
+        "execution-1",
+        "--report",
+        "report-1",
+        "--structured",
+        "--project",
+        "project-1",
+        "--url",
+        "http://localhost:3100",
+      ],
+      { from: "user" },
+    );
+
+    expect(requests.map((item) => item.url)).toEqual([
+      "http://localhost:3100/api/v1/experiments/experiment-1/executions/execution-1/reports?projectId=project-1",
+      "http://localhost:3100/api/v1/experiments/experiment-1/executions/execution-1/reports/report-1/structured?projectId=project-1",
+    ]);
+    expect(output.join("\n")).toContain(
+      '"experimentExecutionId": "execution-1"',
+    );
+  });
 });

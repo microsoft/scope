@@ -354,6 +354,29 @@ export const api = {
     return parseExperimentExecution(value);
   },
 
+  listExperimentReports: (
+    id: string,
+    experimentExecutionId: string,
+  ): Promise<Report[]> =>
+    request(
+      `/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(experimentExecutionId)}/reports`,
+      undefined,
+      { scoped: true },
+    ),
+
+  experimentReportStructuredUrl: (
+    id: string,
+    experimentExecutionId: string,
+    reportId: string,
+  ): string => {
+    const projectId = getSelectedProjectId();
+    if (!projectId) throw new ProjectRequiredError();
+    return `${BASE}${withProjectId(
+      `/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(experimentExecutionId)}/reports/${encodeURIComponent(reportId)}/structured`,
+      projectId,
+    )}`;
+  },
+
   retryExperiment: async (
     id: string,
     experimentExecutionId: string,
@@ -909,6 +932,9 @@ export const api = {
   getReport: (id: string): Promise<Report> => {
     return request(`/reports/${id}`);
   },
+
+  reportStructuredUrl: (id: string): string =>
+    `${BASE}/reports/${encodeURIComponent(id)}/structured`,
 
   /** Get reports for a specific run */
   getRunReports: (requestId: string): Promise<Report[]> => {

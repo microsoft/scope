@@ -109,6 +109,12 @@ export interface ExperimentRequestStateUpdateClaim {
   claimedAt: Date;
 }
 
+export interface ExperimentReportReference {
+  reportId: string;
+  url: string;
+  updatedAt: Date;
+}
+
 export interface ExperimentExecution {
   experimentExecutionId: string;
   attemptNumber: number;
@@ -117,6 +123,7 @@ export interface ExperimentExecution {
   vectorFingerprint: string;
   handlerSummary: Record<string, ExperimentHandlerSummary>;
   blocking: ExperimentBlocker[];
+  report?: ExperimentReportReference;
   createdAt: Date;
   updatedAt: Date;
   startedAt?: Date;

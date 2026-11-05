@@ -47,7 +47,7 @@ export interface ExperimentExecutionView {
   requests: ExperimentRequestSummaryView[];
   handlerProgress: Record<string, unknown>;
   blocking: ExperimentBlockerView[];
-  currentReport?: { reportId?: string; url?: string; updatedAt?: string };
+  report?: { reportId: string; url: string; updatedAt: string };
   createdAt: string;
   updatedAt?: string;
   startedAt?: string;
@@ -183,16 +183,16 @@ export function parseExperimentExecution(
     execution.handlerSummary ??
     {};
   const handlerProgress = record(progressValue, "experiment handler progress");
-  const reportValue = execution.currentReport;
-  const currentReport =
+  const reportValue = execution.report;
+  const report =
     reportValue === undefined
       ? undefined
       : (() => {
           const report = record(reportValue, "experiment report");
           return {
-            reportId: optionalString(report, "reportId"),
-            url: optionalString(report, "url"),
-            updatedAt: optionalString(report, "updatedAt"),
+            reportId: requiredString(report, "reportId", "experiment report"),
+            url: requiredString(report, "url", "experiment report"),
+            updatedAt: requiredString(report, "updatedAt", "experiment report"),
           };
         })();
 
@@ -214,7 +214,7 @@ export function parseExperimentExecution(
     requests: vector.requests,
     handlerProgress,
     blocking,
-    currentReport,
+    report,
     createdAt: requiredString(execution, "createdAt", "experiment execution"),
     updatedAt: optionalString(execution, "updatedAt"),
     startedAt: optionalString(execution, "startedAt"),

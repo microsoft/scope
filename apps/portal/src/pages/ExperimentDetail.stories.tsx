@@ -70,6 +70,67 @@ const experiment = {
   createdAt: "2026-10-16T09:00:00.000Z",
 };
 
+const currentReports = [
+  {
+    _id: "report-current",
+    id: "report-current",
+    experimentId: "experiment-demo",
+    experimentExecutionId: "execution-current",
+    status: "completed",
+    content: "# Current readout\n\nThe latest exact-vector analysis.",
+    reporter: {
+      id: "pp-readout",
+      name: "Experiment Readout",
+      gitHash: "abc",
+      model: "gpt-5.4",
+      agentId: "copilot-sdk",
+      agentVersion: "1.0.0",
+    },
+    structuredArtifact: {
+      schemaId: "scope.experiment-readout",
+      schemaVersion: "1.0",
+      contentType: "application/json",
+      url: "reports/report-current/structured.json",
+    },
+    createdAt: "2026-10-16T10:30:00.000Z",
+  },
+  {
+    _id: "report-previous",
+    id: "report-previous",
+    experimentId: "experiment-demo",
+    experimentExecutionId: "execution-current",
+    status: "completed",
+    content: "# Previous readout\n\nThe first report version.",
+    reporter: {
+      id: "pp-readout",
+      name: "Experiment Readout",
+      gitHash: "abc",
+      model: "gpt-5.4",
+      agentId: "copilot-sdk",
+      agentVersion: "1.0.0",
+    },
+    createdAt: "2026-10-16T10:15:00.000Z",
+  },
+  {
+    _id: "report-quality",
+    id: "report-quality",
+    experimentId: "experiment-demo",
+    experimentExecutionId: "execution-current",
+    templateId: "quality-summary",
+    status: "completed",
+    content: "# Quality summary\n\nAn additional attached report.",
+    reporter: {
+      id: "quality-summary",
+      name: "Quality Summary",
+      gitHash: "def",
+      model: "gpt-5.4",
+      agentId: "copilot-sdk",
+      agentVersion: "1.0.0",
+    },
+    createdAt: "2026-10-16T10:20:00.000Z",
+  },
+];
+
 function ExperimentDetailStory() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -109,6 +170,15 @@ const meta = {
           "/api/v1/experiments/experiment-demo/executions/execution-history",
           () => HttpResponse.json(historicalExecution),
         ),
+        http.get(
+          "/api/v1/experiments/experiment-demo/executions/:executionId/reports",
+          ({ params }) =>
+            HttpResponse.json(
+              params.executionId === "execution-current"
+                ? currentReports
+                : [],
+            ),
+        ),
       ],
     },
   },
@@ -120,6 +190,19 @@ type Story = StoryObj<typeof meta>;
 
 export const AttemptSelectionAndRunsTable: Story = {
   play: async ({ canvas, canvasElement }) => {
+    await expect(
+      await screen.findByRole("heading", { name: "Current readout" }),
+    ).toBeVisible();
+    const tabList = canvas.getByRole("tablist", {
+      name: "Experiment detail sections",
+    });
+    const header = canvasElement.querySelector(
+      '[data-slot="experiment-detail-header"]',
+    );
+    if (!header) throw new Error("Compact Experiment header is missing");
+    await expect(header.nextElementSibling).toBe(tabList.parentElement);
+
+    await userEvent.click(canvas.getByRole("tab", { name: "Runs" }));
     await expect(
       await screen.findByText("Runs in attempt 2"),
     ).toBeVisible();
@@ -143,10 +226,10 @@ export const AttemptSelectionAndRunsTable: Story = {
     );
 
     await expect(
-      await screen.findByText(/Viewing processing attempt #1 \(historical\)/),
+      await screen.findByText("Historical attempt"),
     ).toBeVisible();
     await expect(
-      screen.getAllByText("Inspect the historical benchmark task")[0],
+      (await screen.findAllByText("Inspect the historical benchmark task"))[0],
     ).toBeVisible();
     await expect(screen.queryAllByText("Implement the current benchmark task"))
       .toHaveLength(0);

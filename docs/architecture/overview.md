@@ -80,6 +80,7 @@ flowchart TB
 | `workers/coder-acp-copilot` | GitHub Copilot agent via Agent Client Protocol (ACP) |
 | `workers/report-generator` | Copilot SDK worker that generates post-run markdown reports |
 | `workers/post-processor` | DAG-based post-run handlers: `pp-atif` (trajectory ATIF) and `pp-observations` (boolean observations via the judge, per-iteration or whole-run by criterion `subject`) |
+| `workers/readout` | Copilot SDK submission handler that generates schema-validated structured JSON and derived Markdown for an exact submission attempt |
 | `gateway` | AI Gateway — shared Rust TLS-intercepting proxy with plugin architecture (HAR capture, future: token refresh, rate limiting) |
 | `evaluations/static-prompts` | Developer-run static prompt quality and user-controlled prompt red-team suites |
 

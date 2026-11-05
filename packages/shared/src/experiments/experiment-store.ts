@@ -23,6 +23,7 @@ import {
   type ExperimentHandlerStatus,
   type ExperimentMetadata,
   type ExperimentPage,
+  type ExperimentReportReference,
   type ExperimentRequestState,
   type ExperimentRequestStateUpdateResult,
   type ExperimentRevision,
@@ -285,6 +286,29 @@ export class ExperimentStore {
     return raw ? parseHistory(raw) : null;
   }
 
+  async readExecutionRequests(input: {
+    projectId: string;
+    experimentId: string;
+    experimentExecutionId: string;
+  }): Promise<ExperimentRequestState[] | null> {
+    const experiment = await this.get(input.projectId, input.experimentId);
+    const execution =
+      experiment?.execution.experimentExecutionId ===
+      input.experimentExecutionId
+        ? experiment.execution
+        : await this.getExecution(input);
+    if (!execution) return null;
+    return this.payloads.readRequests(
+      {
+        projectId: input.projectId,
+        experimentId: input.experimentId,
+        ownerId: execution.experimentExecutionId,
+        generation: execution.attemptNumber,
+      },
+      execution.requests,
+    );
+  }
+
   async listExecutionHistory(input: {
     projectId: string;
     experimentId: string;
@@ -358,6 +382,7 @@ export class ExperimentStore {
     claimToken: string;
     status: Extract<ExperimentHandlerStatus, "done" | "failed">;
     error?: string;
+    report?: ExperimentReportReference;
     now?: Date;
   }): Promise<ExperimentDocument | null> {
     assertHandlerId(input.handlerId);
@@ -387,6 +412,7 @@ export class ExperimentStore {
           },
           "execution.updatedAt": now,
           "execution.finishedAt": now,
+          ...(input.report ? { "execution.report": input.report } : {}),
           updatedAt: now,
         },
         $inc: { "execution.version": 1, stateVersion: 1 },
