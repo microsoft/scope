@@ -213,16 +213,6 @@ pnpm test:integration             # Integration tests (requires .env + Docker)
 
 > **Portal Storybook stories run under Vitest**: `apps/portal/src/components/ui/stories.play.test.tsx` composes the `ui/*` stories and executes their `play` (interaction) functions inside the regular Vitest suite (no `@storybook/addon-vitest` required). It binds a Testing Library `canvas` to the rendered container, so story `play` functions must keep depending only on `canvas` plus values imported directly from `storybook/test` (`userEvent`, `screen`, `expect`). When you add a new `ui/*` story with a `play` function, register its module in that harness so it's covered.
 
-### GitHub Actions
-
-Every external action or reusable workflow under `.github/workflows/` must use
-a full 40-character commit SHA followed by its release version comment. Use
-`pinact run` to add or update pins instead of resolving SHAs manually, then run
-`pinact run --check --verify-comment` and
-`pnpm exec vitest run scripts/ci-workflow.test.ts` before completion. Do not
-hand-edit generated `*.lock.yml` workflows; regenerate them with their owning
-gh-aw tooling.
-
 ### Static prompt evaluations
 
 Read [docs/architecture/prompt-evaluations.md](docs/architecture/prompt-evaluations.md)
