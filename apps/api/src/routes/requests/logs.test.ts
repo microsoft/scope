@@ -63,6 +63,69 @@ describe("SSE log endpoints — blob replay", () => {
     _injectTestDependencies(mocks);
   });
 
+  describe("JSON log endpoints", () => {
+    it("reads the current attempt's stored events without opening an SSE stream", async () => {
+      const logs = [makeLogEvent("completed")];
+      (mocks.collection.findOne as any).mockResolvedValue({
+        _id: "request-1",
+        run: { _id: "attempt-1", status: "done" },
+      });
+      (mocks.blobStorage.getLogEvents as any).mockResolvedValue(logs);
+
+      const res = await request(testServer()).get("/api/v1/requests/request-1/logs/events");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(logs);
+      expect(mocks.blobStorage.getLogEvents).toHaveBeenCalledWith("request-1", "attempt-1");
+      expect(mocks.collection.watch).not.toHaveBeenCalled();
+    });
+
+    it("uses the attempt URL for historical run logs", async () => {
+      const logs = [makeLogEvent("previous attempt")];
+      (mocks.collection.findOne as any).mockResolvedValue({
+        _id: "request-1",
+        run: { _id: "attempt-2", status: "done" },
+      });
+      (mocks.runsCollection.findOne as any).mockResolvedValue({
+        _id: "attempt-1",
+        requestId: "request-1",
+        status: "done",
+        logsUrl: "https://logs/attempt-1",
+      });
+      (mocks.blobStorage.getLogEvents as any).mockResolvedValue(logs);
+
+      const res = await request(testServer()).get("/api/v1/requests/request-1/runs/attempt-1/logs/events");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(logs);
+      expect(mocks.blobStorage.getLogEvents).toHaveBeenCalledWith("https://logs/attempt-1");
+    });
+
+    it("returns a storage error for JSON log reads", async () => {
+      (mocks.collection.findOne as any).mockResolvedValue({
+        _id: "request-1",
+        run: { _id: "attempt-1", status: "done" },
+      });
+      (mocks.blobStorage.getLogEvents as any).mockRejectedValue(new Error("blob unavailable"));
+
+      const res = await request(testServer()).get("/api/v1/requests/request-1/logs/events");
+
+      expect(res.status).toBe(502);
+    });
+
+    it("reads stored report events as JSON", async () => {
+      const logs = [makeLogEvent("report complete")];
+      (mocks.reportCollection.findOne as any).mockResolvedValue({ _id: "report-1", status: "completed" });
+      (mocks.blobStorage.getLogEvents as any).mockResolvedValue(logs);
+
+      const res = await request(testServer()).get("/api/v1/reports/report-1/logs/events");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(logs);
+      expect(mocks.blobStorage.getLogEvents).toHaveBeenCalledWith("report-1");
+    });
+  });
+
   // =========================================================================
   // GET /api/v1/requests/:id/logs
   // =========================================================================

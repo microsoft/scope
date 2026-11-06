@@ -44,18 +44,27 @@ export function ReportDetail() {
 
   const isActive = report?.status === "pending" || report?.status === "generating";
 
-  // The SSE endpoint handles completed reports by replaying blob logs then closing.
+  const isTerminal = report?.status === "completed" || report?.status === "failed";
+  const { data: storedLogs, error: storedLogsError } = useQuery({
+    queryKey: ["report-log-events", id],
+    queryFn: () => api.getReportLogEvents(id!),
+    enabled: !!id && isTerminal,
+  });
+
+  // Active reports stream; terminal reports use the JSON log response.
   const logStream = useLogStream({
     id: report?._id ?? "",
-    enabled: !!report,
+    enabled: !!report && !isTerminal,
     fromStart: true,
     urlBuilder: api.reportLogsUrl,
   });
 
-  const effectiveLogs = logStream.logs;
+  const effectiveLogs = isTerminal ? (storedLogs ?? logStream.logs) : logStream.logs;
   const effectiveIsConnected = isActive ? logStream.isConnected : false;
-  const effectiveIsDone = logStream.isDone;
-  const effectiveError = logStream.error;
+  const effectiveIsDone = isTerminal || logStream.isDone;
+  const effectiveError = isTerminal
+    ? (storedLogsError instanceof Error ? storedLogsError.message : null)
+    : logStream.error;
 
   const copyId = () => {
     navigator.clipboard.writeText(id ?? "");

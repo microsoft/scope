@@ -2,13 +2,20 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import type { RunState } from "shared";
+import { LogEventSchema, type LogEvent, type RunState } from "shared";
 import type { Response } from "express";
 import { apiRoute } from "../../openapi/api-route.js";
 import type { RouteContext } from "../../route-context.js";
 import { subscribeClient, unsubscribeClient } from "../../utils/sse.js";
 import type { SSEClient } from "../../utils/sse.js";
 import { resolveRunForRequest } from "./resolve-run.js";
+
+/** Read the same attempt log blob used by SSE replay. */
+function readRunLogs(ctx: RouteContext, id: string, run: RunState): Promise<LogEvent[]> {
+  return run.logsUrl
+    ? ctx.blobStorage.getLogEvents(run.logsUrl)
+    : ctx.blobStorage.getLogEvents(id, run._id);
+}
 
 /**
  * Shared SSE log-streaming handler.
@@ -32,10 +39,7 @@ async function handleLogs(
   // Replay logs from blob storage
   if (fromStart) {
     try {
-      const logsUrl = targetRun.logsUrl;
-      const pastLogs = logsUrl
-        ? await ctx.blobStorage.getLogEvents(logsUrl)
-        : await ctx.blobStorage.getLogEvents(id, targetRun._id);
+      const pastLogs = await readRunLogs(ctx, id, targetRun);
       for (const log of pastLogs) {
         res.write(`data: ${JSON.stringify(log)}\n\n`);
       }
@@ -144,6 +148,58 @@ async function handleLogs(
 }
 
 export function registerRequestsLogsRoutes(ctx: RouteContext): void {
+
+// Plain JSON replay for completed requests avoids an SSE connection.
+apiRoute(ctx.app, ctx.registry, {
+  method: "get",
+  path: "/api/v1/requests/:id/logs/events",
+  tags: ["Requests"],
+  summary: "Get request log events (JSON)",
+  params: z.object({ id: z.string() }),
+  response: z.array(LogEventSchema),
+  errorResponses: { 404: { description: "Request not found" }, 502: { description: "Log storage unavailable" } },
+  handler: async (req, res) => {
+    const { id } = req.params;
+    const resource = await ctx.requestCollection.findOne({ _id: id });
+    if (!resource?.run) {
+      res.status(404).json({ error: "Request not found" });
+      return;
+    }
+
+    try {
+      res.json(await readRunLogs(ctx, id, resource.run));
+    } catch (error) {
+      console.error(`Failed to read logs for request ${id}:`, error);
+      res.status(502).json({ error: "Cannot connect to log storage" });
+    }
+  },
+});
+
+// Historical attempts use the same request ownership check as their SSE route.
+apiRoute(ctx.app, ctx.registry, {
+  method: "get",
+  path: "/api/v1/requests/:id/runs/:runId/logs/events",
+  tags: ["Requests"],
+  summary: "Get log events for an attempt (JSON)",
+  params: z.object({ id: z.string(), runId: z.string() }),
+  response: z.array(LogEventSchema),
+  errorResponses: { 404: { description: "Run not found" }, 502: { description: "Log storage unavailable" } },
+  handler: async (req, res) => {
+    const { id, runId } = req.params;
+    const resolved = await resolveRunForRequest(ctx, id, runId);
+    if ("error" in resolved) {
+      res.status(resolved.status).json({ error: resolved.error });
+      return;
+    }
+
+    try {
+      res.json(await readRunLogs(ctx, id, resolved.run));
+    } catch (error) {
+      console.error(`Failed to read logs for request ${id}, attempt ${runId}:`, error);
+      res.status(502).json({ error: "Cannot connect to log storage" });
+    }
+  },
+});
 
 // Request-level log streaming
 apiRoute(ctx.app, ctx.registry, {
