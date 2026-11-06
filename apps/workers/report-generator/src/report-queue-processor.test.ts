@@ -36,6 +36,7 @@ vi.mock("shared", () => {
     protected collection = { updateOne: vi.fn().mockResolvedValue({}) };
     constructor() {}
     protected safeDeleteMessage = vi.fn().mockResolvedValue(undefined);
+    protected safeDeferMessage = vi.fn().mockResolvedValue(undefined);
   }
   class StubTokenManagerClient {
     acquireToken = vi.fn().mockResolvedValue("fake-token");
@@ -66,7 +67,11 @@ vi.mock("os", () => ({
   tmpdir: vi.fn(() => "/tmp"),
 }));
 
-import { ReportQueueProcessor } from "./report-queue-processor.js";
+import {
+  ReportQueueProcessor,
+  RUN_NOT_FINISHED_DEFER_SECONDS,
+  classifyRunReadiness,
+} from "./report-queue-processor.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -445,6 +450,87 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
     const requestedUrl = String(fetchMock.mock.calls[0][0]);
     expect(requestedUrl).toContain("/report-templates/nonexistent-template");
     expect(requestedUrl).toContain("projectId=proj-1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Run readiness (#1287)
+// ---------------------------------------------------------------------------
+
+describe("classifyRunReadiness", () => {
+  it.each(["pending", "queued", "processing", "paused"])("waits while the run is %s", (status) => {
+    expect(classifyRunReadiness({ run: { status, turns: [] } as any })).toEqual({ state: "waiting", runStatus: status });
+  });
+
+  it("waits when the request has no run yet", () => {
+    expect(classifyRunReadiness({})).toEqual({ state: "waiting", runStatus: "pending" });
+  });
+
+  it("is ready once the run is done with at least one turn", () => {
+    expect(classifyRunReadiness({ run: { status: "done", outcome: "failed", turns: [{ iteration: 1 }] } as any }))
+      .toEqual({ state: "ready" });
+  });
+
+  it("is non-evaluable when the run finished without any turn", () => {
+    const readiness = classifyRunReadiness({ run: { status: "done", outcome: "failed", error: "boom", turns: [] } as any });
+
+    expect(readiness.state).toBe("non-evaluable");
+    expect(readiness.state === "non-evaluable" && readiness.reason).toContain("boom");
+  });
+});
+
+describe("ReportQueueProcessor – waits for an evaluable run (#1287)", () => {
+  let processor: ReportQueueProcessor;
+  let log: ReturnType<typeof vi.fn>;
+  const heartbeat = { stop: vi.fn(() => "pop-latest"), popReceipt: "pop-latest" };
+  const message = { messageId: "msg-1", popReceipt: "pop-1" };
+  const doc = { _id: "report-1", projectId: "proj-1", requestId: "req-1", templateId: "tpl", status: "pending", createdAt: new Date() };
+
+  /** Serve the template, then the run document, from the API. */
+  function stubApi(run: Record<string, unknown>) {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/report-templates/")) {
+        return { ok: true, json: async () => ({ id: "tpl", name: "Template", userPrompt: "Report on {{requestId}}" }) };
+      }
+      return { ok: true, json: async () => ({ _id: "req-1", run }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+  }
+
+  beforeEach(() => {
+    log = vi.fn().mockResolvedValue(undefined);
+    processor = new ReportQueueProcessor(makeConfig());
+    heartbeat.stop.mockClear();
+    mockCreateSession.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("defers the job and keeps the report pending while the run is processing", async () => {
+    stubApi({ status: "processing", turns: [] });
+
+    await (processor as any).handleRequest(doc, message, heartbeat, log);
+
+    expect((processor as any).safeDeferMessage).toHaveBeenCalledWith("msg-1", "pop-latest", RUN_NOT_FINISHED_DEFER_SECONDS);
+    expect((processor as any).safeDeleteMessage).not.toHaveBeenCalled();
+    expect((processor as any).collection.updateOne).not.toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith("info", expect.stringContaining("Waiting for run req-1 to finish (status: processing)"));
+  });
+
+  it("fails the report as non-evaluable instead of scoring a run with no turns", async () => {
+    stubApi({ status: "done", outcome: "failed", turns: [] });
+
+    await (processor as any).handleRequest(doc, message, heartbeat, log);
+
+    expect((processor as any).collection.updateOne).toHaveBeenCalledWith(
+      { _id: "report-1" },
+      { $set: expect.objectContaining({ status: "failed", error: expect.stringContaining("Non-evaluable run") }) },
+    );
+    expect((processor as any).safeDeleteMessage).toHaveBeenCalledWith("msg-1", "pop-latest");
+    expect(mockCreateSession).not.toHaveBeenCalled();
   });
 });
 
