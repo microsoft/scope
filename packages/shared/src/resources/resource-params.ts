@@ -92,7 +92,7 @@ export interface ResolveParamsInput {
 }
 
 export interface ResolveParamsResult {
-  /** Fully resolved values: defaults, overlaid by profile, overlaid by run. */
+  /** Fully resolved values: defaults, overlaid by run, overlaid by profile (profile wins). */
   params: Record<string, string>;
   /** Human-readable conflicts, matching the API's existing `conflicts[]` shape. */
   conflicts: string[];
