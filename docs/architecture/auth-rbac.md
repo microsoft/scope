@@ -44,6 +44,16 @@ for coordinated configuration and workers-free emulator-free startup.
 
 The following identity, role and freshness contract applies when auth is enabled.
 
+The Portal's signed-out welcome page follows the public website's branding with
+responsive light/dark layouts, product context and first-time access guidance.
+Sign-in stays explicit: visiting the page never redirects or enrolls an account.
+The **Log in** action shows a pending state and prevents repeat submissions while
+starting the identity-provider redirect; a failed redirect displays an inline
+error and permits retry. Configuration, account-resolution and access-denied
+states share the welcome shell without mounting protected application content.
+These styles are scoped to the entry page and do not change the authenticated
+Portal's palette or any authentication/authorization policy.
+
 | Principal | Project content | Project settings | Memberships and project lifecycle |
 |-----------|-----------------|------------------|----------------------------------|
 | Enrolled user with no membership | None; own account only | None | None |

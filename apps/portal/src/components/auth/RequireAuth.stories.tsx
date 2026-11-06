@@ -3,7 +3,7 @@
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ComponentType } from "react";
-import { expect } from "storybook/test";
+import { expect, fn, userEvent } from "storybook/test";
 import { AuthContext, type AuthContextValue } from "@/contexts/AuthContext";
 import { signedOutAuth } from "@/contexts/authFixtures";
 import { ApiError } from "@/lib/api";
@@ -19,12 +19,50 @@ function withAuth(auth: Partial<AuthContextValue>) {
 
 const meta = {
   component: RequireAuth,
-  tags: ["ai-generated"],
+  tags: ["ai-generated", "needs-work"],
+  parameters: { layout: "fullscreen" },
   args: { children: <div>Scope application</div> },
 } satisfies Meta<typeof RequireAuth>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+const login = fn(async () => {});
+export const SignedOut: Story = {
+  decorators: [withAuth({ login })],
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole("heading", { name: "Welcome to Scope" })).toBeVisible();
+    await expect(canvas.queryByText("Scope application")).toBeNull();
+    await expect(login).not.toHaveBeenCalled();
+    await userEvent.click(canvas.getByRole("button", { name: "Log in" }));
+    await expect(login).toHaveBeenCalledTimes(1);
+  },
+};
+
+const pendingLogin = fn(() => new Promise<void>(() => {}));
+export const StartingSignIn: Story = {
+  decorators: [withAuth({ login: pendingLogin })],
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Log in" }));
+    const button = canvas.getByRole("button", { name: "Opening sign-in…" });
+    await expect(button).toBeDisabled();
+    await expect(canvas.getByRole("status")).toHaveTextContent("Taking you to your sign-in page");
+    await userEvent.click(button);
+    await expect(pendingLogin).toHaveBeenCalledTimes(1);
+  },
+};
+
+const failedLogin = fn(async () => { throw new Error("Identity provider unavailable"); });
+export const SignInFailure: Story = {
+  decorators: [withAuth({ login: failedLogin })],
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Log in" }));
+    await expect(canvas.getByRole("alert")).toHaveTextContent("Unable to start sign-in. Please try again.");
+    await expect(canvas.getByRole("button", { name: "Log in" })).toBeEnabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Log in" }));
+    await expect(failedLogin).toHaveBeenCalledTimes(2);
+  },
+};
 
 export const Resolving: Story = {
   decorators: [withAuth({ status: "resolving" })],
