@@ -7,6 +7,7 @@ const Redis = require("ioredis");
 import { circuitBreaker, handleAll, ConsecutiveBreaker, CircuitState } from "cockatiel";
 import { LogEvent } from "../types/types.js";
 import { BlobStorage } from "../storage/blob-storage.js";
+import { redactLogData, redactSecrets } from "./redact-secrets.js";
 
 export interface RedisConfig {
   redisHost: string;
@@ -15,6 +16,31 @@ export interface RedisConfig {
 }
 
 export type LogPublisherConfig = RedisConfig;
+
+/**
+ * Build a log event with value-based secret redaction applied to its message
+ * and data (issue #1141). Both publishers go through here, so every line that
+ * reaches Redis/SSE or Blob storage is scrubbed exactly once.
+ *
+ * @param level - Log level.
+ * @param source - Emitting service (e.g. `"coder"`, `"judge"`).
+ * @param message - Human-readable log line.
+ * @param data - Optional structured payload; string values are redacted recursively.
+ */
+function buildRedactedLogEvent(
+  level: LogEvent["level"],
+  source: string,
+  message: string,
+  data?: Record<string, unknown>,
+): LogEvent {
+  return {
+    timestamp: new Date().toISOString(),
+    level,
+    source,
+    message: redactSecrets(message),
+    data: data === undefined ? undefined : redactLogData(data),
+  };
+}
 
 export class LogPublisher {
   private redis: InstanceType<typeof Redis>;
@@ -75,13 +101,7 @@ export class LogPublisher {
     message: string,
     data?: Record<string, unknown>
   ): Promise<void> {
-    const logEvent: LogEvent = {
-      timestamp: new Date().toISOString(),
-      level,
-      source: this.source,
-      message,
-      data,
-    };
+    const logEvent = buildRedactedLogEvent(level, this.source, message, data);
 
     // Publish to Redis for real-time streaming (with circuit breaker).
     // The Redis channel is keyed on requestId so SSE listeners receive logs
@@ -170,13 +190,7 @@ export class RedisLogPublisher {
     message: string,
     data?: Record<string, unknown>
   ): Promise<void> {
-    const logEvent: LogEvent = {
-      timestamp: new Date().toISOString(),
-      level,
-      source: this.source,
-      message,
-      data,
-    };
+    const logEvent = buildRedactedLogEvent(level, this.source, message, data);
 
     const channel = `logs:${requestId}`;
     try {

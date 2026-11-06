@@ -45,6 +45,16 @@ sequenceDiagram
 - **SSE heartbeat** every 30s (`:\n\n` comment) to prevent proxy/LB disconnects
 - **Inactivity timeout** of 5 minutes — closes stream if no log messages forwarded
 - **Redis pub/sub** is the primary log transport (workers publish per-run)
+- **Secret redaction at the boundary** — `LogPublisher` and `RedisLogPublisher` run every event's
+  `message` and (recursively) `data` strings through `redactSecrets` /
+  `redactLogData` (`packages/shared/src/logging/redact-secrets.ts`) before publishing to Redis
+  and appending to Blob, so SSE subscribers and `run.jsonl` never see the raw value (issue #1141).
+  Detection is **value-based** against a curated set of high-confidence token shapes (private-key
+  PEM blocks, Azure `AccountKey=` and SAS `sig=`, `Bearer` tokens, JWTs, AWS access key ids,
+  GitHub/Slack/OpenAI/Anthropic/Google/Stripe/npm/Hugging Face tokens); matches become
+  `[REDACTED:<rule-id>]`, keeping descriptive prefixes like `Bearer ` or `AccountKey=`. The
+  workers' name-based filter in `formatToolArgs` stays as defense-in-depth. Generic entropy and
+  PII detection are not included; tool-call JSONL (below) is not scrubbed by this layer.
 - **MongoDB Change Stream** is a **completion detector only** — watches for status field updates to `completed`/`failed`/`exhausted`
 - Cleanup on client disconnect (`req.on("close")`)
 
