@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/growth-ecosystems/scope-core/docs/architecture/diagram.schema.json",
+  "title": "Architecture Diagram",
+  "description": "Schema for the Scope architecture diagram rendered by the arch-diagram canvas extension.",
+  "type": "object",
+  "required": ["title", "groups", "nodes", "edges"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Reference to this JSON Schema file."
+    },
+    "title": {
+      "type": "string",
+      "description": "Diagram title displayed in the canvas header."
+    },
+    "layout": {
+      "type": "string",
+      "enum": ["layered", "stress", "force", "mrtree"],
+      "default": "layered",
+      "description": "ELK layout algorithm: 'layered' (hierarchical DAG), 'stress' (organic), 'force' (force-directed), 'mrtree' (tree)."
+    },
+    "groups": {
+      "type": "array",
+      "description": "Visual groups that contain related nodes (rendered as sub-flows).",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "color"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^grp_",
+            "description": "Unique group identifier. Must start with 'grp_'."
+          },
+          "label": {
+            "type": "string",
+            "description": "Display label for the group."
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "Hex color used for the group border and label."
+          }
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Architecture components rendered as diagram nodes.",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "color"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique node identifier."
+          },
+          "label": {
+            "type": "string",
+            "description": "Display label for the node."
+          },
+          "group": {
+            "type": "string",
+            "pattern": "^grp_",
+            "description": "ID of the parent group. Omit for ungrouped nodes."
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "Hex color used for the node border."
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Connections between nodes or groups showing data flow.",
+      "items": {
+        "type": "object",
+        "required": ["id", "source", "target", "label", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique edge identifier."
+          },
+          "source": {
+            "type": "string",
+            "description": "Source node or group ID."
+          },
+          "target": {
+            "type": "string",
+            "description": "Target node or group ID."
+          },
+          "label": {
+            "type": "string",
+            "description": "Edge label describing the protocol and sync/async nature."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["sync", "async", "storage"],
+            "description": "Edge type: 'sync' (gray solid), 'async' (purple solid), 'storage' (gray dashed)."
+          }
+        }
+      }
+    }
+  }
+}
