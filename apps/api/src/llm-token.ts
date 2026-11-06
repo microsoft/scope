@@ -20,10 +20,7 @@
  */
 import ModelClient, { type ModelClient as ModelClientType } from "@azure-rest/ai-inference";
 import { AzureKeyCredential } from "@azure/core-auth";
-import {
-  TokenManagerClient,
-  parseAzureAiFoundrySecret,
-} from "shared";
+import { TokenManagerClient } from "shared";
 
 const GITHUB_MODELS_ENDPOINT = "https://models.inference.ai.azure.com";
 
@@ -189,13 +186,7 @@ function logInferenceAcquired(handle: InferenceClientHandle): void {
  *
  * Returns null when no token-manager is configured, when no key is
  * registered for the capability, when the request fails, or when the
- * registered secret is malformed.
- *
- * Note: when only AZURE_AI_INFERENCE_API_KEY is set (without the matching
- * endpoint), TokenManagerClient's env-var shortcut returns the bare key,
- * which parseAzureAiFoundrySecret rejects as malformed — so we fall
- * through to the next backend. The both-vars-set case is already handled
- * in acquireInferenceClient before this is called.
+ * registered endpoint is malformed.
  */
 async function tryAcquireFoundryFromTokenManager(): Promise<{
   endpoint: string;
@@ -206,8 +197,12 @@ async function tryAcquireFoundryFromTokenManager(): Promise<{
   if (!client) return null;
 
   try {
-    const raw = await client.acquireToken("azure-ai-inference");
-    return parseAzureAiFoundrySecret(raw);
+    const endpoint = await client.acquireEndpoint("azure-ai-inference");
+    return {
+      endpoint: endpoint.endpoint,
+      apiKey: endpoint.apiKey,
+      model: endpoint.deployment,
+    };
   } catch {
     return null;
   }
