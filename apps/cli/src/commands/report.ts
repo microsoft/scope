@@ -9,7 +9,7 @@ import { formatData, isMachineReadable } from "../utils/formatters.js";
 import type { OutputFormat, DisplayField } from "../utils/types.js";
 import { normalizeUrl, withOutputOption, withProjectOption, getCliName, getDefaultApiUrl } from "../utils/shared.js";
 import { requireProjectId } from "../utils/config.js";
-import { apiFetch, getApiBasePath } from "../utils/api-client.js";
+import { apiFetch, CLI_USER_AGENT, getApiBasePath } from "../utils/api-client.js";
 
 export function registerReportCommands(program: Command): void {
 // ─── Report management ──────────────────────────────────────────────────────
@@ -52,7 +52,8 @@ report
       if (options.stream) {
         console.log(`\n${label('Streaming logs...')}\n`);
         const eventSource = new EventSource(
-          `${normalizeUrl(options.url)}${getApiBasePath()}/reports/${result.id}/logs?fromStart=true`
+          `${normalizeUrl(options.url)}${getApiBasePath()}/reports/${result.id}/logs?fromStart=true`,
+          { headers: { "User-Agent": CLI_USER_AGENT } },
         );
 
         eventSource.onmessage = (event: MessageEvent) => {
@@ -264,7 +265,8 @@ report
 
       const fromStartParam = options.fromStart ? "&fromStart=true" : "";
       const eventSource = new EventSource(
-        `${normalizeUrl(options.url)}${getApiBasePath()}/reports/${options.id}/logs?${fromStartParam}`
+        `${normalizeUrl(options.url)}${getApiBasePath()}/reports/${options.id}/logs?${fromStartParam}`,
+        { headers: { "User-Agent": CLI_USER_AGENT } },
       );
 
       eventSource.onmessage = (event: MessageEvent) => {

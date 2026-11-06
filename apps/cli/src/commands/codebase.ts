@@ -11,6 +11,7 @@ import { formatData, isMachineReadable } from "../utils/formatters.js";
 import type { DisplayField, OutputFormat } from "../utils/types.js";
 import { getDefaultApiUrl, normalizeUrl, withOutputOption, withProjectOption } from "../utils/shared.js";
 import { requireProjectId } from "../utils/config.js";
+import { CLI_USER_AGENT } from "../utils/api-client.js";
 
 type JsonDate = string | Date;
 type CodebaseApiDocument = Omit<CodebaseDocument, "createdAt" | "updatedAt" | "deletedAt"> & {
@@ -56,8 +57,14 @@ async function readError(response: Response): Promise<string> {
   return error.error ?? JSON.stringify(error);
 }
 
+async function fetchWithUserAgent(url: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("user-agent")) headers.set("user-agent", CLI_USER_AGENT);
+  return fetch(url, { ...init, headers });
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await fetchWithUserAgent(url, init);
   if (!response.ok) {
     throw new Error(await readError(response));
   }
@@ -65,7 +72,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 async function resolveCodebase(baseUrl: string, idOrSlug: string): Promise<CodebaseApiDocument> {
-  const directResponse = await fetch(`${baseUrl}/api/v1/codebases/${encodeURIComponent(idOrSlug)}`);
+  const directResponse = await fetchWithUserAgent(`${baseUrl}/api/v1/codebases/${encodeURIComponent(idOrSlug)}`);
   if (directResponse.ok) {
     return await directResponse.json() as CodebaseApiDocument;
   }
@@ -182,7 +189,7 @@ export function registerCodebaseCommands(program: Command): void {
         if (options.description) formData.append("description", options.description);
         const blob = new Blob([archiveBuffer], { type: "application/octet-stream" });
         formData.append("archive", blob, basename(resolvedPath));
-        const response = await fetch(`${baseUrl}/api/v1/codebases?projectId=${encodeURIComponent(projectId)}`, { method: "POST", body: formData });
+        const response = await fetchWithUserAgent(`${baseUrl}/api/v1/codebases?projectId=${encodeURIComponent(projectId)}`, { method: "POST", body: formData });
         if (!response.ok) {
           throw new Error(await readError(response));
         }
@@ -304,7 +311,7 @@ export function registerCodebaseCommands(program: Command): void {
       const blob = new Blob([archiveBuffer], { type: "application/octet-stream" });
       formData.append("archive", blob, basename(resolvedPath));
 
-      const response = await fetch(`${baseUrl}/api/v1/codebases/${encodeURIComponent(codebaseId(resolved))}/upload`, {
+      const response = await fetchWithUserAgent(`${baseUrl}/api/v1/codebases/${encodeURIComponent(codebaseId(resolved))}/upload`, {
         method: "POST",
         body: formData,
       });
@@ -340,7 +347,7 @@ export function registerCodebaseCommands(program: Command): void {
       const baseUrl = normalizeUrl(options.url);
       try {
         const resolved = await resolveCodebase(baseUrl, codebaseIdOrSlug);
-        const response = await fetch(`${baseUrl}/api/v1/codebases/${encodeURIComponent(codebaseId(resolved))}`, {
+        const response = await fetchWithUserAgent(`${baseUrl}/api/v1/codebases/${encodeURIComponent(codebaseId(resolved))}`, {
           method: "DELETE",
         });
         if (!response.ok) {

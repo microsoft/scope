@@ -44,12 +44,14 @@ let server: Server;
 let port: number;
 let bundleDir: string;
 let isolatedBundle: string;
+let lastUserAgent: string | undefined;
 
 beforeAll(async () => {
   bundleDir = mkdtempSync(join(tmpdir(), "scope-bundle-"));
   isolatedBundle = join(bundleDir, "scope.mjs");
   copyFileSync(BUNDLE_PATH, isolatedBundle);
   server = createServer((req, res) => {
+    lastUserAgent = req.headers["user-agent"];
     const url = new URL(req.url ?? "/", `http://localhost`);
     const response = MOCK_RESPONSES[url.pathname];
     if (response) {
@@ -112,6 +114,7 @@ describe("Bundle integration tests", () => {
     expect(stdout).toContain("req-test-001");
     expect(stdout).toContain("coder-acp-copilot");
     expect(stdout).toContain("done");
+    expect(lastUserAgent).toMatch(/^scope-cli\/\d+\.\d+\.\d+/);
   });
 
   it("criteria list fetches from mock API", async () => {

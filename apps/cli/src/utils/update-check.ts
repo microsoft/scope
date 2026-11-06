@@ -13,6 +13,7 @@ import { execSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import semver from "semver";
+import { CLI_USER_AGENT } from "./api-client.js";
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const CONFIG_DIR = join(homedir(), ".config", "scope");
@@ -107,6 +108,7 @@ export async function fetchLatestVersion(timeoutMs = 5000): Promise<string | und
   try {
     const headers: Record<string, string> = {
       Accept: "application/vnd.github.v3+json",
+      "User-Agent": CLI_USER_AGENT,
     };
     const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
     if (token) {
