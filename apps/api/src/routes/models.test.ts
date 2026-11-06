@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 import { OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
-import type { AgentDocument, ModelDocument } from "shared";
+import type { CodingAgentDocument as AgentDocument, ModelDocument } from "shared";
 import type { RouteContext } from "../route-context.js";
 import { useTestServer } from "../test-server.js";
 import { registerModelsRoutes } from "./models.js";
