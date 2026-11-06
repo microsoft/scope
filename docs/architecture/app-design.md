@@ -79,6 +79,7 @@ erDiagram
 ```
 
 - **Run** — A single benchmark execution: one scenario + one persona + one worker
+- **Report** — Generated analysis of a run in `reports`, linked by `requestId`. Reports have no delete endpoint of their own: soft-deleting a run (`DELETE /api/v1/requests/:id` or `/bulk`) stamps the same `deletedAt` on its active reports, and every report read (lists, status/summary rollups, by-id get, insight back-references) excludes them.
 - **Iteration** — A coding agent turn within a run (agent may iterate multiple times)
 - **Criterion** — An evaluation check (e.g., "has a working Express server"). Criteria form a DAG (directed acyclic graph) with dependencies.
 - **CriterionResult** — Pass/fail result of evaluating a criterion against a specific iteration
