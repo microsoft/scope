@@ -56,7 +56,7 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       // Verify the run exists
-      const run = await ctx.requestCollection.findOne({ _id: requestId });
+      const run = await ctx.requestCollection.findOne({ _id: requestId, deletedAt: { $exists: false } });
       if (!run) {
         res.status(404).json({ error: `Run ${requestId} not found` });
         return;
@@ -113,7 +113,7 @@ apiRoute(ctx.app, ctx.registry, {
   handler: async (req, res, next) => {
     try {
       const requestIdFilter = req.query.requestId as string;
-      const filter: Record<string, unknown> = {};
+      const filter: Record<string, unknown> = { deletedAt: { $exists: false } };
       if (requestIdFilter) {
         // Parent-scoped: the run id already pins the project.
         filter.requestId = requestIdFilter;
@@ -162,7 +162,7 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       // Verify all runs exist
-      const runs = await ctx.requestCollection.find({ _id: { $in: requestIds } as any }).toArray();
+      const runs = await ctx.requestCollection.find({ _id: { $in: requestIds } as any, deletedAt: { $exists: false } }).toArray();
       const foundIds = new Set(runs.map(r => r._id));
       const notFound = requestIds.filter(id => !foundIds.has(id));
 
@@ -222,7 +222,7 @@ apiRoute(ctx.app, ctx.registry, {
 
       // Find the latest report for each requestId
       const reports = await ctx.reportCollection
-        .find({ requestId: { $in: requestIds } })
+        .find({ requestId: { $in: requestIds }, deletedAt: { $exists: false } })
         .sort({ createdAt: -1 })
         .toArray();
 
@@ -267,7 +267,7 @@ apiRoute(ctx.app, ctx.registry, {
       // Aggregation: group by (requestId, templateId), keep latest status per
       // template, then roll up into per-requestId status counts.
       const pipeline = [
-        { $match: { requestId: { $in: requestIds } } },
+        { $match: { requestId: { $in: requestIds }, deletedAt: { $exists: false } } },
         { $sort: { createdAt: -1 as const } },
         // Keep only the latest report per (requestId, templateId)
         {
@@ -323,7 +323,7 @@ apiRoute(ctx.app, ctx.registry, {
     try {
       const { id } = req.params;
 
-      const report = await ctx.reportCollection.findOne({ _id: id });
+      const report = await ctx.reportCollection.findOne({ _id: id, deletedAt: { $exists: false } });
 
       if (!report) {
         res.status(404).json({ error: "Report not found" });
@@ -354,7 +354,7 @@ apiRoute(ctx.app, ctx.registry, {
       const { id } = req.params;
       const fromStart = req.query.fromStart === "true";
 
-      const report = await ctx.reportCollection.findOne({ _id: id });
+      const report = await ctx.reportCollection.findOne({ _id: id, deletedAt: { $exists: false } });
 
       if (!report) {
         res.status(404).json({ error: "Report not found" });
@@ -496,7 +496,7 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       // Fetch the completed run
-      const run = await ctx.requestCollection.findOne({ _id: requestId });
+      const run = await ctx.requestCollection.findOne({ _id: requestId, deletedAt: { $exists: false } });
       if (!run) {
         res.status(404).json({ error: `Run ${requestId} not found` });
         return;
@@ -573,7 +573,7 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       // Fetch runs
-      const runs = await ctx.requestCollection.find({ _id: { $in: requestIds } as any }).toArray();
+      const runs = await ctx.requestCollection.find({ _id: { $in: requestIds } as any, deletedAt: { $exists: false } }).toArray();
       const foundIds = new Set(runs.map(r => r._id));
       const notFound = requestIds.filter(id => !foundIds.has(id));
 
@@ -646,7 +646,7 @@ apiRoute(ctx.app, ctx.registry, {
   handler: async (req, res, next) => {
     try {
       const { id } = req.params;
-      const report = await ctx.reportCollection.findOne({ _id: id });
+      const report = await ctx.reportCollection.findOne({ _id: id, deletedAt: { $exists: false } });
       if (!report) {
         res.status(404).json({ error: "Report not found" });
         return;
@@ -710,7 +710,7 @@ apiRoute(ctx.app, ctx.registry, {
         return;
       }
 
-      const report = await ctx.reportCollection.findOne({ _id: id });
+      const report = await ctx.reportCollection.findOne({ _id: id, deletedAt: { $exists: false } });
       if (!report) {
         res.status(404).json({ error: "Report not found" });
         return;

@@ -43,4 +43,5 @@ export const REQUIRED_MIGRATIONS: readonly string[] = [
   "028-isolate-mcp-secrets-per-project.ts",
   "029-create-users-collection.ts",
   "030-create-resource-indexes.ts",
+  "031-add-reports-soft-delete-index.ts",
 ];
