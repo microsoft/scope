@@ -10,7 +10,7 @@ import { DefaultAzureCredential } from "@azure/identity";
  * and Lowkey Vault (emulator) in local Docker Compose.
  */
 export interface SecretStore {
-  getSecret(name: string): Promise<string>;
+  getSecret(name: string, options?: { bypassCache?: boolean }): Promise<string>;
   setSecret(name: string, value: string): Promise<void>;
   deleteSecret(name: string): Promise<void>;
 }
@@ -38,9 +38,9 @@ export class KeyVaultSecretStore implements SecretStore {
     this.cacheTtlMs = cacheTtlMs;
   }
 
-  async getSecret(name: string): Promise<string> {
+  async getSecret(name: string, options?: { bypassCache?: boolean }): Promise<string> {
     const cached = this.cache.get(name);
-    if (cached && Date.now() - cached.fetchedAt < this.cacheTtlMs) {
+    if (!options?.bypassCache && cached && Date.now() - cached.fetchedAt < this.cacheTtlMs) {
       return cached.value;
     }
 
