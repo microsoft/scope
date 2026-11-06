@@ -5,25 +5,50 @@ import { RestError } from "@azure/storage-blob";
 import { z } from "zod";
 import type { RunState } from "shared";
 import type { Request, Response } from "express";
+import { pipeline } from "node:stream/promises";
 import { apiRoute } from "../../openapi/api-route.js";
 import type { RouteContext } from "../../route-context.js";
 import { resolveRunForRequest } from "./resolve-run.js";
 import { createBlobServiceClient, extractBlobName } from "./blob-helpers.js";
 
+export function parseVideoRange(header: string, size: number): { start: number; end: number } | undefined {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header);
+  if (!match || !size || (!match[1] && !match[2])) return;
+  const first = match[1] ? Number(match[1]) : undefined;
+  const last = match[2] ? Number(match[2]) : undefined;
+  if ((first !== undefined && !Number.isSafeInteger(first)) || (last !== undefined && !Number.isSafeInteger(last))) return;
+  if (first === undefined) {
+    if (!last) return;
+    return { start: Math.max(0, size - last), end: size - 1 };
+  }
+  if (first >= size || (last !== undefined && last < first)) return;
+  return { start: first, end: Math.min(last ?? size - 1, size - 1) };
+}
+
 async function handleVideo(
   ctx: RouteContext,
   req: Request,
   res: Response,
-  targetRun: RunState,
+  targetRun: RunState | undefined,
   id: string,
 ): Promise<void> {
-  const iterationParam = req.query.iteration as string | undefined;
-  const phaseParam = req.query.phase as string | undefined;
-  const indexParam = req.query.index as string | undefined;
-  const videoIndex = indexParam ? parseInt(indexParam, 10) : 0;
-
-  if (isNaN(videoIndex) || videoIndex < 0) {
+  res.setHeader("Cache-Control", "no-store");
+  const iterationParam = req.query.iteration;
+  const phaseParam = req.query.phase;
+  const indexParam = req.query.index;
+  const videoIndex = indexParam === undefined ? 0
+    : typeof indexParam === "string" && /^\d+$/.test(indexParam) ? Number(indexParam) : NaN;
+  if (!Number.isSafeInteger(videoIndex) || videoIndex < 0) {
     res.status(400).json({ error: "Invalid video index" });
+    return;
+  }
+  if (phaseParam !== undefined && phaseParam !== "setup") {
+    res.status(400).json({ error: "Invalid video phase" });
+    return;
+  }
+  if (iterationParam !== undefined && (typeof iterationParam !== "string" ||
+      !/^[1-9]\d*$/.test(iterationParam) || !Number.isSafeInteger(Number(iterationParam)))) {
+    res.status(400).json({ error: "Invalid iteration number" });
     return;
   }
 
@@ -32,22 +57,18 @@ async function handleVideo(
   let label: string;
 
   if (phaseParam === "setup") {
-    videoUrls = targetRun.setupVideoUrls;
+    videoUrls = targetRun?.setupVideoUrls;
     label = `${id}-setup-video-${videoIndex}`;
   } else if (iterationParam) {
-    const iterNum = parseInt(iterationParam, 10);
-    if (isNaN(iterNum) || iterNum < 1) {
-      res.status(400).json({ error: "Invalid iteration number" });
-      return;
-    }
-    const turns = targetRun.turns;
+    const iterNum = Number(iterationParam);
+    const turns = targetRun?.turns;
     const turn = turns?.find((t: { iteration: number }) => t.iteration === iterNum);
     videoUrls = turn?.videoUrls;
     label = `${id}-iteration-${iterNum}-video-${videoIndex}`;
   } else {
     // One-shot: videoUrls on run; multi-turn fallback: last turn
-    const turns = targetRun.turns;
-    videoUrls = targetRun.videoUrls ?? turns?.[turns.length - 1]?.videoUrls;
+    const turns = targetRun?.turns;
+    videoUrls = targetRun?.videoUrls ?? turns?.[turns.length - 1]?.videoUrls;
     label = `${id}-video-${videoIndex}`;
   }
 
@@ -73,49 +94,38 @@ async function handleVideo(
   const containerClient = blobServiceClient.getContainerClient("snapshots");
   const blobClient = containerClient.getBlockBlobClient(blobName);
 
-  // Get blob properties for content length
-  const properties = await blobClient.getProperties();
-  const totalSize = properties.contentLength ?? 0;
-
-  // Support HTTP Range requests for video seeking
-  const rangeHeader = req.headers.range;
-  if (rangeHeader && totalSize > 0) {
-    const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-    if (match) {
-      const start = parseInt(match[1], 10);
-      const end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
-      const chunkSize = end - start + 1;
-
-      const downloadResponse = await blobClient.download(start, chunkSize);
-      if (!downloadResponse.readableStreamBody) {
-        res.status(500).json({ error: "Failed to download video file" });
-        return;
-      }
-
-      res.status(206);
-      res.setHeader("Content-Type", "video/webm");
-      res.setHeader("Content-Range", `bytes ${start}-${end}/${totalSize}`);
-      res.setHeader("Accept-Ranges", "bytes");
-      res.setHeader("Content-Length", chunkSize);
-      downloadResponse.readableStreamBody.pipe(res);
+  const controller = new AbortController();
+  const disconnected = () => { if (!res.writableFinished) controller.abort(); };
+  res.once("close", disconnected);
+  if (req.aborted || res.destroyed) controller.abort();
+  try {
+    const properties = await blobClient.getProperties({ abortSignal: controller.signal });
+    const totalSize = properties.contentLength ?? 0;
+    const rangeHeader = req.headers.range;
+    const range = rangeHeader === undefined ? undefined : parseVideoRange(rangeHeader, totalSize);
+    res.setHeader("Accept-Ranges", "bytes");
+    if (rangeHeader !== undefined && !range) {
+      res.setHeader("Content-Range", `bytes */${totalSize}`);
+      res.status(416).json({ error: "Requested video range is not satisfiable" });
       return;
     }
+    const count = range ? range.end - range.start + 1 : undefined;
+    const downloadResponse = await blobClient.download(range?.start ?? 0, count, { abortSignal: controller.signal });
+    if (!downloadResponse.readableStreamBody) {
+      res.status(500).json({ error: "Failed to download video file" });
+      return;
+    }
+    res.status(range ? 206 : 200);
+    res.setHeader("Content-Type", "video/webm");
+    res.setHeader("Content-Disposition", `inline; filename="${label}.webm"`);
+    res.setHeader("Content-Length", count ?? totalSize);
+    if (range) res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${totalSize}`);
+    await pipeline(downloadResponse.readableStreamBody, res, { signal: controller.signal });
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+  } finally {
+    res.removeListener("close", disconnected);
   }
-
-  const downloadResponse = await blobClient.download();
-  if (!downloadResponse.readableStreamBody) {
-    res.status(500).json({ error: "Failed to download video file" });
-    return;
-  }
-
-  res.setHeader("Content-Type", "video/webm");
-  res.setHeader("Accept-Ranges", "bytes");
-  res.setHeader("Content-Disposition", `inline; filename="${label}.webm"`);
-  if (totalSize > 0) {
-    res.setHeader("Content-Length", totalSize);
-  }
-
-  downloadResponse.readableStreamBody.pipe(res);
 }
 
 export function registerRequestsVideoRoutes(ctx: RouteContext): void {
@@ -141,7 +151,7 @@ apiRoute(ctx.app, ctx.registry, {
         return;
       }
 
-      await handleVideo(ctx, req, res, resource.run!, id);
+      await handleVideo(ctx, req, res, resource.run, id);
     } catch (error) {
       if (error instanceof RestError && (error.statusCode === 404 || error.code === "ContainerNotFound" || error.code === "BlobNotFound")) {
         res.status(404).json({ error: "Video file not found — the blob may have been deleted or is no longer available" });

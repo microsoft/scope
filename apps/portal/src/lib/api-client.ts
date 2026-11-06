@@ -72,6 +72,10 @@ export function setApiSessionSignal(signal: AbortSignal | undefined): void {
   sessionSignal = signal;
 }
 
+export function getApiSessionSignal(): AbortSignal | undefined {
+  return sessionSignal;
+}
+
 /** Override how bearer tokens are resolved (wired by Portal auth). */
 export function setApiTokenProvider(provider: TokenProvider): void {
   tokenProvider = provider;
