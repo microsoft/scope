@@ -3,17 +3,19 @@
 
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import type { TaskPrompt } from "@/types";
 
 const getTaskPrompt = vi.fn(async () => ({}) as TaskPrompt);
+const renameTaskPrompt = vi.fn(async (_id: string, name: string | null) => ({ ...basePrompt, ...(name ? { name } : {}) }) as TaskPrompt);
 
 vi.mock("@/lib/api", () => ({
   api: {
     getTaskPrompt: (...args: unknown[]) => getTaskPrompt(...(args as [])),
     deleteTaskPrompt: vi.fn(),
+    renameTaskPrompt: (...args: unknown[]) => renameTaskPrompt(...(args as [string, string | null])),
   },
 }));
 
@@ -76,5 +78,29 @@ describe("TaskPromptDetail heading adapts to prompt type", () => {
     renderDetail();
 
     expect(await screen.findByText(/Requirements Prompt/)).toBeTruthy();
+  });
+});
+
+describe("TaskPromptDetail name (#176)", () => {
+  it("uses the name as the heading when set", async () => {
+    getTaskPrompt.mockResolvedValue({ ...basePrompt, type: "select", name: "rest-api-typescript" });
+
+    renderDetail();
+
+    expect(await screen.findByRole("heading", { name: "rest-api-typescript" })).toBeTruthy();
+  });
+
+  it("renames the prompt through the inline editor", async () => {
+    getTaskPrompt.mockResolvedValue({ ...basePrompt, type: "select" });
+
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add name" }));
+    fireEvent.change(screen.getByLabelText("Task prompt name"), { target: { value: "rest-api" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+
+    await waitFor(() => expect(renameTaskPrompt).toHaveBeenCalledWith("abc", "rest-api"));
+    // The detail cache is updated from the PATCH response.
+    expect(await screen.findByRole("heading", { name: "rest-api" })).toBeTruthy();
   });
 });

@@ -120,6 +120,11 @@ export function createMockTaskPromptStore(): Record<string, any> {
     }),
     getAll: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     resolvePromptText: vi.fn().mockResolvedValue("mock task"),
+    rename: vi.fn().mockResolvedValue({
+      _id: "tp-mock-id",
+      text: "mock task",
+      createdAt: new Date(),
+    }),
     delete: vi.fn().mockResolvedValue(undefined),
     attachFeatures: vi.fn().mockResolvedValue({
       _id: "tp-mock-id",
