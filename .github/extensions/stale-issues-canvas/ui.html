@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stale Issue Triage</title>
+<style>
+  :root {
+    --bg: #ffffff; --bg-subtle: #f6f8fa; --card: #ffffff; --border: #d0d7de;
+    --fg: #1f2328; --fg-muted: #656d76; --accent: #0969da; --accent-fg: #ffffff;
+    --green: #1a7f37; --green-bg: #dafbe1; --purple: #8250df; --purple-bg: #fbefff;
+    --amber: #9a6700; --amber-bg: #fff8c5; --red: #cf222e; --red-bg: #ffebe9;
+    --shadow: 0 1px 3px rgba(31,35,40,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --bg-subtle: #161b22; --card: #161b22; --border: #30363d;
+      --fg: #e6edf3; --fg-muted: #8b949e; --accent: #2f81f7; --accent-fg: #ffffff;
+      --green: #3fb950; --green-bg: #14261a; --purple: #a371f7; --purple-bg: #1f1830;
+      --amber: #d29922; --amber-bg: #2a2410; --red: #f85149; --red-bg: #2d1416;
+      --shadow: 0 1px 3px rgba(1,4,9,.6);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.5; }
+  header { position: sticky; top: 0; z-index: 20; background: var(--bg);
+    border-bottom: 1px solid var(--border); padding: 14px 20px; }
+  .title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 18px; margin: 0; }
+  .sub { color: var(--fg-muted); font-size: 13px; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+    border-radius: 999px; border: 1px solid var(--border); background: var(--bg-subtle);
+    font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; }
+  .chip[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .chip .n { font-variant-numeric: tabular-nums; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.Implemented { background: var(--green); }
+  .dot.Superseded { background: var(--purple); }
+  .dot.Partial { background: var(--amber); }
+  .dot.Closed { background: var(--fg-muted); }
+  .dot.Aside { background: var(--accent); }
+  .controls { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+  input[type="search"], select, textarea, button { font: inherit; color: var(--fg); }
+  input[type="search"] { flex: 1 1 240px; min-width: 200px; padding: 6px 10px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--card); }
+  select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-muted); font-size: 13px; }
+  .bulkbar { display: flex; align-items: center; gap: 10px; margin-top: 10px;
+    padding: 8px 12px; border: 1px dashed var(--border); border-radius: 8px;
+    background: var(--bg-subtle); font-size: 13px; }
+  .bulkbar.hidden { display: none; }
+  main { padding: 16px 20px 80px; max-width: 1100px; margin: 0 auto; }
+  .group-h { display: flex; align-items: center; gap: 8px; margin: 22px 0 10px; font-size: 13px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-muted); }
+  .card { border: 1px solid var(--border); border-radius: 10px; background: var(--card);
+    box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
+  .card.closed { opacity: .55; }
+  .card.aside { border-left: 3px solid var(--accent); }
+  .card-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  button.ghost { background: transparent; color: var(--fg-muted); border: 1px solid var(--border);
+    font-size: 12px; padding: 4px 10px; white-space: nowrap; }
+  button.ghost:hover { background: var(--bg-subtle); color: var(--fg); }
+  button.ghost.on { color: var(--accent); border-color: var(--accent); }
+  .card-top { display: flex; gap: 12px; padding: 12px 14px; align-items: flex-start; }
+  .card-top input[type="checkbox"] { margin-top: 4px; width: 15px; height: 15px; }
+  .card-main { flex: 1; min-width: 0; }
+  .card-h { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .num { font-weight: 700; color: var(--accent); text-decoration: none; font-variant-numeric: tabular-nums; }
+  .num:hover { text-decoration: underline; }
+  .ctitle { font-weight: 600; }
+  .badge { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .badge.Implemented { color: var(--green); background: var(--green-bg); }
+  .badge.Superseded { color: var(--purple); background: var(--purple-bg); }
+  .badge.Partial { color: var(--amber); background: var(--amber-bg); }
+  .badge.aside { color: var(--accent); background: var(--bg-subtle); border: 1px solid var(--accent); }
+  .badge.conf { border: 1px solid var(--border); color: var(--fg-muted); background: transparent; }
+  .linkb { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--fg-muted); background: transparent; white-space: nowrap; }
+  .linkb.ok { color: var(--green); border-color: var(--green); background: var(--green-bg); }
+  .meta { color: var(--fg-muted); font-size: 12px; margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .meta .lbl { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; }
+  .ev { margin-top: 8px; font-size: 13px; }
+  .ev b { color: var(--fg-muted); font-weight: 600; }
+  details.closebox { border-top: 1px solid var(--border); background: var(--bg-subtle); }
+  details.closebox > summary { cursor: pointer; padding: 8px 14px; font-size: 13px; font-weight: 600;
+    color: var(--fg-muted); list-style: none; display: flex; align-items: center; gap: 6px; }
+  details.closebox > summary::-webkit-details-marker { display: none; }
+  details.closebox > summary::before { content: "▸"; }
+  details.closebox[open] > summary::before { content: "▾"; }
+  .closebody { padding: 0 14px 14px; }
+  .closebody label { font-size: 12px; font-weight: 600; color: var(--fg-muted); display: block; margin: 8px 0 4px; }
+  textarea { width: 100%; min-height: 120px; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--card); resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  .close-row { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  button { cursor: pointer; border-radius: 6px; border: 1px solid var(--border); padding: 6px 12px;
+    background: var(--card); font-weight: 600; }
+  button:hover { background: var(--bg-subtle); }
+  button.danger { background: var(--red); border-color: var(--red); color: #fff; }
+  button.danger:hover { filter: brightness(1.08); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .status { font-size: 12px; font-weight: 600; }
+  .status.ok { color: var(--green); }
+  .status.err { color: var(--red); }
+  .status.busy { color: var(--fg-muted); }
+  .empty { text-align: center; color: var(--fg-muted); padding: 40px; }
+  /* modal */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none;
+    align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .modal-bg.show { display: flex; }
+  .modal { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    max-width: 560px; width: 100%; padding: 18px 20px; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+  .modal h3 { margin: 0 0 8px; }
+  .modal pre { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px; white-space: pre-wrap; font-size: 12px; max-height: 240px; overflow: auto; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .2s; z-index: 200; pointer-events: none; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="title-row">
+    <h1>Stale Issue Triage</h1>
+    <span class="sub" id="repo-sub"></span>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="controls">
+    <input type="search" id="search" placeholder="Filter by #number, title, author, evidence…" />
+    <select id="conf">
+      <option value="">All confidence</option>
+      <option value="High">High confidence</option>
+      <option value="Medium">Medium confidence</option>
+      <option value="Low">Low confidence</option>
+    </select>
+    <label class="toggle"><input type="checkbox" id="hideClosed" checked /> Hide closed</label>
+    <label class="toggle"><input type="checkbox" id="hideAside" checked /> Hide set aside</label>
+    <button id="refresh" title="Re-sync open/closed state and links from GitHub">&#8635; Refresh</button>
+  </div>
+  <p class="sub" style="margin:8px 0 0">Closing an issue posts its comment, which references the solving PR via <code>#NN</code> — creating a cross-reference link in both timelines. <span class="linkb ok">&#128279; linked</span> marks issues already formally linked on GitHub.</p>
+  <div class="bulkbar hidden" id="bulkbar">
+    <span id="selcount">0 selected</span>
+    <button id="selectVisible">Select all visible</button>
+    <button id="clearSel">Clear</button>
+    <span style="flex:1"></span>
+    <button class="danger" id="bulkClose">Close selected…</button>
+  </div>
+</header>
+<main id="main"><div class="empty">Loading issues…</div></main>
+
+<div class="modal-bg" id="modalbg">
+  <div class="modal">
+    <h3 id="modal-title">Confirm close</h3>
+    <div id="modal-body"></div>
+    <div class="modal-actions">
+      <button id="modal-cancel">Cancel</button>
+      <button class="danger" id="modal-confirm">Close</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const ORDER = ["Implemented", "Superseded", "Partial"];
+let ISSUES = [];
+let REPO = "";
+let activeCats = new Set(); // empty = all
+const sel = new Set();
+
+async function load(force) {
+  const res = await fetch("./api/issues" + (force ? "?refresh=1" : ""));
+  const data = await res.json();
+  ISSUES = data.issues;
+  REPO = data.repo;
+  document.getElementById("repo-sub").textContent =
+    data.repo + " · " + ISSUES.length + " candidates";
+  render();
+}
+
+function refLink(n) {
+  return '<a class="num" href="https://github.com/' + REPO + '/issues/' + n +
+    '" target="_blank" rel="noopener">#' + n + "</a>";
+}
+function pointerRow(i) {
+  if (i.category === "Superseded") {
+    const p = (i.refIssues || []).concat(i.prs || []);
+    if (!p.length) return "";
+    return '<div class="ev"><b>Superseded by:</b> ' + p.map(refLink).join(", ") + "</div>";
+  }
+  if (!(i.prs && i.prs.length)) return "";
+  const label = i.category === "Partial" ? "Addressed by" : "Resolved by";
+  const badge = i.linked
+    ? '<span class="linkb ok" title="Formally linked on GitHub (this PR closes the issue)">&#128279; linked</span>'
+    : '<span class="linkb" title="Not formally linked yet — closing will post a comment referencing this PR, creating a cross-reference link">&#128279; will link on close</span>';
+  return '<div class="ev"><b>' + label + ':</b> ' + i.prs.map(refLink).join(", ") + " " + badge + "</div>";
+}
+
+function counts() {
+  const c = { Implemented: 0, Superseded: 0, Partial: 0, Closed: 0, Aside: 0 };
+  for (const i of ISSUES) {
+    if (i.closed) c.Closed++;
+    else if (i.aside) c.Aside++;
+    else c[i.category]++;
+  }
+  return c;
+}
+
+function renderStats() {
+  const c = counts();
+  const el = document.getElementById("stats");
+  el.innerHTML = "";
+  const mk = (cat, label, n) => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.setAttribute("aria-pressed", activeCats.has(cat));
+    b.innerHTML = '<span class="dot ' + cat + '"></span>' + label +
+      ' <span class="n">' + n + "</span>";
+    if (cat !== "Closed") b.onclick = () => {
+      if (activeCats.has(cat)) activeCats.delete(cat); else activeCats.add(cat);
+      render();
+    };
+    else b.style.cursor = "default";
+    return b;
+  };
+  el.appendChild(mk("Implemented", "Implemented", c.Implemented));
+  el.appendChild(mk("Superseded", "Superseded", c.Superseded));
+  el.appendChild(mk("Partial", "Partial", c.Partial));
+  el.appendChild(mk("Closed", "Closed", c.Closed));
+  // "Set aside" chip toggles visibility of set-aside issues.
+  const hideAside = document.getElementById("hideAside");
+  const ab = document.createElement("button");
+  ab.className = "chip";
+  ab.title = "Issues you set aside (won't be closed). Click to show/hide.";
+  ab.setAttribute("aria-pressed", !hideAside.checked);
+  ab.innerHTML = '<span class="dot Aside"></span>Set aside <span class="n">' + c.Aside + "</span>";
+  ab.onclick = () => { hideAside.checked = !hideAside.checked; render(); };
+  el.appendChild(ab);
+}
+
+function visibleIssues() {
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const conf = document.getElementById("conf").value;
+  const hideClosed = document.getElementById("hideClosed").checked;
+  const hideAside = document.getElementById("hideAside").checked;
+  return ISSUES.filter(i => {
+    if (hideClosed && i.closed) return false;
+    if (hideAside && i.aside && !i.closed) return false;
+    if (activeCats.size && !activeCats.has(i.category)) return false;
+    if (conf && i.confidence !== conf) return false;
+    if (q) {
+      const hay = ("#" + i.number + " " + i.title + " " + i.author + " " +
+        i.evidence + " " + i.reason).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, m =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+}
+
+function card(i) {
+  const el = document.createElement("div");
+  el.className = "card" + (i.closed ? " closed" : "") + (!i.closed && i.aside ? " aside" : "");
+  el.dataset.num = i.number;
+  const labels = (i.labels || []).map(l => '<span class="lbl">' + esc(l) + "</span>").join(" ");
+  const asideBadge = (!i.closed && i.aside) ? '<span class="badge aside">set aside</span>' : "";
+  const actions = i.closed ? "" :
+    '<div class="card-actions">' +
+      '<button class="ghost aside-btn' + (i.aside ? " on" : "") + '" title="' +
+        (i.aside ? "Restore to the active triage list" : "Set aside — keep open, hide from the close list") +
+        '">' + (i.aside ? "&#8617;&#65038; Restore" : "&#8856; Set aside") + "</button>" +
+    "</div>";
+  el.innerHTML =
+    '<div class="card-top">' +
+      '<input type="checkbox" class="selbox" ' + (i.closed || i.aside ? "disabled" : "") + " " +
+        (sel.has(i.number) ? "checked" : "") + " />" +
+      '<div class="card-main">' +
+        '<div class="card-h">' +
+          '<a class="num" href="' + esc(i.url) + '" target="_blank" rel="noopener">#' + i.number + "</a>" +
+          '<span class="ctitle">' + esc(i.title) + "</span>" +
+          '<span class="badge ' + i.category + '">' + i.category + "</span>" +
+          '<span class="badge conf">' + esc(i.confidence) + "</span>" +
+          asideBadge +
+        "</div>" +
+        '<div class="meta"><span>@' + esc(i.author) + "</span><span>" + esc(i.created) +
+          "</span>" + labels + "</div>" +
+        pointerRow(i) +
+        '<div class="ev"><b>Evidence:</b> ' + esc(i.evidence) + "</div>" +
+        '<div class="ev"><b>Why stale:</b> ' + esc(i.reason) + "</div>" +
+      "</div>" +
+      actions +
+    "</div>" +
+    '<details class="closebox">' +
+      "<summary>Close with comment</summary>" +
+      '<div class="closebody">' +
+        "<label>Closing comment (editable)</label>" +
+        "<textarea class=\"cmt\">" + esc(i.closeComment) + "</textarea>" +
+        '<div class="close-row">' +
+          "<label style=\"margin:0\">Reason</label>" +
+          '<select class="rsn">' +
+            '<option value="completed"' + (i.closeReason === "completed" ? " selected" : "") + ">completed</option>" +
+            '<option value="not planned"' + (i.closeReason === "not planned" ? " selected" : "") + ">not planned</option>" +
+            '<option value="duplicate"' + (i.closeReason === "duplicate" ? " selected" : "") + ">duplicate</option>" +
+          "</select>" +
+          '<button class="danger doclose" ' + (i.closed ? "disabled" : "") + ">Close #" + i.number + "</button>" +
+          '<span class="status"></span>' +
+        "</div>" +
+      "</div>" +
+    "</details>";
+
+  const box = el.querySelector(".selbox");
+  box.onchange = () => { if (box.checked) sel.add(i.number); else sel.delete(i.number); renderBulk(); };
+  const asideBtn = el.querySelector(".aside-btn");
+  if (asideBtn) asideBtn.onclick = () => toggleAside(i, asideBtn);
+  el.querySelector(".doclose").onclick = () => {
+    const comment = el.querySelector(".cmt").value;
+    const reason = el.querySelector(".rsn").value;
+    confirmClose([{ number: i.number, comment, reason, title: i.title }], (results) => applyResults(results));
+  };
+  return el;
+}
+
+function render() {
+  renderStats();
+  renderBulk();
+  const main = document.getElementById("main");
+  const vis = visibleIssues();
+  main.innerHTML = "";
+  if (!vis.length) { main.innerHTML = '<div class="empty">No issues match your filters.</div>'; return; }
+  for (const cat of ORDER) {
+    const group = vis.filter(i => i.category === cat && !(i.aside && !i.closed));
+    if (!group.length) continue;
+    const h = document.createElement("div");
+    h.className = "group-h";
+    h.innerHTML = '<span class="dot ' + cat + '"></span>' + cat + " · " + group.length;
+    main.appendChild(h);
+    for (const i of group) main.appendChild(card(i));
+  }
+  const asideGroup = vis.filter(i => i.aside && !i.closed);
+  if (asideGroup.length) {
+    const h = document.createElement("div");
+    h.className = "group-h";
+    h.innerHTML = '<span class="dot Aside"></span>Set aside · ' + asideGroup.length;
+    main.appendChild(h);
+    for (const i of asideGroup) main.appendChild(card(i));
+  }
+}
+
+async function toggleAside(i, btn) {
+  const makeAside = !i.aside;
+  const prev = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = makeAside ? "Setting aside…" : "Restoring…";
+  try {
+    const res = await fetch("./api/aside", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ number: i.number, aside: makeAside }),
+    });
+    const j = await res.json();
+    if (j.ok) {
+      i.aside = j.aside;
+      if (i.aside) sel.delete(i.number);
+      toast("#" + i.number + (i.aside ? " set aside" : " restored"));
+      render();
+    } else {
+      toast("Failed: " + (j.error || "error"));
+      btn.disabled = false; btn.innerHTML = prev;
+    }
+  } catch (e) {
+    toast("Failed"); btn.disabled = false; btn.innerHTML = prev;
+  }
+}
+
+function renderBulk() {
+  const bar = document.getElementById("bulkbar");
+  const active = [...sel].filter(n => { const i = ISSUES.find(x => x.number === n); return i && !i.closed; });
+  for (const n of [...sel]) if (!active.includes(n)) sel.delete(n);
+  document.getElementById("selcount").textContent = sel.size + " selected";
+  bar.classList.toggle("hidden", sel.size === 0);
+}
+
+/* ---- modal + close plumbing ---- */
+let pendingConfirm = null;
+function confirmClose(items, onDone) {
+  const body = document.getElementById("modal-body");
+  document.getElementById("modal-title").textContent =
+    items.length === 1 ? "Close issue #" + items[0].number + "?" : "Close " + items.length + " issues?";
+  if (items.length === 1) {
+    body.innerHTML = '<p>This will <b>close</b> <b>#' + items[0].number + "</b> — " +
+      esc(items[0].title) + " — as <b>" + esc(items[0].reason) +
+      "</b> and post this comment:</p><pre>" + esc(items[0].comment) + "</pre>";
+  } else {
+    body.innerHTML = "<p>This will <b>close</b> the following " + items.length +
+      " issues and post each one's comment:</p><pre>" +
+      items.map(i => "#" + i.number + "  (" + i.reason + ")  " + i.title).join("\n") + "</pre>";
+  }
+  pendingConfirm = { items, onDone };
+  document.getElementById("modalbg").classList.add("show");
+}
+document.getElementById("modal-cancel").onclick = () => {
+  document.getElementById("modalbg").classList.remove("show"); pendingConfirm = null;
+};
+document.getElementById("modal-confirm").onclick = async () => {
+  if (!pendingConfirm) return;
+  const { items, onDone } = pendingConfirm;
+  pendingConfirm = null;
+  document.getElementById("modalbg").classList.remove("show");
+  await runCloses(items, onDone);
+};
+
+async function runCloses(items, onDone) {
+  const results = [];
+  for (const it of items) {
+    setStatus(it.number, "busy", "Closing…");
+    try {
+      const res = await fetch("./api/close", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ number: it.number, comment: it.comment, reason: it.reason }),
+      });
+      const j = await res.json();
+      results.push({ number: it.number, ok: j.ok, msg: j.ok ? (j.output || "Closed") : (j.error || "Failed") });
+    } catch (e) {
+      results.push({ number: it.number, ok: false, msg: String(e) });
+    }
+  }
+  onDone(results);
+}
+
+function applyResults(results) {
+  let okc = 0, errc = 0;
+  for (const r of results) {
+    if (r.ok) {
+      okc++;
+      const i = ISSUES.find(x => x.number === r.number);
+      if (i) i.closed = true;
+      sel.delete(r.number);
+      setStatus(r.number, "ok", "✓ Closed");
+    } else {
+      errc++;
+      setStatus(r.number, "err", "✗ " + r.msg);
+    }
+  }
+  toast(okc + " closed" + (errc ? ", " + errc + " failed" : ""));
+  renderStats(); renderBulk();
+  // re-render after a short delay so users see the status, unless hideClosed will remove them
+  setTimeout(() => render(), 900);
+}
+
+function setStatus(number, cls, text) {
+  const card = document.querySelector('.card[data-num="' + number + '"]');
+  if (!card) return;
+  const s = card.querySelector(".status");
+  if (s) { s.className = "status " + cls; s.textContent = text; }
+}
+
+let toastT;
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+document.getElementById("bulkClose").onclick = () => {
+  const items = [...sel].map(n => {
+    const card = document.querySelector('.card[data-num="' + n + '"]');
+    const i = ISSUES.find(x => x.number === n);
+    const comment = card ? card.querySelector(".cmt").value : i.closeComment;
+    const reason = card ? card.querySelector(".rsn").value : i.closeReason;
+    return { number: n, comment, reason, title: i.title };
+  });
+  if (items.length) confirmClose(items, applyResults);
+};
+document.getElementById("selectVisible").onclick = () => {
+  for (const i of visibleIssues()) if (!i.closed) sel.add(i.number);
+  render();
+};
+document.getElementById("clearSel").onclick = () => { sel.clear(); render(); };
+document.getElementById("search").oninput = render;
+document.getElementById("conf").onchange = render;
+document.getElementById("hideClosed").onchange = render;
+document.getElementById("hideAside").onchange = render;
+document.getElementById("refresh").onclick = async (e) => {
+  const btn = e.currentTarget;
+  const prev = btn.innerHTML;
+  btn.disabled = true; btn.textContent = "Refreshing…";
+  try { await load(true); toast("Synced from GitHub"); }
+  catch { toast("Refresh failed"); }
+  finally { btn.disabled = false; btn.innerHTML = prev; }
+};
+
+load();
+</script>
+</body>
+</html>
