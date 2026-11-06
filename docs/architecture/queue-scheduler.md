@@ -199,6 +199,26 @@ When a worker dequeues a message whose `run.status === "processing"`, it consult
 
 The default threshold is `2 × HEARTBEAT_VISIBILITY_SECONDS` (= 120s). Override with the `SCOPE_RUN_HEARTBEAT_STALE_MS` env var (milliseconds). The Redis TTL defaults to `5 × HEARTBEAT_VISIBILITY_SECONDS` (= 300s); override with `SCOPE_RUN_HEARTBEAT_REDIS_TTL_MS`.
 
+### Mid-Run Ownership Guard (zombie workers)
+
+A worker can keep running after it has lost a run: the run was cancelled, reaped,
+failed by a stale-heartbeat redelivery, or retried (new `run._id`). Every incremental
+write the worker makes between its claim and its terminal write — `run.turns` /
+`gateSummaries` pushes, `run.setupVideoUrls`, and the run observations
+(`run.resources`, `run.mcpRegistered`) — is filtered on
+[`ownedRunFilter`](../../packages/shared/src/queue/run-ownership.ts):
+`{ _id, "run._id": runId, "run.status": "processing", "run.worker.instanceId": <self> }`
+(issue #803). The terminal write and the error-path failure write were already gated
+the same way.
+
+When a turn, gate or setup-video write matches nothing, the worker throws
+`RunOwnershipLostError`. It propagates out of the multi-turn loop, so no further
+agent/judge work runs. The base queue processor recognizes it, logs a `warn` (never a
+`final` failure line), **skips the failure write**, and deletes its message. The
+observations write runs in a `finally`, so it only no-ops. Per-turn blob uploads are not
+gated individually: a zombie stops at its first turn write after losing ownership, so it
+uploads at most one extra iteration's artifacts, under its own `runId` path.
+
 ### Stuck-Run Reaper (scheduler backstop)
 
 Queue redelivery is best-effort: if a message ever expires (Azure queue TTL, default 7 days) or is lost, a `processing` run with a dead worker would stay stuck forever because the scheduler only dispatches `pending` runs. The **`StuckRunReaper`** ([`apps/scheduler/src/stuck-run-reaper.ts`](../../apps/scheduler/src/stuck-run-reaper.ts)) is the authoritative backstop, modeled on the `PostProcessorDispatcher` polling loop. Each sweep (every `SCOPE_REAPER_POLL_INTERVAL_MS`, default 60s):
