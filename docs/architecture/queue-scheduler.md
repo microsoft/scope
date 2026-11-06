@@ -197,6 +197,10 @@ When a worker dequeues a message whose `run.status === "processing"`, it consult
 
 > **Why re-defer instead of delete?** Recovery of a `processing` run whose worker dies hard (OOM/SIGKILL — no graceful failure write) relies on the queue redelivering its message so a healthy worker eventually sees the stale heartbeat. The *only* trigger is that the message still exists. If a fresh-heartbeat duplicate were **deleted**, the recovery token would be destroyed: worker A loses its popReceipt → worker B dequeues the dupe, sees A's fresh beat, deletes the message → A then dies hard → the run is `processing` with **no queue message in existence**, and the scheduler only dispatches `pending` runs. Re-deferring keeps the token alive: each time the message resurfaces, a fresh beat re-defers (cheap), a stale beat marks failed. The terminal-`done` guard still deletes the message when a later worker dequeues it after the original completed successfully — so "run completed, but the queue message still exists" is a normal, self-healing outcome.
 
+If a re-defer fails, the worker keeps the run untouched and emits a warning with
+`event: "defer_failed"`, `messageId`, and `queueName`. Count this event in worker
+logs to detect repeated queue visibility or pop-receipt failures.
+
 The default threshold is `2 × HEARTBEAT_VISIBILITY_SECONDS` (= 120s). Override with the `SCOPE_RUN_HEARTBEAT_STALE_MS` env var (milliseconds). The Redis TTL defaults to `5 × HEARTBEAT_VISIBILITY_SECONDS` (= 300s); override with `SCOPE_RUN_HEARTBEAT_REDIS_TTL_MS`.
 
 ### Stuck-Run Reaper (scheduler backstop)
