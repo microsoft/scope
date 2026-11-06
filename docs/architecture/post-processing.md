@@ -24,7 +24,8 @@ Two paths trigger post-processing:
 ### Flow
 
 1. Queue message arrives: `{ type: "atif", requestId, runId }`
-2. Worker fetches the request document from MongoDB
+2. Worker claims the completed attempt using `{ _id: requestId, "run._id": runId,
+   "run.status": "done" }`. A message for an older attempt is discarded.
 3. For each iteration turn with a `harUrl`:
 
     - Downloads the HAR blob from Azure Blob Storage
@@ -34,6 +35,11 @@ Two paths trigger post-processing:
 
 4. On success, stamps `run.postProcessorVersion` and sets `run.postProcessorStatus: "done"`
 5. Triggers report generation via the API (best-effort, with retry)
+
+The handler's turn read and `atifUrl` writes, plus every post-processor status
+write, use the same attempt filter. If a retry replaces the run while the handler
+is working, its old-attempt artifact may finish uploading, but no field on the
+new attempt is changed and report generation is skipped.
 
 ### Blob Storage Layout
 
