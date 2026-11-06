@@ -190,7 +190,7 @@ export function createMockBlobStorage(): BlobStorage {
     getLogsBlobUrl: vi.fn().mockImplementation((blobName: string) => `https://mockaccount.blob.core.windows.net/logs/${blobName}`),
     appendLogEvent: vi.fn().mockResolvedValue(undefined),
     ensureContainer: vi.fn().mockResolvedValue(undefined),
-    uploadWorkspaceSnapshot: vi.fn().mockResolvedValue("https://blob/snapshot"),
+    uploadWorkspaceSnapshot: vi.fn().mockResolvedValue({ url: "https://blob/snapshot", sizeBytes: 2048 }),
     downloadSnapshot: vi.fn().mockResolvedValue(undefined),
     listSnapshots: vi.fn().mockResolvedValue([]),
   } as unknown as BlobStorage;

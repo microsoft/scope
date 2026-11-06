@@ -143,6 +143,13 @@ export interface ConversationTurn {
   codingAgentResponse?: string;
   judgeFeedback: string;
   snapshotUrl: string;
+  /**
+   * Stored (gzip-compressed) size of this iteration's workspace snapshot, in
+   * bytes. Absent on turns recorded before #1564, on imported runs whose
+   * archive did not carry it, and when the snapshot upload failed. Consumers
+   * must show "unavailable" rather than 0 when it is missing.
+   */
+  workspaceSizeBytes?: number;
   passed: boolean;
   timestamp: Date;
   criteriaResults?: CriterionResult[];  // Per-criterion breakdown from DAG evaluation

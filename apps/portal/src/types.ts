@@ -50,6 +50,9 @@ export interface ConversationTurn {
   toolCallCount?: number;
   aiCallCount?: number;
   atifUrl?: string;
+  /** Size in bytes of this iteration's uploaded workspace snapshot archive.
+   *  Absent for legacy/imported runs — render as "unavailable", never 0. */
+  workspaceSizeBytes?: number;
 }
 
 export interface Scenario {
