@@ -433,7 +433,12 @@ export async function packRunIntoTar(
     archiveResource.codebase.archiveBlobUrl = codebaseBlobUrl;
     archiveResource.codebase.archiveUrl = "codebase.tar.gz";
   }
-  const yamlContent = yamlStringify(archiveResource, { lineWidth: 120 });
+  // Ponytail: YAML comments clarify IDs without changing the importable schema.
+  const yamlContent =
+    "# _id is the request ID (the archive folder and Portal run URL).\n" +
+    "# run._id is this execution attempt's ID; retries keep the request ID.\n" +
+    "# submissionId groups requests created by one submission.\n" +
+    yamlStringify(archiveResource, { lineWidth: 120 });
   const yamlBuf = Buffer.from(yamlContent, "utf-8");
   pack.entry({ name: `${id}/run.yaml`, size: yamlBuf.length }, yamlBuf);
 
