@@ -27,6 +27,11 @@ describe("ShortId trigger", () => {
     render(<ShortId id={FULL_ID} length={4} />);
     expect(screen.getByText("abcd")).toBeTruthy();
   });
+
+  it("shows the full submission ID on a detail page", () => {
+    render(<ShortId id={FULL_ID} length={FULL_ID.length} label="submission ID" />);
+    expect(screen.getByText(FULL_ID)).toBeTruthy();
+  });
 });
 
 describe("ShortId hover + copy", () => {
