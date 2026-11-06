@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Check, ChevronsUpDown, FolderKanban, Plus, Settings2 } from "lucide-react";
+import { Check, ChevronsUpDown, FolderKanban, Plus, Search, Settings2 } from "lucide-react";
 
 import { ProjectCreateForm } from "@/components/ProjectCreateForm";
 import { Button } from "@/components/ui/button";
@@ -23,9 +23,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { useProjectContext } from "@/contexts/ProjectContext";
 import { useSelectProject } from "@/hooks/useSelectProject";
 import { api } from "@/lib/api";
+import { filterProjects, shouldSearchProjects } from "@/lib/project-search";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types";
 
@@ -63,8 +65,17 @@ export function ProjectSwitcherView({
     active?.name ??
     (!activeProjectId ? "Select project" : isLoading ? "Loading…" : "Unknown project");
 
+  // Many projects: offer a search box and scroll the list (#1311). A handful
+  // keeps the plain menu.
+  const [query, setQuery] = useState("");
+  const searchable = !isLoading && shouldSearchProjects(projects.length);
+  const visibleProjects = useMemo(
+    () => (searchable ? filterProjects(projects, query) : projects),
+    [projects, query, searchable],
+  );
+
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={(open) => { if (!open) setQuery(""); }}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -84,27 +95,47 @@ export function ProjectSwitcherView({
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Projects</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {searchable && (
+          <div className="relative px-1 pb-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              // Keep typing in the box: the menu's typeahead would otherwise
+              // treat each character as "jump to item". Escape still closes.
+              onKeyDown={(e) => { if (e.key !== "Escape") e.stopPropagation(); }}
+              placeholder="Search projects…"
+              aria-label="Search projects"
+              className="h-8 pl-7 text-sm"
+              autoFocus
+            />
+          </div>
+        )}
         {isLoading ? (
           <DropdownMenuItem disabled>Loading…</DropdownMenuItem>
         ) : projects.length === 0 ? (
           <DropdownMenuItem disabled>No projects yet</DropdownMenuItem>
+        ) : visibleProjects.length === 0 ? (
+          <DropdownMenuItem disabled>No matching projects</DropdownMenuItem>
         ) : (
-          projects.map((project) => {
-            const id = projectId(project);
-            const selected = id === activeProjectId;
-            return (
-              <DropdownMenuItem
-                key={id}
-                onClick={() => {
-                  if (!selected) onSelect(id);
-                }}
-                className="gap-2"
-              >
-                <span className="flex-1 truncate">{project.name}</span>
-                {selected && <Check className="h-4 w-4 shrink-0" />}
-              </DropdownMenuItem>
-            );
-          })
+          <div className={cn(searchable && "max-h-72 overflow-y-auto")}>
+            {visibleProjects.map((project) => {
+              const id = projectId(project);
+              const selected = id === activeProjectId;
+              return (
+                <DropdownMenuItem
+                  key={id}
+                  onClick={() => {
+                    if (!selected) onSelect(id);
+                  }}
+                  className="gap-2"
+                >
+                  <span className="flex-1 truncate">{project.name}</span>
+                  {selected && <Check className="h-4 w-4 shrink-0" />}
+                </DropdownMenuItem>
+              );
+            })}
+          </div>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onNewProject} className="gap-2">
