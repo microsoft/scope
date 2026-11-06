@@ -92,6 +92,10 @@ document counts.
 
 **Verification** runs automatically:
 
+For in-cluster dumps, both the local archive stream and diagnostic log finish
+writing before the checksum, manifest and integrity checks run. A local output
+write failure aborts the dump and stops the streaming command.
+
 1. Every collection Cosmos lists for the database must appear in the dump log
    (fails if any live collection is missing).
 2. The archive must pass a `gzip -t` integrity check.
