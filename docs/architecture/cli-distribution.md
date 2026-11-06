@@ -173,6 +173,10 @@ rerun the public installer without `gh`.
 After each command, the CLI performs a non-blocking check for newer versions:
 
 - Checks `cli/v*` releases in `microsoft/scope` (2s per background lookup attempt)
+- Both GitHub CLI and REST lookups skip draft, prerelease, and invalid-version
+  releases, including prerelease versions whose GitHub flag is unset. The
+  updater uses the same selection and fails without replacing the CLI when no
+  stable release is available.
 - Compares the current embedded version against the latest release tag
 - If newer, prints a one-line notice with the upgrade command
 - Suppressed by `SCOPE_NO_UPDATE_CHECK=1`

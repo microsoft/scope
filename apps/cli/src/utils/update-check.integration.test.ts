@@ -175,15 +175,31 @@ describe("update-check (via bundle)", () => {
     }
   });
 
-  it("handles pre-release versions correctly", async () => {
+  it("does not offer a prerelease as a stable update", async () => {
     releaseResponse = { status: 200, body: [{ tag_name: "cli/v2.0.0-beta.1" }] };
     await startServers();
     const tempDir = mkdtempSync(join(tmpdir(), "scope-uc-"));
     try {
       const { stderr } = await runBundle(["run", "list"], tempDir);
-      // 2.0.0-beta.1 > 0.0.0-dev in semver
-      expect(stderr).toContain("2.0.0-beta.1");
-      expect(stderr).toContain("scope update");
+      expect(stderr).not.toContain("newer version");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("offers the stable release after newer draft and prerelease entries", async () => {
+    releaseResponse = { status: 200, body: [
+      { tag_name: "cli/v100.0.0", draft: true },
+      { tag_name: "cli/v99.0.0", prerelease: true },
+      { tag_name: "cli/v98.0.0" },
+    ] };
+    await startServers();
+    const tempDir = mkdtempSync(join(tmpdir(), "scope-uc-"));
+    try {
+      const { stderr } = await runBundle(["run", "list"], tempDir);
+      expect(stderr).toContain("newer version of scope is available: 98.0.0");
+      expect(stderr).not.toContain("99.0.0");
+      expect(stderr).not.toContain("100.0.0");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
