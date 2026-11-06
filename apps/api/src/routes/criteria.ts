@@ -14,6 +14,7 @@ import {
   type GateId,
 } from "shared";
 import { apiRoute } from "../openapi/api-route.js";
+import { escapeSearchText } from "../utils/search.js";
 import type { RouteContext } from "../route-context.js";
 import { computeMdp } from "../criteria-mdp.js";
 import type { MdpAnalyzableRun } from "../criteria-mdp.js";
@@ -229,7 +230,7 @@ apiRoute(ctx.app, ctx.registry, {
     const q = req.query.q;
     const idsParam = req.query.ids;
 
-    // `q` (regex search) and `ids` (exact set + optional ancestor resolution)
+    // `q` (literal substring search) and `ids` (exact set + optional ancestor resolution)
     // are mutually exclusive: applying the regex filter first would silently
     // drop ancestors that don't match `q`, yielding an incomplete dependency tree.
     if (q && idsParam) {
@@ -243,8 +244,8 @@ apiRoute(ctx.app, ctx.registry, {
     };
     if (q) {
       filter.$or = [
-        { id: { $regex: q, $options: "i" } },
-        { prompt: { $regex: q, $options: "i" } },
+        { id: { $regex: escapeSearchText(q), $options: "i" } },
+        { prompt: { $regex: escapeSearchText(q), $options: "i" } },
       ];
     }
     let criteria = await ctx.criteriaCollection.find(filter).toArray();

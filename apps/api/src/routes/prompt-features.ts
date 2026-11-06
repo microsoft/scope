@@ -10,6 +10,7 @@ import {
   UpdatePromptFeatureInputSchema,
 } from "shared";
 import { apiRoute } from "../openapi/api-route.js";
+import { escapeSearchText } from "../utils/search.js";
 import type { PromptFeatureDocument, RouteContext } from "../route-context.js";
 import { extractPromptFeatures, generatePromptFeaturePrompt, isLlmAvailable as isPromptFeatureLlmAvailable } from "../prompt-feature-llm.js";
 import { isInferenceError } from "../llm-token.js";
@@ -218,8 +219,8 @@ apiRoute(ctx.app, ctx.registry, {
     }
     if (q) {
       const search = [
-        { id: { $regex: q, $options: "i" } },
-        { prompt: { $regex: q, $options: "i" } },
+        { id: { $regex: escapeSearchText(q), $options: "i" } },
+        { prompt: { $regex: escapeSearchText(q), $options: "i" } },
       ];
       if (filter.$and) {
         (filter.$and as unknown[]).push({ $or: search });
