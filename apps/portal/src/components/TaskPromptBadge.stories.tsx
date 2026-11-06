@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect } from "storybook/test";
+import { expect, screen, userEvent } from "storybook/test";
 import { TaskPromptBadge } from "./TaskPromptBadge";
 import type { TaskPrompt } from "@/types";
 
@@ -82,5 +82,31 @@ export const NonLinking: Story = {
   args: { link: false, prompt: { ...basePrompt, type: "run" } },
   play: async ({ canvas }) => {
     await expect(canvas.queryByRole("link")).toBeNull();
+  },
+};
+
+const legacyTask =
+  "Build a benchmarking dashboard that compares coding agents, displays evaluation criteria, streams logs, supports project filters, and explains all results with clear accessible interactions.";
+
+export const LegacyRunWithoutPromptReference: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story: "Shows the full inline task with the same 200 ms hover delay as the existing run metadata tooltips.",
+      },
+    },
+  },
+  args: {
+    taskPromptId: undefined,
+    prompt: undefined,
+    fallbackText: legacyTask,
+    children: <span>Build a benchmarking dashboard…</span>,
+  },
+  play: async ({ canvas }) => {
+    await expect(canvas.queryByRole("link")).toBeNull();
+    const trigger = canvas.getByText("Build a benchmarking dashboard…");
+    await userEvent.hover(trigger);
+    await expect(await screen.findByRole("tooltip")).toHaveTextContent(legacyTask);
+    await userEvent.unhover(trigger);
   },
 };

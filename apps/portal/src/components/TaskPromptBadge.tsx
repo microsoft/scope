@@ -25,6 +25,8 @@ interface TaskPromptBadgeProps {
    * When omitted, the prompt is fetched lazily the first time the tooltip opens.
    */
   prompt?: TaskPrompt;
+  /** Full text to show when a legacy run has no task prompt reference. */
+  fallbackText?: string;
   /** Custom trigger content. Defaults to a `<type label> · <short id>` badge. */
   children?: ReactNode;
   /** When true (default) the trigger links to the task prompt detail page. */
@@ -48,6 +50,7 @@ interface TaskPromptBadgeProps {
 export function TaskPromptBadge({
   taskPromptId,
   prompt,
+  fallbackText,
   children,
   link = true,
   className,
@@ -76,8 +79,30 @@ export function TaskPromptBadge({
   const snippet = resolved?.text ?? content?.text;
   const detectedFeatures = resolved?.features?.filter((f) => f.detected) ?? [];
 
-  // Without an id there is nothing to preview or link to — render content plainly.
+  // Legacy runs can still preview their inline task without a prompt reference.
   if (!taskPromptId) {
+    if (fallbackText) {
+      return (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0} className={cn("inline-flex max-w-full", className)}>
+                {children ?? fallbackText}
+              </span>
+            </TooltipTrigger>
+            <TooltipPrimitive.Portal>
+              <TooltipContent
+                side="top"
+                collisionPadding={8}
+                className="max-w-sm max-h-[var(--radix-tooltip-content-available-height)] overflow-y-auto whitespace-pre-wrap break-words text-xs"
+              >
+                {fallbackText}
+              </TooltipContent>
+            </TooltipPrimitive.Portal>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
     return children ? (
       <span className={cn("inline-flex max-w-full", className)}>{children}</span>
     ) : null;
