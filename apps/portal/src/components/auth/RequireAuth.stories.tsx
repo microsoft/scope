@@ -21,6 +21,9 @@ const meta = {
   component: RequireAuth,
   tags: ["ai-generated"],
   args: { children: <div>Scope application</div> },
+  parameters: {
+    docs: { description: { component: "Requires a configured OAuth client from runtime SCOPE_AUTH_* or build-time VITE_AUTH_* settings before sign-in." } },
+  },
 } satisfies Meta<typeof RequireAuth>;
 
 export default meta;
