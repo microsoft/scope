@@ -198,6 +198,12 @@ normalization, the single `401` re-auth retry, redacted logging, and `ApiError`
 shaping. `update-check.ts` stays on raw `fetch` precisely because it must bypass that
 auth hook.
 
+When a logging sink is installed, text response previews read at most 64 KiB
+from a clone. On reaching that cap, the client requests cancellation of the
+preview branch without waiting for the original response to finish. This lets
+the caller receive and consume a chunked response even while its server is
+still sending data; logging never consumes the caller's copy.
+
 For **scoped** operations the facade also appends the resolved project as a
 `?projectId=` query param (see _Project scoping_ below): pass `{ projectId }` in the
 `apiFetch` init and it is URL-encoded onto the query and stripped from the ky init (a

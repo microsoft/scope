@@ -267,8 +267,10 @@ async function readCappedResponseText(response: Response, maxBytes: number): Pro
       }
     }
   } finally {
-    // Stop the tee'd stream; ignore errors from an already-closed reader.
-    await reader.cancel().catch(() => {});
+    // Cancelling a tee branch can wait for the original response to finish.
+    // The caller cannot consume that response until we return it, so request
+    // cancellation without awaiting the other branch. Handle late failures.
+    void reader.cancel().catch(() => {});
   }
   if (total === 0) return undefined;
   const merged = new Uint8Array(total);
