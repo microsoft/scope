@@ -426,6 +426,19 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
     expect(mockUpdateOne).not.toHaveBeenCalled();
   });
 
+  it("throws when report has no projectId instead of querying project \"undefined\"", async () => {
+    const doc = makeReportDoc({ templateId: "some-template", projectId: undefined as unknown as string });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      (processor as any).handleRequest(doc, makeMessage(), "pop-1", log)
+    ).rejects.toThrow("has no projectId");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockUpdateOne).not.toHaveBeenCalled();
+  });
+
   it("throws when templateId points to a non-existent template", async () => {
     const doc = makeReportDoc({ templateId: "nonexistent-template" });
 
