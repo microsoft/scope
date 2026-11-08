@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { browserSettings, resolveRuntimeEnv } from "./config.js";
 import { runtimes, runtimeByName } from "./inventory.js";
-import { consumerEnvironment, launchCommand, startupState } from "./control.js";
+import {
+  buildDiskSpaceWarning,
+  codespacesForwardingTip,
+  consumerEnvironment,
+  launchCommand,
+  startupState,
+} from "./control.js";
 import { renderNativeWorkers } from "./workers.js";
 import { spawn } from "node:child_process";
 
@@ -33,6 +39,19 @@ describe("lifecycle transitions", () => {
     expect(startupState(previous, "native", undefined, true).services).toEqual(["api"]);
     expect(startupState(previous, "native", ["portal"], false).services).toEqual(["portal"]);
     expect(() => startupState(previous, "native", ["not-a-service"], false)).toThrow(/Unknown runtime/);
+  });
+});
+
+describe("startup guidance", () => {
+  it("warns before builds only when available disk space is below 10 GiB", () => {
+    expect(buildDiskSpaceWarning(10 * 2 ** 30)).toBeUndefined();
+    expect(buildDiskSpaceWarning(10 * 2 ** 30 - 1)).toMatch(/10 GiB/);
+  });
+
+  it("shows the port-forwarding tip only in Codespaces", () => {
+    expect(codespacesForwardingTip({ CODESPACES: "true" }, 8080))
+      .toContain("forward port 8080");
+    expect(codespacesForwardingTip({}, 8080)).toBeUndefined();
   });
 });
 

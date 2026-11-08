@@ -13,8 +13,22 @@ export const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 export const stateDirectory = resolve(root, ".dev-state/runtime");
 export const project = workspaceName(root).replace("spike", "dev");
 
+const MIN_BUILD_DISK_SPACE = 10 * 2 ** 30;
+
 interface ManagedProcess { pid: number; identity: string }
 interface State { mode: "native" | "kind"; active: boolean; restore: boolean; services?: string[]; phase?: "starting" | "ready" | "failed"; processes: Record<string, ManagedProcess> }
+
+/** Warn when a requested image build has less than 10 GiB available. */
+export function buildDiskSpaceWarning(availableBytes: number): string | undefined {
+  if (availableBytes >= MIN_BUILD_DISK_SPACE) return undefined;
+  return "Less than 10 GiB of disk space is available; Kind image builds may fail.";
+}
+
+/** Give Codespaces users the configured port-forwarding step after Kind startup. */
+export function codespacesForwardingTip(environment: NodeJS.ProcessEnv, port: number): string | undefined {
+  if (environment.CODESPACES !== "true") return undefined;
+  return `Codespaces: forward port ${port} in the Ports panel to access the Kind environment.`;
+}
 
 /** Preserve ownership on failure; an explicit down is required before changing modes. */
 export function startupState(previous: State | undefined, mode: State["mode"], services: string[] | undefined, restore: boolean): State {
@@ -281,6 +295,11 @@ async function main(): Promise<void> {
   const mode = option("mode") || "native";
   if (mode !== "native" && mode !== "kind") throw new Error("Mode must be native or kind");
   if (state?.active && state.mode !== mode) throw new Error(`Mode ${state.mode} is active; run dev:down before switching`);
+  if (mode === "kind" && process.argv.includes("--build")) {
+    const disk = statfsSync(root);
+    const warning = buildDiskSpaceWarning(disk.bavail * disk.bsize);
+    if (warning) console.warn(warning);
+  }
   const next = startupState(state, mode, option("services")?.split(","), process.argv.includes("--restore"));
   const lock = resolve(stateDirectory, "operation.lock");
   try { mkdirSync(lock); } catch { throw new Error("Another lifecycle operation is active; inspect .dev-state/runtime/operation.lock"); }
@@ -297,6 +316,8 @@ async function main(): Promise<void> {
       cluster.startCluster(inputEnv, next.services!, process.argv.includes("--build"));
       next.phase = "ready";
       saveState(next);
+      const tip = codespacesForwardingTip(inputEnv, config.edgePort);
+      if (tip) console.log(tip);
       return;
     }
     compose(env, "up", "--detach", "--wait", "--wait-timeout", "180", "mongodb", "redis", "azurite", "lowkey-vault");

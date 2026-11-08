@@ -146,6 +146,11 @@ pnpm dev:smoke --mode=kind                              # credential-free up -> 
 pnpm dev:down                                           # deletes only this workspace's cluster
 ```
 
+When `--build` is used, startup checks available disk space and warns if less
+than 10 GiB is free; the warning does not block the build. After a successful
+Kind startup in Codespaces, forward the configured edge port (`EDGE_PORT`,
+default `8080`) from the Ports panel to open the browser URL.
+
 The browser reaches the stack through one origin. The node maps NodePort 30080
 to loopback `EDGE_PORT`, and the in-cluster nginx edge routes by path.
 
