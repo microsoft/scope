@@ -1,5 +1,22 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TENANT, renderEdgeRoutes, resolveDevConfig } from "./config.js";
+
+describe("Codespaces devcontainer options", () => {
+  it("requests the Kind machine size and forwards the edge port", () => {
+    const devcontainer: {
+      forwardPorts?: number[];
+      hostRequirements?: { cpus?: number; memory?: string; storage?: string };
+    } = JSON.parse(readFileSync(new URL("../../.devcontainer/devcontainer.json", import.meta.url), "utf8"));
+
+    expect(devcontainer.hostRequirements).toEqual({
+      cpus: 8,
+      memory: "32gb",
+      storage: "64gb",
+    });
+    expect(devcontainer.forwardPorts).toContain(8080);
+  });
+});
 
 describe("development origin contract", () => {
   it("resolves local TLS and preserves the external port in known authorities", () => {

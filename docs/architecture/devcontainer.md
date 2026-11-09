@@ -23,15 +23,17 @@ and Kind node images are digest-pinned. Debian packages are **not snapshot-pinne
 this is not the final reproducible toolchain. Node 24 selection, Rust, Python/uv,
 browsers, Azure/PowerShell, and the remaining phase-two tools are still pending.
 
-Initial sizing **targets, not verified minimums**: 4 CPUs / 16 GB for fast mode;
-8 CPUs / 32 GB and at least 80 GB available disk for full Kind. On Docker Desktop,
-configure the same CPU/RAM allocations and sufficient disk capacity under
-Settings -> Resources (or the WSL2 resource configuration on Windows). The spike
-bounds Compose concurrency at two; it does not start any workers. Full-stack
-build and worker concurrency limits and cold/steady-state measurements remain
-required. arm64 and Windows/macOS have not been validated; do not assume that
-all images run natively on arm64. Windows worker execution and image validation
-remain separate Windows targets, not Linux/Kind capabilities.
+Codespaces requests 8 CPUs, 32 GB RAM, and 64 GB storage through
+`.devcontainer/devcontainer.json` for the full Kind workload. This is a minimum
+machine specification, subject to the machine types allowed by the organization.
+For fast mode on Docker Desktop, configure at least 4 CPUs / 16 GB RAM and
+sufficient disk capacity under Settings -> Resources (or the WSL2 resource
+configuration on Windows). The spike bounds Compose concurrency at two; it does
+not start any workers. Full-stack build and worker concurrency limits and
+cold/steady-state measurements remain required. arm64 and Windows/macOS have not
+been validated; do not assume that all images run natively on arm64. Windows
+worker execution and image validation remain separate Windows targets, not
+Linux/Kind capabilities.
 
 ## Run the probe
 
@@ -147,9 +149,9 @@ pnpm dev:down                                           # deletes only this work
 ```
 
 When `--build` is used, startup checks available disk space and warns if less
-than 10 GiB is free; the warning does not block the build. After a successful
-Kind startup in Codespaces, forward the configured edge port (`EDGE_PORT`,
-default `8080`) from the Ports panel to open the browser URL.
+than 10 GiB is free; the warning does not block the build. The devcontainer
+configuration forwards port `8080` automatically, so Codespaces users do not
+need to add a port mapping manually.
 
 The browser reaches the stack through one origin. The node maps NodePort 30080
 to loopback `EDGE_PORT`, and the in-cluster nginx edge routes by path.

@@ -24,12 +24,6 @@ export function buildDiskSpaceWarning(availableBytes: number): string | undefine
   return "Less than 10 GiB of disk space is available; Kind image builds may fail.";
 }
 
-/** Give Codespaces users the configured port-forwarding step after Kind startup. */
-export function codespacesForwardingTip(environment: NodeJS.ProcessEnv, port: number): string | undefined {
-  if (environment.CODESPACES !== "true") return undefined;
-  return `Codespaces: forward port ${port} in the Ports panel to access the Kind environment.`;
-}
-
 /** Preserve ownership on failure; an explicit down is required before changing modes. */
 export function startupState(previous: State | undefined, mode: State["mode"], services: string[] | undefined, restore: boolean): State {
   if (previous?.active && previous.mode !== mode) throw new Error(`Mode ${previous.mode} is active; run dev:down before switching`);
@@ -316,8 +310,6 @@ async function main(): Promise<void> {
       cluster.startCluster(inputEnv, next.services!, process.argv.includes("--build"));
       next.phase = "ready";
       saveState(next);
-      const tip = codespacesForwardingTip(inputEnv, config.edgePort);
-      if (tip) console.log(tip);
       return;
     }
     compose(env, "up", "--detach", "--wait", "--wait-timeout", "180", "mongodb", "redis", "azurite", "lowkey-vault");

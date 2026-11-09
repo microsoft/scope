@@ -1,6 +1,7 @@
 {
   "name": "Scope development (DinD + native/Kind)",
   "build": { "dockerfile": "Dockerfile", "context": ".." },
+  "hostRequirements": { "cpus": 8, "memory": "32gb", "storage": "64gb" },
   "remoteUser": "node",
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:4.1.3": {
@@ -25,6 +26,7 @@
   "postCreateCommand": "sudo -n chown node:node /home/node/.local/share/pnpm/store /home/node/.cargo /home/node/.scope-state && pnpm install --frozen-lockfile && pnpm exec tsx scripts/dev/control.ts create",
   "postStartCommand": "pnpm exec tsx scripts/dev/control.ts start",
   "postAttachCommand": "pnpm exec tsx scripts/dev/control.ts attach",
+  "forwardPorts": [8080],
   "portsAttributes": {
     "8080": { "label": "dev-edge (Codespaces HTTP transport)", "protocol": "http", "requireLocalPort": true, "onAutoForward": "notify" },
     "8443": { "label": "dev-edge (local HTTPS)", "protocol": "https", "requireLocalPort": true, "onAutoForward": "ignore" },
