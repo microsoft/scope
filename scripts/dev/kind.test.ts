@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { MONGO_REPLICA_SET_INIT, renderKindStack } from "./kind.js";
 import { runtimes } from "./inventory.js";
-import { inspectorCommand } from "./cluster.js";
+import { findWorkload, inspectorCommand, logsArguments } from "./cluster.js";
 
 describe("complete Kind stack", () => {
   const resources = renderKindStack({});
@@ -56,5 +56,23 @@ describe("complete Kind stack", () => {
     expect(local).toContain(`"name":"TENANT_ID","value":"${tenant}"`);
     expect(local).toContain("listen 8080 ssl");
     expect(local).toContain('"targetPort":8080');
+  });
+});
+
+describe("Kind workload logs", () => {
+  it("resolves apps and backing services to Deployments and one-shot steps to Jobs", () => {
+    expect(findWorkload({}, "api").kind).toBe("Deployment");
+    expect(findWorkload({}, "mongodb").kind).toBe("Deployment");
+    expect(findWorkload({}, "dev-edge").kind).toBe("Deployment");
+    expect(findWorkload({}, "db-migrate").kind).toBe("Job");
+  });
+
+  it("lists the valid workload names for an unknown name", () => {
+    expect(() => findWorkload({}, "nope")).toThrow(/Unknown Kind workload nope; available: .*api.*mongodb/);
+  });
+
+  it("reads the last 100 lines of the matching workload", () => {
+    expect(logsArguments("Deployment", "api")).toEqual(["logs", "deployment/api", "--tail=100"]);
+    expect(logsArguments("Job", "db-migrate")).toEqual(["logs", "job/db-migrate", "--tail=100"]);
   });
 });

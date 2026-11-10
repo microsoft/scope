@@ -264,6 +264,14 @@ async function main(): Promise<void> {
   const state = readState();
   if (command === "logs") {
     const name = option("service") || "api";
+
+    // Kind workloads log to the cluster, not to native log files or the native Compose project.
+    if (state?.mode === "kind" && state.active) {
+      const cluster = await import("./cluster.js");
+      cluster.showLogs(inputEnv, name);
+      return;
+    }
+
     runtimeByName(name);
     const path = resolve(stateDirectory, `${name}.log`);
     if (existsSync(path)) execute("tail", ["-n", "100", path]);

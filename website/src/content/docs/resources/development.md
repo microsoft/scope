@@ -29,12 +29,18 @@ dependencies and run the stack, then read
 Run these commands from the repository root:
 
 ```bash
+pnpm start                 # Interactive guide: pick a task, check prerequisites, run it
+pnpm start --list          # Every contributor command, grouped by topic
 pnpm test                  # Unit tests
 pnpm lint                  # Workspace lint and type checks
 pnpm build                 # Workspace builds
 pnpm storybook             # Portal component catalog
 pnpm test:integration      # Integration tests; requires .env and backing services
 ```
+
+`pnpm start` (alias `pnpm scope`) only runs existing root scripts after you
+confirm, and destructive commands default to **No**. Add `--dry-run` to see
+the commands without running them.
 
 Evaluate Scope's own AI prompts with `pnpm eval:prompts -- --mode quality`
 (the default mode). See the
