@@ -64,6 +64,26 @@ Python/compiler toolchain. Keep required dependency build scripts allowlisted in
 
 ## Local development
 
+### Copilot on GitHub Actions
+
+For Copilot sessions launched in the **Actions** environment,
+`.github/workflows/copilot-setup-steps.yml` prepares Node.js 22, the pnpm version
+from `package.json`, Docker Compose v2, mkcert, NSS certificate tools, and
+FFmpeg/FFprobe. It restores cached pnpm downloads, installs workspace dependencies,
+builds the shared CLI prerequisite packages, and prepares local HTTPS trust before
+the agent starts. Docker and GitHub CLI are supplied by the Ubuntu runner and
+checked during setup.
+
+The workflow must be on the default branch to be used by Copilot. It can also be
+tested manually or by a pull request changing the workflow. It does **not** run
+in **Cloud** sandbox sessions and does not create a reusable machine image.
+Only package downloads are cached; certificates, private keys, and credentials
+are not cached. The Docker stack is not built or started automatically.
+Copilot entitlement, inference credentials, and the repository's outbound
+firewall allowlist still need separate configuration.
+
+### Start the local stack
+
 Local authentication requires your browser to trust a development certificate.
 The Portal development scripts run `mkcert -install` to add a local certificate
 authority to the OS/browser trust store and generate the emulator's `localhost`

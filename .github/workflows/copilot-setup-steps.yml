@@ -1,0 +1,84 @@
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/copilot-setup-steps.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/copilot-setup-steps.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: Install pinned pnpm
+        run: |
+          npm install --global "$(node -p 'require("./package.json").packageManager')"
+          echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+        id: pnpm
+
+      - name: Cache pnpm downloads
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ${{ steps.pnpm.outputs.path }}
+          key: copilot-pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            copilot-pnpm-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install development and recording tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mkcert libnss3-tools ffmpeg
+          if ! docker compose version; then
+            if apt-cache show docker-compose-plugin >/dev/null 2>&1; then
+              sudo apt-get install -y --no-install-recommends docker-compose-plugin
+            else
+              sudo apt-get install -y --no-install-recommends docker-compose-v2
+            fi
+          fi
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CLI prerequisite packages
+        run: pnpm --filter shared --filter github-auth build
+
+      - name: Prepare local HTTPS trust
+        run: |
+          mkdir -p "$HOME/.pki/nssdb"
+          if [ ! -f "$HOME/.pki/nssdb/cert9.db" ]; then
+            certutil -N --empty-password -d "sql:$HOME/.pki/nssdb"
+          fi
+          scripts/ensure-dev-certs.sh
+
+      - name: Verify prerequisites
+        run: |
+          node --version
+          pnpm --version
+          gh --version
+          docker info
+          docker compose version
+          mkcert -version
+          ffmpeg -version
+          ffprobe -version
+          docker_root="$(docker info --format '{{.DockerRootDir}}')"
+          df -h "$docker_root"
