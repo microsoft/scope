@@ -7,8 +7,13 @@ and Timeout through deterministic TypeScript. Explicit local or
 installed-package plugins can add custom deterministic handlers without
 modifying Taxonome. No Scope backing services are needed.
 
-The generic runtime is `packages/taxonomy-engine`; the shipped
-Ax taxonomy definitions and Timeout handler are isolated in
+Start with the website's [Using Taxonome guide](../../website/src/content/docs/guides/taxonome.mdx)
+for practical workflows and authoring a custom taxonomy. The
+[default taxonomy reference](../../website/src/content/docs/reference/taxonome-elements.mdx)
+generates its element/file list and full YAML sources from the catalog.
+
+The generic runtime is `packages/taxonomy-engine`; the shipped Ax taxonomy
+definitions and deterministic handlers are isolated in
 `packages/ax-taxonomy`. The CLI explicitly composes both packages.
 
 See [the architecture and usage guide](../../docs/architecture/taxonome.md)

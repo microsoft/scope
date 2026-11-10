@@ -107,6 +107,28 @@ function randomVariationColor(): string {
   return VARIATION_COLORS[Math.floor(Math.random() * VARIATION_COLORS.length)];
 }
 
+/**
+ * Compares ordered resource binding specs, including their parameter values.
+ *
+ * @param left Current run-level resource configuration.
+ * @param right Profile-owned resource configuration.
+ */
+function resourceBindingSpecsEqual(
+  left: ResourceBindingSpec[],
+  right: ResourceBindingSpec[],
+): boolean {
+  if (left.length !== right.length) return false;
+
+  return left.every((binding, index) => {
+    const other = right[index];
+    if (!other || binding.ref !== other.ref) return false;
+
+    const params = Object.entries(binding.params ?? {}).sort(([a], [b]) => a.localeCompare(b));
+    const otherParams = Object.entries(other.params ?? {}).sort(([a], [b]) => a.localeCompare(b));
+    return JSON.stringify(params) === JSON.stringify(otherParams);
+  });
+}
+
 interface GalleryCardProps {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
@@ -139,11 +161,22 @@ interface CollapsibleCardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   disabled?: boolean;
+  disabledReason?: string;
   help?: React.ReactNode;
   children: React.ReactNode;
 }
 
-function CollapsibleCard({ icon: Icon, title, summary, open, onOpenChange, disabled, help, children }: CollapsibleCardProps) {
+function CollapsibleCard({
+  icon: Icon,
+  title,
+  summary,
+  open,
+  onOpenChange,
+  disabled,
+  disabledReason,
+  help,
+  children,
+}: CollapsibleCardProps) {
   return (
     <Card className="relative">
       <button
@@ -160,7 +193,7 @@ function CollapsibleCard({ icon: Icon, title, summary, open, onOpenChange, disab
             </p>
             <p className="truncate text-xs text-muted-foreground">
               {summary}
-              {disabled && " — locked by profile"}
+              {disabled && ` — ${disabledReason ?? "locked by profile"}`}
             </p>
           </div>
         </div>
@@ -339,6 +372,10 @@ export function SubmitRun({
   const selectedBaseProfileVersion = selectedProfileId
     ? profileVersions.find((version) => version.version === selectedProfileVersion) ?? selectedBaseProfile?.version
     : undefined;
+  const profileControlsResources = (selectedBaseProfileVersion?.resources?.length ?? 0) > 0;
+  const variationModeActive = Boolean(
+    selectedProfileId && variationDrafts.some((variation) => variation.profileId.trim().length > 0),
+  );
   const topProfiles = selectableProfileList.slice(0, 3);
 
   // ─── Effects ────────────────────────────────────────────────────────────
@@ -488,19 +525,30 @@ export function SubmitRun({
   };
 
   const addVariationDraft = () => {
-    setVariationDrafts((prev) => {
-      const used = new Set(prev.map((v) => v.profileId).filter(Boolean));
-      const nextProfile = selectableProfileList.find((p) => p._id !== selectedProfileId && !used.has(p._id));
-      if (!nextProfile) {
-        toast.info("All available profiles are already used in variations.");
-        return prev;
-      }
-      return [...prev, {
-        profileId: nextProfile._id,
-        profileVersion: nextProfile.latestVersion,
-        color: randomVariationColor(),
-      }];
-    });
+    const used = new Set(variationDrafts.map((variation) => variation.profileId).filter(Boolean));
+    const nextProfile = selectableProfileList.find(
+      (profile) => profile._id !== selectedProfileId && !used.has(profile._id),
+    );
+    if (!nextProfile) {
+      toast.info("All available profiles are already used in variations.");
+      return;
+    }
+
+    // Variation requests resolve each profile independently and omit request-level
+    // resources, so remove edits that the API would otherwise silently ignore.
+    const profileResourceSpecs = selectedBaseProfileVersion?.resources ?? [];
+    if (!resourceBindingSpecsEqual(selectedResourceSpecs, profileResourceSpecs)) {
+      toast.warning(
+        "Run-owned resource edits were removed. Profile variations resolve resources independently, so every selected profile must provide complete resource bindings and required parameters.",
+      );
+      setSelectedResourceSpecs(profileResourceSpecs);
+    }
+
+    setVariationDrafts((previous) => [...previous, {
+      profileId: nextProfile._id,
+      profileVersion: nextProfile.latestVersion,
+      color: randomVariationColor(),
+    }]);
   };
 
   const updateVariationDraft = (index: number, patch: Partial<VariationDraft>) => {
@@ -800,7 +848,7 @@ export function SubmitRun({
       ...(inVariationMode ? {} : { ...(selectedSkills.length > 0 ? { skills: selectedSkills } : {}) }),
       ...(inVariationMode ? {} : { ...(selectedExtensions.length > 0 ? { extensions: selectedExtensions } : {}) }),
       ...(selectedCodebaseSpec ? { codebase: selectedCodebaseSpec } : {}),
-      ...(selectedResourceSpecs.length > 0 ? { resources: selectedResourceSpecs } : {}),
+      ...(inVariationMode ? {} : { ...(selectedResourceSpecs.length > 0 ? { resources: selectedResourceSpecs } : {}) }),
       ...(inVariationMode ? {} : { ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}) }),
       ...(inVariationMode
         ? {
@@ -1283,50 +1331,6 @@ export function SubmitRun({
                 </Button>
               </div>
               <CodebasePicker selected={selectedCodebaseSpec} onChange={setSelectedCodebaseSpec} />
-            </div>
-          )}
-
-          {/* ─── Resources (optional, discreet) ───────────────────────────── */}
-          {!(resourcesOpen || selectedResourceSpecs.length > 0) ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-xs text-muted-foreground"
-              onClick={() => setResourcesOpen(true)}
-            >
-              <Boxes className="h-3.5 w-3.5" />
-              Add resources
-            </Button>
-          ) : (
-            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Label className="text-xs">
-                    Resources{" "}
-                    <span className="font-normal text-muted-foreground">(optional)</span>
-                  </Label>
-                  <HelpTooltip text="Optional lifecycle dependencies. Pick bare resources to pin their latest revision at submit time, or choose a specific immutable revision." />
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
-                  onClick={() => {
-                    setSelectedResourceSpecs([]);
-                    setResourcesOpen(false);
-                  }}
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Remove
-                </Button>
-              </div>
-              <ResourcePicker
-                selected={selectedResourceSpecs}
-                onChange={setSelectedResourceSpecs}
-                profileBindings={selectedBaseProfileVersion?.resources ?? []}
-              />
             </div>
           )}
 
@@ -2186,6 +2190,51 @@ export function SubmitRun({
           </div>
         </CollapsibleCard>
       )}
+
+      {/* ─── Resources (collapsible) ───────────────────────────────────── */}
+      <CollapsibleCard
+        icon={Boxes}
+        title="Resources"
+        help={
+          <HelpTooltip text="Lifecycle dependencies provisioned before the agent starts. Bare resources pin their latest revision at submit time; explicit revisions remain immutable." />
+        }
+        summary={
+          selectedResourceSpecs.length === 0
+            ? "None selected"
+            : `${selectedResourceSpecs.length} resource${selectedResourceSpecs.length === 1 ? "" : "s"} selected`
+        }
+        open={resourcesOpen}
+        onOpenChange={setResourcesOpen}
+        disabled={variationModeActive || profileControlsResources}
+        disabledReason={variationModeActive ? "managed independently by each profile" : undefined}
+      >
+        <div className="space-y-2">
+          {variationModeActive ? (
+            <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span>
+                Profile variations resolve resources independently. Every selected profile must provide complete
+                resource bindings and required parameters; run-owned resource edits are unavailable in variation mode.
+              </span>
+            </div>
+          ) : profileControlsResources ? (
+            <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span>
+                The selected profile controls the resource list, revisions, and preset parameter values.
+                Parameters the profile leaves unset remain editable for this run.
+              </span>
+            </div>
+          ) : null}
+          <ResourcePicker
+            selected={selectedResourceSpecs}
+            onChange={setSelectedResourceSpecs}
+            profileBindings={selectedBaseProfileVersion?.resources ?? []}
+            bindingsLocked={profileControlsResources}
+            disabled={variationModeActive}
+          />
+        </div>
+      </CollapsibleCard>
 
       {/* ─── Skills (collapsible) ──────────────────────────────────────── */}
       {showSkills && <CollapsibleCard

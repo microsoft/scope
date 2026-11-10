@@ -4,6 +4,13 @@ The normative interoperable authoring/result/reference contract is
 [Trajectory Taxonomy Format](trajectory-taxonomy-format.md). This guide covers
 the Taxonome implementation, CLI, experiments, and evidence.
 
+For end-user workflows, start with the website's
+[Using Taxonome guide](../../website/src/content/docs/guides/taxonome.mdx).
+Its linked Reference pages cover exact CLI/format/handler contracts; the
+[default catalog reference](../../website/src/content/docs/reference/taxonome-elements.mdx)
+renders the canonical manifest, filenames, and complete element YAML at
+website build time without loading the runtime or executing handlers.
+
 Taxonome began as a standalone experimental slice and remains independently
 usable through its CLI. Scope now also integrates the same engine as the
 production taxonomy catalog and Experiment post-processor. It loads authored

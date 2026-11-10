@@ -7,29 +7,11 @@ import { Link, useLocation, Outlet, matchPath } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   Activity,
-  Atom,
   Plus,
-  List,
-  FlaskConical,
-  BarChart3,
-  Tags,
-  FileText,
-  KeyRound,
-  Bot,
-  Server,
-  Lightbulb,
-  Cpu,
-  MessageSquareText,
   Settings,
   Menu,
-  BookOpen,
-  FolderGit2,
-  FolderKanban,
   GitBranch,
   Plug,
-  Puzzle,
-  Boxes,
-  SlidersHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Network,
@@ -53,6 +35,9 @@ import { UserMenu } from "./UserMenu";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useFeatureFlags } from "@/contexts/FeatureFlagContext";
 import { useProjectContext } from "@/contexts/ProjectContext";
+import { navigationIcons } from "./navigation-icons";
+
+const ExperimentIcon = navigationIcons.experiments;
 
 interface NavItem {
   to: string;
@@ -98,11 +83,11 @@ const navGroups: NavGroup[] = [
     label: "Activity",
     scoped: true,
     items: [
-      { to: "/experiments", label: "Experiments", icon: Atom },
-      { to: "/runs", label: "Runs", icon: List },
-      { to: "/statistics", label: "Statistics", icon: BarChart3 },
-      { to: "/reports", label: "Reports", icon: FileText },
-      { to: "/insights", label: "Insights", icon: Lightbulb },
+      { to: "/experiments", label: "Experiments", icon: navigationIcons.experiments },
+      { to: "/runs", label: "Runs", icon: navigationIcons.runs },
+      { to: "/statistics", label: "Statistics", icon: navigationIcons.statistics },
+      { to: "/reports", label: "Reports", icon: navigationIcons.reports },
+      { to: "/insights", label: "Insights", icon: navigationIcons.insights },
     ],
   },
   {
@@ -110,12 +95,12 @@ const navGroups: NavGroup[] = [
     label: "Library",
     scoped: true,
     items: [
-      { to: "/task-prompts", label: "Prompts", icon: MessageSquareText },
-      { to: "/criteria", label: "Criteria", icon: FlaskConical },
-      { to: "/prompt-features", label: "Features", icon: Tags },
-      { to: "/profiles", label: "Profiles", icon: SlidersHorizontal, featureKey: "profiles" },
-      { to: "/skills", label: "Skills", icon: BookOpen, featureKey: "skills" },
-      { to: "/codebases", label: "Codebases", icon: FolderGit2 },
+      { to: "/task-prompts", label: "Prompts", icon: navigationIcons.prompts },
+      { to: "/criteria", label: "Criteria", icon: navigationIcons.criteria },
+      { to: "/prompt-features", label: "Features", icon: navigationIcons.features },
+      { to: "/profiles", label: "Profiles", icon: navigationIcons.profiles, featureKey: "profiles" },
+      { to: "/skills", label: "Skills", icon: navigationIcons.skills, featureKey: "skills" },
+      { to: "/codebases", label: "Codebases", icon: navigationIcons.codebases },
       { to: "/taxonomies", label: "Taxonomies", icon: Network, featureKey: "taxonome", failClosed: true },
     ],
   },
@@ -124,9 +109,9 @@ const navGroups: NavGroup[] = [
     label: "Integrations",
     scoped: true,
     items: [
-      { to: "/resources", label: "Resources", icon: Boxes },
-      { to: "/mcp-servers", label: "MCP", icon: Server, featureKey: "mcp" },
-      { to: "/extensions", label: "Extensions", icon: Puzzle, featureKey: "extensions" },
+      { to: "/resources", label: "Resources", icon: navigationIcons.resources },
+      { to: "/mcp-servers", label: "MCP", icon: navigationIcons.mcp, featureKey: "mcp" },
+      { to: "/extensions", label: "Extensions", icon: navigationIcons.extensions, featureKey: "extensions" },
     ],
   },
   {
@@ -135,9 +120,9 @@ const navGroups: NavGroup[] = [
     id: "platform",
     label: "Platform",
     items: [
-      { to: "/agents", label: "Agents", icon: Bot, featureKey: "agents" },
-      { to: "/models", label: "Models", icon: Cpu, featureKey: "models" },
-      { to: "/secrets", label: "Secrets", icon: KeyRound, featureKey: "tokens" },
+      { to: "/agents", label: "Agents", icon: navigationIcons.agents, featureKey: "agents" },
+      { to: "/models", label: "Models", icon: navigationIcons.models, featureKey: "models" },
+      { to: "/secrets", label: "Secrets", icon: navigationIcons.secrets, featureKey: "tokens" },
     ],
   },
 ];
@@ -410,7 +395,7 @@ function NewWorkflowLauncher({
               "bg-accent text-foreground ring-2 ring-ring ring-offset-1",
           )}
         >
-          <Atom className="h-4 w-4 shrink-0" />
+          <ExperimentIcon className="h-4 w-4 shrink-0" />
           <span className="truncate text-xs font-medium">Experiment</span>
         </Link>
       </div>
@@ -517,7 +502,7 @@ function NewWorkflowLauncher({
             "bg-accent text-foreground ring-2 ring-inset ring-ring",
         )}
       >
-        <Atom className="h-4 w-4 shrink-0" />
+        <ExperimentIcon className="h-4 w-4 shrink-0" />
         <span className="whitespace-nowrap">Experiment</span>
       </Link>
     </div>
@@ -728,7 +713,7 @@ export function Layout() {
               <SidebarIconLink
                 to="/projects"
                 label="Projects"
-                icon={FolderKanban}
+                icon={navigationIcons.projects}
                 active={location.pathname.startsWith("/projects")}
                 expanded={sidebarExpanded}
               />
@@ -850,7 +835,7 @@ export function Layout() {
                           onClick={() => setMobileOpen(false)}
                           className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                         >
-                          <Atom className="h-4 w-4" />
+                          <ExperimentIcon className="h-4 w-4" />
                           New Experiment
                         </Link>
                         <div className="my-2 h-px bg-border/60" aria-hidden />

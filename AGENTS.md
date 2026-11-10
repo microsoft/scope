@@ -37,6 +37,16 @@ config/                         # Benchmark definitions (YAML)
 
 For package architecture and data models, see [docs/architecture/app-design.md](docs/architecture/app-design.md).
 
+## Cross-client domain ownership
+
+The API owns domain validation, orchestration, fan-out, defaulting, and
+resolution rules shared by Portal, CLI, and direct API consumers. Portal and CLI
+are thin clients: they collect user intent and may provide early validation, but
+must not duplicate or materialize API-owned business logic. When one user action
+expands into multiple domain objects, each object is derived independently by
+the API from the shared intent so client or sibling state cannot leak between
+them.
+
 ## Key Components
 
 ### API (`apps/api/`)
@@ -185,6 +195,7 @@ Built on `mongo-migrate-ts`. Migrations are TypeScript files with `up()` and `do
 - Write for humans: descriptive names, small focused functions, simple control flow, minimal abstraction.
 - Separate logical steps with blank lines; avoid dense one-liners and unrelated statements packed together.
 - Give every non-trivial function and logical code block a short comment explaining what it does; add intent, assumptions, invariants, or surprising reasons where useful.
+- Apply the same rule to tests: comment non-trivial fixture setup, user-flow phases, and invariant assertions. A descriptive test name does not replace intent comments inside a multi-step test; avoid generic `Arrange` / `Act` / `Assert` labels and comments that merely repeat the next line.
 - Document function parameters, types, and their fields/properties with concise JSDoc/TSDoc explaining meaning, constraints, units, optionality, and defaults where relevant.
 - Do not narrate trivial or self-evident code. Document public contracts and failure behavior when names and types are insufficient.
 - Follow local conventions and formatters; review readability as well as correctness.
@@ -200,6 +211,15 @@ pnpm dev:portal                   # Portal only (native)
 pnpm dev:<worker-name>            # Individual worker (native)
 pnpm open:portal                  # Open portal in browser
 ```
+
+Before a large clean Docker or Podman rebuild, inspect the container runtime
+storage and any runtime VM filesystem as described in
+[`CONTRIBUTING.md`](CONTRIBUTING.md#prepare-container-storage-for-a-clean-rebuild),
+then report the available space and Scope-specific resources. Never
+automatically run broad prune commands or delete unrelated images, containers,
+build cache, or volumes. Any cleanup must target verified Scope resources and
+requires explicit user approval; warn that named volumes may contain local
+database or authentication data.
 
 ### Shared Dev Infrastructure (CosmosDB)
 

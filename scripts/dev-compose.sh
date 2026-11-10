@@ -19,7 +19,7 @@ for p in /usr/local/bin /opt/homebrew/bin "$HOME/.docker/bin"; do
 done
 
 # ---------------------------------------------------------------------------
-# Forward the host's npm registry into the image builds.
+# Forward package and package-manager bootstrap registries into image builds.
 # ---------------------------------------------------------------------------
 # docker-compose.yml passes ${NPM_CONFIG_REGISTRY} to every image build as a
 # build arg (default: the public registry). Detect the registry configured on
@@ -27,6 +27,10 @@ done
 # cannot reach registry.npmjs.org directly — e.g. behind Microsoft's npm proxy —
 # build out of the box. External contributors detect the public registry and are
 # unaffected. An explicitly exported NPM_CONFIG_REGISTRY always wins.
+#
+# COREPACK_NPM_REGISTRY is intentionally not inferred from the package registry:
+# only forward it when the user explicitly selected a Corepack-compatible
+# metadata endpoint.
 if [ -z "${NPM_CONFIG_REGISTRY:-}" ]; then
   detected_registry="$(npm config get registry 2>/dev/null || pnpm config get registry 2>/dev/null || true)"
   case "$detected_registry" in

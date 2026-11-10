@@ -9,10 +9,11 @@ import starlightOpenAPI, { openAPISidebarGroups } from 'starlight-openapi';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import remarkGfm from 'remark-gfm';
 import remarkBasePath from './src/plugins/remark-base-path.mjs';
 import remarkHttpSnippets from './src/plugins/remark-http-snippets.mjs';
-import { taxonomeGuideNavigation } from './src/lib/taxonome-guide-navigation.mjs';
+import rehypeTaxonomeFocus from './src/plugins/rehype-taxonome-focus.mjs';
 
 // https://astro.build/config
 // `site` and `base` are driven by the GitHub Pages deployment URL in CI
@@ -58,6 +59,12 @@ export default defineConfig({
 	base,
 	output: 'static',
 	server: { port: docPort },
+	vite: {
+		// Prerender bundles relocate import.meta.url; pin read-only source panels to this checkout.
+		define: {
+			__SCOPE_DOCS_SOURCE_ROOT__: JSON.stringify(fileURLToPath(new URL('../', import.meta.url))),
+		},
+	},
 	markdown: {
 		// remarkGfm is listed explicitly because Astro applies its built-in GFM
 		// support to .md only. MDX inherits `remarkPlugins` but not that built-in,
@@ -66,6 +73,7 @@ export default defineConfig({
 		// option here: the HTTP snippet plugin below emits JSX, which only .mdx
 		// renders, and several guides need both tables and snippets.
 		remarkPlugins: [remarkGfm, [remarkBasePath, { base }], remarkHttpSnippets],
+		rehypePlugins: [rehypeTaxonomeFocus],
 	},
 	integrations: [
 		mermaid({
@@ -107,7 +115,10 @@ export default defineConfig({
 				},
 				{
 					label: 'Community',
-					items: [{ label: 'Articles & talks', slug: 'community/articles-and-talks' }],
+					items: [
+						{ label: 'Articles & talks', slug: 'community/articles-and-talks' },
+						{ label: 'Contributors', slug: 'community/contribute' },
+					],
 				},
 				{
 					label: 'Getting Started',
@@ -130,13 +141,14 @@ export default defineConfig({
 								{ label: 'Create Experiments', slug: 'guides/creating-experiments' },
 								{ label: 'Migrate to Experiments', slug: 'guides/migrating-to-experiments' },
 								{ label: 'Prioritize & pause', slug: 'guides/prioritizing-requests' },
+								{ label: 'Analyze trajectories with Taxonome', slug: 'guides/taxonome' },
 							],
 						},
-						taxonomeGuideNavigation,
 						{
 							label: 'Design your benchmark',
 							collapsed: true,
 							items: [
+								{ label: 'Create your own taxonomy', slug: 'guides/create-taxonomy' },
 								{ label: 'Task prompts', slug: 'guides/managing-task-prompts' },
 								{ label: 'Codebases', slug: 'guides/managing-codebases' },
 								{ label: 'Evaluation criteria', slug: 'guides/defining-criteria' },
@@ -191,9 +203,9 @@ export default defineConfig({
 							label: 'Taxonome',
 							items: [
 								{ label: 'CLI commands', slug: 'reference/taxonome-cli' },
-								{ label: 'Taxonomy and results', slug: 'reference/taxonome-taxonomy' },
-								{ label: 'Ax taxonomy and elements', slug: 'reference/taxonome-elements' },
-								{ label: 'Deterministic handlers', slug: 'reference/taxonome-handlers' },
+								{ label: 'Taxonomy and result format', slug: 'reference/taxonome-taxonomy' },
+								{ label: 'Default taxonomy and elements', slug: 'reference/taxonome-elements' },
+								{ label: 'Default handlers and plugin contract', slug: 'reference/taxonome-handlers' },
 							],
 						},
 					],

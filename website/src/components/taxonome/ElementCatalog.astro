@@ -2,58 +2,75 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { Code } from 'astro:components';
 import { loadTaxonomeCatalog } from '../../lib/taxonome-catalog.mjs';
 
 const catalog = await loadTaxonomeCatalog();
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const handlerAnchor = (id: string) => id.replace('/', '-');
 ---
 
-<section class="taxonome-catalog">
-	<h2 id="canonical-manifest">Canonical manifest</h2>
+<section aria-labelledby="catalog-identity" data-taxonome-catalog>
+	<h2 id="catalog-identity">{catalog.id} <small>v{catalog.version}</small></h2>
 	<p>
-		<strong>{catalog.id}</strong> uses portable semantic version
-		<code>{catalog.version}</code>. Scope stores its first immutable database
-		revision separately as <code>{catalog.id}@r1</code>.
+		This reference is generated at build time from <code>{catalog.file}</code>
+		and its referenced files. No classifier, handler, or model runs to build
+		this page. Scope stores the first immutable database revision separately as
+		<code>{catalog.id}@r1</code>.
 	</p>
-	<pre><code class="language-yaml">{catalog.source}</code></pre>
-
-	<h2 id="element-index">Element index</h2>
-	<ul>
-		{catalog.elements.map((element) => (
-			<li>
-				<a href={`#${element.id}`}>{element.label}</a>
-				{' — '}
-				<code>{element.id}</code>
-				{' · '}
-				{element.implementation.type === 'prompt' ? 'Prompt' : 'Code'}
-			</li>
-		))}
-	</ul>
-
-	{catalog.elements.map((element) => (
-		<section>
+	<details id="taxonomy-source">
+		<summary>Full manifest source: {catalog.file}</summary>
+		<Code code={catalog.source} lang="yaml" theme="github-dark-high-contrast" tabindex="0" />
+	</details>
+	<h3 id="surfaces">Declared surfaces</h3>
+	<ul>{catalog.surfaces.map(surface => <li>{surface.label} (<code>{surface.id}</code>)</li>)}</ul>
+	<h3 id="definition-files">Element definition files</h3>
+	<div class="table-scroll" tabindex="0" aria-label="Taxonomy element file list">
+		<table>
+			<thead><tr><th scope="col">Element</th><th scope="col">Type</th><th scope="col">Authored reference</th></tr></thead>
+			<tbody>{catalog.elements.map(element => (
+				<tr>
+					<th scope="row"><a href={`#${element.id}`}>{element.label}</a><br /><code>{element.id}</code></th>
+					<td>{element.type === 'prompt' ? 'Prompt' : 'Code'}</td>
+					<td><a href={`#source-${element.id}`}><code>{element.file}</code></a></td>
+				</tr>
+			))}</tbody>
+		</table>
+	</div>
+	{catalog.elements.map(element => (
+		<section aria-labelledby={element.id} class="element-reference" data-element-id={element.id}>
 			<h2 id={element.id}>{element.label}</h2>
-			<p><code>{element.id}</code> · <code>{element.path}</code></p>
+			<p><code>{element.id}</code> · <strong>{element.type === 'prompt' ? 'Prompt' : 'Code / deterministic'}</strong></p>
 			<p>{element.description}</p>
-			<p>
-				<strong>Implementation:</strong>{' '}
-				{element.implementation.type === 'prompt'
-					? 'Prompt instruction'
-					: `Deterministic handler ${element.implementation.handler}`}
-			</p>
-			<details>
-				<summary>View complete authored YAML</summary>
-				<pre><code class="language-yaml">{element.source}</code></pre>
+			<p>Canonical source: <code>{element.file.startsWith('elements/') ? `packages/ax-taxonomy/taxonomy/${element.file}` : element.file}</code></p>
+			{element.type === 'prompt'
+				? <><h3>Authored prompt</h3><p class="prompt-text">{element.detail}</p></>
+				: <p>Handler: <a href={`${base}reference/taxonome-handlers/#${handlerAnchor(element.detail)}`}><code>{element.detail}</code></a>. Configuration is included in the full YAML below.</p>}
+			<h3>Preconditions</h3>
+			<ul>{element.preconditions.map(flag => <li><code>{flag.name}</code>: <strong>{String(flag.enabled)}</strong></li>)}</ul>
+			<h3>Evidence roles</h3>
+			<ul>{element.evidence.map(role => (
+				<li><code>{role.name}</code> → <code>{role.type}</code>: {role.description}
+					{' '}(minimum {role.min}; maximum {role.max ?? 'not specified'}).</li>
+			))}</ul>
+			<details id={`source-${element.id}`}>
+				<summary>Full element source: {element.file}</summary>
+				<Code code={element.source} lang="yaml" theme="github-dark-high-contrast" tabindex="0" />
 			</details>
+			<p>
+				<a href={`${base}reference/taxonome-taxonomy/`}>Format and result contract</a>
+				{' · '}
+				<a href={`${base}guides/taxonome/`}>Use and extend Taxonome</a>
+			</p>
 		</section>
 	))}
 </section>
 
 <style>
-	.taxonome-catalog pre {
-		max-height: 34rem;
-		overflow: auto;
-	}
-	.taxonome-catalog details {
-		margin-block: 1rem 2rem;
-	}
+	.table-scroll { overflow-x: auto; }
+	.element-reference { margin-block: 3rem; scroll-margin-top: 6rem; }
+	details { margin-block: 1rem; border: 1px solid var(--sl-color-hairline); padding: 1rem; border-radius: .5rem; }
+	summary { cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+	code, .prompt-text { overflow-wrap: anywhere; }
+	small { font-size: .7em; color: var(--sl-color-gray-2); }
 </style>
