@@ -150,6 +150,22 @@ describe("TaskPromptBadge legacy run tooltip", () => {
     expect(onRowClick).toHaveBeenCalledTimes(1);
   });
 
+  it("does not trigger the parent row's click action when clicking the preview", async () => {
+    const onRowClick = vi.fn();
+    renderBadge(
+      <div onClick={onRowClick}>
+        <TaskPromptBadge fallbackText="Full task text">
+          <span>Task…</span>
+        </TaskPromptBadge>
+      </div>,
+    );
+    await userEvent.hover(screen.getByText("Task…"));
+    await screen.findByRole("tooltip");
+    await userEvent.click(screen.getByText("Full task text", { selector: "[data-state]" }));
+
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
   it("preserves the linked prompt preview when fallback text is also supplied", async () => {
     const fallbackText = "Inline task from the run";
     renderBadge(

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -16,6 +16,7 @@ import { cn, formatDate, formatId, truncate } from "@/lib/utils";
 import type { TaskPrompt } from "@/types";
 
 const SNIPPET_LEN = 280;
+const TOOLTIP_SCROLL_STEP = 40;
 
 interface TaskPromptBadgeProps {
   /** Content-addressed task prompt id (used for the link target and lazy fetch). */
@@ -56,6 +57,7 @@ export function TaskPromptBadge({
   className,
 }: TaskPromptBadgeProps) {
   const [open, setOpen] = useState(false);
+  const fallbackContentRef = useRef<HTMLDivElement>(null);
 
   const { data: fetched, isLoading: loadingPrompt } = useQuery({
     queryKey: ["task-prompt", taskPromptId],
@@ -84,17 +86,49 @@ export function TaskPromptBadge({
     if (fallbackText) {
       return (
         <TooltipProvider delayDuration={200}>
-          <Tooltip>
+          <Tooltip open={open} onOpenChange={setOpen}>
             <TooltipTrigger asChild>
-              <span tabIndex={0} className={cn("inline-flex max-w-full", className)}>
+              <span
+                tabIndex={0}
+                className={cn("inline-flex max-w-full", className)}
+                onKeyDown={(event) => {
+                  const preview = fallbackContentRef.current;
+                  if (
+                    !open || !preview ||
+                    preview.scrollHeight <= preview.clientHeight ||
+                    event.altKey || event.ctrlKey || event.metaKey
+                  ) {
+                    return;
+                  }
+
+                  const pageStep = Math.max(TOOLTIP_SCROLL_STEP, preview.clientHeight - TOOLTIP_SCROLL_STEP);
+                  const scrollOffsets: Partial<Record<string, number>> = {
+                    ArrowDown: TOOLTIP_SCROLL_STEP,
+                    ArrowUp: -TOOLTIP_SCROLL_STEP,
+                    PageDown: pageStep,
+                    PageUp: -pageStep,
+                    Home: -preview.scrollHeight,
+                    End: preview.scrollHeight,
+                    " ": event.shiftKey ? -pageStep : pageStep,
+                  };
+                  const offset = scrollOffsets[event.key];
+                  if (offset === undefined) return;
+
+                  event.preventDefault();
+                  event.stopPropagation();
+                  preview.scrollTop += offset;
+                }}
+              >
                 {children ?? fallbackText}
               </span>
             </TooltipTrigger>
             <TooltipPrimitive.Portal>
               <TooltipContent
+                ref={fallbackContentRef}
                 side="top"
                 collisionPadding={8}
                 className="max-w-sm max-h-[var(--radix-tooltip-content-available-height)] overflow-y-auto whitespace-pre-wrap break-words text-xs"
+                onClick={(event) => event.stopPropagation()}
               >
                 {fallbackText}
               </TooltipContent>

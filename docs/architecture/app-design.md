@@ -668,6 +668,13 @@ Both follow the same rules:
   and scrolls if needed. This fallback has no detail link and never fetches
   prompt metadata or content. Runs with a task-prompt reference keep their
   existing linked preview, even when fallback text is supplied.
+  When the fallback preview overflows, Arrow Up/Down, Page Up/Down, Home/End,
+  and Space/Shift+Space scroll it while keyboard focus stays on the trigger.
+  Escape dismisses the tooltip; Tab moves to the next control and dismisses it.
+  Clicks inside the fallback preview stop propagation so they do not navigate
+  the enclosing row; clicking the trigger keeps the row's normal behavior.
+  The `LegacyRunWithOverflowingTask` Storybook interaction checks real overflow,
+  scrolling to the final visible line, and keyboard dismissal in a browser.
   The Runs list's truncated numeric filter labels also use Radix tooltips
   instead of native `title` attributes, inheriting the page's 200 ms hover delay.
 - **Detected-features list + explicit navigate button.** `TaskPromptBadge`'s preview lists only
