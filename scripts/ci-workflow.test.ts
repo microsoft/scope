@@ -161,6 +161,39 @@ describe("GitHub Action pinning", () => {
 });
 
 describe("CI execution prerequisites", () => {
+  it("prepares Actions-based Copilot sessions with read-only repository access", () => {
+    const setup = parse(readFileSync(".github/workflows/copilot-setup-steps.yml", "utf8")) as {
+      on: Record<string, unknown>;
+      permissions: Record<string, string>;
+      jobs: Record<string, Job>;
+    };
+
+    // Copilot recognizes this exact job name and only a single setup job.
+    expect(Object.keys(setup.jobs)).toEqual(["copilot-setup-steps"]);
+    expect(setup.on).toHaveProperty("workflow_dispatch");
+    expect(setup.permissions).toEqual({ contents: "read" });
+    const job = setup.jobs["copilot-setup-steps"];
+    expect(job.permissions).toEqual({ contents: "read" });
+    expect(job["runs-on"]).toBe("ubuntu-24.04");
+    expect(job.steps.find((candidate) => candidate.uses?.startsWith("actions/checkout@"))?.with)
+      .toEqual({ "persist-credentials": false });
+
+    // Cache package downloads, never the generated development CA or credentials.
+    const cache = job.steps.find((candidate) => candidate.uses?.startsWith("actions/cache@"));
+    expect(cache?.with?.path).toBe("${{ steps.pnpm.outputs.path }}");
+    expect(cache?.with?.key).toContain("hashFiles('pnpm-lock.yaml')");
+    const commands = job.steps.flatMap((candidate) => candidate.run ? [candidate.run] : []);
+    expect(commands.join("\n")).toContain("pnpm install --frozen-lockfile");
+    expect(commands.join("\n")).toContain("mkcert libnss3-tools ffmpeg");
+    expect(commands.join("\n")).toContain("scripts/ensure-dev-certs.sh");
+    expect(commands.join("\n")).toContain("docker compose version");
+    for (const command of commands) {
+      const result = spawnSync("bash", ["-n"], { input: command, encoding: "utf8" });
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+    }
+  });
+
   it("selects integration checks for workflow changes through a dedicated filter", () => {
     const filtersStep = jobs["detect-changes"].steps.find((candidate) => candidate.uses?.startsWith("dorny/paths-filter@"));
     const filters = parse(filtersStep!.with!.filters) as Record<string, string[]>;
