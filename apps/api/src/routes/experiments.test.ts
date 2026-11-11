@@ -577,6 +577,31 @@ describe("Experiment API contract", () => {
     expect(findAgent).toHaveBeenCalledTimes(2);
   });
 
+  it("rejects criterion-free multi-turn composition before inserting requests", async () => {
+    const insertMany = vi.fn();
+    const { app } = harness({
+      experimentCollection: emptyExperimentCollection(),
+      requestCollection: { insertMany },
+    } as unknown as Partial<RouteContext>);
+
+    const response = await request(app)
+      .post("/api/v1/experiments?projectId=project-1")
+      .send({
+        mode: "compose",
+        metadata: { name: "Invalid multi-turn" },
+        requests: [{
+          scenario: { task: "Build it", criteria: [] },
+          workerType: "coder-acp-copilot",
+        }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain(
+      "At least one criterion is required",
+    );
+    expect(insertMany).not.toHaveBeenCalled();
+  });
+
   it("publishes only the canonical routes and public execution fields", () => {
     const { registry } = harness();
     const document = generateDocument(registry);

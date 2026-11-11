@@ -9,6 +9,7 @@ import type { Response } from "express";
 import {
   CreateRequestInputSchema,
   ExperimentStore,
+  MULTI_TURN_DEFAULTS,
   fingerprintExperimentPayload,
   ReportResponseSchema,
   withRetry,
@@ -1179,6 +1180,18 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         z.infer<typeof ExperimentRequestInputSchema>
       > = [];
       for (const requestedBody of req.body.requests) {
+        const effectiveMaxIterations =
+          requestedBody.maxIterations ?? MULTI_TURN_DEFAULTS.MAX_ITERATIONS;
+        if (
+          effectiveMaxIterations > 1 &&
+          requestedBody.scenario.criteria.length === 0
+        ) {
+          res.status(400).json({
+            error:
+              "At least one criterion is required in scenario.criteria when maxIterations > 1",
+          });
+          return;
+        }
         const profileResolution = await resolveProfileControlledRequest(
           ctx,
           projectId,
