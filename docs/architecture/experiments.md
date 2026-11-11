@@ -518,6 +518,15 @@ automatic-always, and automatic linked-run templates, shows matching-run
 counts and independent blockers, and warns that selection changes publish a
 revision. Configurable types coexist with `pp-readout` in the existing compact
 type selector and append-only version selector.
+
+The generic `pp-readout` model prompt uses a bounded projection of the exact
+execution evidence. It preserves every request/run identity, profile, outcome,
+observation, and representative trajectory evidence while truncating large
+task, result, feedback, criterion, and ATIF bodies. The complete persisted
+evidence remains available to the deterministic readout composer for validation
+and rendering; bounding applies only to the model synthesis request so large
+successful workspaces cannot overflow the model context.
+
 Run list and detail views link `experimentId` back to the Experiment. A
 historical correlation that has no Experiment document is view-only and cannot
 trigger retry.
