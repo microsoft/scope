@@ -100,8 +100,15 @@ async function mockPublishedSite(page: Page, options: {
 	}, options);
 	await page.route('https://microsoft.github.io/**', async (route) => {
 		const url = new URL(route.request().url());
-		const response = await page.request.get(`http://127.0.0.1:14321${url.pathname}${url.search}`);
-		await route.fulfill({ response });
+		const response = await fetch(`http://127.0.0.1:14321${url.pathname}${url.search}`);
+		const headers = Object.fromEntries(response.headers);
+		delete headers['content-encoding'];
+		delete headers['content-length'];
+		await route.fulfill({
+			status: response.status,
+			headers,
+			body: Buffer.from(await response.arrayBuffer()),
+		});
 	});
 	await page.route('https://wcpstatic.microsoft.com/**', async (route) => {
 		await route.fulfill({ contentType: 'text/javascript', body: `(${consentStub.toString()})();` });
