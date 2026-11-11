@@ -263,7 +263,7 @@ export const ExperimentDocumentSchema = z
     lifecycle: z
       .object({
         operationId: IdSchema,
-        phase: z.enum(["deleting", "deleted", "restoring", "restored"]),
+        phase: z.enum(["deleting", "deleted", "restoring"]),
         stateVersion: z.number().int().positive(),
         targets: ExperimentFixedRequestPayloadSchema,
         targetFingerprint: IdSchema,
@@ -294,7 +294,6 @@ export const ExperimentDocumentSchema = z
         deleteRequestedAt: z.coerce.date(),
         deleteCompletedAt: z.coerce.date().optional(),
         restoreRequestedAt: z.coerce.date().optional(),
-        restoreCompletedAt: z.coerce.date().optional(),
       })
       .strict()
       .optional(),

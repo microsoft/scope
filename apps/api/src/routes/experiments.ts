@@ -254,7 +254,7 @@ const ExperimentResponseSchema = z
     lifecycle: z
       .object({
         operationId: z.string(),
-        phase: z.enum(["deleting", "deleted", "restoring", "restored"]),
+        phase: z.enum(["deleting", "deleted", "restoring"]),
         stateVersion: z.number().int().positive(),
         progress: z.object({
           expectedRequests: z.number().int().nonnegative(),
@@ -275,7 +275,6 @@ const ExperimentResponseSchema = z
         deleteRequestedAt: z.coerce.date(),
         deleteCompletedAt: z.coerce.date().optional(),
         restoreRequestedAt: z.coerce.date().optional(),
-        restoreCompletedAt: z.coerce.date().optional(),
       })
       .optional(),
   })
@@ -285,7 +284,7 @@ const ExperimentLifecycleResponseSchema = z
   .object({
     experimentId: z.string(),
     operationId: z.string(),
-    phase: z.enum(["deleting", "deleted", "restoring", "restored"]),
+    phase: z.enum(["deleting", "deleted", "restoring"]),
     stateVersion: z.number().int().positive(),
     progress: z.object({
       expectedRequests: z.number().int().nonnegative(),
@@ -302,7 +301,6 @@ const ExperimentLifecycleResponseSchema = z
     deleteRequestedAt: z.coerce.date(),
     deleteCompletedAt: z.coerce.date().optional(),
     restoreRequestedAt: z.coerce.date().optional(),
-    restoreCompletedAt: z.coerce.date().optional(),
   })
   .openapi("ExperimentLifecycleResponse");
 
@@ -444,9 +442,6 @@ function lifecycleResponse(experiment: ExperimentDocument) {
     ...(experiment.lifecycle.restoreRequestedAt
       ? { restoreRequestedAt: experiment.lifecycle.restoreRequestedAt }
       : {}),
-    ...(experiment.lifecycle.restoreCompletedAt
-      ? { restoreCompletedAt: experiment.lifecycle.restoreCompletedAt }
-      : {}),
   };
 }
 
@@ -455,6 +450,7 @@ function sendLifecycleError(res: Response, error: unknown): boolean {
   res.status(error.status).json({
     error: error.message,
     code: error.code,
+    ...(error.conflicts ? { conflicts: error.conflicts } : {}),
     ...(error.lifecycle
       ? {
           operationId: error.lifecycle.operationId,
@@ -909,9 +905,6 @@ function experimentResponse(experiment: ExperimentDocument) {
               : {}),
             ...(experiment.lifecycle.restoreRequestedAt
               ? { restoreRequestedAt: experiment.lifecycle.restoreRequestedAt }
-              : {}),
-            ...(experiment.lifecycle.restoreCompletedAt
-              ? { restoreCompletedAt: experiment.lifecycle.restoreCompletedAt }
               : {}),
           },
         }
@@ -1386,7 +1379,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
     successStatus: 202,
     errorResponses: {
       404: { description: "Experiment not found" },
-      409: { description: "An incompatible Experiment mutation is active" },
+      409: { description: "Experiment or exact member coding, handlers, reports or publication is nonterminal, or an incompatible mutation is active" },
     },
     handler: async (req, res) => {
       try {
@@ -1406,13 +1399,15 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
     path: "/api/v1/experiments/:id/restore",
     tags: ["Experiments"],
     summary: "Start or resume cascading Experiment restore",
+    description: "Visibility-only restoration preserves exact attempts and results. Returns the normal Experiment when complete or already active; 202 progress only while pending.",
     params: z.object({ id: z.string().min(1) }),
     query: ProjectIdQuerySchema,
-    response: ExperimentLifecycleResponseSchema,
-    successStatus: 202,
+    response: ExperimentResponseSchema,
+    successStatus: 200,
     errorResponses: {
+      202: { description: "Restore cascade is pending", schema: ExperimentLifecycleResponseSchema },
       404: { description: "Experiment not found" },
-      409: { description: "Experiment is not deleted or another intent is active" },
+      409: { description: "Conflicting lifecycle/publication intent or invalid recoverability" },
     },
     handler: async (req, res) => {
       try {
@@ -1420,7 +1415,11 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
           getQueryProjectId(req),
           req.params.id,
         );
-        res.status(202).json(lifecycleResponse(experiment));
+        if (experiment.lifecycle) {
+          res.status(202).json(lifecycleResponse(experiment));
+        } else {
+          res.status(200).json(experimentResponse(experiment));
+        }
       } catch (error) {
         if (!sendLifecycleError(res, error)) throw error;
       }
@@ -1434,10 +1433,10 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
     summary: "Get and repair Experiment lifecycle progress",
     params: z.object({ id: z.string().min(1) }),
     query: ProjectIdQuerySchema,
-    response: ExperimentLifecycleResponseSchema,
+    response: z.union([ExperimentLifecycleResponseSchema, ExperimentResponseSchema]),
     errorResponses: {
       404: { description: "Experiment not found" },
-      409: { description: "Experiment has no lifecycle operation" },
+      409: { description: "Deleted Experiment has no recoverable operation or a conflicting intent won a repair race" },
     },
     handler: async (req, res) => {
       try {
@@ -1445,7 +1444,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
           getQueryProjectId(req),
           req.params.id,
         );
-        res.json(lifecycleResponse(experiment));
+        res.json(experiment.lifecycle ? lifecycleResponse(experiment) : experimentResponse(experiment));
       } catch (error) {
         if (!sendLifecycleError(res, error)) throw error;
       }

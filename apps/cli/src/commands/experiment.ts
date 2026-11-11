@@ -29,7 +29,7 @@ interface ExperimentMetadata {
 
 interface ExperimentLifecycle {
   operationId: string;
-  phase: "deleting" | "deleted" | "restoring" | "restored";
+  phase: "deleting" | "deleted" | "restoring";
   stateVersion: number;
   progress: {
     expectedRequests: number;
@@ -369,8 +369,7 @@ function parseLifecycle(value: unknown): ExperimentLifecycle {
   if (
     phase !== "deleting" &&
     phase !== "deleted" &&
-    phase !== "restoring" &&
-    phase !== "restored"
+    phase !== "restoring"
   ) {
     throw new Error("Invalid experiment lifecycle.phase response from Scope");
   }
@@ -502,7 +501,13 @@ const fields: DisplayField[] = [
     formatter: (row: JsonRecord) =>
       String((row.execution as ExperimentExecution | undefined)?.attemptNumber ?? ""),
   },
-  { key: "readiness", label: "Readiness" },
+  {
+    key: "readiness",
+    label: "Status",
+    tableFormatter: (row: JsonRecord) =>
+      (row.lifecycle as ExperimentLifecycle | undefined)?.phase ??
+      String(row.readiness ?? "unknown"),
+  },
   {
     key: "revision",
     label: "Runs",
@@ -1003,7 +1008,7 @@ export function registerExperimentCommands(program: Command): void {
     command: Command,
     method: "DELETE" | "POST",
     pathSuffix: "" | "/restore",
-    terminalPhase: "deleted" | "restored",
+    terminalPhase: "deleted" | "active",
   ) => {
     withProjectOption(
       withOutputOption(
@@ -1021,8 +1026,12 @@ export function registerExperimentCommands(program: Command): void {
           { method, projectId },
         );
         if (!response.ok) await throwApiError(response);
-        let state = parseLifecycle(await json(response));
-        while (options.wait !== false && state.phase !== terminalPhase) {
+        const parseOperation = (body: unknown): ExperimentLifecycle | ExperimentView => {
+          const item = asRecord(body, "experiment operation");
+          return "phase" in item ? parseLifecycle(item) : parseExperiment(item);
+        };
+        let state = parseOperation(await json(response));
+        while (options.wait !== false && "phase" in state && state.phase !== terminalPhase) {
           if (state.blocking.length > 0) {
             throw new Error(
               `Experiment lifecycle blocked: ${state.blocking
@@ -1041,9 +1050,13 @@ export function registerExperimentCommands(program: Command): void {
             { projectId },
           );
           if (!status.ok) await throwApiError(status);
-          state = parseLifecycle(await json(status));
+          state = parseOperation(await json(status));
         }
         const format = (options.output ?? "table") as OutputFormat;
+        if (!("phase" in state)) {
+          console.log(formatData([state], fields, format));
+          return;
+        }
         if (isMachineReadable(format)) {
           console.log(formatData([state], [
             { key: "operationId", label: "Operation" },
@@ -1088,7 +1101,7 @@ export function registerExperimentCommands(program: Command): void {
       .description("Restore an Experiment cascade and poll its progress"),
     "POST",
     "/restore",
-    "restored",
+    "active",
   );
 
   withProjectOption(
@@ -1108,7 +1121,12 @@ export function registerExperimentCommands(program: Command): void {
         { projectId },
       );
       if (!response.ok) await throwApiError(response);
-      const state = parseLifecycle(await json(response));
+      const body = asRecord(await json(response), "experiment operation");
+      if (!("phase" in body)) {
+        console.log(formatData([parseExperiment(body)], fields, (options.output ?? "table") as OutputFormat));
+        return;
+      }
+      const state = parseLifecycle(body);
       console.log(
         formatData(
           [state as unknown as JsonRecord],
@@ -1223,7 +1241,7 @@ export function registerExperimentCommands(program: Command): void {
         `${label("Attempt:")} ${value(String(item.execution.attemptNumber))}`,
       );
       console.log(
-        `${label("Readiness:")} ${value(item.readiness ?? "unknown")}`,
+        `${label("Status:")} ${value(item.lifecycle?.phase ?? item.readiness ?? "unknown")}`,
       );
       console.log(
         `${label("Runs:")} ${value(String(item.revision.memberCount))}`,

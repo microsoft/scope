@@ -1138,10 +1138,15 @@ describe("API Endpoints", () => {
   });
 
   describe("DELETE /api/v1/requests/:id", () => {
+    const terminalRun = {
+      _id: "run-1", attemptNumber: 1, status: "done", outcome: "failed",
+      reportsTriggerCompletedAt: new Date("2026-10-16T12:00:00Z"),
+    };
     it("returns 200 when request is soft-deleted", async () => {
       (mocks.collection.findOne as any).mockResolvedValue({
         _id: "r1",
         projectId: TEST_PROJECT_ID,
+        run: terminalRun,
       });
       (mocks.collection.updateOne as any).mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
 
@@ -1171,6 +1176,7 @@ describe("API Endpoints", () => {
         _id: "r1",
         projectId: TEST_PROJECT_ID,
         experimentId: "experiment-1",
+        run: terminalRun,
       });
       const get = vi.spyOn(ExperimentStore.prototype, "get").mockResolvedValue({
         revision: {
@@ -1221,20 +1227,99 @@ describe("API Endpoints", () => {
         expect.anything(),
       );
     });
+
+    it.each(["pending", "queued", "processing", "paused"])("rejects %s before changing membership", async (status) => {
+      (mocks.collection.findOne as any).mockResolvedValue({
+        _id: "r1", projectId: TEST_PROJECT_ID, experimentId: "experiment-1",
+        run: { ...terminalRun, status },
+      });
+      const remove = vi.spyOn(ExperimentMembershipCoordinator.prototype, "remove");
+      const res = await request(testServer()).delete("/api/v1/requests/r1");
+      expect(res.status).toBe(409);
+      expect(res.body.conflicts).toContainEqual({ requestId: "r1", runId: "run-1", reason: `coding-${status}` });
+      expect(remove).not.toHaveBeenCalled();
+      expect(mocks.collection.updateOne).not.toHaveBeenCalled();
+    });
+
+    it.each(["succeeded", "failed", "finished"])("deletes terminal %s without rewriting its outcome", async (outcome) => {
+      (mocks.collection.findOne as any).mockResolvedValue({
+        _id: "r1", projectId: TEST_PROJECT_ID, run: { ...terminalRun, outcome },
+      });
+      (mocks.collection.updateOne as any).mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+      const res = await request(testServer()).delete("/api/v1/requests/r1");
+      expect(res.status).toBe(200);
+      expect(mocks.collection.updateOne).toHaveBeenCalledWith(
+        expect.objectContaining({ "run._id": "run-1", "run.status": "done" }),
+        { $set: { deletedAt: expect.any(Date) } },
+      );
+    });
+
+    it("reports exact outstanding handler and report publication IDs", async () => {
+      (mocks.collection.findOne as any).mockResolvedValue({
+        _id: "r1", projectId: TEST_PROJECT_ID,
+        run: { ...terminalRun, handlerStatus: { "pp-atif": { status: "processing" } }, reportPublicationIds: ["report-publishing"] },
+      });
+      const res = await request(testServer()).delete("/api/v1/requests/r1");
+      expect(res.status).toBe(409);
+      expect(res.body.conflicts).toEqual(expect.arrayContaining([
+        expect.objectContaining({ handlerId: "pp-atif", runId: "run-1" }),
+        expect.objectContaining({ reportId: "report-publishing" }),
+      ]));
+      expect(mocks.collection.updateOne).not.toHaveBeenCalled();
+    });
+
+    it("surfaces contention when a retry or work claim wins the exact-attempt CAS", async () => {
+      (mocks.collection.findOne as any).mockResolvedValue({ _id: "r1", projectId: TEST_PROJECT_ID, run: terminalRun });
+      (mocks.collection.updateOne as any).mockResolvedValue({ matchedCount: 0 });
+      const res = await request(testServer()).delete("/api/v1/requests/r1");
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe("request-membership-contention");
+    });
+
+    it("rejects a report insert/release ABA race after terminal preflight", async () => {
+      const current = {
+        _id: "r1", projectId: TEST_PROJECT_ID,
+        run: { ...terminalRun, reportPublicationIds: [], reportPublicationVersion: 7 },
+      };
+      vi.mocked(mocks.collection.findOne).mockResolvedValue(structuredClone(current));
+      // Publication completes its claim/release after the reports read. The
+      // claims array is empty again, but the monotonic fence has advanced.
+      vi.mocked(mocks.reportCollection.find).mockReturnValue({
+        toArray: vi.fn(async () => {
+          current.run.reportPublicationVersion += 1;
+          return [];
+        }),
+      });
+      vi.mocked(mocks.collection.updateOne).mockImplementation(async (filter) => ({
+        matchedCount: !("run.reportPublicationVersion" in filter) ||
+          filter["run.reportPublicationVersion"] === current.run.reportPublicationVersion ? 1 : 0,
+      }));
+      const res = await request(testServer()).delete("/api/v1/requests/r1");
+      expect(res.status).toBe(409);
+      expect(mocks.collection.updateOne).toHaveBeenCalledWith(
+        expect.objectContaining({ "run.reportPublicationIds": [], "run.reportPublicationVersion": 7 }),
+        expect.anything(),
+      );
+    });
   });
 
   describe("DELETE /api/v1/requests/bulk", () => {
+    const terminalRun = {
+      _id: "run-1", attemptNumber: 1, status: "done", reportsTriggerCompletedAt: new Date(),
+    };
     it("publishes one revision for several members before deleting them", async () => {
       const documents = [
         {
           _id: "r1",
           projectId: TEST_PROJECT_ID,
           experimentId: "experiment-1",
+          run: terminalRun,
         },
         {
           _id: "r2",
           projectId: TEST_PROJECT_ID,
           experimentId: "experiment-1",
+          run: terminalRun,
         },
       ];
       (mocks.collection.find as any).mockReturnValue({
@@ -1291,11 +1376,13 @@ describe("API Endpoints", () => {
             _id: "r1",
             projectId: TEST_PROJECT_ID,
             experimentId: "experiment-1",
+            run: terminalRun,
           },
           {
             _id: "r2",
             projectId: TEST_PROJECT_ID,
             experimentId: "experiment-2",
+            run: terminalRun,
           },
         ]),
       });
@@ -1312,6 +1399,21 @@ describe("API Endpoints", () => {
           { requestId: "r2", experimentId: "experiment-2" },
         ],
       });
+      expect(mocks.collection.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("preflights mixed terminal/nonterminal input before any partial mutation", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { _id: "r1", projectId: TEST_PROJECT_ID, run: terminalRun },
+          { _id: "r2", projectId: TEST_PROJECT_ID, experimentId: "experiment-1", run: { ...terminalRun, _id: "run-2", status: "paused" } },
+        ]),
+      });
+      const remove = vi.spyOn(ExperimentMembershipCoordinator.prototype, "remove");
+      const res = await request(testServer()).delete("/api/v1/requests/bulk").send({ ids: ["r1", "r2"] });
+      expect(res.status).toBe(409);
+      expect(res.body.conflicts).toContainEqual({ requestId: "r2", runId: "run-2", reason: "coding-paused" });
+      expect(remove).not.toHaveBeenCalled();
       expect(mocks.collection.updateMany).not.toHaveBeenCalled();
     });
   });
@@ -1344,7 +1446,8 @@ describe("API Endpoints", () => {
       // Run exists
       (mocks.collection.findOne as any).mockResolvedValue({
         _id: "r1",
-        status: "completed",
+        projectId: TEST_PROJECT_ID,
+        run: { _id: "run-1", status: "done", attemptNumber: 1 },
       });
 
       const res = await request(testServer())
@@ -1354,6 +1457,18 @@ describe("API Endpoints", () => {
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty("requestId", "r1");
       expect(res.body).toHaveProperty("status", "pending");
+      const report = vi.mocked(mocks.reportCollection.insertOne).mock.calls[0]![0];
+      expect(mocks.collection.updateOne).toHaveBeenNthCalledWith(1,
+        { _id: "r1", projectId: TEST_PROJECT_ID, "run._id": "run-1", deletedAt: { $exists: false } },
+        { $addToSet: { "run.reportPublicationIds": report._id }, $inc: { "run.reportPublicationVersion": 1 } },
+      );
+      expect(mocks.collection.updateOne).toHaveBeenLastCalledWith(
+        { _id: "r1", projectId: TEST_PROJECT_ID, "run._id": "run-1" },
+        { $pull: { "run.reportPublicationIds": report._id } },
+      );
+      expect(vi.mocked(mocks.collection.updateOne).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(mocks.reportCollection.insertOne).mock.invocationCallOrder[0]!,
+      );
     });
 
     it("returns 400 when requestId missing", async () => {
@@ -1372,6 +1487,27 @@ describe("API Endpoints", () => {
         .send({ requestId: "no-such-run" });
 
       expect(res.status).toBe(404);
+    });
+
+    it("does not publish a report when deletion wins the exact-attempt claim", async () => {
+      vi.mocked(mocks.collection.findOne).mockResolvedValue({
+        _id: "r1", projectId: TEST_PROJECT_ID, run: { _id: "run-1", status: "done", attemptNumber: 1 },
+      });
+      vi.mocked(mocks.collection.updateOne).mockResolvedValue({ matchedCount: 0 });
+      const res = await request(testServer()).post("/api/v1/reports").send({ requestId: "r1" });
+      expect(res.status).toBe(409);
+      expect(mocks.reportCollection.insertOne).not.toHaveBeenCalled();
+      expect(mocks.reportQueueClient.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it("rejects a stale automatic report trigger for another attempt", async () => {
+      vi.mocked(mocks.collection.findOne).mockResolvedValue({
+        _id: "r1", projectId: TEST_PROJECT_ID, run: { _id: "run-2", status: "done", attemptNumber: 2 },
+      });
+      const res = await request(testServer()).post("/api/v1/reports/trigger").send({ requestId: "r1", runId: "run-1" });
+      expect(res.status).toBe(409);
+      expect(mocks.reportCollection.insertOne).not.toHaveBeenCalled();
+      expect(mocks.collection.updateOne).not.toHaveBeenCalled();
     });
   });
 
@@ -3144,7 +3280,7 @@ describe("API Endpoints", () => {
         expect.objectContaining({ _id: "run-1", requestId: "req-1" }),
       );
       expect(mocks.collection.updateOne).toHaveBeenCalledWith(
-        { _id: "req-1", "run._id": "run-1" },
+        expect.objectContaining({ _id: "req-1", "run._id": "run-1", deletedAt: { $exists: false }, "run.reportPublicationIds.0": { $exists: false } }),
         expect.objectContaining({
           $set: expect.objectContaining({
             agentVersion: "1.0.0",
@@ -3251,7 +3387,7 @@ describe("API Endpoints", () => {
       expect(res.body.results.find((r: any) => r.requestId === "req-1").attemptNumber).toBe(2);
       expect(res.body.results.find((r: any) => r.requestId === "req-2").error).toContain("processing");
       expect(mocks.collection.updateOne).toHaveBeenCalledWith(
-        { _id: "req-1", "run._id": "run-1" },
+        expect.objectContaining({ _id: "req-1", "run._id": "run-1", deletedAt: { $exists: false }, "run.reportPublicationIds.0": { $exists: false } }),
         expect.objectContaining({
           $set: expect.objectContaining({ agentVersion: "1.0.0" }),
         }),

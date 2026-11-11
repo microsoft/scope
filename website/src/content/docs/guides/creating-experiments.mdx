@@ -78,14 +78,31 @@ requests and generated report records. Report artifacts and immutable
 execution history remain retained. Records that were deleted independently are
 not claimed by the cascade and are not restored with the Experiment.
 
+Deletion is allowed only after processing has finished. Every active member run
+must have coding status `done` (successful, failed, or finished), and all
+post-processing, report triggering, and report generation must have drained.
+Nonempty Experiments also require `done` or `failed` processing readiness.
+An empty Experiment with no outstanding work can be deleted. Single and bulk
+run deletion use the same terminal-work rule. A `409` conflict identifies the
+unfinished requests, runs, handlers, or reports; deletion never cancels work.
+
 In Experiment Detail, select **Delete**, review the confirmation, and start the
 operation. The page shows the stable operation ID, request/report progress, and
 exact blockers while deletion or restore is active. Deleted Experiments are
 hidden from the list by default; select **Show deleted** to find them. Open a
 deleted Experiment and select **Restore**. Restore processes matching child
-records first, revives the Experiment, and reconciles its current run vector.
+records first, then makes the Experiment visible with its original exact run
+and execution identities. It preserves outcomes, reports, artifacts, and history;
+it never restarts work or creates an attempt. Unexpected run-vector changes are
+explicit blockers rather than automatic reconciliation.
 
-The CLI polls to the terminal state by default:
+The Portal and CLI display `deleting`, `deleted`, or `restoring` only while that
+lifecycle applies. Once restoration completes, lifecycle bookkeeping disappears,
+status returns to normal processing readiness, and **Delete** is available again.
+Status filters, counts, and sorting follow the displayed status. Canonical run
+status/outcome and machine-readable CLI readiness are not rewritten.
+
+The CLI waits for completion by default:
 
 ```bash
 scope experiment delete <experiment-id> --project "$SCOPE_PROJECT"
@@ -97,6 +114,12 @@ Add `--no-wait` to `delete` or `restore` to return as soon as the API accepts
 the operation. Use `scope experiment list --include-deleted` or
 `scope experiment get <experiment-id> --include-deleted` to inspect recoverable
 records.
+
+The restore API returns `200` with the normal Experiment resource when complete,
+including an already-active no-op. It returns `202` with operation identity,
+progress, and blockers only while restoration is pending. Large cascades
+continue through bounded background repair; clients need not observe a
+`restored` phase.
 
 ## Create from the CLI
 

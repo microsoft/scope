@@ -85,6 +85,7 @@ import type {
   ExperimentRequestSummaryView,
   ExperimentView,
 } from "@/lib/experiments";
+import { experimentDisplayStatus } from "@/lib/experiments";
 import { formatDate } from "@/lib/utils";
 import type { ReportTemplate } from "@/types";
 import { useFeatureFlags } from "@/contexts/FeatureFlagContext";
@@ -558,8 +559,9 @@ export function ExperimentDetail() {
   });
   const restoreExperiment = useMutation({
     mutationFn: () => api.restoreExperiment(experimentQuery.data!.experimentId),
-    onSuccess: () => {
-      toast.success("Experiment restore started");
+    onSuccess: (result) => {
+      toast.success("phase" in result ? "Experiment restore started" : "Experiment restored");
+      if (!("phase" in result)) queryClient.setQueryData(["experiment", id], result);
       void queryClient.invalidateQueries({ queryKey: ["experiment", id] });
       void queryClient.invalidateQueries({ queryKey: ["experiments"] });
     },
@@ -1185,27 +1187,15 @@ export function ExperimentDetail() {
             <ShortId id={experiment.experimentId} label="experiment ID" />
             <Badge
               variant={
-                experiment.readiness === "failed" ||
-                experiment.readiness === "blocked"
+                ["failed", "blocked", "deleted"].includes(experimentDisplayStatus(experiment))
                   ? "destructive"
                   : "secondary"
               }
             >
-              {experiment.readiness ?? "unknown"}
+              {experimentDisplayStatus(experiment)}
             </Badge>
             {isViewingHistorical && (
               <Badge variant="outline">Historical attempt</Badge>
-            )}
-            {experiment.lifecycle && (
-              <Badge
-                variant={
-                  experiment.lifecycle.phase === "deleted"
-                    ? "destructive"
-                    : "outline"
-                }
-              >
-                {experiment.lifecycle.phase}
-              </Badge>
             )}
           </div>
           {experiment.metadata.description && (

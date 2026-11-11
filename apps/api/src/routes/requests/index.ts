@@ -91,6 +91,11 @@ import {
   ExperimentMembershipCoordinator,
   ExperimentMembershipError,
 } from "../../experiment-membership.js";
+import {
+  assertTerminalDeletion,
+  terminalDeletionFilter,
+  TerminalDeletionError,
+} from "../../terminal-deletion.js";
 
 type RequestCollection = RouteContext["requestCollection"];
 type RunFacetsResponse = z.infer<typeof RunFacetsResponseSchema>;
@@ -2397,7 +2402,7 @@ apiRoute(ctx.app, ctx.registry, {
     }).optional(),
   }),
   errorResponses: {
-    409: { description: "Deletion spans Experiments or membership changed" },
+    409: { description: "Nonterminal coding/post-processing/report work, deletion spans Experiments, or concurrent mutation" },
   },
   handler: async (req, res) => {
     const { ids } = req.body as { ids?: string[] };
@@ -2420,9 +2425,10 @@ apiRoute(ctx.app, ctx.registry, {
 
     let membershipRevision;
     try {
+      await assertTerminalDeletion(existingDocs, ctx.reportCollection);
       membershipRevision = await coordinatedDeletionRevision(existingDocs);
     } catch (error) {
-      if (error instanceof ExperimentMembershipError) {
+      if (error instanceof ExperimentMembershipError || error instanceof TerminalDeletionError) {
         res.status(error.status).json({
           error: error.message,
           code: error.code,
@@ -2436,12 +2442,28 @@ apiRoute(ctx.app, ctx.registry, {
     // Soft-delete all matching documents
     const result = await ctx.requestCollection.updateMany(
       {
-        _id: { $in: uniqueIds },
-        deletedAt: { $exists: false },
+        $or: existingDocs.length > 0
+          ? existingDocs.map(terminalDeletionFilter)
+          : [{ _id: { $in: [] } }],
         experimentId: { $exists: false },
       },
       { $set: { deletedAt: new Date() } }
     );
+    if (result.matchedCount !== existingDocs.length) {
+      res.status(409).json({
+        error: "Request attempts or work claims changed during deletion; retry to reconcile the selection",
+        code: "request-deletion-contention",
+        requestIds: existingDocs.map(({ _id }) => _id),
+        conflicts: existingDocs.map(document => ({
+          requestId: document._id,
+          runId: document.run?._id,
+          reason: "deletion-contention",
+        })),
+        deleted: result.modifiedCount,
+        ...(membershipRevision ? { membershipRevision } : {}),
+      });
+      return;
+    }
 
     // Determine which IDs were not found or already deleted
     const notFound = uniqueIds.filter(id => !existingIds.has(id));
@@ -2472,7 +2494,7 @@ apiRoute(ctx.app, ctx.registry, {
   }),
   errorResponses: {
     404: { description: "Not found" },
-    409: { description: "Membership changed" },
+    409: { description: "Nonterminal coding/post-processing/report work or concurrent mutation" },
     410: { description: "Already deleted" },
   },
   handler: async (req, res) => {
@@ -2489,9 +2511,10 @@ apiRoute(ctx.app, ctx.registry, {
     }
     let membershipRevision;
     try {
+      await assertTerminalDeletion([document], ctx.reportCollection);
       membershipRevision = await coordinatedDeletionRevision([document]);
     } catch (error) {
-      if (error instanceof ExperimentMembershipError) {
+      if (error instanceof ExperimentMembershipError || error instanceof TerminalDeletionError) {
         res.status(error.status).json({
           error: error.message,
           code: error.code,
@@ -2503,8 +2526,7 @@ apiRoute(ctx.app, ctx.registry, {
     }
     const result = await ctx.requestCollection.updateOne(
       {
-        _id: id,
-        deletedAt: { $exists: false },
+        ...terminalDeletionFilter(document),
         experimentId: { $exists: false },
       },
       { $set: { deletedAt: new Date() } }
@@ -2512,8 +2534,11 @@ apiRoute(ctx.app, ctx.registry, {
 
     if (result.matchedCount === 0) {
       res.status(409).json({
-        error: "Request membership changed before deletion",
+        error: "Request attempt, work claims, or membership changed before deletion",
         code: "request-membership-contention",
+        requestId: id,
+        runId: document.run?._id,
+        ...(membershipRevision ? { membershipRevision } : {}),
       });
       return;
     }
@@ -3412,7 +3437,7 @@ apiRoute(ctx.app, ctx.registry, {
 
       // 2. Atomically swap
       const updateResult = await ctx.requestCollection.updateOne(
-        { _id: id, "run._id": runToDemote._id },
+        { _id: id, projectId: request.projectId, "run._id": runToDemote._id, deletedAt: { $exists: false }, "run.reportPublicationIds.0": { $exists: false } },
         {
           $set: {
             run: newRun,
@@ -3518,7 +3543,7 @@ apiRoute(ctx.app, ctx.registry, {
     // 2. Atomically swap the current run on the request, gated on its _id
     //    so concurrent retries fail fast with a 409.
     const updateResult = await ctx.requestCollection.updateOne(
-      { _id: id, "run._id": runToDemote._id },
+      { _id: id, projectId: request.projectId, "run._id": runToDemote._id, deletedAt: { $exists: false }, "run.reportPublicationIds.0": { $exists: false } },
       {
         $set: {
           run: newRun,

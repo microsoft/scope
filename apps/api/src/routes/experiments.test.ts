@@ -76,6 +76,33 @@ function generateDocument(registry: OpenAPIRegistry) {
 }
 
 describe("Experiment API contract", () => {
+  it("returns a normal resource for completed and already-active restore, including progress races", async () => {
+    const collection = emptyExperimentCollection();
+    const createdHarness = harness({ experimentCollection: collection as unknown as RouteContext["experimentCollection"] });
+    const created = await request(createdHarness.app).post("/api/v1/experiments?projectId=project-1").send({
+      mode: "empty", metadata: { name: "Restore no-op" }, requests: [],
+    });
+    expect(created.status).toBe(201);
+    const current = (await collection.findOne())!;
+    const startRestore = vi.spyOn(ExperimentLifecycleCoordinator.prototype, "startRestore").mockResolvedValue(current);
+    const repair = vi.spyOn(ExperimentLifecycleCoordinator.prototype, "repair").mockResolvedValue(current);
+    const { app, registry } = harness();
+    // Both initial completion and a concurrent repair return the same resource,
+    // never a fabricated terminal lifecycle phase.
+    for (const method of ["post", "get"] as const) {
+      const path = method === "post" ? "restore" : "lifecycle";
+      const response = await request(app)[method](`/api/v1/experiments/${current.experimentId}/${path}?projectId=project-1`);
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ experimentId: current.experimentId, currentExecution: { readiness: "empty" } });
+      expect(response.body.lifecycle).toBeUndefined();
+      expect(response.body.currentExecution.experimentExecutionId).toBe(current.execution.experimentExecutionId);
+    }
+    const operation = generateDocument(registry).paths["/api/v1/experiments/{id}/restore"]!.post!;
+    expect(operation.responses["200"]).toHaveProperty("content.application/json.schema");
+    expect(operation.responses["202"]).toHaveProperty("content.application/json.schema");
+    startRestore.mockRestore();
+    repair.mockRestore();
+  });
   it("scopes lifecycle operations and returns stable asynchronous progress", async () => {
     const lifecycleExperiment = {
       experimentId: "experiment-1",

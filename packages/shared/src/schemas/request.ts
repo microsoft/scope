@@ -177,6 +177,7 @@ export const RequestResponseSchema = z
     personaInstructions: z.string().optional(),
     persona: PersonaSchema.optional(),
     deletedAt: z.coerce.date().optional(),
+    lastDeletionOperationId: z.string().optional(),
     deletionProvenance: z
       .object({
         kind: z.literal("experiment"),
@@ -285,6 +286,10 @@ export const RunStateSchema = z
     observationResults: z.array(CriterionResultSchema).optional(),
     /** Canonical run-scoped report-template IDs frozen for this exact attempt. */
     reportTemplateIds: z.array(z.string().min(1)).optional(),
+    reportsTriggeredAt: z.coerce.date().optional(),
+    reportsTriggerCompletedAt: z.coerce.date().optional(),
+    reportPublicationIds: z.array(z.string()).optional(),
+    reportPublicationVersion: z.number().int().nonnegative().optional(),
     /** Immutable compressed Taxonome SDK result for this exact run attempt. */
     taxonomyEvaluation: z
       .object({

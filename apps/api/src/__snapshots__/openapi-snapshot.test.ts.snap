@@ -2199,7 +2199,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "deleting",
               "deleted",
               "restoring",
-              "restored",
             ],
             "type": "string",
           },
@@ -2229,13 +2228,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "completedReports",
             ],
             "type": "object",
-          },
-          "restoreCompletedAt": {
-            "format": "date-time",
-            "type": [
-              "string",
-              "null",
-            ],
           },
           "restoreRequestedAt": {
             "format": "date-time",
@@ -2859,7 +2851,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                   "deleting",
                   "deleted",
                   "restoring",
-                  "restored",
                 ],
                 "type": "string",
               },
@@ -2889,13 +2880,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                   "completedReports",
                 ],
                 "type": "object",
-              },
-              "restoreCompletedAt": {
-                "format": "date-time",
-                "type": [
-                  "string",
-                  "null",
-                ],
               },
               "restoreRequestedAt": {
                 "format": "date-time",
@@ -4867,6 +4851,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             },
             "type": "array",
           },
+          "lastDeletionOperationId": {
+            "type": "string",
+          },
           "maxIterations": {
             "type": "number",
           },
@@ -5540,12 +5527,36 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "rawChatUrl": {
             "type": "string",
           },
+          "reportPublicationIds": {
+            "items": {
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "reportPublicationVersion": {
+            "minimum": 0,
+            "type": "integer",
+          },
           "reportTemplateIds": {
             "items": {
               "minLength": 1,
               "type": "string",
             },
             "type": "array",
+          },
+          "reportsTriggerCompletedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "reportsTriggeredAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
           },
           "resources": {
             "items": {
@@ -7222,6 +7233,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       "TriggerReportsInput": {
         "properties": {
           "requestId": {
+            "type": "string",
+          },
+          "runId": {
             "type": "string",
           },
         },
@@ -9216,7 +9230,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Experiment not found",
           },
           "409": {
-            "description": "An incompatible Experiment mutation is active",
+            "description": "Experiment or exact member coding, handlers, reports or publication is nonterminal, or an incompatible mutation is active",
           },
         },
         "summary": "Start or resume cascading Experiment deletion",
@@ -9711,7 +9725,14 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExperimentLifecycleResponse",
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ExperimentLifecycleResponse",
+                    },
+                    {
+                      "$ref": "#/components/schemas/ExperimentResponse",
+                    },
+                  ],
                 },
               },
             },
@@ -9721,7 +9742,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Experiment not found",
           },
           "409": {
-            "description": "Experiment has no lifecycle operation",
+            "description": "Deleted Experiment has no recoverable operation or a conflicting intent won a repair race",
           },
         },
         "summary": "Get and repair Experiment lifecycle progress",
@@ -9908,6 +9929,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
     },
     "/api/v1/experiments/{id}/restore": {
       "post": {
+        "description": "Visibility-only restoration preserves exact attempts and results. Returns the normal Experiment when complete or already active; 202 progress only while pending.",
         "parameters": [
           {
             "in": "path",
@@ -9932,6 +9954,16 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         ],
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
           "202": {
             "content": {
               "application/json": {
@@ -9940,13 +9972,13 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                 },
               },
             },
-            "description": "Success",
+            "description": "Restore cascade is pending",
           },
           "404": {
             "description": "Experiment not found",
           },
           "409": {
-            "description": "Experiment is not deleted or another intent is active",
+            "description": "Conflicting lifecycle/publication intent or invalid recoverability",
           },
         },
         "summary": "Start or resume cascading Experiment restore",
@@ -13144,6 +13176,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "404": {
             "description": "Run or template not found",
           },
+          "409": {
+            "description": "Request attempt changed, was deleted, or its Experiment has a lifecycle operation",
+          },
         },
         "summary": "Create report",
         "tags": [
@@ -13178,6 +13213,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "400": {
             "description": "Invalid input",
+          },
+          "409": {
+            "description": "A request attempt changed, was deleted, or its Experiment has a lifecycle operation",
           },
         },
         "summary": "Bulk create reports",
@@ -13284,6 +13322,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "400": {
             "description": "Invalid input",
           },
+          "409": {
+            "description": "A request attempt changed, was deleted, or its Experiment has a lifecycle operation",
+          },
         },
         "summary": "Bulk trigger reports",
         "tags": [
@@ -13333,6 +13374,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "404": {
             "description": "Run not found",
+          },
+          "409": {
+            "description": "Exact run ID changed, request was deleted, or Experiment lifecycle conflicts with publication",
           },
         },
         "summary": "Trigger reports",
@@ -14127,7 +14171,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Success",
           },
           "409": {
-            "description": "Deletion spans Experiments or membership changed",
+            "description": "Nonterminal coding/post-processing/report work, deletion spans Experiments, or concurrent mutation",
           },
         },
         "summary": "Bulk soft-delete requests",
@@ -14589,7 +14633,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Not found",
           },
           "409": {
-            "description": "Membership changed",
+            "description": "Nonterminal coding/post-processing/report work or concurrent mutation",
           },
           "410": {
             "description": "Already deleted",

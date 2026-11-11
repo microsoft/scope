@@ -955,6 +955,8 @@ export class ExperimentStore {
         "execution.version": input.expectedExecutionVersion,
         "execution.frozenAt": { $exists: true },
         "execution.rollover": { $exists: false },
+        lifecycle: { $exists: false },
+        deletedAt: { $exists: false },
       } as Document,
       {
         $set: {

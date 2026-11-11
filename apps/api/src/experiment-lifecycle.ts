@@ -13,10 +13,16 @@ import {
   type ExperimentLifecycleBlocker,
   type ExperimentLifecycleState,
   type ExperimentLifecycleTarget,
-  type ExperimentRequestState,
   type ReportDocument,
   type RequestDocument,
 } from "shared";
+import { currentReadiness } from "./experiment-coordinator.js";
+import {
+  assertTerminalDeletion,
+  terminalDeletionFilter,
+  TerminalDeletionError,
+  type DeletionConflict,
+} from "./terminal-deletion.js";
 
 const TARGET_BATCH_SIZE = 500;
 
@@ -26,6 +32,7 @@ export class ExperimentLifecycleError extends Error {
     readonly status: 404 | 409,
     readonly code: string,
     readonly lifecycle?: ExperimentLifecycleState,
+    readonly conflicts?: DeletionConflict[],
   ) {
     super(message);
   }
@@ -98,12 +105,23 @@ export class ExperimentLifecycleCoordinator {
         current.lifecycle,
       );
     }
-    if (current.execution.rollover || current.execution.requestStateUpdate) {
+    if (
+      current.execution.rollover ||
+      current.execution.requestStateUpdate ||
+      (current.execution.frozenAt && !current.execution.discardedAt)
+    ) {
       throw new ExperimentLifecycleError(
         "Experiment publication is active",
         409,
         "experiment-mutation-active",
         current.lifecycle,
+      );
+    }
+    if (current.deletedAt) {
+      throw new ExperimentLifecycleError(
+        "Deleted Experiment has no recoverable lifecycle",
+        409,
+        "experiment-lifecycle-conflict",
       );
     }
 
@@ -117,25 +135,93 @@ export class ExperimentLifecycleCoordinator {
       current.execution.requests,
     );
     const requestIds = requestVector.map(({ requestId }) => requestId);
-    const activeRequests = requestIds.length === 0
+    const memberRequests = requestIds.length === 0
       ? []
       : await this.collections.requests
         .find({
           _id: { $in: requestIds },
           projectId,
-          experimentId,
-          deletedAt: { $exists: false },
         } as Document)
-        .project({ _id: 1 })
         .toArray();
+    const activeRequests = memberRequests.filter((request) => !request.deletedAt);
     const activeReports = await this.collections.reports
       .find({
         projectId,
-        experimentId,
+        $or: [
+          { experimentId },
+          ...(requestIds.length > 0 ? [{ requestId: { $in: requestIds } }] : []),
+        ],
         deletedAt: { $exists: false },
       } as Document)
-      .project({ _id: 1 })
       .toArray();
+    const conflicts: DeletionConflict[] = [];
+    const readiness = currentReadiness(current);
+    if (!["empty", "done", "failed"].includes(readiness)) {
+      conflicts.push({ reason: `experiment-${readiness}` });
+    }
+    for (const [handlerId, handler] of Object.entries(
+      current.execution.handlerSummary,
+    )) {
+      if (handler.status === "queued" || handler.status === "processing") {
+        conflicts.push({ handlerId, reason: `handler-${handler.status}` });
+      }
+    }
+    for (const [handlerId, report] of Object.entries(
+      current.execution.reportTemplates ?? {},
+    )) {
+      if (["waiting", "queued", "processing"].includes(report.status)) {
+        conflicts.push({
+          handlerId,
+          reportId: report.report?.reportId,
+          reason: `report-template-${report.status}`,
+        });
+      }
+    }
+    for (const report of activeReports) {
+      if (report.status === "pending" || report.status === "generating") {
+        conflicts.push({ reportId: report._id, reason: `report-${report.status}` });
+      }
+    }
+    const exactRuns = new Map(
+      requestVector.map((member) => [member.requestId, member.runId]),
+    );
+    const membersById = new Map(
+      memberRequests.map((member) => [member._id, member]),
+    );
+    for (const member of requestVector) {
+      const request = membersById.get(member.requestId);
+      if (!request || request.experimentId !== experimentId) {
+        conflicts.push({
+          requestId: member.requestId,
+          runId: member.runId,
+          reason: "member-missing-or-reassigned",
+        });
+      }
+    }
+    for (const request of activeRequests) {
+      if (exactRuns.get(request._id) !== request.run?._id) {
+        conflicts.push({
+          requestId: request._id,
+          runId: request.run?._id,
+          reason: "run-changed",
+        });
+      }
+    }
+    try {
+      await assertTerminalDeletion(activeRequests, this.collections.reports);
+    } catch (error) {
+      if (!(error instanceof TerminalDeletionError)) throw error;
+      conflicts.push(...error.conflicts);
+    }
+    if (conflicts.length > 0) {
+      throw new ExperimentLifecycleError(
+        "Experiment has unfinished work or its exact member attempts changed",
+        409,
+        "experiment-deletion-work-active",
+        undefined,
+        conflicts,
+      );
+    }
     const targets: ExperimentLifecycleTarget[] = [
       ...activeRequests.map((request) => ({
         kind: "request" as const,
@@ -177,10 +263,12 @@ export class ExperimentLifecycleCoordinator {
         _id: experimentId,
         projectId,
         stateVersion: current.stateVersion,
-        $or: [
-          { lifecycle: { $exists: false } },
-          { "lifecycle.phase": "restored" },
-        ],
+        "execution.experimentExecutionId": current.execution.experimentExecutionId,
+        "execution.version": current.execution.version,
+        "execution.rollover": { $exists: false },
+        "execution.requestStateUpdate": { $exists: false },
+        lifecycle: { $exists: false },
+        deletedAt: { $exists: false },
       } as Document,
       {
         $set: {
@@ -191,7 +279,7 @@ export class ExperimentLifecycleCoordinator {
         },
         $inc: {
           stateVersion: 1,
-          "execution.version": current.execution.frozenAt ? 0 : 1,
+          "execution.version": 1,
         },
       } as Document,
       { returnDocument: "after" },
@@ -229,10 +317,22 @@ export class ExperimentLifecycleCoordinator {
       );
     }
     if (
-      current.lifecycle?.phase === "restoring" ||
-      current.lifecycle?.phase === "restored"
+      current.execution.rollover ||
+      current.execution.requestStateUpdate ||
+      (!current.lifecycle && current.execution.frozenAt && !current.execution.discardedAt)
     ) {
-      return this.repair(projectId, experimentId);
+      throw new ExperimentLifecycleError(
+        "Experiment publication is active",
+        409,
+        "experiment-mutation-active",
+        current.lifecycle,
+      );
+    }
+    if (!current.deletedAt && !current.lifecycle) return current;
+    if (current.lifecycle?.phase === "restoring") {
+      return current.lifecycle.targets.entryCount <= TARGET_BATCH_SIZE
+        ? this.repair(projectId, experimentId)
+        : current;
     }
     if (current.lifecycle?.phase !== "deleted") {
       throw new ExperimentLifecycleError(
@@ -247,6 +347,10 @@ export class ExperimentLifecycleCoordinator {
         _id: experimentId,
         projectId,
         stateVersion: current.stateVersion,
+        "execution.experimentExecutionId": current.execution.experimentExecutionId,
+        "execution.version": current.execution.version,
+        "execution.rollover": { $exists: false },
+        "execution.requestStateUpdate": { $exists: false },
         "lifecycle.operationId": current.lifecycle.operationId,
         "lifecycle.phase": "deleted",
       } as Document,
@@ -265,6 +369,7 @@ export class ExperimentLifecycleCoordinator {
     );
     if (!updated) {
       const raced = await this.store.getIncludingDeleted(projectId, experimentId);
+      if (raced && !raced.deletedAt && !raced.lifecycle) return raced;
       if (raced?.lifecycle?.phase === "restoring") {
         return this.repair(projectId, experimentId);
       }
@@ -275,7 +380,9 @@ export class ExperimentLifecycleCoordinator {
         raced?.lifecycle,
       );
     }
-    return updated;
+    return updated.lifecycle!.targets.entryCount <= TARGET_BATCH_SIZE
+      ? this.repair(projectId, experimentId)
+      : updated;
   }
 
   async repair(
@@ -283,6 +390,7 @@ export class ExperimentLifecycleCoordinator {
     experimentId: string,
   ): Promise<ExperimentDocument> {
     const current = await this.store.getIncludingDeleted(projectId, experimentId);
+    if (current && !current.lifecycle && !current.deletedAt) return current;
     if (!current?.lifecycle) {
       throw new ExperimentLifecycleError(
         `Experiment ${experimentId} has no lifecycle operation`,
@@ -290,10 +398,7 @@ export class ExperimentLifecycleCoordinator {
         current ? "experiment-lifecycle-inactive" : "experiment-not-found",
       );
     }
-    if (
-      current.lifecycle.phase === "deleted" ||
-      current.lifecycle.phase === "restored"
-    ) {
+    if (current.lifecycle.phase === "deleted") {
       return current;
     }
     const targets = await this.targetStore.read({
@@ -309,8 +414,8 @@ export class ExperimentLifecycleCoordinator {
       .filter((target) => target.kind === "report")
       .map((target) => target.id);
     if (current.lifecycle.phase === "deleting") {
-      await this.deleteTargets(current, requests, reports);
-      return this.finishDelete(current, requests, reports);
+      const blocking = await this.deleteTargets(current, requests, reports);
+      return this.finishDelete(current, requests, reports, blocking);
     }
     await this.restoreTargets(current, requests, reports);
     return this.finishRestore(current, requests, reports);
@@ -338,39 +443,168 @@ export class ExperimentLifecycleCoordinator {
     return roots.length;
   }
 
+  /** CAS losers may follow the same operation or its completed active result,
+   * never a later delete/restore intent that reused this Experiment ID. */
+  private async resume(current: ExperimentDocument): Promise<ExperimentDocument> {
+    const latest = await this.store.getIncludingDeleted(
+      current.projectId,
+      current.experimentId,
+    );
+    if (!latest) {
+      throw new ExperimentLifecycleError(
+        "Experiment disappeared during lifecycle repair",
+        404,
+        "experiment-not-found",
+      );
+    }
+    if (
+      current.lifecycle?.phase === "restoring" &&
+      !latest.lifecycle &&
+      !latest.deletedAt &&
+      !latest.execution.rollover &&
+      !latest.execution.requestStateUpdate &&
+      !latest.execution.frozenAt
+    ) {
+      return latest;
+    }
+    if (
+      current.lifecycle?.phase === "deleting" &&
+      latest.lifecycle?.phase === "deleted" &&
+      latest.lifecycle.operationId === current.lifecycle.operationId
+    ) {
+      return latest;
+    }
+    if (
+      latest.lifecycle?.operationId !== current.lifecycle?.operationId ||
+      latest.lifecycle?.phase !== current.lifecycle?.phase
+    ) {
+      throw new ExperimentLifecycleError(
+        "A different lifecycle intent won the completion race",
+        409,
+        "experiment-lifecycle-conflict",
+        latest.lifecycle,
+      );
+    }
+    return this.repair(current.projectId, current.experimentId);
+  }
+
   private async deleteTargets(
     experiment: ExperimentDocument,
     requestIds: readonly string[],
     reportIds: readonly string[],
-  ): Promise<void> {
+  ): Promise<ExperimentLifecycleBlocker[]> {
     const provenance = {
       kind: "experiment" as const,
       experimentId: experiment.experimentId,
       operationId: experiment.lifecycle!.operationId,
     };
     const now = new Date();
-    for (const ids of batches(requestIds)) {
+    // Revalidate after the execution freeze. Accepted cascades skip their own
+    // tombstones; concurrent retries/claims become repairable exact-ID blockers.
+    const active = requestIds.length === 0
+      ? []
+      : await this.collections.requests.find({
+          _id: { $in: [...requestIds] },
+          projectId: experiment.projectId,
+          experimentId: experiment.experimentId,
+          deletedAt: { $exists: false },
+        } as Document).limit(TARGET_BATCH_SIZE).toArray();
+    const vector = active.length === 0
+      ? []
+      : await this.payloads.readRequests({
+          projectId: experiment.projectId,
+          experimentId: experiment.experimentId,
+          ownerId: experiment.execution.experimentExecutionId,
+          generation: experiment.execution.attemptNumber,
+        }, experiment.execution.requests);
+    const exactRuns = new Map(
+      vector.map((member) => [member.requestId, member.runId]),
+    );
+    const eligible: RequestDocument[] = [];
+    const blocking: ExperimentLifecycleBlocker[] = [];
+    for (const request of active) {
+      if (request.lastDeletionOperationId === provenance.operationId) continue;
+      if (exactRuns.get(request._id) !== request.run?._id) {
+        blocking.push({
+          kind: "request",
+          id: request._id,
+          reason: "target-conflict",
+          error: "Exact run changed after deletion preflight",
+        });
+        continue;
+      }
+      try {
+        await assertTerminalDeletion([request], this.collections.reports);
+        eligible.push(request);
+      } catch (error) {
+        if (!(error instanceof TerminalDeletionError)) throw error;
+        blocking.push(...error.conflicts.map((conflict) => ({
+          kind: conflict.reportId ? "report" as const : "request" as const,
+          id: conflict.reportId ?? request._id,
+          reason: "target-conflict" as const,
+          error: `${conflict.handlerId ?? conflict.runId ?? request._id}: ${conflict.reason}`,
+        })));
+      }
+    }
+    const pendingReports = reportIds.length === 0 ? [] : await this.collections.reports.find({
+      _id: { $in: [...reportIds] },
+      projectId: experiment.projectId,
+      deletedAt: { $exists: false },
+      status: { $nin: ["pending", "generating"] },
+    } as Document).limit(TARGET_BATCH_SIZE).toArray();
+    // A delayed repair must not tombstone children after another repair has
+    // completed this delete and restored them. Per-child operation fences also
+    // cover completion between this root check and the guarded child writes.
+    const intent = await this.collections.experiments.findOne({
+      _id: experiment.experimentId,
+      projectId: experiment.projectId,
+      "lifecycle.operationId": provenance.operationId,
+      "lifecycle.phase": "deleting",
+    } as Document);
+    if (!intent) {
+      throw new ExperimentLifecycleError(
+        "Deletion intent changed before child writes",
+        409,
+        "experiment-lifecycle-conflict",
+      );
+    }
+    for (const requests of batches(eligible)) {
       await this.collections.requests.updateMany(
         {
-          _id: { $in: ids },
-          projectId: experiment.projectId,
+          $or: requests.map((request) => ({
+            ...terminalDeletionFilter(request),
+            lastDeletionOperationId: request.lastDeletionOperationId ?? { $exists: false },
+          })),
           experimentId: experiment.experimentId,
-          deletedAt: { $exists: false },
         } as Document,
-        { $set: { deletedAt: now, deletionProvenance: provenance } } as Document,
+        { $set: {
+          deletedAt: now,
+          deletionProvenance: provenance,
+          lastDeletionOperationId: provenance.operationId,
+        } } as Document,
       );
     }
-    for (const ids of batches(reportIds)) {
+    for (const reports of batches(pendingReports.filter((report) =>
+      report.lastDeletionOperationId !== provenance.operationId,
+    ))) {
       await this.collections.reports.updateMany(
         {
-          _id: { $in: ids },
+          $or: reports.map((report) => ({
+            _id: report._id,
+            lastDeletionOperationId: report.lastDeletionOperationId ?? { $exists: false },
+          })),
           projectId: experiment.projectId,
-          experimentId: experiment.experimentId,
           deletedAt: { $exists: false },
+          status: { $nin: ["pending", "generating"] },
         } as Document,
-        { $set: { deletedAt: now, deletionProvenance: provenance } } as Document,
+        { $set: {
+          deletedAt: now,
+          deletionProvenance: provenance,
+          lastDeletionOperationId: provenance.operationId,
+        } } as Document,
       );
     }
+    return blocking;
   }
 
   private async restoreTargets(
@@ -383,7 +617,12 @@ export class ExperimentLifecycleCoordinator {
       experimentId: experiment.experimentId,
       operationId: experiment.lifecycle!.operationId,
     };
-    for (const ids of batches(requestIds)) {
+    const requestTargets = requestIds.length === 0 ? [] : await this.collections.requests.find({
+      _id: { $in: [...requestIds] },
+      projectId: experiment.projectId,
+      deletionProvenance: filter,
+    } as Document).limit(TARGET_BATCH_SIZE).toArray();
+    for (const ids of batches(requestTargets.map((request) => request._id))) {
       await this.collections.requests.updateMany(
         {
           _id: { $in: ids },
@@ -393,7 +632,12 @@ export class ExperimentLifecycleCoordinator {
         { $unset: { deletedAt: "", deletionProvenance: "" } } as Document,
       );
     }
-    for (const ids of batches(reportIds)) {
+    const reportTargets = reportIds.length === 0 ? [] : await this.collections.reports.find({
+      _id: { $in: [...reportIds] },
+      projectId: experiment.projectId,
+      deletionProvenance: filter,
+    } as Document).limit(TARGET_BATCH_SIZE).toArray();
+    for (const ids of batches(reportTargets.map((report) => report._id))) {
       await this.collections.reports.updateMany(
         {
           _id: { $in: ids },
@@ -482,8 +726,29 @@ export class ExperimentLifecycleCoordinator {
     current: ExperimentDocument,
     requestIds: readonly string[],
     reportIds: readonly string[],
+    blocking: ExperimentLifecycleBlocker[] = [],
   ): Promise<ExperimentDocument> {
     const state = await this.targetState(current, requestIds, reportIds, false);
+    state.blocking.push(...blocking);
+    // Cross-document publication is not a transaction. A report published
+    // after preflight must be surfaced, never silently excluded from the cascade.
+    const unexpectedReports = await this.collections.reports.find({
+      projectId: current.projectId,
+      deletedAt: { $exists: false },
+      $or: [
+        { experimentId: current.experimentId },
+        ...(requestIds.length > 0 ? [{ requestId: { $in: [...requestIds] } }] : []),
+      ],
+    } as Document).toArray();
+    for (const report of unexpectedReports) {
+      state.blocking.push({
+        kind: "report",
+        id: report._id,
+        reason: "target-conflict",
+        error: "Report remains active after deletion preflight",
+      });
+    }
+    state.blocking = state.blocking.slice(0, 32);
     const complete =
       state.completedRequests === requestIds.length &&
       state.completedReports === reportIds.length &&
@@ -494,6 +759,10 @@ export class ExperimentLifecycleCoordinator {
         _id: current.experimentId,
         projectId: current.projectId,
         stateVersion: current.stateVersion,
+        "execution.experimentExecutionId": current.execution.experimentExecutionId,
+        "execution.version": current.execution.version,
+        "execution.rollover": { $exists: false },
+        "execution.requestStateUpdate": { $exists: false },
         "lifecycle.operationId": current.lifecycle!.operationId,
         "lifecycle.phase": "deleting",
         "lifecycle.stateVersion": current.lifecycle!.stateVersion,
@@ -516,7 +785,7 @@ export class ExperimentLifecycleCoordinator {
       } as Document,
       { returnDocument: "after" },
     );
-    if (!updated) return this.repair(current.projectId, current.experimentId);
+    if (!updated) return this.resume(current);
     return updated;
   }
 
@@ -551,7 +820,7 @@ export class ExperimentLifecycleCoordinator {
         } as Document,
         { returnDocument: "after" },
       );
-      return updated ?? current;
+      return updated ?? this.resume(current);
     }
 
     const requestVector = await this.payloads.readRequests(
@@ -563,14 +832,14 @@ export class ExperimentLifecycleCoordinator {
       },
       current.execution.requests,
     );
-    const requestDocs = requestIds.length === 0
+    const vectorIds = requestVector.map((member) => member.requestId);
+    const requestDocs = vectorIds.length === 0
       ? []
       : await this.collections.requests
         .find({
-          _id: { $in: requestIds },
+          _id: { $in: vectorIds },
           projectId: current.projectId,
           experimentId: current.experimentId,
-          deletedAt: { $exists: false },
         } as Document)
         .toArray();
     const currentById = new Map(requestDocs.map((request) => [request._id, request]));
@@ -578,49 +847,31 @@ export class ExperimentLifecycleCoordinator {
       (request) => currentById.get(request.requestId)?.run?._id !== request.runId,
     );
     if (drifted) {
-      const nextRequests: ExperimentRequestState[] = requestVector.map((request) => {
-        const runId = currentById.get(request.requestId)?.run?._id;
-        return runId && runId !== request.runId
-          ? { requestId: request.requestId, runId, dependencies: [], blockers: [] }
-          : request;
-      });
-      const rolled = await this.store.rollover({
-        projectId: current.projectId,
-        experimentId: current.experimentId,
-        expectedExperimentExecutionId: current.execution.experimentExecutionId,
-        expectedExecutionVersion: current.execution.version,
-        nextExperimentExecutionId: randomUUID(),
-        requests: nextRequests,
-        reason: "rollover",
-      });
-      if (!rolled) {
-        const blocker: ExperimentLifecycleBlocker = {
-          kind: "experiment",
-          id: current.experimentId,
-          reason: "reconciliation-failed",
-          error: "Current request vector changed during restore reconciliation",
-        };
-        const updated = await this.collections.experiments.findOneAndUpdate(
-          {
-            _id: current.experimentId,
-            projectId: current.projectId,
-            stateVersion: current.stateVersion,
-            "lifecycle.operationId": current.lifecycle!.operationId,
-            "lifecycle.phase": "restoring",
-            "lifecycle.stateVersion": current.lifecycle!.stateVersion,
-          } as Document,
-          {
-            $set: {
-              "lifecycle.blocking": [blocker],
-              updatedAt: new Date(),
-            },
-            $inc: { stateVersion: 1, "lifecycle.stateVersion": 1 },
-          } as Document,
-          { returnDocument: "after" },
-        );
-        return updated ?? current;
-      }
-      current = rolled;
+      const blocker: ExperimentLifecycleBlocker = {
+        kind: "experiment",
+        id: current.experimentId,
+        reason: "reconciliation-failed",
+        error: "Exact request/run vector changed; restoration never creates an execution attempt",
+      };
+      const updated = await this.collections.experiments.findOneAndUpdate(
+        {
+          _id: current.experimentId,
+          projectId: current.projectId,
+          stateVersion: current.stateVersion,
+          "lifecycle.operationId": current.lifecycle!.operationId,
+          "lifecycle.phase": "restoring",
+          "lifecycle.stateVersion": current.lifecycle!.stateVersion,
+        } as Document,
+        {
+          $set: {
+            "lifecycle.blocking": [blocker],
+            updatedAt: new Date(),
+          },
+          $inc: { stateVersion: 1, "lifecycle.stateVersion": 1 },
+        } as Document,
+        { returnDocument: "after" },
+      );
+      return updated ?? this.resume(current);
     }
 
     const now = new Date();
@@ -629,33 +880,32 @@ export class ExperimentLifecycleCoordinator {
         _id: current.experimentId,
         projectId: current.projectId,
         stateVersion: current.stateVersion,
+        "execution.experimentExecutionId": current.execution.experimentExecutionId,
+        "execution.version": current.execution.version,
+        "execution.rollover": { $exists: false },
+        "execution.requestStateUpdate": { $exists: false },
         "lifecycle.operationId": current.lifecycle!.operationId,
         "lifecycle.phase": "restoring",
         "lifecycle.stateVersion": current.lifecycle!.stateVersion,
       } as Document,
       {
         $set: {
-          "lifecycle.phase": "restored",
-          "lifecycle.restoreCompletedAt": now,
-          "lifecycle.progress.completedRequests": requestIds.length,
-          "lifecycle.progress.completedReports": reportIds.length,
-          "lifecycle.blocking": [],
           "execution.updatedAt": now,
           updatedAt: now,
         },
         $unset: {
           deletedAt: "",
+          lifecycle: "",
           "execution.frozenAt": "",
         },
         $inc: {
           stateVersion: 1,
           "execution.version": 1,
-          "lifecycle.stateVersion": 1,
         },
       } as Document,
       { returnDocument: "after" },
     );
-    if (!updated) return this.repair(current.projectId, current.experimentId);
+    if (!updated) return this.resume(current);
     return updated;
   }
 }

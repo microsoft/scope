@@ -33,8 +33,7 @@ export type FixedPayload<T> =
 export type ExperimentLifecyclePhase =
   | "deleting"
   | "deleted"
-  | "restoring"
-  | "restored";
+  | "restoring";
 
 export type ExperimentLifecycleTargetKind = "request" | "report";
 
@@ -68,7 +67,6 @@ export interface ExperimentLifecycleState {
   deleteRequestedAt: Date;
   deleteCompletedAt?: Date;
   restoreRequestedAt?: Date;
-  restoreCompletedAt?: Date;
 }
 
 export type ExperimentDependencyState =

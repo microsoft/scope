@@ -319,13 +319,54 @@ dropped queue notices, and interrupted publication or rollover.
 `ExperimentLifecycleCoordinator` owns recoverable delete and restore
 operations. A stable operation ID and compare-and-swap `stateVersion` advance
 the root through `deleting`, `deleted`, and `restoring`. Starting deletion
-makes the Experiment non-dispatchable immediately. Exact immutable target
+makes the Experiment non-dispatchable immediately, but only after terminal-work
+preflight. A nonempty Experiment must have `done` or `failed` readiness; every
+active exact member run must have coding status `done`, regardless of outcome.
+Queued/processing run handlers, incomplete automatic report triggering, report
+publication claims, pending/generating reports, waiting/queued/processing
+Experiment reports, and execution publication/freeze intents reject deletion
+with `409` and exact conflicting IDs. An empty Experiment with no work remains
+deletable. The same run policy applies to single and bulk request deletion, with
+the whole bulk selection checked before membership edits or tombstones.
+
+Automatic report triggering records `run.reportsTriggerCompletedAt` only after
+the DAG has drained and the API has published its reports (including zero
+matches). `run.reportPublicationIds` identifies in-flight report inserts. These
+and its monotonic `run.reportPublicationVersion` fence are exact-attempt operation
+bookkeeping, not processing statuses. The version prevents an insert/release
+race from making an earlier empty-claim snapshot appear current. Report
+publication and deletion compete on the request document; retry cannot swap a
+deleted attempt or one with an active report-publication claim. Final child
+tombstones compare the exact run ID and work-state snapshot, and the root claim
+compares both document and execution versions. Repair revalidates after the
+execution freeze. Cross-document writes are not a transaction: later contention
+is explicit progress/blockers, never a claim of atomic bulk mutation.
+
+Exact immutable target
 snapshots reuse `FixedPayloadStore`; requests and reports are soft-deleted only
 when they were active and receive `{ experimentId, operationId }` provenance.
+Each child retains `lastDeletionOperationId` as a cascade-specific idempotency
+fence, so a delayed delete repair cannot re-tombstone a restored child. New
+operations compare and replace that fence; it is not a displayed lifecycle or
+processing state.
 Independent deletions are never claimed. Restore processes matching children
-first, revives the Experiment, then reconciles the current request/run vector
-and rolls to a fresh execution only when drift exists. Archived executions and
-report blobs remain immutable.
+first and verifies the unchanged exact request/run vector. Unexpected vector
+drift is an explicit blocker, never an automatic rollover. Successful restoration
+atomically clears `deletedAt`, the lifecycle object, and the execution freeze
+under project/operation/document/execution-version guards. It changes no coding
+status, outcome, execution identity, report, artifact, or history and schedules
+no new attempt. Already-active restore is an idempotent no-op unless a conflicting
+publication intent exists. Missing/independently deleted members remain blockers
+for normal processing rather than creating replacement executions.
+
+Restore returns `200` with the normal Experiment resource on completion or an
+already-active no-op, and `202` with operation progress only while pending.
+Large restores are accepted without synchronously cascading every child; repair
+writes at most 500 requests and 500 reports per pass. The scoped lifecycle
+progress endpoint also returns the normal resource when completion has removed
+the operation, allowing concurrent pollers to converge without a transient
+`restored` phase. Target payloads are never discarded while referenced by an
+operation. This undeployed contract requires no migration or compatibility state.
 
 The dispatcher polls lifecycle operations alongside publication repair so
 partial cascades, dropped notifications, and process restarts converge. Queue
@@ -354,8 +395,8 @@ All routes require `?projectId=`:
 | `GET` | `/api/v1/experiments` | Cursor-page finalized Experiments; `includeDeleted=true` includes lifecycle records |
 | `GET` | `/api/v1/experiments/:id` | Read the public Experiment and current execution; `includeDeleted=true` reads a deleted record |
 | `DELETE` | `/api/v1/experiments/:id` | Start or resume a recoverable cascading delete and return `202` |
-| `POST` | `/api/v1/experiments/:id/restore` | Start or resume child-first restore and return `202` |
-| `GET` | `/api/v1/experiments/:id/lifecycle` | Read and repair lifecycle progress and blockers |
+| `POST` | `/api/v1/experiments/:id/restore` | `200` normal resource when complete/already active; `202` child-first progress while pending |
+| `GET` | `/api/v1/experiments/:id/lifecycle` | Read/repair progress and blockers; return the normal resource after restoration completes |
 | `GET` | `/api/v1/experiments/:id/executions` | List current and archived execution summaries |
 | `GET` | `/api/v1/experiments/:id/executions/:experimentExecutionId` | Read one exact current or archived execution |
 | `POST` | `/api/v1/experiments/:id/retry` | Start a new processing attempt for the current exact vector |
@@ -413,8 +454,16 @@ project scope.
 
 Delete and restore commands poll the stable lifecycle operation by default.
 `--no-wait` returns the accepted state immediately for automation that polls
-separately. `scope experiment status` prints exact progress and blockers, while
+separately. Restore returns immediately on a `200` resource and tolerates
+completion between polls, without waiting for a persisted `restored` phase.
+`scope experiment status` prints exact progress and blockers, or the normal
+resource when active, while
 `list --include-deleted` and `get --include-deleted` expose recoverable records.
+Portal and human-readable CLI status derive a display-only override from
+`deleting`, `deleted`, or `restoring`; absent lifecycle falls back to canonical
+readiness. Portal status sorting, filtering, and counts use that same derivation.
+Machine-readable CLI readiness remains canonical; no presentation value is
+written into execution readiness or a run's status/outcome.
 
 The Portal provides `/experiments`, `/experiments/new`, and
 `/experiments/:id`. The shared creation form retains the established run
@@ -487,6 +536,8 @@ ID, request/report progress, and exact blockers. Deletion uses an explicit
 confirmation dialog; a deleted Experiment exposes **Restore**. Membership,
 retry, and report publication controls stay disabled while lifecycle work is
 active.
+After restoration the lifecycle panel disappears, status again shows canonical
+readiness, and the normal Delete action becomes available.
 
 ## GEPA optimizer integration
 
