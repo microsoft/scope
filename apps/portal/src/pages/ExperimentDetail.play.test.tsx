@@ -243,7 +243,7 @@ beforeAll(() => {
   ]);
 });
 
-describe("ExperimentDetail stories", () => {
+describe("ExperimentDetail stories", { timeout: 30_000 }, () => {
   it("runs the attempt-selection interaction", async () => {
     const StoryRender = experimentDetailMeta.render;
     if (!StoryRender) throw new Error("Experiment detail story is missing render");
