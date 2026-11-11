@@ -266,6 +266,7 @@ export class HandlerDispatcher implements NotifyHandler {
         "run._id": runId,
         "run.status": "done",
         "run.reportsTriggeredAt": { $exists: false },
+        deletedAt: { $exists: false },
       } as any,
       { $set: { "run.reportsTriggeredAt": new Date() } } as any,
       { returnDocument: "after" },
@@ -273,7 +274,11 @@ export class HandlerDispatcher implements NotifyHandler {
     if (!claimed) return; // Another path already claimed it.
 
     try {
-      await this.triggerReports(requestId);
+      await this.triggerReports(requestId, runId);
+      await this.collection.updateOne(
+        { _id: requestId, "run._id": runId, deletedAt: { $exists: false } } as any,
+        { $set: { "run.reportsTriggerCompletedAt": new Date() } } as any,
+      );
       console.log(
         `[HandlerDispatcher] Triggered report generation for ${requestId} (DAG drained)`,
       );
@@ -292,13 +297,13 @@ export class HandlerDispatcher implements NotifyHandler {
   }
 
   /** POSTs to the API's report-trigger endpoint with retry on transient errors. */
-  private async triggerReports(requestId: string): Promise<void> {
+  private async triggerReports(requestId: string, runId: string): Promise<void> {
     const url = `${this.apiUrl}/api/v1/reports/trigger`;
     await withRetry(async () => {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId }),
+        body: JSON.stringify({ requestId, runId }),
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");

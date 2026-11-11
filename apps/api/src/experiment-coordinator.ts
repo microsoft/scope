@@ -99,7 +99,7 @@ function namedHandlerState(
   return "waiting";
 }
 
-function currentReadiness(
+export function currentReadiness(
   experiment: ExperimentDocument,
 ): ExperimentReadiness {
   if (experiment.execution.requests.entryCount === 0) return "empty";
@@ -216,7 +216,9 @@ export class ExperimentCoordinator {
       const byId = new Map(requestDocs.map((request) => [request._id, request]));
       const runVectorChanged = requests.some((request) => {
         const current = byId.get(request.requestId);
-        return current?.run?._id !== request.runId;
+        // A missing/independently deleted member is a blocker, not a new
+        // attempt. Only an explicitly retried existing run changes the vector.
+        return current?.run !== undefined && current.run._id !== request.runId;
       });
       const handlers = await this.loadRunHandlers();
 

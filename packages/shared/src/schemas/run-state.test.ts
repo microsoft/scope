@@ -33,8 +33,24 @@ describe("RunStateSchema", () => {
       tokenUsage: { promptTokens: 1, completionTokens: 2, totalTokens: 3 },
       aiCallCount: 4,
     });
+
     expect(parsed.outcome).toBe("succeeded");
     expect(parsed.attemptNumber).toBe(2);
+  });
+
+  it("preserves report-publication fences without changing the processing state", () => {
+    const parsed = RunStateSchema.parse({
+      _id: "run-terminal", attemptNumber: 1, status: "done", outcome: "failed",
+      reportsTriggeredAt: "2026-10-16T12:00:00Z",
+      reportsTriggerCompletedAt: "2026-10-16T12:01:00Z",
+      reportPublicationIds: ["report-publishing"],
+      reportPublicationVersion: 3,
+    });
+    expect(parsed).toMatchObject({
+      status: "done", outcome: "failed",
+      reportsTriggerCompletedAt: new Date("2026-10-16T12:01:00Z"),
+      reportPublicationIds: ["report-publishing"], reportPublicationVersion: 3,
+    });
   });
 
   it("rejects attemptNumber < 1", () => {

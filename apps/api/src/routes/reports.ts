@@ -27,7 +27,54 @@ import type {
 } from "../route-context.js";
 import { subscribeClient, unsubscribeClient } from "../utils/sse.js";
 import type { SSEClient } from "../utils/sse.js";
-import { getQueryProjectId } from "../utils/project-scope.js";
+import { getQueryProjectId, ProjectScopeError } from "../utils/project-scope.js";
+
+/** Publish under an exact-attempt claim so deletion cannot miss an in-flight
+ * insert. An interrupted insert retains its report ID as an explicit blocker. */
+async function publishRunReport(
+  ctx: RouteContext,
+  request: RequestDocument,
+  report: ReportDocument,
+): Promise<void> {
+  if (!request.run) {
+    throw new ProjectScopeError(`Request ${request._id} has no exact run for report ${report._id} publication`, 409);
+  }
+  const claim = await ctx.requestCollection.updateOne(
+    {
+      _id: request._id,
+      projectId: request.projectId,
+      "run._id": request.run._id,
+      deletedAt: { $exists: false },
+    },
+    {
+      $addToSet: { "run.reportPublicationIds": report._id },
+      $inc: { "run.reportPublicationVersion": 1 },
+    },
+  );
+  if (claim.matchedCount === 0) {
+    throw new ProjectScopeError(`Request ${request._id} was deleted or its exact run changed before report ${report._id} publication`, 409);
+  }
+  if (request.experimentId) {
+    const active = await ctx.experimentCollection.findOne({
+      _id: request.experimentId,
+      projectId: request.projectId,
+      lifecycle: { $exists: false },
+      deletedAt: { $exists: false },
+    });
+    if (!active) {
+      await ctx.requestCollection.updateOne(
+        { _id: request._id, projectId: request.projectId, "run._id": request.run?._id },
+        { $pull: { "run.reportPublicationIds": report._id } },
+      );
+      throw new ProjectScopeError(`Experiment ${request.experimentId} is not active for report ${report._id} publication`, 409);
+    }
+  }
+  await ctx.reportCollection.insertOne(report);
+  await ctx.requestCollection.updateOne(
+    { _id: request._id, projectId: request.projectId, "run._id": request.run?._id },
+    { $pull: { "run.reportPublicationIds": report._id } },
+  );
+}
 
 async function createVersionedRunReport(input: {
   ctx: RouteContext;
@@ -128,7 +175,7 @@ apiRoute(ctx.app, ctx.registry, {
         return;
       }
 
-      await ctx.reportCollection.insertOne(reportDoc);
+      await publishRunReport(ctx, run, reportDoc);
 
       // Queue the report for processing
       const messageContent = Buffer.from(JSON.stringify({ reportId })).toString("base64");
@@ -249,6 +296,7 @@ apiRoute(ctx.app, ctx.registry, {
       // Create reports only for runs that exist
       const validIds = requestIds.filter(id => foundIds.has(id));
       const projectByRequestId = new Map(runs.map(r => [r._id, r.projectId]));
+      const requestById = new Map(runs.map(run => [run._id, run]));
       const created: { reportId: string; requestId: string }[] = [];
 
       for (const requestId of validIds) {
@@ -257,10 +305,11 @@ apiRoute(ctx.app, ctx.registry, {
           _id: reportId,
           projectId: projectByRequestId.get(requestId)!,
           requestId,
+          runId: requestById.get(requestId)!.run?._id,
           status: "pending",
           createdAt: new Date(),
         };
-        await ctx.reportCollection.insertOne(reportDoc);
+        await publishRunReport(ctx, requestById.get(requestId)!, reportDoc);
 
         const messageContent = Buffer.from(JSON.stringify({ reportId })).toString("base64");
         await ctx.reportQueueClient.sendMessage(messageContent);
@@ -601,7 +650,7 @@ apiRoute(ctx.app, ctx.registry, {
   },
   handler: async (req, res, next) => {
     try {
-      const { requestId } = req.body;
+      const { requestId, runId } = req.body;
 
       if (!requestId || typeof requestId !== "string") {
         res.status(400).json({ error: "requestId is required and must be a string" });
@@ -612,6 +661,10 @@ apiRoute(ctx.app, ctx.registry, {
       const run = await ctx.requestCollection.findOne({ _id: requestId });
       if (!run) {
         res.status(404).json({ error: `Run ${requestId} not found` });
+        return;
+      }
+      if (run.deletedAt || (runId !== undefined && run.run?._id !== runId)) {
+        res.status(409).json({ error: `Request ${requestId} is deleted or no longer has run ${runId}`, code: "report-publication-contention" });
         return;
       }
 
@@ -653,7 +706,7 @@ apiRoute(ctx.app, ctx.registry, {
             reportId,
           });
           if (!reportDoc) continue;
-          await ctx.reportCollection.insertOne(reportDoc);
+          await publishRunReport(ctx, run, reportDoc);
           const messageContent = Buffer.from(JSON.stringify({ reportId })).toString("base64");
           await ctx.reportQueueClient.sendMessage(messageContent);
 
@@ -663,6 +716,14 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       console.log(`Trigger evaluation for run ${requestId}: ${created.length}/${templates.length} templates matched`);
+      // Persist completion at the publisher, before replying, so a scheduler
+      // restart after the response cannot leave an acknowledged trigger pending.
+      if (runId && run.run?.reportsTriggeredAt) {
+        await ctx.requestCollection.updateOne(
+          { _id: requestId, projectId: run.projectId, "run._id": runId, deletedAt: { $exists: false } },
+          { $set: { "run.reportsTriggerCompletedAt": new Date() } },
+        );
+      }
       res.status(201).json({ triggered: created.length, reports: created });
     } catch (error) {
       next(error);
@@ -731,7 +792,7 @@ apiRoute(ctx.app, ctx.registry, {
               reportId,
             });
             if (!reportDoc) continue;
-            await ctx.reportCollection.insertOne(reportDoc);
+            await publishRunReport(ctx, run, reportDoc);
             const messageContent = Buffer.from(JSON.stringify({ reportId })).toString("base64");
             await ctx.reportQueueClient.sendMessage(messageContent);
             created.push({ reportId, requestId: run._id, templateId: template.id });

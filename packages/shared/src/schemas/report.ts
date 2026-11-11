@@ -109,6 +109,8 @@ export const BulkReportStatusInputSchema = z
 export const TriggerReportsInputSchema = z
   .object({
     requestId: z.string(),
+    /** Pins scheduler-triggered publication to the attempt whose DAG drained. */
+    runId: z.string().optional(),
   })
   .openapi("TriggerReportsInput");
 

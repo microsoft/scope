@@ -166,7 +166,11 @@ describe("HandlerDispatcher — maybeTriggerReports", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://api.test/api/v1/reports/trigger");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body)).toEqual({ requestId: "req-1" });
+    expect(JSON.parse(init.body)).toEqual({ requestId: "req-1", runId: "run-1" });
+    expect(collection.updateOne).toHaveBeenCalledWith(
+      { _id: "req-1", "run._id": "run-1", deletedAt: { $exists: false } },
+      { $set: { "run.reportsTriggerCompletedAt": expect.any(Date) } },
+    );
   });
 
   it("does not trigger when the DAG has not drained", async () => {
