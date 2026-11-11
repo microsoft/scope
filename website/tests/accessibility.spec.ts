@@ -187,26 +187,26 @@ test('skip link moves keyboard focus to the visible landing heading', async ({ p
 	await expect(page.getByRole('link', { name: 'Start with Scope' })).toBeFocused();
 });
 
-test('Taxonome guides share one ordered Guides subsection on desktop and mobile', async ({ page }) => {
+test('Taxonome guides remain discoverable in the current desktop and mobile navigation', async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await page.goto('/scope/guides/taxonome/');
-	await expect(page.getByRole('heading', { name: 'Using Taxonome', level: 1 })).toBeVisible();
-	const desktopSidebar = page.locator('nav[aria-label="Main"]');
-	await expect(desktopSidebar.getByText('Use and design taxonomies', { exact: true }))
+	await expect(page.getByRole('heading', { name: 'Analyze trajectories with Taxonome', level: 1 }))
 		.toBeVisible();
-	const guideLinks = desktopSidebar.locator([
-		'a[href="/scope/guides/taxonome/"]',
-		'a[href="/scope/guides/create-taxonomy/"]',
-	].join(','));
-	await expect(guideLinks).toHaveText(['Using Taxonome', 'Create your own taxonomy']);
-	await expect(desktopSidebar.getByRole('link', { name: 'Using Taxonome', exact: true }))
+	const desktopSidebar = page.locator('nav[aria-label="Main"]');
+	await expect(desktopSidebar.getByRole('link', { name: 'Analyze trajectories with Taxonome' }))
+		.toBeVisible();
+	await desktopSidebar.getByText('Design your benchmark', { exact: true }).click();
+	await expect(desktopSidebar.getByRole('link', { name: 'Create your own taxonomy' }))
+		.toBeVisible();
+	await expect(desktopSidebar.getByRole('link', { name: 'Analyze trajectories with Taxonome' }))
 		.toHaveAttribute('aria-current', 'page');
 
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.getByRole('button', { name: /menu/i }).click();
 	const mobileSidebar = page.locator('nav[aria-label="Main"]');
-	await expect(mobileSidebar.getByText('Use and design taxonomies', { exact: true })).toBeVisible();
-	await mobileSidebar.getByRole('link', { name: 'Create your own taxonomy', exact: true }).click();
+	await expect(mobileSidebar.getByRole('link', { name: 'Analyze trajectories with Taxonome' }))
+		.toHaveAttribute('aria-current', 'page');
+	await page.goto('/scope/guides/create-taxonomy/');
 	await expect(page).toHaveURL(/\/scope\/guides\/create-taxonomy\/$/);
 	await expect(page.getByRole('heading', { name: 'Create your own taxonomy', level: 1 }))
 		.toBeVisible();
