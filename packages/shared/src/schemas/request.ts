@@ -206,7 +206,7 @@ export const RequestResponseSchema = z
     experimentMembershipOperationId: z.string().optional(),
     experimentMembershipRevisionId: z.string().optional(),
     taxonomyHandler: z.object({
-      status: z.enum(["queued", "processing", "done", "failed"]),
+      status: z.enum(["pending", "queued", "processing", "done", "failed"]),
       updatedAt: z.coerce.date().optional(),
       error: z.string().optional(),
       resultAvailable: z.boolean(),

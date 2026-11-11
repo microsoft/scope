@@ -14,6 +14,7 @@ import {
   type ExperimentRequestState,
   type ReportDocument,
   type RequestDocument,
+  taxonomyHandlerSummary,
 } from "shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -196,6 +197,8 @@ describe("ExperimentLifecycleCoordinator", () => {
 
   it.each([
     { status: "done", handlerStatus: { "pp-atif": { status: "queued" } } },
+    { status: "done", handlerStatus: { "pp-taxonomy": { status: "queued" } } },
+    { status: "done", handlerStatus: { "pp-taxonomy": { status: "processing" } } },
     { status: "done", reportsTriggerCompletedAt: undefined },
     { status: "done", reportPublicationIds: ["publishing-report"] },
   ])("rejects unfinished run work $handlerStatus $reportPublicationIds", async (run) => {
@@ -204,6 +207,47 @@ describe("ExperimentLifecycleCoordinator", () => {
     vi.spyOn(FixedPayloadStore.prototype, "readRequests").mockResolvedValue([requestState]);
     await expect(new ExperimentLifecycleCoordinator(db).startDelete("project-1", "experiment-1")).rejects.toMatchObject({ status: 409 });
     expect(db.experiments.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("keeps derived taxonomy pending view-only while deletion remains fenced by durable work", async () => {
+    const current = root();
+    const run: NonNullable<RequestDocument["run"]> = {
+      _id: "run-1",
+      status: "done",
+      attemptNumber: 1,
+      reportsTriggerCompletedAt: undefined,
+    };
+    const request = {
+      _id: "request-1",
+      run,
+    };
+    const db = collections({ current, updated: current, requests: [request] });
+    vi.spyOn(FixedPayloadStore.prototype, "readRequests").mockResolvedValue([requestState]);
+
+    expect(taxonomyHandlerSummary(request.run, true)).toEqual({
+      status: "pending",
+      resultAvailable: false,
+    });
+    expect(request.run.handlerStatus).toBeUndefined();
+    await expect(
+      new ExperimentLifecycleCoordinator(db).startDelete(
+        "project-1",
+        "experiment-1",
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      conflicts: expect.arrayContaining([
+        expect.objectContaining({
+          requestId: "request-1",
+          reason: "report-trigger-incomplete",
+        }),
+      ]),
+    });
+    expect(request.run).toMatchObject({
+      status: "done",
+      attemptNumber: 1,
+    });
+    expect(request.run.handlerStatus).toBeUndefined();
   });
 
   it.each(["pending", "generating"])("rejects an outstanding %s report by exact report ID", async (status) => {
@@ -317,9 +361,35 @@ describe("ExperimentLifecycleCoordinator", () => {
     const deleted = { ...root(lifecycle("deleted", targets)), deletedAt: now };
     const restoring = { ...root(lifecycle("restoring", targets)), deletedAt: now };
     const active = root();
+    const taxonomy = {
+      taxonomyRevisionId: "taxonomy-revision-1",
+      ref: "ax-taxonomy@r1",
+      contentSha256: "a".repeat(64),
+    };
+    for (const experiment of [deleting, deleted, restoring, active]) {
+      experiment.revision.taxonomy = taxonomy;
+      experiment.execution.taxonomy = taxonomy;
+    }
     const db = collections({
       current: deleting, updated: deleted,
-      requests: [{ _id: "request-1", run: { _id: "run-1", outcome, result: "retained result", turns: [{ iteration: 1 }] } }],
+      requests: [{
+        _id: "request-1",
+        run: {
+          _id: "run-1",
+          outcome,
+          result: "retained result",
+          turns: [{ iteration: 1 }],
+          handlerStatus: {
+            "pp-taxonomy": { status: "done", updatedAt: now },
+          },
+          taxonomyEvaluation: {
+            url: "https://storage.invalid/taxonomy.json.gz",
+            schemaVersion: "scope/taxonomy-run-result/v1",
+            contentSha256: "b".repeat(64),
+            sizeBytes: 123,
+          },
+        },
+      }],
     });
     vi.spyOn(ExperimentLifecycleTargetStore.prototype, "read").mockResolvedValue(targets);
     vi.spyOn(FixedPayloadStore.prototype, "readRequests").mockResolvedValue([requestState]);
@@ -338,6 +408,7 @@ describe("ExperimentLifecycleCoordinator", () => {
     expect(after.deletionProvenance).toBeUndefined();
     expect(restored.lifecycle).toBeUndefined();
     expect(restored.execution.experimentExecutionId).toBe("execution-1");
+    expect(restored.execution.taxonomy).toEqual(taxonomy);
     expect(rollover).not.toHaveBeenCalled();
 
     // Successful completion removes the intent, so a new deletion can claim it.

@@ -110,7 +110,9 @@ const currentRequests = Array.from({ length: 11 }, (_, index) => ({
                 resultAvailable: false,
                 error: "Taxonome execution failed",
               }
-            : undefined,
+            : index === 4
+              ? { status: "pending" as const, resultAvailable: false }
+              : undefined,
 }));
 
 const currentExecution: ExperimentExecutionView = {
@@ -440,6 +442,7 @@ describe("ExperimentDetail", { timeout: 30_000 }, () => {
     expect(screen.getAllByText("Deleted").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Missing").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Processing").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Historical task")).toHaveLength(0);
     expect(screen.getByText("1–10 of 11 runs")).toBeTruthy();

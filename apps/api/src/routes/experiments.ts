@@ -17,6 +17,8 @@ import {
   type ExperimentExecutionHistoryDocument,
   type ExperimentMetadata,
   type ExperimentRequestState,
+  type ProfileVersionDocument,
+  parseProfileSpec,
   taxonomyHandlerSummary,
 } from "shared";
 import type { RequestDocument, RouteContext } from "../route-context.js";
@@ -158,7 +160,7 @@ const ExperimentRequestSummarySchema = z.object({
   lastHeartbeatAt: z.coerce.date().optional(),
   startedAt: z.coerce.date().optional(),
   taxonomyHandler: z.object({
-    status: z.enum(["queued", "processing", "done", "failed"]),
+    status: z.enum(["pending", "queued", "processing", "done", "failed"]),
     updatedAt: z.coerce.date().optional(),
     error: z.string().optional(),
     resultAvailable: z.boolean(),
@@ -663,6 +665,8 @@ async function resolvedExecutionResponse(
               worker: 1,
               lastHeartbeatAt: 1,
               startedAt: 1,
+              handlerStatus: 1,
+              taxonomyEvaluation: 1,
             },
           },
         )
@@ -676,6 +680,10 @@ async function resolvedExecutionResponse(
     const run = request?.run?._id === runId
       ? request.run
       : historicalRunsById.get(runId);
+    const taxonomyHandler = taxonomyHandlerSummary(
+      run,
+      Boolean(input.execution.taxonomy && run),
+    );
     const status = request?.deletedAt
       ? "deleted"
       : (run?.status ?? "missing");
@@ -711,9 +719,7 @@ async function resolvedExecutionResponse(
         ? { lastHeartbeatAt: run.lastHeartbeatAt }
         : {}),
       ...(run?.startedAt ? { startedAt: run.startedAt } : {}),
-      ...(taxonomyHandlerSummary(run)
-        ? { taxonomyHandler: taxonomyHandlerSummary(run) }
-        : {}),
+      ...(taxonomyHandler ? { taxonomyHandler } : {}),
     };
   });
 
@@ -1021,6 +1027,82 @@ function createRequestDocument(input: {
   };
 }
 
+async function resolveProfileControlledRequest(
+  ctx: RouteContext,
+  projectId: string,
+  body: z.infer<typeof ExperimentRequestInputSchema>,
+): Promise<
+  | { ok: true; body: z.infer<typeof ExperimentRequestInputSchema> }
+  | { ok: false; status: 400 | 404; error: string }
+> {
+  if (!body.profileId) return { ok: true, body };
+
+  let parsed: { profileId: string; version?: number };
+  try {
+    parsed = parseProfileSpec(body.profileId);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : "Invalid profile reference",
+    };
+  }
+  const profile = await ctx.profileCollection.findOne({
+    _id: parsed.profileId,
+    projectId,
+    deletedAt: { $exists: false },
+  });
+  if (!profile) {
+    return { ok: false, status: 404, error: `Profile not found: ${parsed.profileId}` };
+  }
+  const version = await ctx.profileVersionCollection.findOne({
+    profileId: profile._id,
+    projectId,
+    version: parsed.version ?? profile.latestVersion,
+  }) as ProfileVersionDocument | null;
+  if (!version) {
+    return {
+      ok: false,
+      status: 404,
+      error: `Profile version not found: ${body.profileId}`,
+    };
+  }
+
+  // The API owns profile composition: discard client-materialized controlled
+  // values and independently derive every request from the exact profile.
+  const {
+    workerType: _workerType,
+    model: _model,
+    reasoningEffort: _reasoningEffort,
+    agentVersion: _agentVersion,
+    mcpServers: _mcpServers,
+    skillRevisions: _skillRevisions,
+    resources: _resources,
+    extensions: _extensions,
+    profileId: _profileId,
+    ...sharedIntent
+  } = body;
+  return {
+    ok: true,
+    body: {
+      ...sharedIntent,
+      workerType: version.workerType,
+      model: version.model,
+      ...(version.reasoningEffort
+        ? { reasoningEffort: version.reasoningEffort }
+        : {}),
+      ...(version.agentVersion ? { agentVersion: version.agentVersion } : {}),
+      ...(version.mcpServers ? { mcpServers: version.mcpServers } : {}),
+      ...(version.skillRevisions
+        ? { skillRevisions: version.skillRevisions }
+        : {}),
+      ...(version.resources ? { resources: version.resources } : {}),
+      ...(version.extensions ? { extensions: version.extensions } : {}),
+      profileId: version.ref,
+    },
+  };
+}
+
 export function registerExperimentsRoutes(ctx: RouteContext): void {
   apiRoute(ctx.app, ctx.registry, {
     method: "post",
@@ -1096,7 +1178,19 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
       const resolvedRequests: Array<
         z.infer<typeof ExperimentRequestInputSchema>
       > = [];
-      for (const body of req.body.requests) {
+      for (const requestedBody of req.body.requests) {
+        const profileResolution = await resolveProfileControlledRequest(
+          ctx,
+          projectId,
+          requestedBody,
+        );
+        if (!profileResolution.ok) {
+          res.status(profileResolution.status).json({
+            error: profileResolution.error,
+          });
+          return;
+        }
+        const body = profileResolution.body;
         const capabilities = requestedAgentCapabilities({
           reasoningEffort: body.reasoningEffort,
           mcpServers: body.mcpServers,

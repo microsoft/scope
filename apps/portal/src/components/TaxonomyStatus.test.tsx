@@ -15,6 +15,7 @@ describe("TaxonomyStatus", () => {
   });
 
   it.each([
+    ["pending", false, "Pending"],
     ["queued", false, "Queued"],
     ["processing", false, "Processing"],
     ["failed", false, "Failed"],

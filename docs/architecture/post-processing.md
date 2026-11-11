@@ -136,12 +136,17 @@ read the flag; turning it off hides new user entry points without interrupting
 accepted work.
 
 Run list responses and exact Experiment execution members include only a
-bounded `taxonomyHandler` summary derived from the persisted
-`run.handlerStatus["pp-taxonomy"]` entry and whether the exact run has a
-`taxonomyEvaluation` reference. List pages never read or probe result blobs.
-The Portal renders these states as:
+bounded `taxonomyHandler` summary. Persisted
+`run.handlerStatus["pp-taxonomy"]` and the exact run's `taxonomyEvaluation`
+reference remain authoritative. When an exact Experiment execution selects a
+taxonomy but its exact request/run member has no handler entry yet, the API
+derives a view-only `pending` summary. `/runs` resolves that expectation with
+page-scoped bulk Experiment, history, and membership-chunk reads; it never
+applies a current taxonomy selection to unrelated historical attempts or issues
+per-row lookups. List pages never read or probe result blobs. The Portal renders:
 
-- no handler entry: unavailable;
+- no selected/known exact taxonomy expectation: unavailable;
+- selected exact taxonomy with no handler entry: pending;
 - `queued`: queued;
 - `processing`: processing;
 - `failed`: failed, with the persisted error available in the tooltip;

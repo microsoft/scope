@@ -326,6 +326,7 @@ function parseRequestSummary(value: unknown): ExperimentRequestSummaryView {
           "experiment request taxonomy handler",
         );
         if (
+          status !== "pending" &&
           status !== "queued" &&
           status !== "processing" &&
           status !== "done" &&

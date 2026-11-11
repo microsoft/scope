@@ -4,6 +4,7 @@
 import type { RunState } from "../types/types.js";
 
 export type TaxonomyStatusValue =
+  | "pending"
   | "queued"
   | "processing"
   | "done"
@@ -19,9 +20,14 @@ export interface TaxonomyHandlerSummary {
 /** Derives the minimal UI summary from persisted exact-run fields only. */
 export function taxonomyHandlerSummary(
   run: RunState | undefined,
+  taxonomyExpected = false,
 ): TaxonomyHandlerSummary | undefined {
   const handler = run?.handlerStatus?.["pp-taxonomy"];
-  if (!handler) return undefined;
+  if (!handler) {
+    return taxonomyExpected
+      ? { status: "pending", resultAvailable: false }
+      : undefined;
+  }
   return {
     status: handler.status,
     ...(handler.updatedAt ? { updatedAt: handler.updatedAt } : {}),

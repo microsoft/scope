@@ -15,6 +15,15 @@ const resource = {
     readiness: "done",
     progress: {},
     blockers: [],
+    requests: [{
+      requestId: "request-1",
+      runId: "run-1",
+      status: "done",
+      taxonomyHandler: {
+        status: "pending",
+        resultAvailable: false,
+      },
+    }],
     createdAt: "2026-10-16T12:00:00Z",
   },
   createdAt: "2026-10-16T12:00:00Z",
@@ -35,6 +44,10 @@ describe("Experiment operation responses", () => {
     });
     if ("phase" in active) throw new Error("Expected an Experiment resource");
     expect(active.lifecycle).toBeUndefined();
+    expect(active.execution.requests[0]?.taxonomyHandler).toEqual({
+      status: "pending",
+      resultAvailable: false,
+    });
     expect(parseExperimentOperation(progress)).toMatchObject({
       operationId: "operation-1", phase: "restoring",
     });

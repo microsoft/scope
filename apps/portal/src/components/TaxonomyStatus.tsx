@@ -24,7 +24,9 @@ export function TaxonomyStatus({
   }
 
   const view =
-    summary.status === "queued"
+    summary.status === "pending"
+      ? { label: "Pending", variant: "secondary" as const }
+      : summary.status === "queued"
       ? { label: "Queued", variant: "purple" as const }
       : summary.status === "processing"
         ? { label: "Processing", variant: "info" as const }

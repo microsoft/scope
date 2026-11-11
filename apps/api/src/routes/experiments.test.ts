@@ -462,8 +462,7 @@ describe("Experiment API contract", () => {
     const requests = Array.from({ length: 6 }, (_, index) => ({
       scenario: { task: "Build it", criteria: ["works"] },
       workerType: "coder-acp-copilot",
-      model:
-        index < 3 ? "claude-haiku-4.5" : "gpt-5.6-sol-fast",
+      model: "client-value-must-not-control-profile-composition",
       profileId: index < 3 ? "profile-a@1" : "profile-b@2",
     }));
     const { app } = harness({
@@ -480,6 +479,44 @@ describe("Experiment API contract", () => {
         find,
       },
       runsCollection: { find: vi.fn() },
+      profileCollection: {
+        findOne: vi.fn(async (filter: { _id: string }) => ({
+          _id: filter._id,
+          projectId: "project-1",
+          name: filter._id,
+          latestVersion: filter._id === "profile-a" ? 1 : 2,
+          createdAt: new Date(),
+        })),
+      },
+      profileVersionCollection: {
+        findOne: vi.fn(async (filter: { profileId: string; version: number }) =>
+          filter.profileId === "profile-a"
+            ? {
+                _id: "profile-version-a",
+                ref: "profile-a@1",
+                profileId: "profile-a",
+                projectId: "project-1",
+                version: 1,
+                workerType: "coder-acp-copilot",
+                model: "claude-haiku-4.5",
+                agentVersion: "copilot-dev",
+                mcpServers: ["ms-learn"],
+                createdAt: new Date(),
+              }
+            : {
+                _id: "profile-version-b",
+                ref: "profile-b@2",
+                profileId: "profile-b",
+                projectId: "project-1",
+                version: 2,
+                workerType: "coder-acp-copilot",
+                model: "gpt-5.6-sol-fast",
+                agentVersion: "copilot-dev",
+                skillRevisions: ["owner/skill@commit"],
+                createdAt: new Date(),
+              }
+        ),
+      },
       agentCollection: { findOne: findAgent },
       taskPromptStore: {
         findOrCreate: vi.fn().mockResolvedValue({ _id: "prompt-1" }),
@@ -520,6 +557,22 @@ describe("Experiment API contract", () => {
       "profile-b@2",
       "profile-b@2",
       "profile-b@2",
+    ]);
+    expect(insertedDocuments.map((document) => document.mcpServers)).toEqual([
+      ["ms-learn"],
+      ["ms-learn"],
+      ["ms-learn"],
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(insertedDocuments.map((document) => document.skillRevisions)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      ["owner/skill@commit"],
+      ["owner/skill@commit"],
+      ["owner/skill@commit"],
     ]);
     expect(findAgent).toHaveBeenCalledTimes(2);
   });
@@ -591,6 +644,11 @@ describe("Experiment API contract", () => {
         entries: states,
       },
       vectorFingerprint: "vector",
+      taxonomy: {
+        taxonomyRevisionId: "taxonomy-revision-1",
+        ref: "ax-taxonomy@r1",
+        contentSha256: "b".repeat(64),
+      },
       handlerSummary: {},
       blocking: [],
       createdAt: now,
@@ -724,6 +782,10 @@ describe("Experiment API contract", () => {
           status: "deleted",
           outcome: "succeeded",
           task: "Deleted task",
+          taxonomyHandler: {
+            status: "pending",
+            resultAvailable: false,
+          },
         },
         {
           requestId: "request-missing",
@@ -749,6 +811,7 @@ describe("Experiment API contract", () => {
     const now = new Date("2026-10-29T20:00:00.000Z");
     const states = [
       { requestId: "request-1", runId: "run-historical", dependencies: [], blockers: [] },
+      { requestId: "request-2", runId: "run-historical-unselected", dependencies: [], blockers: [] },
     ];
     const execution = {
       experimentExecutionId: "execution-historical",
@@ -780,31 +843,64 @@ describe("Experiment API contract", () => {
       projectId: "project-1",
     });
     const requestFind = vi.fn(() => ({
-      toArray: vi.fn().mockResolvedValue([{
-        _id: "request-1",
-        projectId: "project-1",
-        scenario: { task: "Historical task", criteria: [] },
-        workerType: "coder-acp-copilot",
-        model: "model-a",
-        run: {
-          _id: "run-current",
-          attemptNumber: 2,
-          status: "queued",
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "request-1",
+          projectId: "project-1",
+          scenario: { task: "Historical task", criteria: [] },
+          workerType: "coder-acp-copilot",
+          model: "model-a",
+          run: {
+            _id: "run-current",
+            attemptNumber: 2,
+            status: "queued",
+          },
         },
-      }]),
+        {
+          _id: "request-2",
+          projectId: "project-1",
+          scenario: { task: "Historical unselected task", criteria: [] },
+          workerType: "coder-acp-copilot",
+          model: "model-a",
+          run: {
+            _id: "run-current-2",
+            attemptNumber: 2,
+            status: "queued",
+          },
+        },
+      ]),
     }));
     const runsFind = vi.fn(() => ({
-      toArray: vi.fn().mockResolvedValue([{
-        _id: "run-historical",
-        requestId: "request-1",
-        projectId: "project-1",
-        attemptNumber: 1,
-        status: "done",
-        outcome: "failed",
-        os: { platform: "linux", release: "6.7", arch: "x64" },
-        worker: { instanceId: "worker-history" },
-        startedAt: now,
-      }]),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "run-historical",
+          requestId: "request-1",
+          projectId: "project-1",
+          attemptNumber: 1,
+          status: "done",
+          outcome: "failed",
+          os: { platform: "linux", release: "6.7", arch: "x64" },
+          worker: { instanceId: "worker-history" },
+          startedAt: now,
+          handlerStatus: {
+            "pp-taxonomy": {
+              status: "processing",
+              version: 1,
+              updatedAt: now,
+              claimToken: "claim-history",
+            },
+          },
+        },
+        {
+          _id: "run-historical-unselected",
+          requestId: "request-2",
+          projectId: "project-1",
+          attemptNumber: 1,
+          status: "done",
+          outcome: "succeeded",
+          startedAt: now,
+        },
+      ]),
     }));
     const { app } = harness({
       experimentCollection: { findOne },
@@ -819,20 +915,38 @@ describe("Experiment API contract", () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       experimentExecutionId: "execution-historical",
-      requestCount: 1,
-      requests: [{
-        requestId: "request-1",
-        runId: "run-historical",
-        status: "done",
-        outcome: "failed",
-        task: "Historical task",
-        workerType: "coder-acp-copilot",
-        model: "model-a",
-        attemptNumber: 1,
-        os: { platform: "linux", release: "6.7", arch: "x64" },
-        worker: { instanceId: "worker-history" },
-      }],
+      requestCount: 2,
+      requests: [
+        {
+          requestId: "request-1",
+          runId: "run-historical",
+          status: "done",
+          outcome: "failed",
+          task: "Historical task",
+          workerType: "coder-acp-copilot",
+          model: "model-a",
+          attemptNumber: 1,
+          os: { platform: "linux", release: "6.7", arch: "x64" },
+          worker: { instanceId: "worker-history" },
+          taxonomyHandler: {
+            status: "processing",
+            updatedAt: now.toISOString(),
+            resultAvailable: false,
+          },
+        },
+        {
+          requestId: "request-2",
+          runId: "run-historical-unselected",
+          status: "done",
+          outcome: "succeeded",
+          task: "Historical unselected task",
+          workerType: "coder-acp-copilot",
+          model: "model-a",
+          attemptNumber: 1,
+        },
+      ],
     });
+    expect(response.body.requests[1]).not.toHaveProperty("taxonomyHandler");
     expect(requestFind).toHaveBeenCalledTimes(1);
     expect(runsFind).toHaveBeenCalledTimes(1);
 

@@ -6,6 +6,7 @@
 export type RunStatus = "pending" | "queued" | "processing" | "paused" | "done";
 export type RunOutcome = "succeeded" | "failed" | "finished";
 export type TaxonomyStatusValue =
+  | "pending"
   | "queued"
   | "processing"
   | "done"

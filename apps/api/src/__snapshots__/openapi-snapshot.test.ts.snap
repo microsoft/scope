@@ -2044,6 +2044,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                     },
                     "status": {
                       "enum": [
+                        "pending",
                         "queued",
                         "processing",
                         "done",
@@ -2703,6 +2704,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                         },
                         "status": {
                           "enum": [
+                            "pending",
                             "queued",
                             "processing",
                             "done",
@@ -4929,6 +4931,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               },
               "status": {
                 "enum": [
+                  "pending",
                   "queued",
                   "processing",
                   "done",

@@ -42,6 +42,13 @@ describe("taxonomyHandlerSummary", () => {
     expect(taxonomyHandlerSummary(run())).toBeUndefined();
   });
 
+  it("derives pending only when the exact run is expected to be assessed", () => {
+    expect(taxonomyHandlerSummary(run(), true)).toEqual({
+      status: "pending",
+      resultAvailable: false,
+    });
+  });
+
   it.each(["queued", "processing", "failed"] as const)(
     "preserves %s without inferring progress",
     (status) => {

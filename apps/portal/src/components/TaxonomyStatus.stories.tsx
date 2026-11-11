@@ -19,6 +19,12 @@ export const Unavailable: Story = {
     await expect(canvas.getByLabelText("Taxonomy unavailable")).toBeVisible();
   },
 };
+export const Pending: Story = {
+  args: { summary: { status: "pending", resultAvailable: false } },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText("Pending")).toBeVisible();
+  },
+};
 export const Queued: Story = {
   args: { summary: { status: "queued", resultAvailable: false } },
   play: async ({ canvas }) => {
