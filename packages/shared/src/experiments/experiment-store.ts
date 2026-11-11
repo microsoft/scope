@@ -89,26 +89,6 @@ export interface ReplaceExperimentReportTemplatesInput {
 }
 
 function parseExperiment(value: unknown): ExperimentDocument {
-  if (
-    value &&
-    typeof value === "object" &&
-    !Array.isArray(value)
-  ) {
-    const record = value as Record<string, unknown>;
-    const lifecycle = record.lifecycle;
-    if (
-      record.deletedAt === undefined &&
-      lifecycle &&
-      typeof lifecycle === "object" &&
-      !Array.isArray(lifecycle) &&
-      (lifecycle as Record<string, unknown>).phase === "restored"
-    ) {
-      // Older releases persisted this display-only completion marker. Treat
-      // active legacy roots as lifecycle-free without mutating stored data.
-      const { lifecycle: _legacyLifecycle, ...active } = record;
-      return ExperimentDocumentSchema.parse(active) as ExperimentDocument;
-    }
-  }
   return ExperimentDocumentSchema.parse(value) as ExperimentDocument;
 }
 

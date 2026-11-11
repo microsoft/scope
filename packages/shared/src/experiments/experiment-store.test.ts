@@ -188,50 +188,6 @@ function experiment(): ExperimentDocument {
   };
 }
 
-describe("ExperimentStore read compatibility", () => {
-  it("treats a legacy active restored marker as display-only lifecycle state", async () => {
-    const legacy = {
-      ...experiment(),
-      lifecycle: {
-        operationId: "operation-1",
-        phase: "restored",
-        stateVersion: 4,
-        targets: {
-          storage: "inline",
-          entryCount: 0,
-          entries: [],
-          payloadVersion: 1,
-          payloadFingerprint: fingerprintExperimentPayload([]),
-        },
-        targetFingerprint: fingerprintExperimentPayload([]),
-        progress: {
-          expectedRequests: 0,
-          completedRequests: 0,
-          expectedReports: 0,
-          completedReports: 0,
-        },
-        blocking: [],
-        deleteRequestedAt: new Date("2026-01-01T00:00:00.000Z"),
-        deleteCompletedAt: new Date("2026-01-01T00:01:00.000Z"),
-        restoreRequestedAt: new Date("2026-01-01T00:02:00.000Z"),
-        restoreCompletedAt: new Date("2026-01-01T00:03:00.000Z"),
-      },
-    };
-    const store = new ExperimentStore({
-      experiments: {
-        findOne: async () => structuredClone(legacy),
-      } as unknown as Collection<ExperimentDocument>,
-      executions: {} as Collection<ExperimentExecutionHistoryDocument>,
-      chunks: {} as Collection,
-    });
-
-    const restored = await store.getIncludingDeleted("project-1", "experiment-1");
-
-    expect(restored?.lifecycle).toBeUndefined();
-    expect(restored?.execution).toEqual(legacy.execution);
-  });
-});
-
 function chunkCollection() {
   const documents = new Map<string, Document>();
   return {
