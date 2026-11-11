@@ -6,6 +6,7 @@ import type { ExperimentEvidence } from "./readout-builder.js";
 import {
   composeReadoutPromptEvidence,
   composeReadoutUserPrompt,
+  READOUT_SYSTEM_PROMPT,
 } from "./prompt.js";
 
 function largeEvidence(): ExperimentEvidence {
@@ -74,6 +75,9 @@ describe("Experiment readout prompt composition", () => {
       Array.from({ length: 9 }, (_, index) => `run-${index}`),
     );
     expect(prompt.length).toBeLessThan(250_000);
+    expect(
+      Math.ceil((READOUT_SYSTEM_PROMPT.length + prompt.length) / 3),
+    ).toBeLessThan(100_000);
     expect(prompt).toContain("... [truncated]");
   });
 
