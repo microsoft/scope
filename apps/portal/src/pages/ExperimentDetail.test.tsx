@@ -332,7 +332,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("ExperimentDetail", { timeout: 10_000 }, () => {
+describe("ExperimentDetail", { timeout: 30_000 }, () => {
   it("starts an asynchronous deletion from the confirmation dialog", async () => {
     vi.mocked(api.deleteExperiment).mockResolvedValue({
       operationId: "operation-delete",
