@@ -604,7 +604,7 @@ describe("ExperimentDetail", { timeout: 30_000 }, () => {
       .mockRejectedValueOnce(new Error("Report service unavailable"))
       .mockResolvedValueOnce([]);
 
-    renderDetail();
+    renderDetail("/experiments/experiment-1?tab=reports");
 
     expect(await screen.findByText("Report service unavailable")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Retry$/ }));
@@ -617,7 +617,7 @@ describe("ExperimentDetail", { timeout: 30_000 }, () => {
       { includeDeleted: false },
     );
     expect(
-      await screen.findByText("Runs in attempt 2"),
+      await screen.findByText("No report available"),
     ).toBeTruthy();
   });
 
