@@ -25,7 +25,7 @@ import { ShortId } from "@/components/ShortId";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import type { ExperimentView } from "@/lib/experiments";
+import { experimentDisplayStatus, type ExperimentView } from "@/lib/experiments";
 import { formatDate } from "@/lib/utils";
 
 const FILTER_KEYS = ["readiness"] as const;
@@ -35,6 +35,9 @@ const READINESS_VALUES = [
   "done",
   "blocked",
   "failed",
+  "deleting",
+  "deleted",
+  "restoring",
 ] as const;
 const COLUMN_OPTIONS: CustomizeColumnsOption[] = [
   { id: "name", label: "Experiment", required: true },
@@ -50,7 +53,7 @@ const COLUMN_IDS = COLUMN_OPTIONS.map((column) => column.id);
 type ExperimentSortColumn = (typeof COLUMN_IDS)[number];
 
 function readinessVariant(readiness?: string) {
-  return readiness === "failed" || readiness === "blocked"
+  return readiness === "failed" || readiness === "blocked" || readiness === "deleted"
     ? "destructive"
     : "secondary";
 }
@@ -63,7 +66,7 @@ function sortValue(
     case "name":
       return experiment.metadata.name;
     case "readiness":
-      return experiment.readiness ?? "";
+      return experimentDisplayStatus(experiment);
     case "runs":
       return experiment.revision.memberCount;
     case "revision":
@@ -121,7 +124,7 @@ export function ExperimentsList() {
         label: readiness,
         count:
           experimentsQuery.data?.items.filter(
-            (experiment) => experiment.readiness === readiness,
+            (experiment) => experimentDisplayStatus(experiment) === readiness,
           ).length ?? 0,
       })),
     [experimentsQuery.data?.items],
@@ -133,7 +136,7 @@ export function ExperimentsList() {
     return (experimentsQuery.data?.items ?? []).filter((experiment) => {
       if (
         selectedReadiness.length > 0 &&
-        !selectedReadiness.includes(experiment.readiness ?? "unknown")
+        !selectedReadiness.includes(experimentDisplayStatus(experiment))
       ) {
         return false;
       }
@@ -204,10 +207,8 @@ export function ExperimentsList() {
         width: "120px",
         hidden: columnVisibility.isHidden("readiness"),
         cell: (experiment) => (
-          <Badge variant={readinessVariant(experiment.readiness)}>
-            {experiment.lifecycle?.phase === "deleted"
-              ? "deleted"
-              : experiment.lifecycle?.phase ?? experiment.readiness ?? "unknown"}
+          <Badge variant={readinessVariant(experimentDisplayStatus(experiment))}>
+            {experimentDisplayStatus(experiment)}
           </Badge>
         ),
       },

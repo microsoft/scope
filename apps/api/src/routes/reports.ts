@@ -135,6 +135,7 @@ apiRoute(ctx.app, ctx.registry, {
   errorResponses: {
     400: { description: "Invalid input" },
     404: { description: "Run or template not found" },
+    409: { description: "Request attempt changed, was deleted, or its Experiment has a lifecycle operation" },
   },
   handler: async (req, res, next) => {
     try {
@@ -278,6 +279,7 @@ apiRoute(ctx.app, ctx.registry, {
   successStatus: 201,
   errorResponses: {
     400: { description: "Invalid input" },
+    409: { description: "A request attempt changed, was deleted, or its Experiment has a lifecycle operation" },
   },
   handler: async (req, res, next) => {
     try {
@@ -647,6 +649,7 @@ apiRoute(ctx.app, ctx.registry, {
   errorResponses: {
     400: { description: "Invalid input" },
     404: { description: "Run not found" },
+    409: { description: "Exact run ID changed, request was deleted, or Experiment lifecycle conflicts with publication" },
   },
   handler: async (req, res, next) => {
     try {
@@ -742,6 +745,7 @@ apiRoute(ctx.app, ctx.registry, {
   successStatus: 201,
   errorResponses: {
     400: { description: "Invalid input" },
+    409: { description: "A request attempt changed, was deleted, or its Experiment has a lifecycle operation" },
   },
   handler: async (req, res, next) => {
     try {

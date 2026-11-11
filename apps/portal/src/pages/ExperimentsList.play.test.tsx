@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 // @vitest-environment happy-dom
-import { render, within } from "@testing-library/react";
-import { beforeAll, describe, it, vi } from "vitest";
+import { cleanup, render, within } from "@testing-library/react";
+import { afterEach, beforeAll, describe, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { api } from "@/lib/api";
@@ -34,6 +34,8 @@ class IntersectionObserverMock {
   unobserve = vi.fn();
   disconnect = vi.fn();
 }
+
+afterEach(() => cleanup());
 
 beforeAll(() => {
   Object.defineProperty(globalThis, "ResizeObserver", {

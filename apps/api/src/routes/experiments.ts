@@ -1100,7 +1100,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
     errorResponses: {
       202: { description: "Restore cascade is pending", schema: ExperimentLifecycleResponseSchema },
       404: { description: "Experiment not found" },
-      409: { description: "Experiment is not deleted or another intent is active" },
+      409: { description: "Conflicting lifecycle/publication intent or invalid recoverability" },
     },
     handler: async (req, res) => {
       try {
@@ -1129,7 +1129,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
     response: z.union([ExperimentLifecycleResponseSchema, ExperimentResponseSchema]),
     errorResponses: {
       404: { description: "Experiment not found" },
-      409: { description: "Experiment has no lifecycle operation" },
+      409: { description: "Deleted Experiment has no recoverable operation or a conflicting intent won a repair race" },
     },
     handler: async (req, res) => {
       try {

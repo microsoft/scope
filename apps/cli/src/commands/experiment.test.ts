@@ -353,21 +353,24 @@ describe("experiment commands", () => {
     expect(output.join("\n")).toContain('"phase": "deleting"');
   });
 
-  it("polls restore until the lifecycle reaches restored", async () => {
+  it("returns pending restore progress without polling with --no-wait", async () => {
+    const { requests } = mockFetchWith({ ...lifecycle, phase: "restoring" });
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await makeProgram().parseAsync(
+      ["experiment", "restore", "experiment-1", "--no-wait", "--project", "project-1", "--url", "http://localhost:3100", "--output", "json"],
+      { from: "user" },
+    );
+    expect(requests).toHaveLength(1);
+    expect(output.mock.calls.flat().join("\n")).toContain('"phase": "restoring"');
+    expect(process.exitCode).not.toBe(1);
+  });
+
+  it("polls restore until completion returns the active resource", async () => {
     vi.useFakeTimers();
     const requests: CapturedRequest[] = [];
     const responses = [
       { ...lifecycle, phase: "restoring" },
-      {
-        ...lifecycle,
-        phase: "restored",
-        stateVersion: 3,
-        progress: {
-          ...lifecycle.progress,
-          completedRequests: 1,
-          completedReports: 1,
-        },
-      },
+      experiment,
     ];
     vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
       requests.push({
@@ -408,6 +411,32 @@ describe("experiment commands", () => {
         url: "http://localhost:3100/api/v1/experiments/experiment-1/lifecycle?projectId=project-1",
       },
     ]);
+    expect(process.exitCode).not.toBe(1);
+  });
+
+  it.each([{ waitOptions: [] }, { waitOptions: ["--no-wait"] }])("returns immediately for a completed/no-op restore $waitOptions", async ({ waitOptions }) => {
+    const { requests } = mockFetchWith(experiment);
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await makeProgram().parseAsync(
+      ["experiment", "restore", "experiment-1", "--project", "project-1", "--url", "http://localhost:3100", "--output", "json", ...waitOptions],
+      { from: "user" },
+    );
+    expect(requests).toHaveLength(1);
+    expect(process.exitCode).not.toBe(1);
+    expect(JSON.parse(String(output.mock.calls[0]?.[0]))).toMatchObject([
+      { experimentId: "experiment-1", readiness: "ready" },
+    ]);
+  });
+
+  it.each(["deleting", "deleted", "restoring"])("displays %s without changing machine-readable readiness", async (phase) => {
+    const resource = { ...experiment, readiness: "done", lifecycle: { ...lifecycle, phase } };
+    mockFetchWith(resource);
+    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    await makeProgram().parseAsync(["experiment", "get", "experiment-1", "--project", "project-1", "--url", "http://localhost:3100"], { from: "user" });
+    expect(output.mock.calls.flat().join("\n")).toContain(phase);
+    output.mockClear();
+    await makeProgram().parseAsync(["experiment", "get", "experiment-1", "--project", "project-1", "--url", "http://localhost:3100", "--output", "json"], { from: "user" });
+    expect(JSON.parse(String(output.mock.calls[0]?.[0]))).toMatchObject([{ readiness: "done" }]);
   });
 
   it("surfaces lifecycle blockers without polling", async () => {

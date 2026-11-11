@@ -14,6 +14,7 @@ import {
   parseExperimentExecution,
   parseExperimentExecutionPage,
   parseExperimentLifecycle,
+  parseExperimentOperation,
   parseExperimentPage,
   type ExistingRunExperimentCreateView,
   type ExperimentExecutionPageView,
@@ -429,24 +430,24 @@ export const api = {
     return parseExperimentLifecycle(value);
   },
 
-  restoreExperiment: async (id: string): Promise<ExperimentLifecycleView> => {
+  restoreExperiment: async (id: string): Promise<ExperimentView | ExperimentLifecycleView> => {
     const value = await request<unknown>(
       `/experiments/${encodeURIComponent(id)}/restore`,
       { method: "POST" },
       { scoped: true },
     );
-    return parseExperimentLifecycle(value);
+    return parseExperimentOperation(value);
   },
 
   getExperimentLifecycle: async (
     id: string,
-  ): Promise<ExperimentLifecycleView> => {
+  ): Promise<ExperimentView | ExperimentLifecycleView> => {
     const value = await request<unknown>(
       `/experiments/${encodeURIComponent(id)}/lifecycle`,
       undefined,
       { scoped: true },
     );
-    return parseExperimentLifecycle(value);
+    return parseExperimentOperation(value);
   },
 
   listExperimentExecutions: async (
