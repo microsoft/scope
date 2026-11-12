@@ -159,6 +159,16 @@ never defaulted. The single carrier is the **`?projectId=` query parameter**. He
 | **By-`id`/slug get · edit · soft-delete** (`GET/PUT/DELETE /:id` on scoped catalogs) | `?projectId=` (**required**), or derived from context (e.g. a run's `projectId`) — filter is always `{ projectId, slug\|id }` | **400** |
 | **By true `_id`** (internal code already holding the globally-unique UUID `_id`) | Act on `{ _id }` directly — already unambiguous | n/a |
 
+**Writes must target a live project.** `projectId` is stored as a bare string, so the API
+enforces referential integrity itself: `LiveProjectGuard` (mounted on `/api/v1`) checks every
+non-`GET`/`HEAD`/`OPTIONS` request that carries `?projectId=` against the `projects`
+collection before any route runs — **404** when the project does not exist, **409** when it is
+soft-deleted (restore it first). Projects confirmed live are cached in-process for 10s
+(`LIVE_PROJECT_CACHE_TTL_MS`); misses are never cached, so a new or restored project is
+writable immediately, while a just-deleted project may accept writes on an instance for at most
+one TTL. Scoped reads are not checked: listing an unknown or deleted project returns an empty
+set (issue #1301).
+
 The **runs list** (`GET /api/v1/requests`) requires `?projectId=` and AND-filters every page,
 probe, facet, and grouping pipeline by it (`flat.projectId` → `composeFilter`). The
 `groupBy: "project"` option and the project facet were **removed** — moot under a required
