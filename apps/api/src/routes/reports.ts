@@ -12,6 +12,7 @@ import {
   BulkTriggerReportsInputSchema,
   CreateReportInputSchema,
   InsightResponseSchema,
+  LogEventSchema,
   ReportResponseSchema,
   TriggerReportsInputSchema,
   evaluateTrigger,
@@ -333,6 +334,31 @@ apiRoute(ctx.app, ctx.registry, {
       res.json({ ...report, id: report._id });
     } catch (error) {
       next(error);
+    }
+  },
+});
+
+apiRoute(ctx.app, ctx.registry, {
+  method: "get",
+  path: "/api/v1/reports/:id/logs/events",
+  tags: ["Reports"],
+  summary: "Get report log events (JSON)",
+  params: z.object({ id: z.string() }),
+  response: z.array(LogEventSchema),
+  errorResponses: { 404: { description: "Report not found" }, 502: { description: "Log storage unavailable" } },
+  handler: async (req, res) => {
+    const { id } = req.params;
+    const report = await ctx.reportCollection.findOne({ _id: id });
+    if (!report) {
+      res.status(404).json({ error: "Report not found" });
+      return;
+    }
+
+    try {
+      res.json(await ctx.blobStorage.getLogEvents(id));
+    } catch (error) {
+      console.error(`Failed to read logs for report ${id}:`, error);
+      res.status(502).json({ error: "Cannot connect to log storage" });
     }
   },
 });
