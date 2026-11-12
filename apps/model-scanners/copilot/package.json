@@ -14,7 +14,7 @@
     "telemetry": "workspace:*",
     "model-scanning": "workspace:*",
     "dotenv": "^16.4.5",
-    "undici": "^7.28.0"
+    "undici": "^7.30.1"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
