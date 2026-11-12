@@ -83,51 +83,23 @@ ${{ steps.sanitized.outputs.text }}
 Fetch policy files from the base revision, never from the pull request head. Use
 the changed-file list only to determine which conditional requirements apply.
 
-## Rubric
+## Policy interpretation
 
-Judge substance and applicability, not exact wording or checkbox syntax.
+Derive the complete rubric from the trusted base-revision
+`.github/PULL_REQUEST_TEMPLATE.md` and `CONTRIBUTING.md`. They are the only
+sources of truth for description requirements.
 
-1. **Summary**
-   - Explain what changed and why.
-   - Link a related issue when one exists or the description claims to address
-     tracked work. Do not require an issue for a self-contained change that has
-     no related issue.
-
-2. **Demos**
-   - For user-visible Portal or CLI features and UX changes, require a short
-     after-change recording with a useful caption.
-   - For user-visible bug fixes, require both before and after evidence.
-   - For changes that are not user-visible, accept an explicit `N/A` with a
-     brief explanation.
-   - Do not require recordings for documentation-only, test-only, refactoring,
-     or infrastructure-only changes unless the description identifies a
-     user-visible behavior change.
-
-3. **Testing**
-   - List relevant commands or manual checks and their results.
-   - Accept a clear explanation when testing is not applicable.
-   - A command without its pass/fail result is incomplete.
-
-4. **Documentation and compatibility**
-   - Identify documentation updated by the change, or explain why no
-     documentation update is needed.
-   - State breaking changes, API or CLI compatibility impacts, migrations, and
-     upgrade steps when applicable.
-   - Accept an explicit `None` or equivalent when there are no impacts.
-
-5. **Checklist consistency**
-   - Portal feature changes must address CLI capability parity.
-   - Portal component changes must address Storybook stories.
-   - Database changes that require a migration must address `up()` and `down()`
-     behavior and CosmosDB compatibility.
-   - Dependency changes must address lockfile and notice regeneration.
-   - Demo checklist answers must agree with the Demos section and the
-     applicability rules above.
-   - Do not fail a pull request merely because an inapplicable checkbox remains
-     unchecked when the description clearly marks the item `N/A`.
-
-Only report omissions that block a maintainer from understanding or validating
-the contribution. Optional wording improvements must not fail the check.
+- Do not add, strengthen, or restate requirements from this workflow prompt.
+- Apply conditional requirements only when the changed-file evidence and pull
+  request description make them relevant.
+- Accept any response format that substantively satisfies the source policy;
+  do not require exact headings, wording, or checkbox syntax.
+- When the source policy is ambiguous about whether something is required, do
+  not fail the check for that item.
+- Report only clear violations of an explicit source requirement. Optional
+  wording improvements must not fail the check.
+- Cite the relevant template section or contribution-guide heading for every
+  blocking finding so contributors can verify the requirement.
 
 ## Output
 
