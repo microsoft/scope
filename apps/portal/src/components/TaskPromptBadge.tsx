@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -16,6 +16,7 @@ import { cn, formatDate, formatId, truncate } from "@/lib/utils";
 import type { TaskPrompt } from "@/types";
 
 const SNIPPET_LEN = 280;
+const TOOLTIP_SCROLL_STEP = 40;
 
 interface TaskPromptBadgeProps {
   /** Content-addressed task prompt id (used for the link target and lazy fetch). */
@@ -25,6 +26,8 @@ interface TaskPromptBadgeProps {
    * When omitted, the prompt is fetched lazily the first time the tooltip opens.
    */
   prompt?: TaskPrompt;
+  /** Full text to show when a legacy run has no task prompt reference. */
+  fallbackText?: string;
   /** Custom trigger content. Defaults to a `<type label> · <short id>` badge. */
   children?: ReactNode;
   /** When true (default) the trigger links to the task prompt detail page. */
@@ -48,11 +51,13 @@ interface TaskPromptBadgeProps {
 export function TaskPromptBadge({
   taskPromptId,
   prompt,
+  fallbackText,
   children,
   link = true,
   className,
 }: TaskPromptBadgeProps) {
   const [open, setOpen] = useState(false);
+  const fallbackContentRef = useRef<HTMLDivElement>(null);
 
   const { data: fetched, isLoading: loadingPrompt } = useQuery({
     queryKey: ["task-prompt", taskPromptId],
@@ -76,8 +81,62 @@ export function TaskPromptBadge({
   const snippet = resolved?.text ?? content?.text;
   const detectedFeatures = resolved?.features?.filter((f) => f.detected) ?? [];
 
-  // Without an id there is nothing to preview or link to — render content plainly.
+  // Legacy runs can still preview their inline task without a prompt reference.
   if (!taskPromptId) {
+    if (fallbackText) {
+      return (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip open={open} onOpenChange={setOpen}>
+            <TooltipTrigger asChild>
+              <span
+                tabIndex={0}
+                className={cn("inline-flex max-w-full", className)}
+                onKeyDown={(event) => {
+                  const preview = fallbackContentRef.current;
+                  if (
+                    !open || !preview ||
+                    preview.scrollHeight <= preview.clientHeight ||
+                    event.altKey || event.ctrlKey || event.metaKey
+                  ) {
+                    return;
+                  }
+
+                  const pageStep = Math.max(TOOLTIP_SCROLL_STEP, preview.clientHeight - TOOLTIP_SCROLL_STEP);
+                  const scrollOffsets: Partial<Record<string, number>> = {
+                    ArrowDown: TOOLTIP_SCROLL_STEP,
+                    ArrowUp: -TOOLTIP_SCROLL_STEP,
+                    PageDown: pageStep,
+                    PageUp: -pageStep,
+                    Home: -preview.scrollHeight,
+                    End: preview.scrollHeight,
+                    " ": event.shiftKey ? -pageStep : pageStep,
+                  };
+                  const offset = scrollOffsets[event.key];
+                  if (offset === undefined) return;
+
+                  event.preventDefault();
+                  event.stopPropagation();
+                  preview.scrollTop += offset;
+                }}
+              >
+                {children ?? fallbackText}
+              </span>
+            </TooltipTrigger>
+            <TooltipPrimitive.Portal>
+              <TooltipContent
+                ref={fallbackContentRef}
+                side="top"
+                collisionPadding={8}
+                className="max-w-sm max-h-[var(--radix-tooltip-content-available-height)] overflow-y-auto whitespace-pre-wrap break-words text-xs"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {fallbackText}
+              </TooltipContent>
+            </TooltipPrimitive.Portal>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
     return children ? (
       <span className={cn("inline-flex max-w-full", className)}>{children}</span>
     ) : null;
