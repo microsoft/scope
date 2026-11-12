@@ -17,5 +17,7 @@
 !cosmosdb-mongodb/**
 !documentation/
 !documentation/**
+!github-actions/
+!github-actions/**
 !vscode-electron-worker/
 !vscode-electron-worker/**

@@ -17,6 +17,8 @@ interface ResourcePickerProps {
   selected: ResourceBindingSpec[];
   onChange: (specs: ResourceBindingSpec[]) => void;
   profileBindings?: ResourceBindingSpec[];
+  /** Prevent adding, removing, or replacing bindings while leaving run-owned parameter gaps editable. */
+  bindingsLocked?: boolean;
   disabled?: boolean;
 }
 
@@ -26,7 +28,13 @@ export function parseResourceRef(ref: string): { slug: string; revisionRef?: str
   return { slug: ref };
 }
 
-export function ResourcePicker({ selected, onChange, profileBindings = [], disabled = false }: ResourcePickerProps) {
+export function ResourcePicker({
+  selected,
+  onChange,
+  profileBindings = [],
+  bindingsLocked = false,
+  disabled = false,
+}: ResourcePickerProps) {
   const queryClient = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +80,8 @@ export function ResourcePicker({ selected, onChange, profileBindings = [], disab
     onChange(selected.filter((_, i) => i !== index));
   };
 
-  const showDropdown = open && (matches.length > 0 || query.trim().length > 0);
+  const canChangeBindings = !disabled && !bindingsLocked;
+  const showDropdown = canChangeBindings && open && (matches.length > 0 || query.trim().length > 0);
 
   if (isLoading) return <Skeleton className="h-9 w-full" />;
 
@@ -90,6 +99,7 @@ export function ResourcePicker({ selected, onChange, profileBindings = [], disab
               binding={binding}
               profileBinding={findProfileBinding(binding, profileBindings)}
               resources={activeResources}
+              bindingLocked={bindingsLocked}
               disabled={disabled}
               onReplace={(next) => replaceBinding(index, { ref: next })}
               onChange={(next) => replaceBinding(index, next)}
@@ -99,7 +109,7 @@ export function ResourcePicker({ selected, onChange, profileBindings = [], disab
         </div>
       )}
 
-      {!disabled && (
+      {canChangeBindings && (
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -142,7 +152,7 @@ export function ResourcePicker({ selected, onChange, profileBindings = [], disab
         </div>
       )}
 
-      {!disabled && (
+      {canChangeBindings && (
         <div className="mt-1.5">
           <button type="button" onClick={() => setCreateOpen(!createOpen)} className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground">
             {createOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
@@ -174,6 +184,7 @@ function SelectedResource({
   binding,
   profileBinding,
   resources,
+  bindingLocked,
   disabled,
   onReplace,
   onChange,
@@ -182,6 +193,7 @@ function SelectedResource({
   binding: ResourceBindingSpec;
   profileBinding?: ResourceBindingSpec;
   resources: ResourceDocument[];
+  bindingLocked: boolean;
   disabled: boolean;
   onReplace: (spec: string) => void;
   onChange: (binding: ResourceBindingSpec) => void;
@@ -208,7 +220,7 @@ function SelectedResource({
     return revisions[0] ?? null;
   }, [parsed.revisionRef, resource, revisions]);
 
-  const profileControlledResource = !!profileBinding;
+  const profileControlledResource = bindingLocked || !!profileBinding;
   const updateParam = (parameter: ResourceParameter, value: string) => {
     const params = { ...(binding.params ?? {}) };
     if (value === "" && parameter.default === undefined) {
@@ -228,7 +240,9 @@ function SelectedResource({
         <Boxes className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="flex-1 font-mono text-xs">{binding.ref}</span>
         <Badge variant="secondary" className="text-[10px]">resolved revision</Badge>
-        {!disabled && <X className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-destructive" onClick={onRemove} />}
+        {!disabled && !profileControlledResource && (
+          <X className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-destructive" onClick={onRemove} />
+        )}
       </div>
     );
   }

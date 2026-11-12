@@ -467,8 +467,13 @@ Profile fan-out mode is also supported for comparative runs:
 
 1. User selects a base `profileId` (optionally pinned via `profileId@version`) and a `profileVariations[]` array of profile spec strings to compare against (e.g. `["def456", "ghi789@2"]`)
 2. API parses each spec, validates every variation upfront, then expands one submit call into multiple requests under one shared `submissionId`
-3. Each expanded request resolves configuration from its variation profile; unpinned specs resolve to `latestVersion`
+3. The base is the first comparison member, not an inheritance source. The API starts from the same shared run intent for every member and resolves worker, model, reasoning effort, agent version, MCP servers, skills, extensions, and resources independently from that member's profile; unpinned specs resolve to `latestVersion`
 4. Expanded requests persist `profileId` and `profileVersionId` on each `RequestDocument` for indexing and traceability
+
+Request-level profile-managed fields are rejected in fan-out mode. Portal and
+CLI submit only shared intent (scenario, gates, codebase, count, priority, and
+AGENTS.md); they do not materialize baseline profile values into the request.
+This keeps API, CLI, and Portal submissions behaviorally identical.
 
 ## Runs List Query API
 
@@ -609,6 +614,15 @@ Workers publish log events to Redis Pub/Sub channels keyed by run ID. The API su
 
 The Portal desktop shell uses a persistent left navigation sidebar. It defaults to the compact icon rail, and users can expand it to show navigation labels; the choice is stored in `localStorage` under `scope:layout:sidebar-expanded`. Mobile navigation remains a sheet-based menu with labels always visible.
 
+`components/navigation-icons.ts` owns the shared section icons used by `Layout`
+and the compact `ListLayout` header's **Open filters** trigger. `ListLayout`
+resolves its section from the existing `railStorageKey`; report templates share
+the Reports icon, while keys and accounts share Secrets. Missing or unregistered
+storage keys retain the generic sliders icon. Desktop rail toggles, persisted
+collapse state, navigation routes, feature flags, and project gating are unchanged.
+When adding a list section, register its storage key here to keep its header and
+sidebar icons aligned.
+
 The Keys list and its nested `/secrets/keys/:id/preview` route use the same
 full-bleed shell. Opening or closing the preview keeps the tabs and filter rail
 aligned with the navigation. Key registration and full-detail routes retain the
@@ -633,6 +647,20 @@ and asks users to review and edit generated output. The footer links to the
 public data collection and privacy document so users can understand what Scope
 handles and why. `components/Layout.tsx` renders this footer on both standard
 and full-bleed routes so the disclosures remain visible throughout the Portal.
+
+The same footer displays Portal commit, branch, and build-time metadata injected
+by Vite. Metadata behavior differs by environment:
+
+| Environment | Git metadata behavior |
+|-------------|-----------------------|
+| Native development | Git lookup is enabled by default. Valid explicit `GIT_COMMIT` / `GIT_BRANCH` values take precedence, otherwise Vite reads the source repository once at startup. |
+| Docker Compose development | `PORTAL_GIT_INFO_ENABLED=false` disables lookup in the minimal Git-free container. The footer uses `commit=development` and omits the branch. |
+| Integration and production | Lookup remains enabled for the one-time immutable bundle build. Explicit Docker/ACR build metadata takes precedence; unavailable values fall back to `development` and an empty branch. |
+
+All paths validate values before embedding them in client code. `BUILD_TIME` is
+independent of Git extraction: an explicit valid timestamp wins, otherwise Vite
+uses the current startup/build time. The deployed nginx runtime never invokes
+Git because metadata is already embedded in the immutable bundle.
 
 ### Hover-preview + navigate badges
 

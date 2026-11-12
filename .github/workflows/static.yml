@@ -31,19 +31,19 @@ jobs:
         working-directory: website
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Install pnpm
-        uses: pnpm/action-setup@v6.0.8
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
           package_json_file: website/package.json
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: website/pnpm-lock.yaml
       - name: Restore Astro build cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           # Only the persistent data store is cached. `website/.astro` holds
           # generated content-collection modules that import source files by
@@ -64,7 +64,7 @@ jobs:
       - name: Setup Pages
         id: pages
         if: github.ref == 'refs/heads/main'
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
       - name: Build site
         env:
           # The Pages API can report an isolated hostname instead of the public URL.
@@ -78,7 +78,7 @@ jobs:
         run: pnpm exec playwright test
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: ./website/dist
 
@@ -92,4 +92,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
