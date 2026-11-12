@@ -247,28 +247,25 @@ before changing any AI-facing instruction surface.
 
 ## Contributing (Pull Requests)
 
-This repository is commonly worked on from a **fork**. When opening a pull
-request, **always target the upstream repository when one is available** — do
-not open the PR against the fork unless the user explicitly asks you to.
+Before pushing or opening a pull request, inspect `git remote -v` and determine
+the user's actual write permission for `microsoft/scope`; do not infer ownership
+or access from remote names such as `origin` or `upstream`.
 
-- Detect the upstream: check `git remote -v`. If an `upstream` remote exists
-  (e.g. `microsoft/scope`), that is the PR base. The `origin` remote is
-  typically your personal fork (e.g. `cedricvidal/scope`).
-- Push the branch to your fork (`origin`), then open the PR **across forks**
-  with the upstream as the base:
-  ```bash
-  gh pr create \
-    --repo <upstream-owner>/<repo> \
-    --base main \
-    --head <fork-owner>:<branch> \
-    --title "..." --body-file <path>
-  ```
-- Only fall back to opening the PR against the fork (`origin`) when there is no
-  `upstream` remote, or when the user explicitly requests it.
-- If the upstream org enforces **SAML SSO** and the PR call fails with a `403`
+- **Developers with branch write access:** push the branch to an already
+  configured remote whose URL points to `microsoft/scope`, then open a
+  same-repository pull request against the intended base branch. Do not use a
+  fork when direct branch push access is available.
+- **Community contributors without branch write access:** push the branch to
+  their already configured fork, then open a cross-fork pull request targeting
+  `microsoft/scope` and the intended base branch.
+- Never create or configure a fork unless the user explicitly requests or
+  approves it. If the required writable remote is not configured, stop and ask
+  the user rather than creating a fork or changing the target repository.
+
+- If the target org enforces **SAML SSO** and the PR call fails with a `403`
   ("Resource protected by organization SAML enforcement"), stop and ask the
   user to authorize their token for that org via the SSO link, then retry —
-  do not silently downgrade to a fork PR.
+  do not silently change the target repository.
 
 ## Documentation Workflow
 
