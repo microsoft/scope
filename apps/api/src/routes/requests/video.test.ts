@@ -140,6 +140,50 @@ describe("Video endpoints", () => {
       expect(mockDownload).toHaveBeenCalledWith(0, 500);
     });
 
+    it.each([
+      ["bytes=10-999", 10, 16],
+      ["bytes=10-", 10, 16],
+      ["bytes=-5", 12, 16],
+      ["bytes=-100", 0, 16],
+    ])("serves the available bytes for %s", async (range, start, end) => {
+      variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", videoUrls: [blobUrl("req-1/video.webm")] });
+      const content = "mock-blob-content".slice(start, end + 1);
+      mockDownload.mockResolvedValue({ readableStreamBody: readableFrom(content) });
+
+      const res = await supertest(testServer()).get(vidUrl("req-1"))
+        .set("Range", range).buffer(true).parse(rawParser);
+
+      expect(res.status).toBe(206);
+      expect(res.headers["content-range"]).toBe(`bytes ${start}-${end}/17`);
+      expect(res.headers["content-length"]).toBe(String(content.length));
+      expect(res.body.toString()).toBe(content);
+      expect(mockDownload).toHaveBeenCalledWith(start, content.length);
+    });
+
+    it.each(["bytes=17-", "bytes=30-40", "bytes=10-5", "bytes=-0"])(
+      "rejects unsatisfiable %s before downloading", async (range) => {
+        variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", videoUrls: [blobUrl("req-1/video.webm")] });
+
+        const res = await supertest(testServer()).get(vidUrl("req-1")).set("Range", range);
+
+        expect(res.status).toBe(416);
+        expect(res.headers["content-range"]).toBe("bytes */17");
+        expect(mockDownload).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["items=0-1", "bytes=0-1,4-5", "invalid"])(
+      "ignores unsupported or malformed range %s", async (range) => {
+        variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done", videoUrls: [blobUrl("req-1/video.webm")] });
+
+        const res = await supertest(testServer()).get(vidUrl("req-1")).set("Range", range);
+
+        expect(res.status).toBe(200);
+        expect(res.headers["content-range"]).toBeUndefined();
+        expect(mockDownload).toHaveBeenCalledWith();
+      },
+    );
+
     it("returns 400 for invalid iteration number", async () => {
       variant.mockRequest(mocks, "req-1", { _id: "run-1", status: "done" });
       const res = await supertest(testServer()).get(vidUrl("req-1", "?iteration=abc"));
