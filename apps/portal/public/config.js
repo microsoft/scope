@@ -5,8 +5,8 @@
 //
 // In production this file is regenerated at container start by
 // docker-entrypoint.sh from environment variables (SCOPE_DOCS_BASE_URL,
-// SCOPE_AUTH_ENABLED), so the docs base URL and the auth feature toggle can
-// change per environment without rebuilding the image.
+// SCOPE_AUTH_ENABLED, SCOPE_AUTH_CLIENT_ID, SCOPE_AUTH_AUTHORITY,
+// SCOPE_AUTH_SCOPES), so public auth settings can change per environment.
 //
 // In development (Vite) this static file is served as-is and provides the
 // default values. Note: `authEnabled` is intentionally omitted here so local

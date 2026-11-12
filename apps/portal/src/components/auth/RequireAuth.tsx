@@ -9,8 +9,8 @@
  * "Log in" button; the interactive redirect only starts when the user clicks it.
  *
  * When the Portal auth config is missing (a production build without the
- * `VITE_AUTH_*` env vars), we render a clear configuration error instead of
- * bouncing into a broken redirect loop.
+ * runtime `SCOPE_AUTH_*` or build-time `VITE_AUTH_*` settings), we render a
+ * configuration error instead of bouncing into a broken redirect loop.
  */
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -54,9 +54,9 @@ function NotConfigured() {
           Authentication not configured
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          This build is missing its identity-provider configuration
-          (<code>VITE_AUTH_*</code>). Set the Entra ID values at build time and
-          redeploy.
+          The identity-provider configuration is incomplete. Set the public
+          Entra ID client, authority, and API scopes through <code>SCOPE_AUTH_*</code>
+          at container startup or <code>VITE_AUTH_*</code> at build time.
         </p>
       </div>
     </div>
