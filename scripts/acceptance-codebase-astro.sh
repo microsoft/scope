@@ -25,6 +25,7 @@
 #   jq and curl must be on PATH.
 #
 # REQUIRED ENV:
+#   SCOPE_PROJECT       project UUID for the scoped API calls
 #   ASTRO_CRITERION_ID   id of a criterion asserting the project uses Astro
 #                        (e.g. "The project is built with the Astro framework"
 #                        — checks for an `astro` dependency in package.json,
@@ -66,13 +67,18 @@ fail() { printf '\033[31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 command -v jq >/dev/null   || fail "jq is required"
 command -v curl >/dev/null || fail "curl is required"
 [ -n "${ASTRO_CRITERION_ID:-}" ] || fail "ASTRO_CRITERION_ID must be set (the 'uses Astro' criterion id)"
+[ -n "${SCOPE_PROJECT:-}" ] || fail "SCOPE_PROJECT must be set to the target project UUID (see 'scope project list')"
+PROJECT_QUERY="$(jq -rn --arg id "$SCOPE_PROJECT" '$id|@uri')"
 
 api() { # api METHOD PATH [JSON_BODY]
   local method="$1" path="$2" body="${3:-}"
+  local separator='?'
+  [[ "$path" == *\?* ]] && separator='&'
+  local url="$API$path${separator}projectId=$PROJECT_QUERY"
   if [ -n "$body" ]; then
-    curl -fsS -X "$method" "$API$path" -H 'Content-Type: application/json' -d "$body"
+    curl -fsS -X "$method" "$url" -H 'Content-Type: application/json' -d "$body"
   else
-    curl -fsS -X "$method" "$API$path"
+    curl -fsS -X "$method" "$url"
   fi
 }
 
