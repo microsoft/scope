@@ -4,6 +4,8 @@
   "private": true,
   "description": "Scoped - coding agent workers (Claude Code, Copilot ACP, VS Code Web) + API + CLI",
   "scripts": {
+    "start": "node scripts/guide/launch.mjs",
+    "scope": "node scripts/guide/launch.mjs",
     "build": "pnpm -r build",
     "cli": "pnpm --filter cli exec tsx src/index.ts",
     "build:cli": "pnpm --filter shared build && pnpm --filter cli build",

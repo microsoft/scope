@@ -18,6 +18,37 @@ export function kubectl(args: string[], env = process.env): void {
   execute("kubectl", ["--kubeconfig", kubeconfig, "--context", context, "--namespace", namespace, ...args], env);
 }
 
+/**
+ * Find the rendered Deployment or Job named `name`. Every Kind workload, app or
+ * backing service (e.g. mongodb, dev-edge, db-migrate), is named after itself.
+ *
+ * @throws When no Deployment or Job has that name; the message lists the valid names.
+ */
+export function findWorkload(env: NodeJS.ProcessEnv, name: string): { kind: "Deployment" | "Job"; resource: Record<string, unknown> } {
+  const workloads = renderKindStack({ ...env, SCOPE_IMAGE_TAG: project }).filter((item) => item.kind === "Deployment" || item.kind === "Job");
+  const resource = workloads.find((item) => (item.metadata as { name: string }).name === name);
+
+  if (!resource) {
+    const names = workloads.map((item) => (item.metadata as { name: string }).name).sort();
+    throw new Error(`Unknown Kind workload ${name}; available: ${names.join(", ")}`);
+  }
+  return { kind: resource.kind as "Deployment" | "Job", resource };
+}
+
+/** kubectl arguments for a workload's last 100 log lines; for a Deployment, kubectl picks one of its pods. */
+export function logsArguments(kind: "Deployment" | "Job", name: string): string[] {
+  return ["logs", `${kind === "Job" ? "job" : "deployment"}/${name}`, "--tail=100"];
+}
+
+/** Print a Kind workload's recent logs, then how to follow them live with kubectl. */
+export function showLogs(env: NodeJS.ProcessEnv, name: string): void {
+  const { kind } = findWorkload(env, name);
+  const [, target] = logsArguments(kind, name);
+
+  kubectl(logsArguments(kind, name), env);
+  console.log(`\nFollow live: KUBECONFIG=.dev-state/runtime/kubeconfig kubectl -n ${namespace} logs -f ${target}`);
+}
+
 export function inspectorCommand(command: string[], port: number): string[] {
   if (command[0] !== "node" || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("A Node entrypoint and valid inspector port are required");
   return ["node", `--inspect-brk=0.0.0.0:${port}`, ...command.slice(1).filter((argument) => argument !== "--watch" && !argument.startsWith("--inspect"))];
@@ -27,8 +58,7 @@ export function inspectorCommand(command: string[], port: number): string[] {
 export async function debugRuntime(env: NodeJS.ProcessEnv, name: string, args: string[] = []): Promise<void> {
   const entry = runtimeByName(name);
   if (!entry.inspector) throw new Error(`${name} has no Node inspector; use its dedicated debugger profile`);
-  const resource = renderKindStack({ ...env, SCOPE_IMAGE_TAG: project }).find((item) => (item.kind === "Deployment" || item.kind === "Job") && (item.metadata as { name: string }).name === name);
-  if (!resource) throw new Error(`Missing workload ${name}`);
+  const { resource } = findWorkload(env, name);
   const workload = resource.kind === "Job" ? "job" : "deployment";
   type Container = { name: string; command: string[]; startupProbe?: unknown; readinessProbe?: unknown };
   const spec = resource.spec as { suspend?: boolean; template: { spec: { containers: Container[] } } };
