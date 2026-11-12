@@ -7,3 +7,4 @@ export * from "./criteria-provider.js";
 export * from "./criteria-provider-fs.js";
 export * from "./criteria-provider-api.js";
 export * from "./criteria-provider-factory.js";
+export * from "./observation-taxonomy.js";

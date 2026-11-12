@@ -3,7 +3,7 @@
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
-import { CriteriaBadge } from "./CriteriaBadge";
+import { CriteriaBadge, CriteriaKindBadge, CriteriaSubjectBadge } from "./CriteriaBadge";
 
 const meta = {
   component: CriteriaBadge,
@@ -48,7 +48,46 @@ export const NonLinking: Story = {
 };
 
 export const WithoutPreloadedPrompt: Story = {
-  // No `prompt` prop — the prompt is fetched lazily the first time the
-  // tooltip opens (handled by the global MSW + Query decorators in Storybook).
   args: { prompt: undefined },
+};
+
+export const GateCriterion: Story = {
+  args: {
+    criterionId: "has_unit_tests",
+    kind: "gate",
+    evaluated: true,
+    result: true,
+    showStateLabel: true,
+    link: false,
+  },
+};
+
+export const ObservationCriterion: Story = {
+  args: {
+    criterionId: "uses_current_sdk",
+    kind: "observation",
+    evaluated: true,
+    result: false,
+    showStateLabel: true,
+    link: false,
+  },
+};
+
+export const KindBadges: Story = {
+  render: () => (
+    <div className="flex gap-2">
+      <CriteriaKindBadge kind="gate" />
+      <CriteriaKindBadge kind="observation" />
+    </div>
+  ),
+};
+
+export const SubjectBadges: Story = {
+  render: () => (
+    <div className="flex gap-2">
+      <CriteriaSubjectBadge subject="run" />
+      <CriteriaSubjectBadge subject="iteration" />
+      <CriteriaSubjectBadge subject={undefined} />
+    </div>
+  ),
 };

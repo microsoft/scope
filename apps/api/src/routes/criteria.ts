@@ -224,11 +224,13 @@ apiRoute(ctx.app, ctx.registry, {
     q: z.string().optional(),
     ids: z.string().optional().describe("Comma-separated criterion IDs to include"),
     ancestors: z.enum(["true", "false"]).optional().describe("When true and ids is set, also include dependency ancestors"),
+    kind: z.enum(["gate", "observation"]).optional().describe("Filter by criterion kind"),
   }).merge(ProjectIdQuerySchema),
   response: z.array(CriteriaResponseSchema),
   handler: async (req, res) => {
     const q = req.query.q;
     const idsParam = req.query.ids;
+    const kind = req.query.kind;
 
     // `q` (regex search) and `ids` (exact set + optional ancestor resolution)
     // are mutually exclusive: applying the regex filter first would silently
@@ -247,6 +249,12 @@ apiRoute(ctx.app, ctx.registry, {
         { id: { $regex: q, $options: "i" } },
         { prompt: { $regex: q, $options: "i" } },
       ];
+    }
+    // kind:"gate" includes legacy rows where kind is absent (backfilled to gate).
+    if (kind === "gate") {
+      filter.$and = [{ $or: [{ kind: "gate" }, { kind: { $exists: false } }] }];
+    } else if (kind === "observation") {
+      filter.kind = "observation";
     }
     let criteria = await ctx.criteriaCollection.find(filter).toArray();
     criteria.sort((a, b) => a.id.localeCompare(b.id));
@@ -444,9 +452,18 @@ apiRoute(ctx.app, ctx.registry, {
   },
   handler: async (req, res) => {
     const projectId = getQueryProjectId(req);
-    const { id, prompt, dependsOn = [], gates } = req.body;
+    const { id, prompt, dependsOn = [], gates, kind, taxonomyElementId, subject } = req.body;
     try {
-      const doc = await getCriteriaStore(projectId).create({ projectId, id, prompt, dependsOn, gates });
+      const doc = await getCriteriaStore(projectId).create({
+        projectId,
+        id,
+        prompt,
+        dependsOn,
+        gates,
+        kind,
+        taxonomyElementId,
+        subject,
+      });
       res.status(201).json(doc);
     } catch (err) {
       if (!sendStoreError(res, err)) throw err;
@@ -470,9 +487,16 @@ apiRoute(ctx.app, ctx.registry, {
   },
   handler: async (req, res) => {
     const { id } = req.params;
-    const { prompt, dependsOn, gates } = req.body;
+    const { prompt, dependsOn, gates, kind, taxonomyElementId, subject } = req.body;
     try {
-      const updated = await getCriteriaStore(getQueryProjectId(req)).update(id, { prompt, dependsOn, gates });
+      const updated = await getCriteriaStore(getQueryProjectId(req)).update(id, {
+        prompt,
+        dependsOn,
+        gates,
+        kind,
+        taxonomyElementId,
+        subject,
+      });
       res.json(updated);
     } catch (err) {
       if (!sendStoreError(res, err)) throw err;

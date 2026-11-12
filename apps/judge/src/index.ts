@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { evaluateWorkspace } from "./judge-agent.js";
 import { verifyCopilotProtocol } from "./protocol-check.js";
 import { resolveCurrentIteration, mapIterationToolCallUrls } from "./tool-call-history.js";
+import { type AgentTrajectory, fromAtif, fromAtifList } from "./agent-trajectory.js";
 import { BlobStorage, RedisLogPublisher } from "shared";
 import { initTelemetry, trackMetric, trackEvent } from "telemetry";
 import { mkdtempSync, rmSync } from "fs";
@@ -57,7 +58,7 @@ app.post(
     const startTime = Date.now();
 
     try {
-      const { snapshotUrl, criteria, conversationHistory, personaInstructions, requestId, gate, toolCallsUrl, iteration, projectId, currentAgentResponse } = req.body;
+      const { snapshotUrl, criteria, conversationHistory, personaInstructions, requestId, gate, toolCallsUrl, atifUrl, atifUrls, iteration, projectId, currentAgentResponse } = req.body;
 
       // Validate required fields
       if (!snapshotUrl || typeof snapshotUrl !== "string") {
@@ -115,6 +116,37 @@ app.post(
         });
 
         console.log(`[judge] Snapshot extracted to ${workDir}`);
+
+        // Observation evaluations carry normalized ATIF trajectories. A
+        // run-subject observation sends every iteration so cross-iteration
+        // behavior remains visible; an iteration-subject observation sends one.
+        // Failures are non-fatal because workspace evidence remains available.
+        let trajectory: AgentTrajectory | undefined;
+        if (Array.isArray(atifUrls) && atifUrls.length > 0) {
+          const urls = atifUrls.filter((url: unknown): url is string => typeof url === "string");
+          try {
+            const atifs = await Promise.all(urls.map((url) => blobStorage.downloadJson(url)));
+            trajectory = fromAtifList(atifs);
+            console.log(
+              `[judge] Loaded merged ATIF trajectory from ${urls.length} iteration(s): ${trajectory.calls.length} call(s), ${trajectory.toolDefinitions.length} tool definition(s)`,
+            );
+          } catch (err) {
+            console.warn(
+              `[judge] Failed to load merged ATIF from ${urls.length} url(s): ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        } else if (typeof atifUrl === "string") {
+          try {
+            trajectory = fromAtif(await blobStorage.downloadJson(atifUrl));
+            console.log(
+              `[judge] Loaded ATIF trajectory from ${atifUrl}: ${trajectory.calls.length} call(s), ${trajectory.toolDefinitions.length} tool definition(s)`,
+            );
+          } catch (err) {
+            console.warn(
+              `[judge] Failed to load ATIF from ${atifUrl}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
 
         // Assemble the coding agent's captured tool calls across the WHOLE run,
         // not just the current iteration. Each prior turn in conversationHistory
@@ -177,6 +209,7 @@ app.post(
           onProgress,
           gate,
           iterationToolCalls,
+          trajectory,
           projectId,
           currentAgentResponse,
         });

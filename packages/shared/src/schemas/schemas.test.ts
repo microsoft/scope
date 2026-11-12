@@ -502,6 +502,33 @@ describe("criteria schemas", () => {
     it("rejects missing prompt", () => {
       expect(() => CreateCriteriaInputSchema.parse({ id: "abc" })).toThrow();
     });
+
+    it("defaults kind to 'gate' when absent", () => {
+      const result = CreateCriteriaInputSchema.parse({ id: "abc", prompt: "p" });
+      expect(result.kind).toBe("gate");
+    });
+
+    it("accepts kind:'observation' with a valid taxonomyElementId", () => {
+      const result = CreateCriteriaInputSchema.parse({
+        id: "obs",
+        prompt: "p",
+        kind: "observation",
+        taxonomyElementId: "dimension:idiomatic-use",
+      });
+      expect(result.kind).toBe("observation");
+      expect(result.taxonomyElementId).toBe("dimension:idiomatic-use");
+    });
+
+    it("rejects an unknown taxonomyElementId", () => {
+      expect(() =>
+        CreateCriteriaInputSchema.parse({
+          id: "obs",
+          prompt: "p",
+          kind: "observation",
+          taxonomyElementId: "dimension:nope",
+        }),
+      ).toThrow();
+    });
   });
 
   describe("CriteriaResponseSchema", () => {

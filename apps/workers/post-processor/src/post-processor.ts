@@ -172,6 +172,7 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
       const ctx: HandlerContext = {
         blobStorage: this.blobStorage,
         collection: this.collection as any,
+        criteriaCollection: this.db.collection("criteria"),
         log,
       };
 
