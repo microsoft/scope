@@ -31,7 +31,7 @@ describe("public CLI release lookup", () => {
     expect(await fetchLatestVersion()).toBe("1.2.3");
     expect(fetchMock).toHaveBeenCalledWith(RELEASES_URL, {
       signal: expect.any(AbortSignal),
-      headers: { Accept: "application/vnd.github.v3+json" },
+      headers: { Accept: "application/vnd.github.v3+json", "User-Agent": expect.stringMatching(/^scope-cli\//) },
     });
   });
 
