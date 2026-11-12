@@ -426,7 +426,6 @@ export interface RunState {
    *  run. `false` with a non-empty `mcpServers` on the request means the profile
    *  ran without the tools it was configured with. */
   mcpRegistered?: boolean;
-  workerVersion?: string;
   os?: OsInfo;
   /** Wall-clock time of the last heartbeat written by the worker actively
    *  processing this attempt. **Stored in Redis, not Mongo** — the API
@@ -441,10 +440,7 @@ export interface RunState {
    *  generated at worker startup; `podName` comes from `process.env.HOSTNAME`
    *  when running under Kubernetes. Useful for troubleshooting ("which pod
    *  ran this?") and for the redelivery handler's log lines. */
-  worker?: {
-    instanceId: string;
-    podName?: string;
-  };
+  worker?: RunWorkerInfo;
   harUrl?: string;
   videoUrls?: string[];
   setupVideoUrls?: string[];
@@ -459,6 +455,22 @@ export interface RunState {
   /** Lifecycle status of post-processing for this run. Prevents duplicate
    *  enqueuing and tracks processing progress. */
   postProcessorStatus?: "queued" | "processing" | "done" | "failed";
+}
+
+/**
+ * Identity and build of the worker that handled a run attempt
+ * (`RunState.worker`). Single source of truth for worker identity (issue #855).
+ */
+export interface RunWorkerInfo {
+  /** Per-process UUID generated at worker startup. Absent only on legacy runs
+   *  picked up before worker identity was recorded (#846), where migration 031
+   *  moved just the version in. */
+  instanceId?: string;
+  /** Kubernetes pod name (`process.env.HOSTNAME`), when available. */
+  podName?: string;
+  /** Worker build, `<agentVersion>-<buildTime>-<gitCommit>`. Formerly the
+   *  top-level `RunState.workerVersion`. */
+  version?: string;
 }
 
 /**
@@ -483,7 +495,6 @@ export const RUN_STATE_FIELD_NAMES = [
   "error",
   "updatedAt",
   "turns",
-  "workerVersion",
   "os",
   "lastHeartbeatAt",
   "worker",
