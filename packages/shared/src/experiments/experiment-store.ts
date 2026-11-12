@@ -59,6 +59,20 @@ export interface RolloverExperimentInput {
   now?: Date;
 }
 
+export interface ReplaceExperimentMembershipInput {
+  projectId: string;
+  experimentId: string;
+  expectedExperimentRevisionId: string;
+  expectedRevisionNumber: number;
+  expectedExperimentExecutionId: string;
+  expectedExecutionVersion: number;
+  nextExperimentRevisionId: string;
+  nextExperimentExecutionId: string;
+  requests: readonly ExperimentRequestState[];
+  deferPublication?: boolean;
+  now?: Date;
+}
+
 function parseExperiment(value: unknown): ExperimentDocument {
   return ExperimentDocumentSchema.parse(value) as ExperimentDocument;
 }
@@ -790,11 +804,183 @@ export class ExperimentStore {
     ) {
       return null;
     }
+
     const requests = await this.payloads.readRequests(
       this.executionIdentity(experiment),
       experiment.execution.requests,
     );
     return this.rollover({ ...input, requests, reason: "retry" });
+  }
+
+  async replaceMembership(
+    input: ReplaceExperimentMembershipInput,
+  ): Promise<ExperimentDocument | null> {
+    const experiment = await this.getRaw(input.projectId, input.experimentId);
+    if (!experiment) return null;
+    const canonicalRequests = input.requests
+      .map((request) => ExperimentRequestStateSchema.parse(request))
+      .sort((left, right) =>
+        left.requestId.localeCompare(right.requestId),
+      ) as ExperimentRequestState[];
+    const membershipFingerprint =
+      fingerprintExperimentRequestVector(canonicalRequests);
+    const nextRevision = ExperimentRevisionSchema.parse({
+      experimentRevisionId: input.nextExperimentRevisionId,
+      revisionNumber: input.expectedRevisionNumber + 1,
+      memberCount: canonicalRequests.length,
+      membershipFingerprint,
+      definitionFingerprint: fingerprintExperimentPayload({
+        metadata: experiment.metadata,
+        requestIds: canonicalRequests.map(({ requestId }) => requestId),
+      }),
+      createdAt: input.now ?? new Date(),
+    }) as ExperimentRevision;
+
+    const existingClaim = experiment.execution.rollover;
+    if (existingClaim?.reason === "membership") {
+      if (
+        existingClaim.nextRevision?.experimentRevisionId !==
+          nextRevision.experimentRevisionId ||
+        existingClaim.nextRevision.membershipFingerprint !==
+          nextRevision.membershipFingerprint ||
+        existingClaim.nextExecution.experimentExecutionId !==
+          input.nextExperimentExecutionId
+      ) {
+        return null;
+      }
+      return input.deferPublication
+        ? experiment
+        : this.repairRollover(input.projectId, input.experimentId);
+    }
+    if (
+      experiment.revision.experimentRevisionId !==
+        input.expectedExperimentRevisionId ||
+      experiment.revision.revisionNumber !== input.expectedRevisionNumber ||
+      experiment.execution.experimentExecutionId !==
+        input.expectedExperimentExecutionId ||
+      experiment.execution.version !== input.expectedExecutionVersion
+    ) {
+      return null;
+    }
+
+    const now = input.now ?? new Date();
+    const payload = await this.payloads.prepareRequests({
+      identity: {
+        projectId: input.projectId,
+        experimentId: input.experimentId,
+        ownerId: input.nextExperimentExecutionId,
+        generation: 1,
+      },
+      entries: canonicalRequests,
+      inlineDocument: (candidate) => ({
+        ...experiment,
+        revision: nextRevision,
+        execution: this.membershipExecution(
+          input.nextExperimentExecutionId,
+          candidate,
+          canonicalRequests,
+          now,
+        ),
+      }),
+      now,
+    });
+    const nextExecution = this.membershipExecution(
+      input.nextExperimentExecutionId,
+      payload,
+      canonicalRequests,
+      now,
+    );
+    const claimed = await this.collections.experiments.findOneAndUpdate(
+      {
+        _id: input.experimentId,
+        projectId: input.projectId,
+        "revision.experimentRevisionId":
+          input.expectedExperimentRevisionId,
+        "revision.revisionNumber": input.expectedRevisionNumber,
+        "execution.experimentExecutionId":
+          input.expectedExperimentExecutionId,
+        "execution.version": input.expectedExecutionVersion,
+        "execution.rollover": { $exists: false },
+      } as Document,
+      {
+        $set: {
+          "execution.frozenAt": now,
+          "execution.rollover": {
+            nextExecution,
+            nextRevision,
+            reason: "membership",
+            claimedAt: now,
+          },
+          "execution.updatedAt": now,
+          updatedAt: now,
+        },
+        $inc: { "execution.version": 1, stateVersion: 1 },
+      } as Document,
+      { returnDocument: "after" },
+    );
+    if (!claimed) {
+      await this.payloads.discardUnpublished(payload);
+      return null;
+    }
+    return input.deferPublication
+      ? parseExperiment(claimed)
+      : this.repairRollover(input.projectId, input.experimentId);
+  }
+
+  async abortMembershipReplacement(input: {
+    projectId: string;
+    experimentId: string;
+    expectedExperimentExecutionId: string;
+    nextExperimentExecutionId: string;
+    nextExperimentRevisionId: string;
+    now?: Date;
+  }): Promise<ExperimentDocument | null> {
+    const experiment = await this.getRaw(input.projectId, input.experimentId);
+    const rollover = experiment?.execution.rollover;
+    if (
+      !experiment ||
+      rollover?.reason !== "membership" ||
+      rollover.nextRevision?.experimentRevisionId !==
+        input.nextExperimentRevisionId ||
+      rollover.nextExecution.experimentExecutionId !==
+        input.nextExperimentExecutionId ||
+      experiment.execution.experimentExecutionId !==
+        input.expectedExperimentExecutionId
+    ) {
+      return null;
+    }
+
+    const now = input.now ?? new Date();
+    const updated = await this.collections.experiments.findOneAndUpdate(
+      {
+        _id: input.experimentId,
+        projectId: input.projectId,
+        "execution.experimentExecutionId":
+          input.expectedExperimentExecutionId,
+        "execution.rollover.reason": "membership",
+        "execution.rollover.nextRevision.experimentRevisionId":
+          input.nextExperimentRevisionId,
+        "execution.rollover.nextExecution.experimentExecutionId":
+          input.nextExperimentExecutionId,
+      } as Document,
+      {
+        $set: {
+          "execution.updatedAt": now,
+          updatedAt: now,
+        },
+        $unset: {
+          "execution.frozenAt": "",
+          "execution.rollover": "",
+        },
+        $inc: { "execution.version": 1, stateVersion: 1 },
+      } as Document,
+      { returnDocument: "after" },
+    );
+    if (!updated) return null;
+    await this.payloads.discardUnpublished(
+      rollover.nextExecution.requests,
+    );
+    return parseExperiment(updated);
   }
 
   async discardStale(input: {
@@ -838,6 +1024,11 @@ export class ExperimentStore {
     const rollover = experiment?.execution.rollover;
     if (!experiment || !rollover) return experiment;
     const next = parseExecution(rollover.nextExecution);
+    const nextRevision = rollover.nextRevision
+      ? (ExperimentRevisionSchema.parse(
+          rollover.nextRevision,
+        ) as ExperimentRevision)
+      : undefined;
     await this.payloads.verifyCompleteSet(
       {
         projectId,
@@ -859,7 +1050,11 @@ export class ExperimentStore {
           next.experimentExecutionId,
       } as Document,
       {
-        $set: { execution: next, updatedAt: now },
+        $set: {
+          execution: next,
+          ...(nextRevision ? { revision: nextRevision } : {}),
+          updatedAt: now,
+        },
         $inc: { stateVersion: 1 },
       } as Document,
       { returnDocument: "after" },
@@ -898,6 +1093,25 @@ export class ExperimentStore {
     return {
       experimentExecutionId,
       attemptNumber: current.attemptNumber + 1,
+      version: 1,
+      requests,
+      vectorFingerprint: fingerprintExperimentRequestVector(entries),
+      handlerSummary: {},
+      blocking: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  private membershipExecution(
+    experimentExecutionId: string,
+    requests: FixedPayload<ExperimentRequestState>,
+    entries: ExperimentRequestState[],
+    now: Date,
+  ): ExperimentExecution {
+    return {
+      experimentExecutionId,
+      attemptNumber: 1,
       version: 1,
       requests,
       vectorFingerprint: fingerprintExperimentRequestVector(entries),

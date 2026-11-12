@@ -398,6 +398,10 @@ export interface RequestDocument {
   /** Set after the parent ExperimentDocument has been idempotently finalized.
    * Missing on interrupted native writes so the scheduler can recover them. */
   experimentFinalizedAt?: Date;
+  /** Recoverable membership mutation that owns this denormalized assignment. */
+  experimentMembershipOperationId?: string;
+  /** Experiment revision that most recently claimed this request. */
+  experimentMembershipRevisionId?: string;
   /** Scheduling priority. Higher = processed first. Default: 0. */
   priority: number;
   /**

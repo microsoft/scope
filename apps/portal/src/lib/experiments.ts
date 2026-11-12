@@ -19,6 +19,23 @@ export interface ExperimentRevisionView {
   createdAt?: string;
 }
 
+export interface ExperimentRevisionIdentityView {
+  experimentId: string;
+  experimentRevisionId: string;
+  revisionNumber: number;
+}
+
+export interface ExperimentMembershipMutationView {
+  experiment: ExperimentView;
+  attachedRequestIds: string[];
+  detachedRequestIds: string[];
+}
+
+export interface ExistingRunExperimentCreateView {
+  experiment: ExperimentView;
+  requestIds: string[];
+}
+
 export interface ExperimentBlockerView {
   handlerId: string;
   reason: string;

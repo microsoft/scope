@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Clock, RotateCcw } from "lucide-react";
+import { ArrowLeft, Clock, RotateCcw, Unlink } from "lucide-react";
 import {
   Link,
   useNavigate,
@@ -17,6 +17,10 @@ import { ShortId } from "@/components/ShortId";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   CustomizeColumnsLink,
   CustomizeColumnsPanel,
@@ -214,6 +218,8 @@ export function ExperimentDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const selectedExecutionId = searchParams.get("executionId") ?? undefined;
   const selectedReportType = searchParams.get("reportType") ?? undefined;
   const selectedReportId =
@@ -234,7 +240,6 @@ export function ExperimentDetail() {
     storageKey: "experiment-runs",
     columnIds: RUN_COLUMN_IDS,
   });
-
   const experimentQuery = useQuery({
     queryKey: ["experiment", id],
     queryFn: () => api.getExperiment(id!),
@@ -301,6 +306,40 @@ export function ExperimentDetail() {
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Retry failed");
+    },
+  });
+  const removeMembers = useMutation({
+    mutationFn: () =>
+      api.updateExperimentRequests("DELETE", experimentQuery.data!.experimentId, {
+        expectedExperimentRevisionId:
+          experimentQuery.data!.revision.experimentRevisionId,
+        requestIds: [...selectedRequestIds],
+      }),
+    onSuccess: ({ experiment: nextExperiment, detachedRequestIds }) => {
+      toast.success(
+        `Removed ${detachedRequestIds.length} run${detachedRequestIds.length === 1 ? "" : "s"} · revision ${nextExperiment.revision.revisionNumber}`,
+      );
+      setSelectedRequestIds(new Set());
+      setRemoveDialogOpen(false);
+      queryClient.setQueryData(["experiment", id], nextExperiment);
+      void queryClient.invalidateQueries({ queryKey: ["experiment-executions", id] });
+      void queryClient.invalidateQueries({ queryKey: ["experiments"] });
+      void queryClient.invalidateQueries({ queryKey: ["runs"] });
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete("executionId");
+          next.set("tab", "runs");
+          next.delete("reportType");
+          next.delete("reportId");
+          next.delete("report");
+          return next;
+        },
+        { replace: false },
+      );
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Runs could not be removed");
     },
   });
 
@@ -451,6 +490,11 @@ export function ExperimentDetail() {
   useEffect(() => {
     setPage(1);
   }, [activeExecution?.experimentExecutionId, pageSize, sortColumn, sortDirection]);
+
+  useEffect(() => {
+    setSelectedRequestIds(new Set());
+    setRemoveDialogOpen(false);
+  }, [activeExecution?.experimentExecutionId]);
 
   const pagedRequests = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -775,11 +819,34 @@ export function ExperimentDetail() {
               <CardContent className="p-6">
                 <EmbeddedTableBlock
                   title={`Runs in attempt ${activeExecution.attemptNumber}`}
-                  description="Open a row to inspect the exact request/run pair captured by this processing attempt."
+                  description={
+                    isViewingHistorical
+                      ? "Open a row to inspect the exact request/run pair captured by this historical processing attempt."
+                      : `Revision ${experiment.revision.revisionNumber} · ${experiment.revision.memberCount} current members. Select runs to remove them in one new revision.`
+                  }
                   actions={
-                    <CustomizeColumnsLink
-                      onClick={() => setCustomizingColumns((open) => !open)}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!isViewingHistorical && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={
+                            selectedRequestIds.size === 0 ||
+                            removeMembers.isPending
+                          }
+                          onClick={() => setRemoveDialogOpen(true)}
+                        >
+                          <Unlink className="mr-2 h-4 w-4" />
+                          Remove
+                          {selectedRequestIds.size > 0
+                            ? ` (${selectedRequestIds.size})`
+                            : ""}
+                        </Button>
+                      )}
+                      <CustomizeColumnsLink
+                        onClick={() => setCustomizingColumns((open) => !open)}
+                      />
+                    </div>
                   }
                 >
                   <div className="flex min-h-0 items-start gap-3">
@@ -812,6 +879,34 @@ export function ExperimentDetail() {
                         sortDir={sortDirection}
                         onSortChange={changeSort}
                         density="compact"
+                        selection={
+                          isViewingHistorical
+                            ? undefined
+                            : {
+                                selectedIds: selectedRequestIds,
+                                onToggle: (requestId) =>
+                                  setSelectedRequestIds((current) => {
+                                    const id = String(requestId);
+                                    const next = new Set(current);
+                                    if (next.has(id)) next.delete(id);
+                                    else next.add(id);
+                                    return next;
+                                  }),
+                                onToggleAll: (requestIds) =>
+                                  setSelectedRequestIds((current) => {
+                                    const next = new Set(current);
+                                    const ids = requestIds.map(String);
+                                    const allSelected = ids.every((requestId) =>
+                                      next.has(requestId)
+                                    );
+                                    for (const requestId of ids) {
+                                      if (allSelected) next.delete(requestId);
+                                      else next.add(requestId);
+                                    }
+                                    return next;
+                                  }),
+                              }
+                        }
                         emptyState={
                           <div className="py-6 text-sm text-muted-foreground">
                             {activeExecution.requestCount === 0
@@ -970,6 +1065,38 @@ export function ExperimentDetail() {
           </TabsContent>
         </Tabs>
       )}
+
+      <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remove {selectedRequestIds.size} run
+              {selectedRequestIds.size === 1 ? "" : "s"} from this Experiment?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              One membership request will publish a new immutable revision based
+              on revision {experiment.revision.revisionNumber}. The runs
+              themselves will not be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                removeMembers.mutate();
+              }}
+              disabled={
+                removeMembers.isPending ||
+                selectedRequestIds.size === 0 ||
+                isViewingHistorical
+              }
+            >
+              {removeMembers.isPending ? "Removing…" : "Remove runs"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
