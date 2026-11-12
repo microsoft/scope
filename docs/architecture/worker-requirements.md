@@ -176,6 +176,21 @@ HAR files are parsed to extract `ToolCall[]` data (tool name, arguments, timesta
 
 > **Anthropic prompt-cache tokens**: For Claude/Anthropic models the API response `usage.input_tokens` is only the *non-cached* remainder of the prompt — the bulk is reported separately in `cache_creation_input_tokens` and `cache_read_input_tokens`. The extractor sums all three into the prompt count, so prompt tokens reflect the full prompt size (cached + uncached). OpenAI/GitHub Models `prompt_tokens` already includes cached tokens and is used as-is.
 
+**Where usage is read from**, in order:
+
+1. HTTP response bodies: JSON `usage` objects, or SSE `data:` chunks that carry them.
+2. WebSocket frames: for the Responses API over a WebSocket (gateway
+   `_webSocketMessages`), the `receive` text frames are the streamed events, and
+   each `response.completed` carries `response.usage`. Send frames, binary frames
+   and unparseable frames are ignored.
+3. Fallback when neither yields usage: Copilot CLI `assistant_usage` telemetry
+   events posted to `/telemetry`.
+
+When the HAR shows at least one AI call but none of these sources report usage,
+`extractHarMetadata()` logs a `warn` ("No token usage found in HAR despite N AI
+call(s)…"). The turn then has no `tokenUsage`, and the warning explains why
+instead of the gap going unnoticed.
+
 For native CLI binaries that don't honor `NODE_EXTRA_CA_CERTS` (e.g., the Copilot CLI binary), workers should create a combined CA bundle using `proxyClient.createCombinedCaBundle()` and inject it via `SSL_CERT_FILE`.
 
 **When required:** All CLI-based workers (Copilot, Claude Code) and desktop workers (VS Code Electron) should support HAR capture. Browser-based workers (VS Code Web) may use alternative approaches.
