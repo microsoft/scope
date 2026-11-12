@@ -218,8 +218,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           AW_CONTEXT=$(jq -Rs \
+            --arg actor "${{ github.actor }}" \
+            --arg command_name "worker-version-upgrade" \
             --arg issue_number "${{ steps.create_issue.outputs.issue_number }}" \
-            '{issue_number: $issue_number, issue_body: .}' \
+            '{
+              actor: $actor,
+              command_name: $command_name,
+              item_type: "issue",
+              item_number: ($issue_number | tonumber),
+              issue_number: $issue_number,
+              issue_body: .
+            }' \
             /tmp/issue-body.md)
 
           # workflow_dispatch is allowed to create a downstream run with GITHUB_TOKEN.

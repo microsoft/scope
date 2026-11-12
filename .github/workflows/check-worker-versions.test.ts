@@ -82,5 +82,7 @@ describe("Check Worker Versions workflow", () => {
     expect(dispatchUpgradeStep.env?.GH_TOKEN).toBe("${{ secrets.GITHUB_TOKEN }}");
     expect(dispatchUpgradeStep.run).toContain("gh workflow run worker-version-upgrade.lock.yml");
     expect(dispatchUpgradeStep.run).toContain('-f issue_number="${{ steps.create_issue.outputs.issue_number }}"');
+    expect(dispatchUpgradeStep.run).toContain('--arg actor "${{ github.actor }}"');
+    expect(dispatchUpgradeStep.run).toContain('--arg command_name "worker-version-upgrade"');
   });
 });
