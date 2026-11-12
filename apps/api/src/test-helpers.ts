@@ -235,6 +235,7 @@ export function createAllMockDependencies() {
   const taskPromptCollection = createMockCollection();
   const featureFlagCollection = createMockCollection();
   const reportTemplateCollection = createMockCollection();
+  const reportTemplateVersionCollection = createMockCollection();
   const skillCollection = createMockCollection();
   const skillRevisionCollection = createMockCollection();
   const profileCollection = createMockCollection();
@@ -266,6 +267,7 @@ export function createAllMockDependencies() {
     taskPromptCollection,
     featureFlagCollection,
     reportTemplateCollection,
+    reportTemplateVersionCollection,
     skillCollection,
     skillRevisionCollection,
     profileCollection,
@@ -299,6 +301,7 @@ export function createAllMockDependencies() {
     taskPromptCollection: Collection;
     featureFlagCollection: Collection;
     reportTemplateCollection: Collection;
+    reportTemplateVersionCollection: Collection;
     skillCollection: Collection;
     skillRevisionCollection: Collection;
     profileCollection: Collection;

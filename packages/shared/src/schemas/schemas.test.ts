@@ -846,8 +846,13 @@ describe("report-template schemas", () => {
         _id: "mongo1",
         projectId: "proj-test",
         id: "tmpl1",
+        subject: "run",
         name: "Template",
         userPrompt: "Analyze",
+        enabled: true,
+        currentVersionId: "tmpl1:v1",
+        currentVersion: 1,
+        contentFingerprint: "fingerprint",
         createdAt: NOW,
       });
       expect(result._id).toBe("mongo1");

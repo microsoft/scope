@@ -66,10 +66,11 @@ export function CreateReportTemplate() {
   const [id, setId] = useState("");
   const [idManuallyEdited, setIdManuallyEdited] = useState(false);
   const [description, setDescription] = useState("");
+  const [subject, setSubject] = useState<"run" | "experiment">("run");
   const [userPrompt, setUserPrompt] = useState("");
   const [sysMode, setSysMode] = useState<"none" | "append" | "override">("none");
   const [sysContent, setSysContent] = useState("");
-  const [triggerType, setTriggerType] = useState<"always" | "criteria" | "taskPrompt" | "promptFeature">("always");
+  const [triggerType, setTriggerType] = useState<"manual" | "always" | "criteria" | "taskPrompt" | "promptFeature" | "run-report-templates">("always");
   const [triggerIds, setTriggerIds] = useState("");
   const [triggerCriteriaIds, setTriggerCriteriaIds] = useState<string[]>([]);
   const [triggerTaskPromptIds, setTriggerTaskPromptIds] = useState<string[]>([]);
@@ -105,6 +106,7 @@ export function CreateReportTemplate() {
   const handleSubmit = () => {
     const body: Parameters<typeof api.createReportTemplate>[0] = {
       id: id.trim(),
+      subject,
       name: name.trim(),
       userPrompt: userPrompt.trim(),
     };
@@ -123,7 +125,9 @@ export function CreateReportTemplate() {
     }
 
     // Trigger
-    if (triggerType !== "always") {
+    if (triggerType === "always") {
+      body.trigger = { type: "always" };
+    } else if (triggerType !== "manual") {
       const idsArray = triggerIds.split(",").map(s => s.trim()).filter(Boolean);
       if (triggerType === "criteria") {
         body.trigger = { type: "criteria", criteriaIds: triggerCriteriaIds, match: triggerMatch };
@@ -131,6 +135,8 @@ export function CreateReportTemplate() {
         body.trigger = { type: "taskPrompt", taskPromptIds: triggerTaskPromptIds };
       } else if (triggerType === "promptFeature") {
         body.trigger = { type: "promptFeature", featureIds: idsArray, match: triggerMatch };
+      } else if (triggerType === "run-report-templates") {
+        body.trigger = { type: "run-report-templates", reportTemplateIds: idsArray };
       }
     }
 
@@ -190,6 +196,23 @@ export function CreateReportTemplate() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description of what this template does"
             />
+          </div>
+          <div className="space-y-2">
+            <Label>Subject</Label>
+            <Select
+              value={subject}
+              onValueChange={(value) => {
+                const next = value as "run" | "experiment";
+                setSubject(next);
+                setTriggerType(next === "experiment" ? "manual" : "always");
+              }}
+            >
+              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="run">Run</SelectItem>
+                <SelectItem value="experiment">Experiment</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <Separator />
@@ -284,10 +307,19 @@ export function CreateReportTemplate() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                {subject === "experiment" && (
+                  <SelectItem value="manual">Manual selection</SelectItem>
+                )}
                 <SelectItem value="always">Always</SelectItem>
-                <SelectItem value="criteria">Criteria match</SelectItem>
-                <SelectItem value="taskPrompt">Task Prompt match</SelectItem>
-                <SelectItem value="promptFeature">Prompt Feature match</SelectItem>
+                {subject === "run" ? (
+                  <>
+                    <SelectItem value="criteria">Criteria match</SelectItem>
+                    <SelectItem value="taskPrompt">Task Prompt match</SelectItem>
+                    <SelectItem value="promptFeature">Prompt Feature match</SelectItem>
+                  </>
+                ) : (
+                  <SelectItem value="run-report-templates">Linked run reports</SelectItem>
+                )}
               </SelectContent>
             </Select>
             {triggerType === "criteria" && (
@@ -305,6 +337,19 @@ export function CreateReportTemplate() {
                   className="font-mono text-sm"
                 />
                 <p className="text-xs text-muted-foreground">Comma-separated IDs</p>
+              </>
+            )}
+            {triggerType === "run-report-templates" && (
+              <>
+                <Input
+                  value={triggerIds}
+                  onChange={(e) => setTriggerIds(e.target.value)}
+                  placeholder="run-template-1, run-template-2"
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Active run-template IDs; all must be assigned in the exact Experiment execution.
+                </p>
               </>
             )}
             {(triggerType === "criteria" || triggerType === "promptFeature") && (

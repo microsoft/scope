@@ -749,6 +749,15 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             ],
             "type": "string",
           },
+          "reportTemplateIds": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "maxItems": 1000,
+            "type": "array",
+          },
           "requestIds": {
             "default": [],
             "items": {
@@ -820,6 +829,13 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                 },
                 "reasoningEffort": {
                   "type": "string",
+                },
+                "reportTemplateIds": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "type": "array",
                 },
                 "resources": {
                   "items": {
@@ -1051,6 +1067,10 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "description": {
             "type": "string",
           },
+          "enabled": {
+            "default": true,
+            "type": "boolean",
+          },
           "id": {
             "type": "string",
           },
@@ -1059,6 +1079,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "name": {
             "type": "string",
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ReportTemplateSubject",
           },
           "systemPrompt": {
             "$ref": "#/components/schemas/ReportTemplateSystemPrompt",
@@ -1149,6 +1172,13 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "reasoningEffort": {
             "type": "string",
+          },
+          "reportTemplateIds": {
+            "items": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "type": "array",
           },
           "resources": {
             "items": {
@@ -1647,6 +1677,124 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             ],
             "type": "object",
           },
+          "reportTemplates": {
+            "additionalProperties": {
+              "properties": {
+                "blockers": {
+                  "items": {
+                    "properties": {
+                      "error": {
+                        "type": "string",
+                      },
+                      "reason": {
+                        "enum": [
+                          "run-template-unused",
+                          "run-report-pending",
+                          "run-report-failed",
+                          "template-unavailable",
+                        ],
+                        "type": "string",
+                      },
+                      "requestId": {
+                        "type": "string",
+                      },
+                      "runId": {
+                        "type": "string",
+                      },
+                      "runTemplateId": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "reason",
+                    ],
+                    "type": "object",
+                  },
+                  "type": "array",
+                },
+                "error": {
+                  "type": "string",
+                },
+                "matchingRunCount": {
+                  "minimum": 0,
+                  "type": "integer",
+                },
+                "report": {
+                  "properties": {
+                    "reportId": {
+                      "type": "string",
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                    "url": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "reportId",
+                    "url",
+                    "updatedAt",
+                  ],
+                  "type": "object",
+                },
+                "source": {
+                  "enum": [
+                    "always",
+                    "linked",
+                    "selected",
+                  ],
+                  "type": "string",
+                },
+                "status": {
+                  "enum": [
+                    "waiting",
+                    "not-applicable",
+                    "unavailable",
+                    "queued",
+                    "processing",
+                    "done",
+                    "failed",
+                  ],
+                  "type": "string",
+                },
+                "templateContentFingerprint": {
+                  "type": "string",
+                },
+                "templateId": {
+                  "type": "string",
+                },
+                "templateVersion": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer",
+                },
+                "templateVersionId": {
+                  "type": "string",
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+              },
+              "required": [
+                "templateId",
+                "source",
+                "status",
+                "matchingRunCount",
+                "blockers",
+                "updatedAt",
+              ],
+              "type": "object",
+            },
+            "type": "object",
+          },
           "startedAt": {
             "format": "date-time",
             "type": [
@@ -1668,6 +1816,8 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "enum": [
               "rollover",
               "retry",
+              "membership",
+              "templates",
             ],
             "type": "string",
           },
@@ -1685,6 +1835,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "readiness",
           "blockers",
           "progress",
+          "reportTemplates",
           "createdAt",
           "updatedAt",
         ],
@@ -1752,6 +1903,28 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "experiment",
           "attachedRequestIds",
           "detachedRequestIds",
+        ],
+        "type": "object",
+      },
+      "ExperimentReportTemplateSelectionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "expectedExperimentRevisionId": {
+            "minLength": 1,
+            "type": "string",
+          },
+          "reportTemplateIds": {
+            "items": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "maxItems": 1000,
+            "type": "array",
+          },
+        },
+        "required": [
+          "expectedExperimentRevisionId",
+          "reportTemplateIds",
         ],
         "type": "object",
       },
@@ -1889,6 +2062,124 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                 ],
                 "type": "object",
               },
+              "reportTemplates": {
+                "additionalProperties": {
+                  "properties": {
+                    "blockers": {
+                      "items": {
+                        "properties": {
+                          "error": {
+                            "type": "string",
+                          },
+                          "reason": {
+                            "enum": [
+                              "run-template-unused",
+                              "run-report-pending",
+                              "run-report-failed",
+                              "template-unavailable",
+                            ],
+                            "type": "string",
+                          },
+                          "requestId": {
+                            "type": "string",
+                          },
+                          "runId": {
+                            "type": "string",
+                          },
+                          "runTemplateId": {
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "reason",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "error": {
+                      "type": "string",
+                    },
+                    "matchingRunCount": {
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "report": {
+                      "properties": {
+                        "reportId": {
+                          "type": "string",
+                        },
+                        "updatedAt": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null",
+                          ],
+                        },
+                        "url": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "reportId",
+                        "url",
+                        "updatedAt",
+                      ],
+                      "type": "object",
+                    },
+                    "source": {
+                      "enum": [
+                        "always",
+                        "linked",
+                        "selected",
+                      ],
+                      "type": "string",
+                    },
+                    "status": {
+                      "enum": [
+                        "waiting",
+                        "not-applicable",
+                        "unavailable",
+                        "queued",
+                        "processing",
+                        "done",
+                        "failed",
+                      ],
+                      "type": "string",
+                    },
+                    "templateContentFingerprint": {
+                      "type": "string",
+                    },
+                    "templateId": {
+                      "type": "string",
+                    },
+                    "templateVersion": {
+                      "exclusiveMinimum": 0,
+                      "type": "integer",
+                    },
+                    "templateVersionId": {
+                      "type": "string",
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                  },
+                  "required": [
+                    "templateId",
+                    "source",
+                    "status",
+                    "matchingRunCount",
+                    "blockers",
+                    "updatedAt",
+                  ],
+                  "type": "object",
+                },
+                "type": "object",
+              },
               "startedAt": {
                 "format": "date-time",
                 "type": [
@@ -1910,6 +2201,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "readiness",
               "blockers",
               "progress",
+              "reportTemplates",
               "createdAt",
               "updatedAt",
             ],
@@ -1957,6 +2249,12 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "memberCount": {
                 "type": "integer",
               },
+              "reportTemplateIds": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
               "revisionNumber": {
                 "type": "integer",
               },
@@ -1965,6 +2263,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "experimentRevisionId",
               "revisionNumber",
               "memberCount",
+              "reportTemplateIds",
               "createdAt",
             ],
             "type": "object",
@@ -3083,10 +3382,17 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "projectId": {
             "type": "string",
           },
+          "reportVersion": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+          },
           "reporter": {
             "$ref": "#/components/schemas/Reporter",
           },
           "requestId": {
+            "type": "string",
+          },
+          "runId": {
             "type": "string",
           },
           "status": {
@@ -3101,7 +3407,20 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "structuredArtifact": {
             "$ref": "#/components/schemas/StructuredReportArtifact",
           },
+          "supersedesReportId": {
+            "type": "string",
+          },
+          "templateContentFingerprint": {
+            "type": "string",
+          },
           "templateId": {
+            "type": "string",
+          },
+          "templateVersion": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+          },
+          "templateVersionId": {
             "type": "string",
           },
           "updatedAt": {
@@ -3152,12 +3471,22 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "_id": {
             "type": "string",
           },
+          "contentFingerprint": {
+            "type": "string",
+          },
           "createdAt": {
             "format": "date-time",
             "type": [
               "string",
               "null",
             ],
+          },
+          "currentVersion": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+          },
+          "currentVersionId": {
+            "type": "string",
           },
           "deletedAt": {
             "format": "date-time",
@@ -3168,6 +3497,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "description": {
             "type": "string",
+          },
+          "enabled": {
+            "type": "boolean",
           },
           "id": {
             "type": "string",
@@ -3180,6 +3512,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "projectId": {
             "type": "string",
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ReportTemplateSubject",
           },
           "systemPrompt": {
             "$ref": "#/components/schemas/ReportTemplateSystemPrompt",
@@ -3205,12 +3540,24 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "required": [
           "_id",
           "id",
+          "subject",
           "name",
           "userPrompt",
+          "enabled",
+          "currentVersionId",
+          "currentVersion",
+          "contentFingerprint",
           "createdAt",
           "projectId",
         ],
         "type": "object",
+      },
+      "ReportTemplateSubject": {
+        "enum": [
+          "run",
+          "experiment",
+        ],
+        "type": "string",
       },
       "ReportTemplateSystemPrompt": {
         "properties": {
@@ -3228,6 +3575,59 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "required": [
           "mode",
           "content",
+        ],
+        "type": "object",
+      },
+      "ReportTemplateVersionResponse": {
+        "properties": {
+          "_id": {
+            "type": "string",
+          },
+          "contentFingerprint": {
+            "type": "string",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "model": {
+            "type": "string",
+          },
+          "projectId": {
+            "type": "string",
+          },
+          "systemPrompt": {
+            "$ref": "#/components/schemas/ReportTemplateSystemPrompt",
+          },
+          "templateId": {
+            "type": "string",
+          },
+          "timeoutMs": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/ReportTrigger",
+          },
+          "userPrompt": {
+            "type": "string",
+          },
+          "version": {
+            "exclusiveMinimum": 0,
+            "type": "integer",
+          },
+        },
+        "required": [
+          "_id",
+          "projectId",
+          "templateId",
+          "version",
+          "contentFingerprint",
+          "userPrompt",
+          "createdAt",
         ],
         "type": "object",
       },
@@ -3321,6 +3721,29 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "required": [
               "type",
               "featureIds",
+            ],
+            "type": "object",
+          },
+          {
+            "properties": {
+              "reportTemplateIds": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "minItems": 1,
+                "type": "array",
+              },
+              "type": {
+                "enum": [
+                  "run-report-templates",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+              "reportTemplateIds",
             ],
             "type": "object",
           },
@@ -4056,6 +4479,13 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "rawChatUrl": {
             "type": "string",
           },
+          "reportTemplateIds": {
+            "items": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "type": "array",
+          },
           "resources": {
             "items": {
               "$ref": "#/components/schemas/ResourceRunOutcome",
@@ -4749,6 +5179,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "properties": {
           "description": {
             "type": "string",
+          },
+          "enabled": {
+            "type": "boolean",
           },
           "model": {
             "type": [
@@ -6777,6 +7210,136 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Download structured JSON for an exact Experiment report",
         "tags": [
           "Reports",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports/{templateId}/retry": {
+      "post": {
+        "description": "Creates a new append-only report version in the same exact Experiment execution and preserves the frozen immutable template identity.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "experimentExecutionId",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "templateId",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment template report not found",
+          },
+          "409": {
+            "description": "Execution is stale or report is already active",
+          },
+        },
+        "summary": "Retry one current Experiment template report",
+        "tags": [
+          "Reports",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/report-templates": {
+      "put": {
+        "description": "Selection is an unordered set. A real change creates a new Experiment revision and execution; duplicate- or order-only changes are no-ops.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentReportTemplateSelectionInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "400": {
+            "description": "One or more template IDs are not selectable",
+          },
+          "404": {
+            "description": "Experiment not found",
+          },
+          "409": {
+            "description": "Stale Experiment revision",
+          },
+        },
+        "summary": "Replace manually selected Experiment report templates",
+        "tags": [
+          "Experiments",
         ],
       },
     },
@@ -9443,14 +10006,6 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       "get": {
         "parameters": [
           {
-            "in": "query",
-            "name": "q",
-            "required": false,
-            "schema": {
-              "type": "string",
-            },
-          },
-          {
             "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
             "in": "query",
             "name": "projectId",
@@ -9460,6 +10015,38 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "example": "00000000-0000-0000-0000-000000000000",
               "minLength": 1,
               "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "subject",
+            "required": false,
+            "schema": {
+              "enum": [
+                "run",
+                "experiment",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "includeDisabled",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": [
+                "boolean",
+                "null",
+              ],
             },
           },
         ],
@@ -9518,11 +10105,14 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             },
             "description": "Success",
           },
+          "400": {
+            "description": "Invalid template or linked run templates",
+          },
           "409": {
             "description": "Report template already exists",
           },
         },
-        "summary": "Create report template",
+        "summary": "Create a versioned report template",
         "tags": [
           "Report Templates",
         ],
@@ -9634,7 +10224,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "description": "Report template not found",
           },
         },
-        "summary": "Delete report template",
+        "summary": "Soft-delete a report template",
         "tags": [
           "Report Templates",
         ],
@@ -9725,11 +10315,115 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             },
             "description": "Success",
           },
+          "400": {
+            "description": "Invalid template or linked run templates",
+          },
           "404": {
             "description": "Report template not found",
           },
+          "409": {
+            "description": "Concurrent template update",
+          },
         },
-        "summary": "Update report template",
+        "summary": "Update a report template and append immutable content versions",
+        "tags": [
+          "Report Templates",
+        ],
+      },
+    },
+    "/api/v1/report-templates/{id}/versions": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReportTemplateVersionResponse",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "List immutable report template versions",
+        "tags": [
+          "Report Templates",
+        ],
+      },
+    },
+    "/api/v1/report-templates/{id}/versions/{versionId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "versionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportTemplateVersionResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Template version not found",
+          },
+        },
+        "summary": "Get an exact immutable report template version",
         "tags": [
           "Report Templates",
         ],

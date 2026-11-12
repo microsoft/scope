@@ -160,6 +160,7 @@ export const CreateRequestInputSchema = z
     agentsMdParentIds: z.array(z.string()).optional(),
     gates: z.array(GateConfigSchema).optional(),
     observations: z.array(z.string()).optional(),
+    reportTemplateIds: z.array(z.string().min(1)).optional(),
   })
   .openapi("CreateRequestInput");
 
@@ -268,6 +269,8 @@ export const RunStateSchema = z
      *  criterion), evaluated once against the merged trajectory. Per-iteration
      *  observation results live on each turn's `observationResults`. #1156. */
     observationResults: z.array(CriterionResultSchema).optional(),
+    /** Canonical run-scoped report-template IDs frozen for this exact attempt. */
+    reportTemplateIds: z.array(z.string().min(1)).optional(),
   })
   .openapi("RunState");
 

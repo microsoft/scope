@@ -286,6 +286,21 @@ atomically publishes the execution report pointer with final handler completion.
 Internal handler, queue, and schema identifiers retain `readout` because they
 identify this synthesis implementation rather than a public report type.
 
+After exact current `pp-readout` completion, the Experiment coordinator
+evaluates configurable `subject: experiment` report templates. Manual
+revision-selected templates and automatic `always` templates can queue
+independently. Linked-run templates read assigned run-template IDs from each
+exact run attempt, never from report existence, then wait for every matching
+`{ requestId, runId, runTemplateId }` report. Unused links are
+`not-applicable`; failed dependencies block only that template.
+
+Each generated report freezes `templateVersionId`, version number, and content
+fingerprint. Initial generation has one deterministic logical report identity
+per exact execution/template/version. Retries append report versions in the
+same execution and never upgrade template content. Exact-execution claims and
+final compare-and-swap publication prevent stale workers from moving current
+pointers; queued-summary polling repairs dropped notifications.
+
 Experiment-handler logs are persisted under the exact execution and streamed
 through
 `GET /api/v1/experiments/:id/executions/:experimentExecutionId/logs`. Queue

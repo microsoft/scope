@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { createHash } from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import type { Document } from "mongodb";
@@ -54,6 +55,7 @@ const CreateExperimentInputSchema = z
     metadata: ExperimentMetadataInputSchema,
     requests: z.array(ExperimentRequestInputSchema).max(250_000).default([]),
     requestIds: z.array(z.string().min(1)).max(250_000).default([]),
+    reportTemplateIds: z.array(z.string().min(1)).max(1_000).default([]),
   })
   .superRefine((value, ctx) => {
     if (
@@ -114,6 +116,39 @@ const ExperimentReportReferenceSchema = z.object({
   updatedAt: z.coerce.date(),
 });
 
+const ExperimentTemplateReportSummarySchema = z.object({
+  templateId: z.string(),
+  templateVersionId: z.string().optional(),
+  templateVersion: z.number().int().positive().optional(),
+  templateContentFingerprint: z.string().optional(),
+  source: z.enum(["always", "linked", "selected"]),
+  status: z.enum([
+    "waiting",
+    "not-applicable",
+    "unavailable",
+    "queued",
+    "processing",
+    "done",
+    "failed",
+  ]),
+  matchingRunCount: z.number().int().nonnegative(),
+  blockers: z.array(z.object({
+    requestId: z.string().optional(),
+    runId: z.string().optional(),
+    runTemplateId: z.string().optional(),
+    reason: z.enum([
+      "run-template-unused",
+      "run-report-pending",
+      "run-report-failed",
+      "template-unavailable",
+    ]),
+    error: z.string().optional(),
+  })),
+  report: ExperimentReportReferenceSchema.optional(),
+  updatedAt: z.coerce.date(),
+  error: z.string().optional(),
+});
+
 const ExperimentResponseSchema = z
   .object({
     experimentId: z.string(),
@@ -125,6 +160,7 @@ const ExperimentResponseSchema = z
       experimentRevisionId: z.string(),
       revisionNumber: z.number().int(),
       memberCount: z.number().int(),
+      reportTemplateIds: z.array(z.string()),
       createdAt: z.coerce.date(),
     }),
     currentExecution: z.object({
@@ -141,6 +177,10 @@ const ExperimentResponseSchema = z
         }),
       ),
       progress: HandlerProgressSchema,
+      reportTemplates: z.record(
+        z.string(),
+        ExperimentTemplateReportSummarySchema,
+      ),
       createdAt: z.coerce.date(),
       updatedAt: z.coerce.date(),
       startedAt: z.coerce.date().optional(),
@@ -174,6 +214,10 @@ const ExecutionResponseSchema = z
       error: z.string().optional(),
     })),
     progress: HandlerProgressSchema,
+    reportTemplates: z.record(
+      z.string(),
+      ExperimentTemplateReportSummarySchema,
+    ),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
     startedAt: z.coerce.date().optional(),
@@ -182,7 +226,7 @@ const ExecutionResponseSchema = z
     discardReason: z.string().optional(),
     supersededAt: z.coerce.date().optional(),
     supersededByExperimentExecutionId: z.string().optional(),
-    supersededReason: z.enum(["rollover", "retry"]).optional(),
+    supersededReason: z.enum(["rollover", "retry", "membership", "templates"]).optional(),
     report: ExperimentReportReferenceSchema.optional(),
   })
   .openapi("ExperimentExecutionResponse");
@@ -233,6 +277,11 @@ const MembershipResponseSchema = z
   })
   .openapi("ExperimentMembershipResponse");
 
+const ReportTemplateSelectionInputSchema = z.object({
+  expectedExperimentRevisionId: z.string().min(1),
+  reportTemplateIds: z.array(z.string().min(1)).max(1_000),
+}).strict().openapi("ExperimentReportTemplateSelectionInput");
+
 type Readiness = z.infer<typeof ReadinessSchema>;
 
 function store(ctx: RouteContext): ExperimentStore {
@@ -258,6 +307,35 @@ function membershipResponse(result: ReplaceMembershipResult) {
     attachedRequestIds: result.attachedRequestIds,
     detachedRequestIds: result.detachedRequestIds,
   };
+}
+
+function canonicalTemplateIds(ids: readonly string[]): string[] {
+  return [...new Set(ids)].sort();
+}
+
+async function invalidManualExperimentTemplateIds(
+  ctx: RouteContext,
+  projectId: string,
+  ids: readonly string[],
+): Promise<string[]> {
+  const canonical = canonicalTemplateIds(ids);
+  if (canonical.length === 0) return [];
+  const templates = await ctx.reportTemplateCollection
+    .find({
+      projectId,
+      id: { $in: canonical },
+      subject: "experiment",
+      enabled: true,
+      deletedAt: { $exists: false },
+      $or: [
+        { trigger: { $exists: false } },
+        { trigger: null },
+      ],
+    } as Document)
+    .project({ id: 1 })
+    .toArray();
+  const valid = new Set(templates.map((template) => template.id));
+  return canonical.filter((id) => !valid.has(id));
 }
 
 function sendMembershipError(
@@ -315,6 +393,7 @@ function executionResponse(execution: ExperimentExecution) {
         },
       ]),
     ),
+    reportTemplates: execution.reportTemplates,
     createdAt: execution.createdAt,
     updatedAt: execution.updatedAt,
     ...(execution.startedAt ? { startedAt: execution.startedAt } : {}),
@@ -494,6 +573,7 @@ function experimentResponse(experiment: ExperimentDocument) {
       experimentRevisionId: experiment.revision.experimentRevisionId,
       revisionNumber: experiment.revision.revisionNumber,
       memberCount: experiment.revision.memberCount,
+      reportTemplateIds: experiment.revision.reportTemplateIds,
       createdAt: experiment.revision.createdAt,
     },
     currentExecution: executionResponse(experiment.execution),
@@ -587,6 +667,9 @@ function createRequestDocument(input: {
       attemptNumber: 1,
       status: "pending",
       logsUrl: input.logsUrl,
+      ...(body.reportTemplateIds
+        ? { reportTemplateIds: canonicalTemplateIds(body.reportTemplateIds) }
+        : {}),
     },
   };
 }
@@ -610,6 +693,22 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
     },
     handler: async (req, res) => {
       const projectId = getQueryProjectId(req);
+      const reportTemplateIds = canonicalTemplateIds(
+        req.body.reportTemplateIds,
+      );
+      const invalidReportTemplateIds =
+        await invalidManualExperimentTemplateIds(
+          ctx,
+          projectId,
+          reportTemplateIds,
+        );
+      if (invalidReportTemplateIds.length > 0) {
+        res.status(400).json({
+          error: "Invalid Experiment report template selection",
+          invalidReportTemplateIds,
+        });
+        return;
+      }
       const experimentId = uuidv4();
       const experimentExecutionId = uuidv4();
       const experimentRevisionId = uuidv4();
@@ -623,6 +722,7 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
             experimentRevisionId,
             metadata: req.body.metadata,
             requestIds: req.body.requestIds,
+            reportTemplateIds,
             now,
           });
           res.status(201).json({
@@ -682,9 +782,11 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
           membershipFingerprint: fingerprintExperimentPayload(
             requestStates.map(({ requestId, runId }) => ({ requestId, runId })),
           ),
+          reportTemplateIds,
           definitionFingerprint: fingerprintExperimentPayload({
             metadata,
             requests: req.body.requests,
+            reportTemplateIds,
           }),
           createdAt: now,
         },
@@ -824,6 +926,110 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
   });
 
   apiRoute(ctx.app, ctx.registry, {
+    method: "put",
+    path: "/api/v1/experiments/:id/report-templates",
+    tags: ["Experiments"],
+    summary: "Replace manually selected Experiment report templates",
+    description:
+      "Selection is an unordered set. A real change creates a new Experiment " +
+      "revision and execution; duplicate- or order-only changes are no-ops.",
+    params: z.object({ id: z.string().min(1) }),
+    query: ProjectIdQuerySchema,
+    body: ReportTemplateSelectionInputSchema,
+    response: ExperimentResponseSchema,
+    errorResponses: {
+      400: { description: "One or more template IDs are not selectable" },
+      404: { description: "Experiment not found" },
+      409: { description: "Stale Experiment revision" },
+    },
+    handler: async (req, res) => {
+      const projectId = getQueryProjectId(req);
+      const reportTemplateIds = canonicalTemplateIds(
+        req.body.reportTemplateIds,
+      );
+      const invalidReportTemplateIds =
+        await invalidManualExperimentTemplateIds(
+          ctx,
+          projectId,
+          reportTemplateIds,
+        );
+      if (invalidReportTemplateIds.length > 0) {
+        res.status(400).json({
+          error: "Invalid Experiment report template selection",
+          invalidReportTemplateIds,
+        });
+        return;
+      }
+      const experimentStore = store(ctx);
+      const current = await experimentStore.get(projectId, req.params.id);
+      if (!current) {
+        res.status(404).json({ error: "Experiment not found" });
+        return;
+      }
+      if (
+        current.revision.experimentRevisionId !==
+        req.body.expectedExperimentRevisionId
+      ) {
+        res.status(409).json({
+          error: "Experiment revision is stale",
+          experimentRevisionId:
+            current.revision.experimentRevisionId,
+        });
+        return;
+      }
+      const updated = await experimentStore.replaceReportTemplates({
+        projectId,
+        experimentId: req.params.id,
+        expectedExperimentRevisionId:
+          current.revision.experimentRevisionId,
+        expectedRevisionNumber: current.revision.revisionNumber,
+        expectedExperimentExecutionId:
+          current.execution.experimentExecutionId,
+        expectedExecutionVersion: current.execution.version,
+        nextExperimentRevisionId: uuidv4(),
+        nextExperimentExecutionId: uuidv4(),
+        reportTemplateIds,
+        reusableTemplateVersionIds: Object.fromEntries(
+          (
+            await ctx.reportTemplateCollection
+              .find({
+                projectId,
+                subject: "experiment",
+                enabled: true,
+                deletedAt: { $exists: false },
+                $or: [
+                  {
+                    id: { $in: reportTemplateIds },
+                    trigger: { $exists: false },
+                  },
+                  {
+                    "trigger.type": {
+                      $in: ["always", "run-report-templates"],
+                    },
+                  },
+                ],
+              })
+              .project({ id: 1, currentVersionId: 1 })
+              .toArray()
+          ).map((template) => [
+            template.id,
+            template.currentVersionId,
+          ]),
+        ),
+      });
+      if (!updated) {
+        res.status(409).json({
+          error: "Experiment report template update contention",
+          experimentRevisionId:
+            current.revision.experimentRevisionId,
+        });
+        return;
+      }
+      res.json(experimentResponse(updated));
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
     method: "get",
     path: "/api/v1/experiments/:id/executions",
     tags: ["Experiments"],
@@ -954,6 +1160,152 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         .sort({ createdAt: -1 })
         .toArray();
       res.json(reports.map((report) => ({ ...report, id: report._id })));
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "post",
+    path: "/api/v1/experiments/:id/executions/:experimentExecutionId/reports/:templateId/retry",
+    tags: ["Reports"],
+    summary: "Retry one current Experiment template report",
+    description:
+      "Creates a new append-only report version in the same exact Experiment " +
+      "execution and preserves the frozen immutable template identity.",
+    params: z.object({
+      id: z.string().min(1),
+      experimentExecutionId: z.string().min(1),
+      templateId: z.string().min(1),
+    }),
+    query: ProjectIdQuerySchema,
+    response: ReportResponseSchema,
+    errorResponses: {
+      404: { description: "Experiment template report not found" },
+      409: { description: "Execution is stale or report is already active" },
+    },
+    handler: async (req, res) => {
+      const projectId = getQueryProjectId(req);
+      const experimentStore = store(ctx);
+      const experiment = await experimentStore.get(projectId, req.params.id);
+      const summary =
+        experiment?.execution.reportTemplates[req.params.templateId];
+      if (
+        !experiment ||
+        experiment.execution.experimentExecutionId !==
+          req.params.experimentExecutionId ||
+        !summary ||
+        !summary.templateVersionId ||
+        !summary.templateVersion ||
+        !summary.templateContentFingerprint
+      ) {
+        res.status(404).json({
+          error: "Experiment template report not found",
+        });
+        return;
+      }
+      if (
+        summary.status === "queued" ||
+        summary.status === "processing" ||
+        summary.status === "waiting" ||
+        summary.status === "not-applicable" ||
+        summary.status === "unavailable"
+      ) {
+        res.status(409).json({
+          error: `Experiment template report cannot be retried from ${summary.status}`,
+        });
+        return;
+      }
+      const previous = await ctx.reportCollection.findOne(
+        {
+          projectId,
+          experimentId: req.params.id,
+          experimentExecutionId: req.params.experimentExecutionId,
+          templateId: req.params.templateId,
+          templateVersionId: summary.templateVersionId,
+        },
+        { sort: { reportVersion: -1, createdAt: -1 } },
+      );
+      const now = new Date();
+      const reportVersion = (previous?.reportVersion ?? 0) + 1;
+      const reportId = `experiment-report-${createHash("sha256")
+        .update(
+          JSON.stringify([
+            req.params.experimentExecutionId,
+            req.params.templateId,
+            summary.templateVersionId,
+            reportVersion,
+          ]),
+        )
+        .digest("base64url")}`;
+      const report = {
+        _id: reportId,
+        projectId,
+        experimentId: req.params.id,
+        experimentExecutionId: req.params.experimentExecutionId,
+        templateId: req.params.templateId,
+        templateVersionId: summary.templateVersionId,
+        templateVersion: summary.templateVersion,
+        templateContentFingerprint:
+          summary.templateContentFingerprint,
+        reportVersion,
+        ...(previous ? { supersedesReportId: previous._id } : {}),
+        status: "pending" as const,
+        createdAt: now,
+        updatedAt: now,
+      };
+      try {
+        await ctx.reportCollection.insertOne(report);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.toLowerCase().includes("duplicate")
+        ) {
+          res.status(409).json({
+            error: "Experiment report retry contention",
+          });
+          return;
+        }
+        throw error;
+      }
+      const updated = await experimentStore.updateReportTemplateSummaries({
+        projectId,
+        experimentId: req.params.id,
+        experimentExecutionId: req.params.experimentExecutionId,
+        expectedExecutionVersion: experiment.execution.version,
+        summaries: {
+          ...experiment.execution.reportTemplates,
+          [req.params.templateId]: {
+            ...summary,
+            status: "queued",
+            claimToken: uuidv4(),
+            blockers: [],
+            report: {
+              reportId,
+              url: `/api/v1/reports/${reportId}`,
+              updatedAt: now,
+            },
+            updatedAt: now,
+            error: undefined,
+          },
+        },
+        now,
+      });
+      if (!updated) {
+        await ctx.reportCollection.updateOne(
+          { _id: reportId, projectId },
+          {
+            $set: {
+              status: "failed",
+              error: "Experiment report retry contention",
+              updatedAt: new Date(),
+            },
+          },
+        );
+        res.status(409).json({
+          error: "Experiment report retry contention",
+        });
+        return;
+      }
+      res.status(201).json({ ...report, id: report._id });
     },
   });
 

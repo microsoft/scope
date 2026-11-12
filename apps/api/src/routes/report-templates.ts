@@ -1,365 +1,332 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { join, basename } from "path";
 import { z } from "zod";
 import {
   CreateReportTemplateInputSchema,
   REPORT_SYSTEM_PROMPT,
   ReportTemplateResponseSchema,
+  ReportTemplateStore,
+  ReportTemplateVersionResponseSchema,
   UpdateReportTemplateInputSchema,
+  type ReportTrigger,
 } from "shared";
 import { apiRoute } from "../openapi/api-route.js";
-import type { ReportTemplateDocument, RouteContext } from "../route-context.js";
-import { validateTrigger } from "../utils/validate-trigger.js";
-import { ProjectIdQuerySchema, getQueryProjectId } from "../utils/project-scope.js";
+import type { RouteContext } from "../route-context.js";
+import {
+  ProjectIdQuerySchema,
+  getQueryProjectId,
+} from "../utils/project-scope.js";
+
+function store(ctx: RouteContext): ReportTemplateStore {
+  return new ReportTemplateStore({
+    templates: ctx.reportTemplateCollection,
+    versions: ctx.reportTemplateVersionCollection,
+  });
+}
+
+async function validateLinkedRunTemplates(input: {
+  ctx: RouteContext;
+  projectId: string;
+  trigger?: ReportTrigger | null;
+}): Promise<string[]> {
+  if (input.trigger?.type !== "run-report-templates") return [];
+  const ids = [...new Set(input.trigger.reportTemplateIds)].sort();
+  const templates = await input.ctx.reportTemplateCollection
+    .find({
+      projectId: input.projectId,
+      id: { $in: ids },
+      subject: "run",
+      enabled: true,
+      deletedAt: { $exists: false },
+    })
+    .project({ id: 1 })
+    .toArray();
+  const valid = new Set(templates.map((template) => template.id));
+  return ids.filter((id) => !valid.has(id));
+}
 
 export function registerReportTemplatesRoutes(ctx: RouteContext): void {
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/report-templates/default-system-prompt",
+    tags: ["Report Templates"],
+    summary: "Get default system prompt",
+    response: z.object({ content: z.string() }),
+    handler: (_req, res) => {
+      res.json({ content: REPORT_SYSTEM_PROMPT });
+    },
+  });
 
-// ============================================================
-// Report Template CRUD routes (/api/v1/report-templates)
-// ============================================================
-
-// Get the default system prompt used when no template override is set
-apiRoute(ctx.app, ctx.registry, {
-  method: "get",
-  path: "/api/v1/report-templates/default-system-prompt",
-  tags: ["Report Templates"],
-  summary: "Get default system prompt",
-  response: z.object({ content: z.string() }),
-  handler: (_req, res) => {
-    res.json({ content: REPORT_SYSTEM_PROMPT });
-  },
-});
-
-// List models available for report generation (github-copilot provider)
-apiRoute(ctx.app, ctx.registry, {
-  method: "get",
-  path: "/api/v1/report-templates/available-models",
-  tags: ["Report Templates"],
-  summary: "List models available for report generation",
-  response: z.array(z.object({ modelId: z.string() })),
-  handler: async (_req, res, next) => {
-    try {
-      const models = await ctx.modelCollection.find({ provider: "github-copilot", disappearedAt: { $exists: false } }).toArray();
-      const result = models.map(m => ({ modelId: m._id.split(":").slice(1).join(":") }));
-      res.json(result);
-    } catch (error) {
-      next(error);
-    }
-  },
-});
-
-// List all report templates
-apiRoute(ctx.app, ctx.registry, {
-  method: "get",
-  path: "/api/v1/report-templates",
-  tags: ["Report Templates"],
-  summary: "List report templates",
-  query: z.object({ q: z.string().optional() }).merge(ProjectIdQuerySchema),
-  response: z.array(ReportTemplateResponseSchema),
-  handler: async (req, res, next) => {
-    try {
-      const q = req.query.q as string | undefined;
-      const filter: Record<string, unknown> = { projectId: getQueryProjectId(req), deletedAt: { $exists: false } };
-      if (q) {
-        filter.$or = [
-          { id: { $regex: q, $options: "i" } },
-          { name: { $regex: q, $options: "i" } },
-          { description: { $regex: q, $options: "i" } },
-        ];
-      }
-      const templates = await ctx.reportTemplateCollection.find(filter).toArray();
-      templates.sort((a, b) => a.id.localeCompare(b.id));
-      res.json(templates);
-    } catch (error) {
-      next(error);
-    }
-  },
-});
-
-// Get single report template by ID
-apiRoute(ctx.app, ctx.registry, {
-  method: "get",
-  path: "/api/v1/report-templates/:id",
-  tags: ["Report Templates"],
-  summary: "Get report template",
-  params: z.object({ id: z.string() }),
-  query: ProjectIdQuerySchema,
-  response: ReportTemplateResponseSchema,
-  errorResponses: {
-    404: { description: "Report template not found" },
-  },
-  handler: async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const template = await ctx.reportTemplateCollection.findOne({ projectId: getQueryProjectId(req), id, deletedAt: { $exists: false } });
-      if (!template) {
-        res.status(404).json({ error: `Report template '${id}' not found` });
-        return;
-      }
-      res.json(template);
-    } catch (error) {
-      next(error);
-    }
-  },
-});
-
-// Create a report template
-apiRoute(ctx.app, ctx.registry, {
-  method: "post",
-  path: "/api/v1/report-templates",
-  tags: ["Report Templates"],
-  summary: "Create report template",
-  body: CreateReportTemplateInputSchema,
-  query: ProjectIdQuerySchema,
-  response: ReportTemplateResponseSchema,
-  errorResponses: {
-    409: { description: "Report template already exists" },
-  },
-  handler: async (req, res, next) => {
-    try {
-      const { id, name, description, userPrompt, systemPrompt, trigger, model, timeoutMs } = req.body;
-      const projectId = getQueryProjectId(req);
-
-      if (!id || typeof id !== "string") {
-        res.status(400).json({ error: "id is required and must be a string" });
-        return;
-      }
-      if (!/^[a-z][a-z0-9_-]*$/.test(id)) {
-        res.status(400).json({ error: "id must start with a lowercase letter and contain only lowercase letters, numbers, hyphens, and underscores" });
-        return;
-      }
-      if (!name || typeof name !== "string") {
-        res.status(400).json({ error: "name is required and must be a string" });
-        return;
-      }
-      if (!userPrompt || typeof userPrompt !== "string") {
-        res.status(400).json({ error: "userPrompt is required and must be a string" });
-        return;
-      }
-
-      // Validate systemPrompt if provided
-      if (systemPrompt !== undefined) {
-        if (!systemPrompt || typeof systemPrompt !== "object") {
-          res.status(400).json({ error: "systemPrompt must be an object with 'mode' and 'content'" });
-          return;
-        }
-        if (!["append", "override"].includes(systemPrompt.mode)) {
-          res.status(400).json({ error: "systemPrompt.mode must be 'append' or 'override'" });
-          return;
-        }
-        if (!systemPrompt.content || typeof systemPrompt.content !== "string") {
-          res.status(400).json({ error: "systemPrompt.content is required and must be a string" });
-          return;
-        }
-      }
-
-      // Validate trigger if provided
-      if (trigger !== undefined) {
-        const triggerError = validateTrigger(trigger);
-        if (triggerError) {
-          res.status(400).json({ error: triggerError });
-          return;
-        }
-      }
-
-      // Validate model against available github-copilot provider models
-      if (model !== undefined) {
-        const available = await ctx.modelCollection.find({ provider: "github-copilot", disappearedAt: { $exists: false } }).toArray();
-        const validIds = available.map(m => m._id.split(":").slice(1).join(":"));
-        if (!validIds.includes(model)) {
-          res.status(400).json({ error: `Invalid model "${model}". Available models: ${validIds.join(", ")}` });
-          return;
-        }
-      }
-
-      // Check for duplicate id
-      const existing = await ctx.reportTemplateCollection.findOne({ id });
-      if (existing && !existing.deletedAt) {
-        res.status(409).json({ error: `Report template '${id}' already exists` });
-        return;
-      }
-      // `id` is a global slug; a soft-deleted template owned by another project
-      // must not be revived into a different one (projectId is immutable).
-      if (existing && existing.projectId && existing.projectId !== projectId) {
-        res.status(409).json({ error: `Report template '${id}' exists in a different project` });
-        return;
-      }
-
-      const now = new Date();
-
-      if (existing && existing.deletedAt) {
-        // Un-delete: update the soft-deleted document
-        await ctx.reportTemplateCollection.updateOne(
-          { id },
-          {
-            $set: {
-              name,
-              ...(description !== undefined ? { description } : {}),
-              userPrompt,
-              ...(systemPrompt !== undefined ? { systemPrompt } : {}),
-              ...(trigger !== undefined ? { trigger } : {}),
-              ...(model !== undefined ? { model } : {}),
-              ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-              updatedAt: now,
-            },
-            $unset: { deletedAt: "" },
-          }
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/report-templates/available-models",
+    tags: ["Report Templates"],
+    summary: "List models available for report generation",
+    response: z.array(z.object({ modelId: z.string() })),
+    handler: async (_req, res, next) => {
+      try {
+        const models = await ctx.modelCollection
+          .find({
+            provider: "github-copilot",
+            disappearedAt: { $exists: false },
+          })
+          .toArray();
+        res.json(
+          models.map((model) => ({
+            modelId: model._id.split(":").slice(1).join(":"),
+          })),
         );
-        const updated = await ctx.reportTemplateCollection.findOne({ id });
-        res.status(201).json(updated);
-      } else {
-        const templateDoc: ReportTemplateDocument = {
-          projectId,
-          id,
-          name,
-          ...(description ? { description } : {}),
-          userPrompt,
-          ...(systemPrompt ? { systemPrompt } : {}),
-          ...(trigger ? { trigger } : {}),
-          ...(model ? { model } : {}),
-          ...(timeoutMs ? { timeoutMs } : {}),
-          createdAt: now,
-        };
-        await ctx.reportTemplateCollection.insertOne(templateDoc as any);
-        res.status(201).json(templateDoc);
+      } catch (error) {
+        next(error);
       }
-    } catch (error) {
-      next(error);
-    }
-  },
-});
+    },
+  });
 
-// Update a report template
-apiRoute(ctx.app, ctx.registry, {
-  method: "put",
-  path: "/api/v1/report-templates/:id",
-  tags: ["Report Templates"],
-  summary: "Update report template",
-  params: z.object({ id: z.string() }),
-  query: ProjectIdQuerySchema,
-  body: UpdateReportTemplateInputSchema,
-  response: ReportTemplateResponseSchema,
-  errorResponses: {
-    404: { description: "Report template not found" },
-  },
-  handler: async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const projectId = getQueryProjectId(req);
-      const { name, description, userPrompt, systemPrompt, trigger, model, timeoutMs } = req.body;
-
-      const existing = await ctx.reportTemplateCollection.findOne({ projectId, id, deletedAt: { $exists: false } });
-      if (!existing) {
-        res.status(404).json({ error: `Report template '${id}' not found` });
-        return;
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/report-templates",
+    tags: ["Report Templates"],
+    summary: "List report templates",
+    query: ProjectIdQuerySchema.extend({
+      q: z.string().optional(),
+      subject: z.enum(["run", "experiment"]).optional(),
+      includeDisabled: z.coerce.boolean().default(false),
+    }),
+    response: z.array(ReportTemplateResponseSchema),
+    handler: async (req, res, next) => {
+      try {
+        const templates = await store(ctx).list({
+          projectId: getQueryProjectId(req),
+          subject: req.query.subject as "run" | "experiment" | undefined,
+          includeDisabled: req.query.includeDisabled === true,
+        });
+        const query = (req.query.q as string | undefined)?.toLowerCase();
+        res.json(
+          query
+            ? templates.filter((template) =>
+                `${template.id} ${template.name} ${template.description ?? ""}`
+                  .toLowerCase()
+                  .includes(query),
+              )
+            : templates,
+        );
+      } catch (error) {
+        next(error);
       }
+    },
+  });
 
-      const updateFields: Record<string, unknown> = { updatedAt: new Date() };
-      if (name !== undefined) updateFields.name = name;
-      if (description !== undefined) updateFields.description = description;
-      if (userPrompt !== undefined) {
-        if (typeof userPrompt !== "string" || !userPrompt.trim()) {
-          res.status(400).json({ error: "userPrompt must be a non-empty string" });
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/report-templates/:id",
+    tags: ["Report Templates"],
+    summary: "Get report template",
+    params: z.object({ id: z.string() }),
+    query: ProjectIdQuerySchema,
+    response: ReportTemplateResponseSchema,
+    errorResponses: { 404: { description: "Report template not found" } },
+    handler: async (req, res, next) => {
+      try {
+        const template = await store(ctx).get(
+          getQueryProjectId(req),
+          req.params.id,
+        );
+        if (!template) {
+          res.status(404).json({
+            error: `Report template '${req.params.id}' not found`,
+          });
           return;
         }
-        updateFields.userPrompt = userPrompt;
+        res.json(template);
+      } catch (error) {
+        next(error);
       }
-      if (systemPrompt !== undefined) {
-        if (systemPrompt === null) {
-          // Allow removing systemPrompt by setting to null
-          updateFields.systemPrompt = undefined;
-        } else {
-          if (!["append", "override"].includes(systemPrompt.mode)) {
-            res.status(400).json({ error: "systemPrompt.mode must be 'append' or 'override'" });
-            return;
-          }
-          if (!systemPrompt.content || typeof systemPrompt.content !== "string") {
-            res.status(400).json({ error: "systemPrompt.content is required and must be a string" });
-            return;
-          }
-          updateFields.systemPrompt = systemPrompt;
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/report-templates/:id/versions",
+    tags: ["Report Templates"],
+    summary: "List immutable report template versions",
+    params: z.object({ id: z.string() }),
+    query: ProjectIdQuerySchema,
+    response: z.array(ReportTemplateVersionResponseSchema),
+    handler: async (req, res, next) => {
+      try {
+        res.json(
+          await store(ctx).listVersions(
+            getQueryProjectId(req),
+            req.params.id,
+          ),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/report-templates/:id/versions/:versionId",
+    tags: ["Report Templates"],
+    summary: "Get an exact immutable report template version",
+    params: z.object({ id: z.string(), versionId: z.string() }),
+    query: ProjectIdQuerySchema,
+    response: ReportTemplateVersionResponseSchema,
+    errorResponses: { 404: { description: "Template version not found" } },
+    handler: async (req, res, next) => {
+      try {
+        const version = await store(ctx).getVersion({
+          projectId: getQueryProjectId(req),
+          templateId: req.params.id,
+          versionId: req.params.versionId,
+        });
+        if (!version) {
+          res.status(404).json({ error: "Report template version not found" });
+          return;
         }
+        res.json(version);
+      } catch (error) {
+        next(error);
       }
-      if (trigger !== undefined) {
-        if (trigger === null) {
-          // Allow removing trigger (reverts to "always" behavior)
-          updateFields.trigger = undefined;
-        } else {
-          const triggerError = validateTrigger(trigger);
-          if (triggerError) {
-            res.status(400).json({ error: triggerError });
-            return;
-          }
-          updateFields.trigger = trigger;
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "post",
+    path: "/api/v1/report-templates",
+    tags: ["Report Templates"],
+    summary: "Create a versioned report template",
+    body: CreateReportTemplateInputSchema,
+    query: ProjectIdQuerySchema,
+    response: ReportTemplateResponseSchema,
+    successStatus: 201,
+    errorResponses: {
+      400: { description: "Invalid template or linked run templates" },
+      409: { description: "Report template already exists" },
+    },
+    handler: async (req, res, next) => {
+      try {
+        const projectId = getQueryProjectId(req);
+        const invalidLinkedIds = await validateLinkedRunTemplates({
+          ctx,
+          projectId,
+          trigger: req.body.trigger,
+        });
+        if (invalidLinkedIds.length > 0) {
+          res.status(400).json({
+            error: "Invalid linked run report templates",
+            code: "invalid-linked-run-report-templates",
+            invalidTemplateIds: invalidLinkedIds,
+          });
+          return;
         }
-      }
-      if (model !== undefined) {
-        if (model === null) {
-          // Allow removing model (reverts to global REPORT_MODEL)
-          updateFields.model = undefined;
-        } else {
-          const available = await ctx.modelCollection.find({ provider: "github-copilot", disappearedAt: { $exists: false } }).toArray();
-          const validIds = available.map(m => m._id.split(":").slice(1).join(":"));
-          if (!validIds.includes(model)) {
-            res.status(400).json({ error: `Invalid model "${model}". Available models: ${validIds.join(", ")}` });
-            return;
-          }
-          updateFields.model = model;
+        const created = await store(ctx).create({
+          projectId,
+          ...req.body,
+        });
+        res.status(201).json(created);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.includes("already exists")
+        ) {
+          res.status(409).json({ error: error.message });
+          return;
         }
+        next(error);
       }
-      if (timeoutMs !== undefined) {
-        if (timeoutMs === null) {
-          updateFields.timeoutMs = undefined;
-        } else {
-          updateFields.timeoutMs = timeoutMs;
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "put",
+    path: "/api/v1/report-templates/:id",
+    tags: ["Report Templates"],
+    summary: "Update a report template and append immutable content versions",
+    params: z.object({ id: z.string() }),
+    query: ProjectIdQuerySchema,
+    body: UpdateReportTemplateInputSchema,
+    response: ReportTemplateResponseSchema,
+    errorResponses: {
+      400: { description: "Invalid template or linked run templates" },
+      404: { description: "Report template not found" },
+      409: { description: "Concurrent template update" },
+    },
+    handler: async (req, res, next) => {
+      try {
+        const projectId = getQueryProjectId(req);
+        const existing = await store(ctx).get(projectId, req.params.id);
+        if (!existing) {
+          res.status(404).json({
+            error: `Report template '${req.params.id}' not found`,
+          });
+          return;
         }
+        const nextTrigger =
+          req.body.trigger === undefined
+            ? existing.trigger
+            : req.body.trigger;
+        const invalidLinkedIds = await validateLinkedRunTemplates({
+          ctx,
+          projectId,
+          trigger: nextTrigger,
+        });
+        if (invalidLinkedIds.length > 0) {
+          res.status(400).json({
+            error: "Invalid linked run report templates",
+            code: "invalid-linked-run-report-templates",
+            invalidTemplateIds: invalidLinkedIds,
+          });
+          return;
+        }
+        const updated = await store(ctx).update(
+          projectId,
+          req.params.id,
+          req.body,
+        );
+        res.json(updated);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.includes("changed concurrently")
+        ) {
+          res.status(409).json({ error: error.message });
+          return;
+        }
+        next(error);
       }
+    },
+  });
 
-      await ctx.reportTemplateCollection.updateOne({ projectId, id }, { $set: updateFields });
-      const updated = await ctx.reportTemplateCollection.findOne({ projectId, id });
-      res.json(updated);
-    } catch (error) {
-      next(error);
-    }
-  },
-});
-
-// Delete a report template (soft-delete)
-apiRoute(ctx.app, ctx.registry, {
-  method: "delete",
-  path: "/api/v1/report-templates/:id",
-  tags: ["Report Templates"],
-  summary: "Delete report template",
-  params: z.object({ id: z.string() }),
-  query: ProjectIdQuerySchema,
-  response: z.object({ message: z.string() }),
-  successStatus: 204,
-  errorResponses: {
-    404: { description: "Report template not found" },
-  },
-  handler: async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const projectId = getQueryProjectId(req);
-
-      const existing = await ctx.reportTemplateCollection.findOne({ projectId, id, deletedAt: { $exists: false } });
-      if (!existing) {
-        res.status(404).json({ error: `Report template '${id}' not found` });
-        return;
+  apiRoute(ctx.app, ctx.registry, {
+    method: "delete",
+    path: "/api/v1/report-templates/:id",
+    tags: ["Report Templates"],
+    summary: "Soft-delete a report template",
+    params: z.object({ id: z.string() }),
+    query: ProjectIdQuerySchema,
+    response: z.object({ message: z.string() }),
+    successStatus: 204,
+    errorResponses: { 404: { description: "Report template not found" } },
+    handler: async (req, res, next) => {
+      try {
+        const deleted = await store(ctx).softDelete(
+          getQueryProjectId(req),
+          req.params.id,
+        );
+        if (!deleted) {
+          res.status(404).json({
+            error: `Report template '${req.params.id}' not found`,
+          });
+          return;
+        }
+        res.status(204).send();
+      } catch (error) {
+        next(error);
       }
-
-      await ctx.reportTemplateCollection.updateOne(
-        { projectId, id },
-        { $set: { deletedAt: new Date(), updatedAt: new Date() } }
-      );
-
-      res.status(204).send();
-    } catch (error) {
-      next(error);
-    }
-  },
-});
-
+    },
+  });
 }
