@@ -174,6 +174,19 @@ In order to get the full updated reference, run `pnpm cli --help` or `pnpm cli <
 | Create from file | `pnpm cli task-prompt create -f <path>` |
 | Extract features | `pnpm cli task-prompt extract-features -i <uuid>` |
 
+### Named Environments
+
+Saved connections (URL, token, project) that override `SCOPE_API_URL`/`SCOPE_TOKEN`/`SCOPE_PROJECT`. An explicit `-u/--url` always wins.
+
+| Action | Command |
+|--------|---------|
+| Add an environment | `pnpm cli env add staging --url https://scope.example.com --token <token>` |
+| List / show (tokens redacted) | `pnpm cli env list` / `pnpm cli env show staging` |
+| Select for later commands | `pnpm cli env use staging` (`--clear` to deselect) |
+| One-off selection | `pnpm cli --env staging run list` |
+| Edit a value | `pnpm cli --env staging env set project <project-id>` |
+| Remove | `pnpm cli env remove staging` |
+
 ### Provider Secrets
 
 Secret values are never printed; prefer the `*-stdin` flags.
