@@ -143,13 +143,13 @@ export function PromptFeatureList() {
         <span className="inline-flex items-center gap-1.5">
           Prompt Features
           <HelpTooltip
-            text="Detection rules that flag whether the agent's prompt or output uses specific capabilities (tools, agents, plans). Used for capability tracking and analytics."
+            text="Detection rules that flag characteristics of a task prompt (asks for a REST API, requires Docker, asks for Azure). Prompt features are analysis metadata: they only categorize task prompts so you can slice and filter runs. They never change what an agent is asked to do, how a run executes, or how results are scored."
             docs="promptFeatures"
             size="md"
           />
         </span>
       }
-      description="Manage prompt feature detection"
+      description="Categorize task prompts for analysis. Features are metadata only — they don't change what agents are asked to do or how runs are scored."
       railStorageKey="prompt-features"
       actions={
         <Link to="/prompt-features/new">

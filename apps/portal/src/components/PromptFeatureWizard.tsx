@@ -150,7 +150,9 @@ export function PromptFeatureWizard({
               <div>
                 <h2 className="text-xl font-semibold">Define Prompt Feature</h2>
                 <p className="text-sm text-muted-foreground">
-                  Describe the characteristic to detect in task prompts
+                  Describe the characteristic to detect in task prompts. Features
+                  only categorize prompts for analysis — they don&apos;t change
+                  what agents are asked to do.
                 </p>
               </div>
             </div>
