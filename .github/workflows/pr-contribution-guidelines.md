@@ -16,6 +16,7 @@ permissions:
   copilot-requests: write
 
 strict: true
+model: claude-sonnet-5.5
 checkout: false
 inlined-imports: true
 network:
