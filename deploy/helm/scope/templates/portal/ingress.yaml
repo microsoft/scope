@@ -1,0 +1,29 @@
+{{- if and .Values.portal.enabled .Values.portal.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "scope.componentName" (dict "component" "portal" "context" .) }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "scope.labels" . | nindent 4 }}
+    app.kubernetes.io/component: portal
+spec:
+  {{- with .Values.portal.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.portal.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ required "portal.ingress.host is required when portal.ingress.enabled is true" .Values.portal.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "scope.componentName" (dict "component" "portal" "context" .) }}
+                port:
+                  number: {{ .Values.portal.port }}
+{{- end -}}
