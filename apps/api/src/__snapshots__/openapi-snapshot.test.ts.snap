@@ -721,6 +721,150 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
         "type": "object",
       },
+      "CreateExperimentInput": {
+        "properties": {
+          "metadata": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "maxLength": 4096,
+                "type": "string",
+              },
+              "name": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string",
+              },
+            },
+            "required": [
+              "name",
+            ],
+            "type": "object",
+          },
+          "mode": {
+            "enum": [
+              "compose",
+              "empty",
+            ],
+            "type": "string",
+          },
+          "requests": {
+            "default": [],
+            "items": {
+              "properties": {
+                "agentsMd": {
+                  "type": "string",
+                },
+                "agentsMdParentIds": {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+                "codebaseRevisionId": {
+                  "type": "string",
+                },
+                "extensions": {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+                "gates": {
+                  "items": {
+                    "$ref": "#/components/schemas/GateConfig",
+                  },
+                  "type": "array",
+                },
+                "maxIterations": {
+                  "maximum": 50,
+                  "minimum": 1,
+                  "type": "integer",
+                },
+                "mcpServers": {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+                "model": {
+                  "type": "string",
+                },
+                "observations": {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+                "persona": {
+                  "$ref": "#/components/schemas/Persona",
+                },
+                "personaInstructions": {
+                  "type": "string",
+                },
+                "priority": {
+                  "type": "integer",
+                },
+                "profileId": {
+                  "type": "string",
+                },
+                "reasoningEffort": {
+                  "type": "string",
+                },
+                "resources": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResourceBindingSpec",
+                  },
+                  "type": "array",
+                },
+                "scenario": {
+                  "$ref": "#/components/schemas/Scenario",
+                },
+                "skillRevisions": {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+                "workerType": {
+                  "minLength": 1,
+                  "type": "string",
+                },
+              },
+              "required": [
+                "scenario",
+                "workerType",
+              ],
+              "type": "object",
+            },
+            "maxItems": 250000,
+            "type": "array",
+          },
+        },
+        "required": [
+          "mode",
+          "metadata",
+        ],
+        "type": "object",
+      },
+      "CreateExperimentResponse": {
+        "properties": {
+          "experiment": {
+            "$ref": "#/components/schemas/ExperimentResponse",
+          },
+          "requestIds": {
+            "items": {
+              "type": "string",
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "experiment",
+          "requestIds",
+        ],
+        "type": "object",
+      },
       "CreateExtensionInput": {
         "properties": {
           "_id": {
@@ -986,6 +1130,8 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
           "profileVariations": {
+            "deprecated": true,
+            "description": "Deprecated for composition. Use POST /api/v1/experiments and its requests array.",
             "items": {
               "type": "string",
             },
@@ -1349,6 +1495,413 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         ],
         "type": "object",
       },
+      "ExperimentExecutionListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ExperimentExecutionResponse",
+            },
+            "type": "array",
+          },
+          "nextCursor": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "data",
+        ],
+        "type": "object",
+      },
+      "ExperimentExecutionResponse": {
+        "properties": {
+          "attemptNumber": {
+            "type": "integer",
+          },
+          "blockers": {
+            "items": {
+              "properties": {
+                "error": {
+                  "type": "string",
+                },
+                "handlerId": {
+                  "type": "string",
+                },
+                "reason": {
+                  "type": "string",
+                },
+                "requestId": {
+                  "type": "string",
+                },
+                "runId": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "handlerId",
+                "reason",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "discardReason": {
+            "type": "string",
+          },
+          "discardedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "experimentExecutionId": {
+            "type": "string",
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "progress": {
+            "additionalProperties": {
+              "properties": {
+                "error": {
+                  "type": "string",
+                },
+                "status": {
+                  "enum": [
+                    "queued",
+                    "processing",
+                    "done",
+                    "failed",
+                  ],
+                  "type": "string",
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null",
+                  ],
+                },
+              },
+              "required": [
+                "status",
+                "updatedAt",
+              ],
+              "type": "object",
+            },
+            "type": "object",
+          },
+          "readiness": {
+            "enum": [
+              "empty",
+              "waiting",
+              "blocked",
+              "ready",
+              "processing",
+              "done",
+              "failed",
+            ],
+            "type": "string",
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "supersededAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "supersededByExperimentExecutionId": {
+            "type": "string",
+          },
+          "supersededReason": {
+            "enum": [
+              "rollover",
+              "retry",
+            ],
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+        },
+        "required": [
+          "experimentExecutionId",
+          "attemptNumber",
+          "readiness",
+          "blockers",
+          "progress",
+          "createdAt",
+          "updatedAt",
+        ],
+        "type": "object",
+      },
+      "ExperimentListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ExperimentResponse",
+            },
+            "type": "array",
+          },
+          "nextCursor": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "data",
+        ],
+        "type": "object",
+      },
+      "ExperimentResponse": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "currentExecution": {
+            "properties": {
+              "attemptNumber": {
+                "type": "integer",
+              },
+              "blockers": {
+                "items": {
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "handlerId": {
+                      "type": "string",
+                    },
+                    "reason": {
+                      "type": "string",
+                    },
+                    "requestId": {
+                      "type": "string",
+                    },
+                    "runId": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "handlerId",
+                    "reason",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
+              "createdAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "discardReason": {
+                "type": "string",
+              },
+              "discardedAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "experimentExecutionId": {
+                "type": "string",
+              },
+              "finishedAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "progress": {
+                "additionalProperties": {
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                    },
+                    "status": {
+                      "enum": [
+                        "queued",
+                        "processing",
+                        "done",
+                        "failed",
+                      ],
+                      "type": "string",
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null",
+                      ],
+                    },
+                  },
+                  "required": [
+                    "status",
+                    "updatedAt",
+                  ],
+                  "type": "object",
+                },
+                "type": "object",
+              },
+              "readiness": {
+                "enum": [
+                  "empty",
+                  "waiting",
+                  "blocked",
+                  "ready",
+                  "processing",
+                  "done",
+                  "failed",
+                ],
+                "type": "string",
+              },
+              "report": {
+                "properties": {
+                  "reportId": {
+                    "type": "string",
+                  },
+                  "updatedAt": {
+                    "format": "date-time",
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "url": {
+                    "type": "string",
+                  },
+                },
+                "type": "object",
+              },
+              "startedAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "updatedAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+            },
+            "required": [
+              "experimentExecutionId",
+              "attemptNumber",
+              "readiness",
+              "blockers",
+              "progress",
+              "createdAt",
+              "updatedAt",
+            ],
+            "type": "object",
+          },
+          "experimentId": {
+            "type": "string",
+          },
+          "metadata": {
+            "additionalProperties": false,
+            "properties": {
+              "createdBy": {
+                "type": "string",
+              },
+              "description": {
+                "maxLength": 4096,
+                "type": "string",
+              },
+              "name": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string",
+              },
+            },
+            "required": [
+              "name",
+            ],
+            "type": "object",
+          },
+          "projectId": {
+            "type": "string",
+          },
+          "revision": {
+            "properties": {
+              "createdAt": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null",
+                ],
+              },
+              "experimentRevisionId": {
+                "type": "string",
+              },
+              "memberCount": {
+                "type": "integer",
+              },
+              "revisionNumber": {
+                "type": "integer",
+              },
+            },
+            "required": [
+              "experimentRevisionId",
+              "revisionNumber",
+              "memberCount",
+              "createdAt",
+            ],
+            "type": "object",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+        },
+        "required": [
+          "experimentId",
+          "projectId",
+          "metadata",
+          "revision",
+          "currentExecution",
+          "createdAt",
+          "updatedAt",
+        ],
+        "type": "object",
+      },
       "ExtensionResponse": {
         "properties": {
           "_id": {
@@ -1599,6 +2152,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
           "codebaseRevisionId": {
+            "type": "string",
+          },
+          "experimentId": {
             "type": "string",
           },
           "extensions": {
@@ -2741,6 +3297,27 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "null",
             ],
           },
+          "experimentExpectedRequestCount": {
+            "minimum": 0,
+            "type": "integer",
+          },
+          "experimentFinalizedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+          "experimentId": {
+            "type": "string",
+          },
+          "experimentInitialRunId": {
+            "type": "string",
+          },
+          "experimentRequestIndex": {
+            "minimum": 0,
+            "type": "integer",
+          },
           "extensions": {
             "items": {
               "type": "string",
@@ -3107,6 +3684,66 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
         },
+        "type": "object",
+      },
+      "RetryExperimentResponse": {
+        "properties": {
+          "attemptNumber": {
+            "type": "integer",
+          },
+          "blockers": {
+            "items": {
+              "properties": {
+                "error": {
+                  "type": "string",
+                },
+                "handlerId": {
+                  "type": "string",
+                },
+                "reason": {
+                  "type": "string",
+                },
+                "requestId": {
+                  "type": "string",
+                },
+                "runId": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "handlerId",
+                "reason",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "experimentExecutionId": {
+            "type": "string",
+          },
+          "experimentId": {
+            "type": "string",
+          },
+          "readiness": {
+            "enum": [
+              "empty",
+              "waiting",
+              "blocked",
+              "ready",
+              "processing",
+              "done",
+              "failed",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "experimentId",
+          "experimentExecutionId",
+          "attemptNumber",
+          "readiness",
+          "blockers",
+        ],
         "type": "object",
       },
       "RunFacetBucket": {
@@ -4698,6 +5335,14 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           {
             "in": "query",
+            "name": "experimentId",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "k",
             "required": false,
             "schema": {
@@ -5559,6 +6204,339 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
         "summary": "Update criterion",
         "tags": [
           "Criteria",
+        ],
+      },
+    },
+    "/api/v1/experiments": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+            },
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentListResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+        },
+        "summary": "List experiments",
+        "tags": [
+          "Experiments",
+        ],
+      },
+      "post": {
+        "description": "Canonical composition endpoint. Request and run IDs are minted before insertion; the exact revision/execution is then finalized idempotently.",
+        "parameters": [
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExperimentInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateExperimentResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "409": {
+            "description": "Experiment identity conflict",
+          },
+        },
+        "summary": "Create an experiment and zero or more new requests",
+        "tags": [
+          "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment not found",
+          },
+        },
+        "summary": "Get an experiment",
+        "tags": [
+          "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/executions": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+            },
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentExecutionListResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment not found",
+          },
+        },
+        "summary": "List current and historical experiment executions",
+        "tags": [
+          "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/executions/{experimentExecutionId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "experimentExecutionId",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentExecutionResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment execution not found",
+          },
+        },
+        "summary": "Get one exact experiment execution",
+        "tags": [
+          "Experiments",
+        ],
+      },
+    },
+    "/api/v1/experiments/{id}/retry": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          {
+            "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project scope. Required on scoped list and root-create operations; requests without a resolvable project are rejected with 400. There is no default project.",
+              "example": "00000000-0000-0000-0000-000000000000",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "experimentExecutionId": {
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "experimentExecutionId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetryExperimentResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "404": {
+            "description": "Experiment not found",
+          },
+          "409": {
+            "description": "Execution is stale or cannot be retried",
+          },
+        },
+        "summary": "Retry current experiment processing",
+        "tags": [
+          "Experiments",
         ],
       },
     },
@@ -8836,6 +9814,14 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           {
             "in": "query",
+            "name": "experimentId",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "profileId",
             "required": false,
             "schema": {
@@ -8976,6 +9962,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
               "enum": [
                 "task",
                 "submissionId",
+                "experimentId",
                 "profile",
               ],
               "type": "string",
@@ -9194,6 +10181,8 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
                       },
                       "count": {
                         "default": 1,
+                        "deprecated": true,
+                        "description": "Deprecated for composition. Use POST /api/v1/experiments and its requests array.",
                         "maximum": 10,
                         "minimum": 1,
                         "type": "number",

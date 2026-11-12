@@ -46,6 +46,13 @@ There is one endpoint group, `/api/v1/requests`, that covers both
 submission and inspection. There's no separate `/runs` resource at the
 API level; run state lives on the request.
 
+`POST /api/v1/requests` remains the permanent interface for one
+request. For named multi-run compositions, use
+[`POST /api/v1/experiments`](/guides/creating-experiments/).
+Request submission with `count` greater than `1` or a non-empty
+`profileVariations` remains supported but is deprecated as
+`legacy-request-composition`.
+
 ## Submit a request
 
 Minimum payload — a task prompt (as text), a list of criteria IDs,
@@ -123,7 +130,6 @@ The response includes the new request's ID and initial state:
 ```json
 {
   "id": "req-018c7d2a-7e92-7b1a-9c3a-4f4f5d6e7e8a",
-  "submissionId": "sub-018c7d2a-…",
   "status": "pending",
   "mode": "multi-turn"
 }
@@ -218,6 +224,10 @@ Request submission is **not** idempotent — every `POST /api/v1/requests`
 creates a new request, even if you send the same payload twice. Build
 idempotency on top by caching the returned `id` if you need it.
 
+Experiment creation is also not idempotent. Its public response
+includes the canonical Experiment view and `createdRequestIds`; see
+[Creating Experiments](/guides/creating-experiments/).
+
 ## Tips
 
 - **Pin everything for production**: pass `profileVersionId` (not
@@ -227,6 +237,9 @@ idempotency on top by caching the returned `id` if you need it.
 - **Use the reference**: the [REST API reference](/reference/api/)
   is the source of truth for exact request and response shapes. Your
   deployment may also provide Swagger UI at `/api-docs`.
+- **Move composition to Experiments**: follow the
+  [migration guide](/guides/migrating-to-experiments/) for exact
+  before-and-after payloads.
 
 ## Next steps
 

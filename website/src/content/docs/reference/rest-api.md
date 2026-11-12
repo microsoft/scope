@@ -36,6 +36,18 @@ Key operations: create, list, get, stream logs, bulk-resubmit
 See [Submitting requests (REST API)](/guides/submitting-requests-api/) and
 [Prioritizing & pausing requests](/guides/prioritizing-requests/).
 
+### Experiments
+
+Project-scoped, named benchmark compositions. An Experiment owns fixed
+member requests, metadata, a current processing execution, and
+execution history.
+
+Key operations: create (including explicit empty creation), list, get,
+list/get executions, and retry current processing.
+
+See [Creating Experiments](/guides/creating-experiments/) and
+[Migrate composition to Experiments](/guides/migrating-to-experiments/).
+
 ### Task prompts
 
 The shared catalog of task prompts, de-duplicated by text. CRUD plus
@@ -114,9 +126,12 @@ pnpm run refresh:openapi
 
 The command does not contact a deployed environment. It overwrites the
 snapshot from the checked-out source. Commit the result to update the
-published reference.
+published reference. The Experiment endpoint pages and sidebar group
+appear automatically when the committed artifact includes the
+Experiment paths; do not hand-author generated operation pages.
 
 ## See also
 
 - [REST API reference (auto-generated)](/reference/api/)
 - [Submitting requests (REST API)](/guides/submitting-requests-api/)
+- [Creating Experiments](/guides/creating-experiments/)

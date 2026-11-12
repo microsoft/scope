@@ -11,6 +11,8 @@ export { CheckboxFilterGroup } from "./CheckboxFilterGroup";
 export type { CheckboxFilterGroupProps, CheckboxFilterOption } from "./CheckboxFilterGroup";
 export { DataTable } from "./DataTable";
 export type { DataTableProps, DataTableColumn, DataTableSelection } from "./DataTable";
+export { EmbeddedTableBlock } from "./EmbeddedTableBlock";
+export type { EmbeddedTableBlockProps } from "./EmbeddedTableBlock";
 export { Pagination } from "./Pagination";
 export type { PaginationProps } from "./Pagination";
 export { DetailPanel } from "./DetailPanel";

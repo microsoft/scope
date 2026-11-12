@@ -205,6 +205,16 @@ flowchart LR
 - **Docker Compose:** one `register-handler-<worker>` init service per handler (e.g. `pp-atif`) runs the generic script via `tsx`, gated on the scheduler being up. The worker waits for its registration service to complete.
 - **Kubernetes:** a `register-handler-post-processor` Job runs the compiled script (`node packages/shared/dist/scripts/register-handler.js`) on each deploy. `pp-atif` and `pp-taxonomy` are registered in K8s via their respective registration Jobs (`register-handler-taxonomy` points its `HANDLER_YAML_PATH` at `handler.taxonomy.yaml`). The scheduler exposes a `Service` (`scheduler.scoped.svc.cluster.local:8080`) so Jobs and workers can reach `/handlers/register` and the notify endpoints.
 
+## Experiment handlers
+
+Experiment handlers use the same `services` registration endpoint but declare
+`type: experiment-handler` and `dependencyMode: all-runs`. Their dependencies
+name run-level DAG handlers. The coordinator projects those dependencies for
+the current Experiment's exact request/run vector and dispatches only its
+embedded current execution. Built-in readout processing is not part of this
+foundation; see [Experiments](experiments.md) for the queue and rollover
+contracts.
+
 To **add or change a handler**, edit its `handler.yaml` (bump `version`, adjust `dependsOn`, etc.) — no code or migration changes are needed for registration.
 
 ## Report Triggering on DAG Drain

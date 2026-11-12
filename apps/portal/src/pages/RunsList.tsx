@@ -56,7 +56,7 @@ import { isAgentAvailable, isAgentVersionAvailable, STATUS_LIST, OUTCOME_LIST } 
 import type { Run, RunStatus, RunOutcome, IterationOp, BulkResubmitOverrides, RunSortField, RunFacetBucket } from "@/types";
 import { buildRunWorkerFilterOptions } from "./run-worker-filter-options";
 
-const FILTER_KEYS = ["worker", "status", "outcome", "taskPromptId", "submissionId", "criteria", "model", "profile", "os", "priority", "version", "dateFrom", "dateTo", "groupBy", "turns", "turnsOp", "maxIter", "maxIterOp"] as const;
+const FILTER_KEYS = ["worker", "status", "outcome", "taskPromptId", "experimentId", "criteria", "model", "profile", "os", "priority", "version", "dateFrom", "dateTo", "groupBy", "turns", "turnsOp", "maxIter", "maxIterOp"] as const;
 
 /**
  * Describes how to fetch a given (1-based) page from the cursor-paginated
@@ -132,18 +132,18 @@ const GROUP_MEMBER_PAGE = 100;
 /**
  * Map a server group key (issue #1138 server-side grouping) to the extra
  * server-side filter that selects that group's member runs. `task` groups by
- * `taskPromptId`, `profile` by `profileId`, `submissionId` by `submissionId`
- * (the literal `no-submission`/`no-profile` keys mean "missing", expressed as
+ * `taskPromptId`, `profile` by `profileId`, `experimentId` by `experimentId`
+ * (the literal `no-experiment`/`no-profile` keys mean "missing", expressed as
  * the `__empty__` sentinel so the API matches rows lacking the field).
  */
 function groupKeyExtraFilter(
-  groupBy: "task" | "submissionId" | "profile",
+  groupBy: "task" | "experimentId" | "profile",
   key: string,
-): { taskPromptId?: string; submissionId?: string; profileId?: string[] } {
+): { taskPromptId?: string; experimentId?: string; profileId?: string[] } {
   if (groupBy === "task") return { taskPromptId: key };
   if (groupBy === "profile")
     return { profileId: [key === "no-profile" ? EMPTY_FILTER_VALUE : key] };
-  return { submissionId: key === "no-submission" ? EMPTY_FILTER_VALUE : key };
+  return { experimentId: key === "no-experiment" ? EMPTY_FILTER_VALUE : key };
 }
 
 /** Compact inline badges with overflow (+N) dropdown for dense table cells. */
@@ -313,7 +313,7 @@ const COLUMN_OPTIONS: CustomizeColumnsOption[] = [
   // growth-ecosystems/scope-project#127).
   { id: "status", label: "Status" },
   { id: "outcome", label: "Outcome" },
-  { id: "submission", label: "Submission" },
+  { id: "experiment", label: "Experiment" },
   { id: "task", label: "Task" },
   { id: "criteria", label: "Criteria" },
   { id: "worker", label: "Worker" },
@@ -339,18 +339,18 @@ const COLUMN_IDS = COLUMN_OPTIONS.map((o) => o.id);
 
 // Segmented toggle used in the list header for the Group By control. Kept
 // inline because it is only used here.
-const GROUP_BY_OPTIONS: ReadonlyArray<{ value: "profile" | "task" | "submissionId"; label: string }> = [
+const GROUP_BY_OPTIONS: ReadonlyArray<{ value: "profile" | "task" | "experimentId"; label: string }> = [
   { value: "profile", label: "Profile" },
   { value: "task", label: "Task" },
-  { value: "submissionId", label: "Submission" },
+  { value: "experimentId", label: "Experiment" },
 ];
 
 function GroupByToggle({
   value,
   onChange,
 }: {
-  value: "none" | "profile" | "task" | "submissionId";
-  onChange: (next: "none" | "profile" | "task" | "submissionId") => void;
+  value: "none" | "profile" | "task" | "experimentId";
+  onChange: (next: "none" | "profile" | "task" | "experimentId") => void;
 }) {
   return (
     <div
@@ -470,7 +470,7 @@ export function RunsList() {
   // Column visibility — persisted under scope:hidden-columns:runs:v3.
   // The `:v3` suffix forces the new default set + order to apply for users
   // who had an older preference stored under a previous versioned key.
-  // Default visible: ID, Status, Outcome, Submission, Task, Criteria, Worker,
+  // Default visible: ID, Status, Outcome, Experiment, Task, Criteria, Worker,
   // Version, OS, MCP, Skills, Extensions, Profile, Priority.
   // Hidden by default (opt-in via Customize columns): Report, Attempt,
   // Turns, LLM Calls, Duration, Tokens, Created. Model is shown next to
@@ -502,7 +502,7 @@ export function RunsList() {
   const [groupMemberPages, setGroupMemberPages] = useState<Record<string, number>>({});
   
   // Get groupBy from URL state
-  const groupBy = (state.getFilter("groupBy") ?? "none") as "none" | "profile" | "task" | "submissionId";
+  const groupBy = (state.getFilter("groupBy") ?? "none") as "none" | "profile" | "task" | "experimentId";
 
   // Cursor pagination — keep a stack of cursors that map a virtual page number
   // to a fetch instruction. Each entry describes how to fetch that page:
@@ -534,7 +534,7 @@ export function RunsList() {
         status: state.getFilterList("status"),
         outcome: state.getFilterList("outcome"),
         taskPromptId: state.getFilter("taskPromptId"),
-        submissionId: state.getFilter("submissionId"),
+        experimentId: state.getFilter("experimentId"),
         criteria: state.getFilter("criteria"),
         model: state.getFilterList("model"),
         profile: state.getFilterList("profile"),
@@ -579,7 +579,7 @@ export function RunsList() {
   const priorities = state.getFilterList("priority");
   const versions = state.getFilterList("version");
   const taskPromptId = state.getFilter("taskPromptId") ?? undefined;
-  const submissionId = state.getFilter("submissionId") ?? undefined;
+  const experimentId = state.getFilter("experimentId") ?? undefined;
   const criteria = state.getFilter("criteria") ?? undefined;
   const dateFrom = state.getFilter("dateFrom");
   const dateTo = state.getFilter("dateTo");
@@ -631,7 +631,7 @@ export function RunsList() {
       agentVersion: asArray(versions),
       profileId: asArray(profiles),
       taskPromptId,
-      submissionId,
+      experimentId,
       criteria,
       search: searchValue,
       createdAfter,
@@ -652,7 +652,7 @@ export function RunsList() {
       versions.join(","),
       profiles.join(","),
       taskPromptId,
-      submissionId,
+      experimentId,
       criteria,
       searchValue,
       createdAfter,
@@ -741,7 +741,7 @@ export function RunsList() {
     enabled: groupBy !== "none",
     queryFn: () =>
       api.listRunGroups({
-        groupBy: groupBy as "task" | "submissionId" | "profile",
+        groupBy: groupBy as "task" | "experimentId" | "profile",
         ...runFilterArgs,
         sortBy,
         sortDir,
@@ -776,7 +776,7 @@ export function RunsList() {
     // Keep the already-loaded member rows visible while a "Load more" refetch runs.
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const gb = groupBy as "task" | "submissionId" | "profile";
+      const gb = groupBy as "task" | "experimentId" | "profile";
       const entries = await Promise.all(
         expandedKeyList.map(async (key) => {
           // Walk the list cursor up to the group's requested page count. The list
@@ -1344,13 +1344,18 @@ export function RunsList() {
       cell: (r) => <ShortId id={r._id} label="run ID" />,
     },
     {
-      id: "submission",
-      header: "Submission",
+      id: "experiment",
+      header: "Experiment",
       width: "120px",
-      hidden: columnVisibility.isHidden("submission"),
+      hidden: columnVisibility.isHidden("experiment"),
       cell: (r) =>
-        r.submissionId ? (
-          <ShortId id={r.submissionId} label="submission ID" />
+        r.experimentId ? (
+          <Link
+            to={`/experiments/${r.experimentId}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <ShortId id={r.experimentId} label="experiment ID" />
+          </Link>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         ),
@@ -2241,8 +2246,8 @@ export function RunsList() {
                       // `taskPromptId` is always materialized server-side, so it
                       // matches the server group key 1:1 (no raw-text fallback).
                       return run.taskPromptId ?? "";
-                    case "submissionId":
-                      return run.submissionId ?? "no-submission";
+                    case "experimentId":
+                      return run.experimentId ?? "no-experiment";
                     default:
                       return "";
                   }
@@ -2505,8 +2510,8 @@ export function RunsList() {
                   };
 
                   switch (column.id) {
-                    case "submission":
-                      return distinct("submissions", (r) => r.submissionId);
+                    case "experiment":
+                      return distinct("experiments", (r) => r.experimentId);
                     case "task":
                       return distinct("tasks", (r) => r.scenario?.task);
                     case "worker":
@@ -2655,42 +2660,47 @@ export function RunsList() {
                   }
 
                   // Default: render the first run's cell (works when the column
-                  // value is uniform across the group, e.g. submission/task when
-                  // grouped by submissionId, or profile when grouped by profile).
+                  // value is uniform across the group, e.g. experiment/task when
+                  // grouped by experimentId, or profile when grouped by profile).
                   return runs[0] ? column.cell(runs[0]) : null;
                 },
                 renderGroupHeader: (groupKey, runs, expanded) => {
-                  const groupLabel = groupBy === "submissionId" ? "Submission ID" : groupBy === "profile" ? "Profile" : "Task";
+                  const groupLabel = groupBy === "experimentId" ? "Experiment ID" : groupBy === "profile" ? "Profile" : "Task";
                   const groupDisplayKey =
                     groupBy === "profile" && groupKey !== "no-profile"
                       ? (profileNameById.get(groupKey) ?? formatId(groupKey))
                       : groupKey;
                   return (
-                    <button
-                      type="button"
-                      onClick={() => toggleGroupExpansion(groupKey)}
-                      className="w-full bg-muted/30 px-4 py-3 text-sm flex items-center justify-between gap-3 hover:bg-muted/40 transition-colors"
-                      aria-expanded={expanded}
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        {expanded ? (
-                          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                        )}
-                        <span className="min-w-0 truncate font-semibold">
-                          <span className="text-muted-foreground">{groupLabel}:</span> {groupDisplayKey}
-                        </span>
-                      </div>
+                    <div className="w-full bg-muted/30 px-4 py-3 text-sm flex items-center justify-between gap-3 hover:bg-muted/40 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupExpansion(groupKey)}
+                        className="flex min-w-0 items-center gap-2 text-left"
+                        aria-expanded={expanded}
+                      >
+                          {expanded ? (
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                          )}
+                          <span className="min-w-0 truncate font-semibold">
+                            <span className="text-muted-foreground">{groupLabel}:</span> {groupDisplayKey}
+                          </span>
+                      </button>
                       <div className="flex shrink-0 items-center gap-3">
+                        {groupBy === "experimentId" && groupKey !== "no-experiment" && (
+                          <Link
+                            to={`/experiments/${groupKey}`}
+                            className="text-xs font-medium text-primary hover:underline"
+                          >
+                            View experiment
+                          </Link>
+                        )}
                         <span className="text-xs text-muted-foreground font-normal">
                           {runs.length} run{runs.length !== 1 ? "s" : ""}
                         </span>
-                        <span className="text-xs text-muted-foreground font-normal">
-                          {expanded ? "Click to collapse" : "Click to expand"}
-                        </span>
                       </div>
-                    </button>
+                    </div>
                   );
                 },
               }}

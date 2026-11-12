@@ -138,6 +138,8 @@ export default defineConfig({
 								{ label: 'Submit from the Portal', slug: 'guides/submitting-requests-portal' },
 								{ label: 'Submit from the CLI', slug: 'guides/submitting-requests-cli' },
 								{ label: 'Submit through the API', slug: 'guides/submitting-requests-api' },
+								{ label: 'Create Experiments', slug: 'guides/creating-experiments' },
+								{ label: 'Migrate to Experiments', slug: 'guides/migrating-to-experiments' },
 								{ label: 'Prioritize & pause', slug: 'guides/prioritizing-requests' },
 								{ label: 'Analyze trajectories with Taxonome', slug: 'guides/taxonome' },
 							],

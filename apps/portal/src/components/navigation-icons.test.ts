@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { getListSectionIcon, navigationIcons, type NavigationIconKey } from "./navigation-icons";
 
 const sections: [string, NavigationIconKey][] = [
+  ["experiments", "experiments"],
   ["runs", "runs"],
   ["reports", "reports"],
   ["report-templates", "reports"],

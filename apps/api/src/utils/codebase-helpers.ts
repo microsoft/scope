@@ -84,7 +84,7 @@ export interface CodebaseSpecResolveContext {
 }
 
 /**
- * Resolve a codebase spec given at run-submission time into a concrete revision id.
+ * Resolve a codebase spec given at request creation time into a concrete revision id.
  *
  * Accepted forms:
  * - a raw revision UUID (`_id`) → validated as-is.

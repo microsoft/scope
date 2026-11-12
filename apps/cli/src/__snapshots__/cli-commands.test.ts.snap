@@ -200,6 +200,75 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       },
     },
   },
+  "experiment": {
+    "subcommands": {
+      "create": {
+        "options": [
+          "--agent-version",
+          "--agents-md",
+          "--codebase",
+          "--count",
+          "--criteria",
+          "--description",
+          "--empty",
+          "--extensions",
+          "--gates",
+          "--max-iterations",
+          "--mcp-servers",
+          "--message",
+          "--model",
+          "--name",
+          "--observations",
+          "--output",
+          "--persona",
+          "--preview",
+          "--profile",
+          "--profile-variations-file",
+          "--project",
+          "--reasoning-effort",
+          "--resource-param",
+          "--resources",
+          "--scenario",
+          "--skills",
+          "--traits",
+          "--url",
+          "--worker",
+        ],
+      },
+      "executions": {
+        "options": [
+          "--cursor",
+          "--limit",
+          "--output",
+          "--project",
+          "--url",
+        ],
+      },
+      "get": {
+        "options": [
+          "--output",
+          "--project",
+          "--url",
+        ],
+      },
+      "list": {
+        "options": [
+          "--cursor",
+          "--limit",
+          "--output",
+          "--project",
+          "--url",
+        ],
+      },
+      "retry": {
+        "options": [
+          "--execution",
+          "--project",
+          "--url",
+        ],
+      },
+    },
+  },
   "extension": {
     "subcommands": {
       "delete": {
@@ -764,11 +833,11 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       "download-batch": {
         "options": [
           "--dir",
+          "--experiment-id",
           "--extract",
           "--ids",
           "--output",
           "--project",
-          "--submission-id",
           "--url",
         ],
       },
@@ -785,6 +854,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--created-after",
           "--created-before",
           "--criteria",
+          "--experiment-id",
           "--include-deleted",
           "--max-iterations",
           "--model",
@@ -798,7 +868,6 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--sort-by",
           "--sort-dir",
           "--status",
-          "--submission-id",
           "--task",
           "--turns",
           "--url",
