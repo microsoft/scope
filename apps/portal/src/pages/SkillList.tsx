@@ -382,11 +382,15 @@ export function SkillList() {
       </ListLayout>
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="max-w-2xl">
+        {/* Height-capped shell: the body scrolls so the wizard's Import action
+            stays reachable on short or narrow windows (#1285). */}
+        <DialogContent className="max-w-2xl max-h-[90vh] grid-rows-[auto_minmax(0,1fr)]">
           <DialogHeader>
             <DialogTitle>Import from GitHub</DialogTitle>
           </DialogHeader>
-          <SkillPicker selected={[]} onChange={() => {}} importOnly />
+          <div className="min-h-0 min-w-0 overflow-y-auto">
+            <SkillPicker selected={[]} onChange={() => {}} importOnly />
+          </div>
         </DialogContent>
       </Dialog>
     </>
