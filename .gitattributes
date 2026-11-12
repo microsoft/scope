@@ -5,7 +5,7 @@
 *.jpg   binary
 *.pdf   binary
 *.min.* -diff
-.github/workflows/*.lock.yml linguist-generated=true merge=ours
+.github/workflows/*.lock.yml linguist-generated=true
 # Generated third-party attribution files: store verbatim (no EOL normalization)
 # so each license matches its source package byte-for-byte and `pnpm notice:check`
 # stays deterministic across checkouts. Marked generated so diffs collapse them.
