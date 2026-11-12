@@ -223,6 +223,7 @@ Emitted by the `scope-report-generator` queue processor.
 | `report_generator.cold_start_ms` | Histogram | First message processing time | `service` |
 | `report_generator.generation_started` | Counter | Generation started event | `requestId`, `reportId`, `templateId` |
 | `report_generator.generation_completed` | Counter | Generation completed event | `requestId`, `reportId` |
+| `report_generator.run_non_evaluable` | Counter | Report failed because its run finished without any turn | `reportId` |
 
 ## Model Scanner Metrics
 

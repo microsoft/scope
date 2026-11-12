@@ -430,6 +430,14 @@ The API owns only the report-generation queue. Its `RouteContext` exposes one
 `reportQueueClient`, not coding-agent queue clients or a queue-client factory;
 those belong to the scheduler.
 
+A report can be requested before its run finishes, so the report-generator gates
+generation on the run (issue #1287). While the run is `pending`, `queued`,
+`processing`, or `paused`, the report stays `pending`: the worker logs that it is
+waiting and hides the queue message for `RUN_NOT_FINISHED_DEFER_SECONDS` (60s)
+before re-checking. A run that finished without any turn is not scored — the
+report is marked `failed` with a `Non-evaluable run: …` error instead of producing
+a misleading `0%` implementation report.
+
 Capabilities are explicit opt-ins. The supported keys are
 `supportsReasoningEffort`, `supportsMcpServers`, `supportsSkills`, and
 `supportsExtensions`; an omitted or false key means unsupported.
