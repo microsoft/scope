@@ -37,6 +37,10 @@ function loadPersona(filePath: string): Persona {
   const raw = readFileSync(filePath, "utf-8");
   const data = parseYaml(raw);
 
+  if (!data || typeof data !== "object") {
+    throw new Error(`Persona file ${filePath} must contain a YAML object`);
+  }
+
   const validPersonality: Personality[] = ["demanding", "friendly"];
   const validExperience: Experience[] = ["junior", "senior"];
   const validVerbosity: Verbosity[] = ["brief", "moderate"];
@@ -75,6 +79,10 @@ function loadScenario(filePath: string): Scenario {
   const raw = readFileSync(filePath, "utf-8");
   const data = parseYaml(raw);
 
+  if (!data || typeof data !== "object") {
+    throw new Error(`Scenario file ${filePath} must contain a YAML object`);
+  }
+
   if (!data.task || typeof data.task !== "string") {
     throw new Error(`Scenario file ${filePath} must have a "task" string field`);
   }
@@ -107,6 +115,10 @@ function loadScenario(filePath: string): Scenario {
 function loadTraits(filePath: string): TraitDescriptions {
   const raw = readFileSync(filePath, "utf-8");
   const data = parseYaml(raw);
+
+  if (!data || typeof data !== "object") {
+    throw new Error(`Traits file ${filePath} must contain a YAML object`);
+  }
 
   if (!data.personality || !data.experience || !data.verbosity || !data.type) {
     throw new Error(
