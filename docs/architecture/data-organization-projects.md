@@ -1,22 +1,18 @@
 # Data Organization: Projects
 
-> **Status:** Proposed — design proposal. Date: 2026-06-30.
+> **Status:** Proposed — design proposal. Revised: 2026-09-18.
 
 Scope currently stores all user-facing data in one flat, global namespace. This document
 proposes a first-class way to **organize** that data **within a single Kubernetes cluster** by
 introducing **the project** — a named container data is filed under.
 
-This is the **data-organization layer** only: it defines the `projects` container, the `projectId`
-field, and how data is **filed, filtered, and grouped** by it. **Access control — ownership,
-membership, groups, visibility, and authorization — is out of scope and owned by
-[auth-rbac.md](auth-rbac.md);** this design only populates the `projectId` field auth-rbac already
-reserved, adding **no** permissions, roles, ownership, or enforcement and re-modelling **no**
-existing data.
+This document defines the **data-organization layer**: the `projects` container, immutable
+`projectId`, and project-based filing, filtering, and grouping. Authorization is defined in
+[auth-rbac.md](auth-rbac.md): membership in a project is the access boundary for its data.
 
-> **Landing order — independent of auth-rbac.** Because this layer adds only organization (a
-> container + one field + filtering) and **no** access control, it can land **before, after, or
-> alongside** auth-rbac with no dependency either way — `projectId` is simply inert until an access
-> layer chooses to read it. See [Landing order](#landing-order-independent).
+> **Delivery relationship.** The project container and `projectId` migration can land before
+> authorization enforcement, but project-aware API and UI behavior must ship with the membership
+> rules in auth-rbac. A `projectId` never grants access by itself.
 
 ---
 
@@ -34,33 +30,30 @@ surfacing in user reports:
 - Everything shares one namespace, so listings mix unrelated work together and there is no
   durable grouping to file work under.
 
-auth-rbac.md governs **who can see and edit** each item (ownership + visibility). What it does
-**not** provide is a **durable container** to file related work under and organize/filter by —
-which is what this document adds.
+auth-rbac.md governs **who can see and edit** each item through project membership. This document
+provides the durable container under which that membership applies, as well as the filing,
+filtering, and grouping behavior.
 
-**Crucially, findability is an _organization_ problem, not an _access_ problem.** Letting users
-file and filter *their own* work needs no permissions, roles, ownership, or enforcement — only a
-container and a filter. So this pressing pain can be addressed **now, on its own timeline**,
-independent of the access-control work (see [Landing order](#landing-order-independent)).
+**Findability and access are separate concerns.** `projectId` makes a project's work easy to file,
+filter, and group; auth-rbac independently determines whether the signed-in caller may use that
+project. The data migration can be delivered first, but project-aware user experiences require both
+layers.
 
 ### Goals
 
 1. A **first-class organizing container** ("project") that gives data a durable home so related
    runs, profiles, criteria, etc. can be **filed together** and **filtered/grouped** as a unit,
    instead of floating in one flat namespace.
-2. **Purely additive & non-breaking**: existing flat/global data keeps working unchanged; the
-   feature is opt-in and reversible phase-by-phase.
-3. **Clean composition with access control**: expose the `projectId` dimension that auth-rbac's
-   access model can later key off — without this layer defining any ownership, membership, or
-   enforcement itself.
+2. **Additive data migration**: existing data is filed into a Default project without attempting
+   to infer a document owner. Access is granted explicitly by project membership.
+3. **Clean composition with access control**: provide the immutable `projectId` that auth-rbac
+   uses to resolve a caller's project role.
 
 ### Non-goals
 
-- **Access control — out of scope, owned by auth-rbac.** Ownership (`ownerId`/`ownerType`/
-  `sharedWith`), **membership** (who belongs to a project), **groups/teams**, **visibility**
-  (`private`/`shared`), permissions, roles, and the `readScope`/`writeScope` enforcement path are
-  **all** defined by [auth-rbac.md](auth-rbac.md), not here. This layer neither adds nor changes
-  any of them; it only adds the `projectId` organizing dimension they can compose with.
+- **Authorization policy details.** [auth-rbac.md](auth-rbac.md) defines platform and project
+  roles, the `project_memberships` collection, explicit readonly shares, permission resolution, and
+  enforcement. This document does not duplicate that policy.
 - **Cross-cutting tags/labels** — a companion organizing layer, specified in
   [data-tags.md](data-tags.md), not here. This doc covers only the project container.
 - **Moving / re-filing entities between projects** — `projectId` is assigned once at creation and
@@ -73,8 +66,8 @@ independent of the access-control work (see [Landing order](#landing-order-indep
   [Alternatives considered](#alternatives-considered).
 - **Code changes** — this document is a design proposal only. Schema/migration/route work is
   sequenced in [Phased rollout](#phased-rollout) for follow-up PRs.
-- A new billing/quota/tenant-isolation boundary — projects are an *organizing* boundary, not a
-  security or tenant boundary (tenant isolation stays with auth-rbac).
+- A new billing, quota, tenant, or organization boundary. Projects are Scope's project-data access
+  boundary; they are not an external tenant or billing isolation primitive.
 
 ---
 
@@ -95,37 +88,28 @@ Every user-facing collection is global and flat. Relevant collections today (see
 | `prompt-features` | Feature definitions (user-slug id); extractions embedded on `task-prompts` | Durable |
 | `skills` / `skill-revisions` | Agent skills | Durable (skill) / deterministic derived-key id (revision) |
 
-auth-rbac.md **reserves** (optional, ignored by its v1 logic) a `projectId?` field on entities,
-plus a future `projects` collection keyed by Scope-owned ids, precisely so an organization layer
-can slot in later. **This document is that layer**: it fills in `projectId` and introduces the
-`projects` container. (auth-rbac's other reserved fields — `ownerType`, `groupId`, `sharedWith` —
-belong to its access model and are **not** touched here.)
+auth-rbac.md defines `projectId` as the authorization boundary for all project-scoped documents.
+This document defines how that field is stored and how clients select their active project. The
+documents do not carry `ownerId`, visibility, or generic sharing fields.
 
-### Landing order (independent)
+### Relationship to RBAC
 
-This design and auth-rbac are **orthogonal layers**. This layer adds only *organization* — a
-container plus the `projectId` field plus filtering — and defines **no** identity, ownership,
-visibility, or enforcement. So it has **no** dependency on auth-rbac in either direction, and
-auth-rbac has none on it:
+| Layer | Responsibility | Integration |
+|-------|----------------|-------------|
+| **Organization** (this document) | `projects`, immutable `projectId`, explicit project selection, filing, filtering, and grouping | Supplies the target project for every project-scoped request. |
+| **Authorization** ([auth-rbac.md](auth-rbac.md)) | User identity, platform roles, project memberships, explicit readonly shares, and route guards | Confirms the caller's role for that exact `projectId` before data is read or changed. |
 
-| Layer | Owned by | Needs caller identity? | Depends on the other? |
-|-------|----------|------------------------|-----------------------|
-| **Organization** (`projects`, `projectId`; filing, `groupBy:"project"`, active-project filter) | **This doc** | No — filing and filtering only *narrow* result sets | No |
-| **Access** (ownership, membership, groups, visibility, `readScope`/`writeScope` enforcement) | **auth-rbac** | Yes | No — its access model **may** additionally key off `projectId`, but need not |
-
-The only integration point is one-way and optional: **auth-rbac's `readScope` MAY read
-`projectId`** (e.g. to make data discoverable to a project's members) once both layers exist. That
-integration is specified in auth-rbac (Open Question B), **not** here. Until then the field is
-inert — present and filterable, but unenforced. The [phased rollout](#phased-rollout) therefore
-needs no identity layer for any of its phases.
+The required `?projectId=` query parameter chooses a root resource's project; it never proves a
+right to use that project. API routes validate membership before applying the project filter or
+writing a new document.
 
 ---
 
 ## Recommended primitive
 
 **The single organizing primitive is the Project** — a named container that data is *filed under*
-and filtered/grouped by. It ships first and satisfies the "file related work together / stop mixing
-everyone's data into one list" goal on its own, with no dependency on the access layer.
+and filtered/grouped by. It supplies the stable boundary that auth-rbac uses to authorize
+collaboration and access.
 
 | Primitive | Job | First lands | Cardinality |
 |-----------|-----|-------------|-------------|
@@ -135,25 +119,21 @@ Cross-cutting, many-to-many labelling (a run belonging to several efforts) is de
 folded into the project — that keeps the singular `projectId` a scalar rather than an array (see
 [Alternatives considered](#alternatives-considered)).
 
-> **Groups / teams are deliberately not a primitive here.** A "team that owns a workstream" is an
-> *access* concept (ownership + membership), which this layer leaves entirely to
-> [auth-rbac.md](auth-rbac.md). A project is just a named bucket; *who* may see or administer it is
-> auth-rbac's to decide. See [Non-goals](#non-goals).
+> **Groups / teams are deliberately not a primitive here.** A project is the collaborative
+> access boundary; [auth-rbac.md](auth-rbac.md) defines the account-to-project membership roles
+> that govern it. This design does not introduce an additional group hierarchy.
 
 ### Why the Project
 
-- **Project alone satisfies the core goal.** A single `projectId` gives every entity a durable
-  home and makes "show me only this workstream" a one-clause filter — with **no** dependency on
-  the access layer. It is the MVP that resolves the "find my work / stop mixing everything
-  together" pain. This is the "start with one structure, phase the rest" spine of the
-  [rollout](#phased-rollout).
+- **Project gives every entity a durable home.** A single `projectId` makes "show me only this
+  workstream" a one-clause filter and is the key used by the RBAC layer to resolve membership.
 - **Single `projectId` keeps everything cheap.** The reserved field is singular, so filing is one
   scalar write and filtering is one `{ projectId: { $in: […] } }` clause — no per-entity fan-out,
   no array-membership index gymnastics on Cosmos DB. It also hands the access layer a single scalar
   to key off later, should it choose to.
-- **Organization ≠ access, so this layer stays small.** By leaving ownership, membership, groups,
-  and visibility to auth-rbac, this design reduces to a container + one field + filtering —
-  shippable in any order (see [Landing order](#landing-order-independent)).
+- **Organization and access have clear boundaries.** This document owns the container and field;
+  auth-rbac owns membership and route authorization. The common `projectId` makes the two
+  layers compose without document-level ownership or visibility fields.
 
 Trade-offs and the rejected shapes (many-to-many projects, nested projects) are in
 [Alternatives considered](#alternatives-considered).
@@ -165,6 +145,8 @@ Trade-offs and the rejected shapes (many-to-many projects, nested projects) are 
 ```mermaid
 erDiagram
     PROJECT ||--o{ ENTITY : contains
+    PROJECT ||--o{ PROJECT_MEMBERSHIP : has
+    USER ||--o{ PROJECT_MEMBERSHIP : holds
 
     PROJECT {
         string _id "fresh UUID (Scope-owned)"
@@ -178,13 +160,17 @@ erDiagram
     ENTITY {
         string projectId "the project this entity is filed under"
     }
+    PROJECT_MEMBERSHIP {
+        string projectId
+        string userId
+        string role "user or admin"
+    }
 ```
 
-> The `projects` collection carries **no** owner or member fields, and there are **no**
-> `project-memberships`, `groups`, or `group-memberships` collections. *Who* owns or may access a
-> project is an [access concern owned by auth-rbac](#non-goals), not modelled here. `ENTITY` is any
-> [project-scoped collection](#which-entities-are-project-scoped); auth-rbac separately adds its
-> own `ownerId`/`visibility` fields to the same documents.
+> The `projects` collection carries no ownership field and project-scoped entities carry no
+> `ownerId` or visibility field. [auth-rbac.md](auth-rbac.md) adds the separate
+> `project_memberships` collection, whose unique `(projectId, userId)` records grant `user` or
+> `admin` access to the project's data.
 
 ### New collection: `projects`
 
@@ -195,12 +181,12 @@ soft-delete `deletedAt`) — minus any ownership field:
 |-------|------|-------|
 | `_id` | `string` | Fresh Scope-owned UUID (no special-cased ids) |
 | `name` | `string` | Display name |
-| `isDefault?` | `boolean` | `true` on exactly one project — the seeded **Default** (the backfill target and resolution-order fallback); **absent** on all others (keeps the sparse index a single entry) |
+| `isDefault?` | `boolean` | `true` on exactly one project — the seeded **Default** backfill target; **absent** on all others (keeps the sparse index a single entry) |
 | `description?` | `string` | |
 | `createdAt` / `updatedAt` / `deletedAt?` | `Date` | Soft-delete like `codebases` |
 
-There is intentionally **one** new collection. Ownership, membership, and group collections, if
-ever needed, are introduced by [auth-rbac.md](auth-rbac.md), which owns access — not here.
+The organization migration introduces `projects`; the RBAC migration introduces
+`project_memberships` as its separate authorization concern.
 
 ### Fields added to existing entities
 
@@ -213,9 +199,8 @@ Every [project-scoped](#which-entities-are-project-scoped) entity gains a single
 For the immutable [deterministically-keyed](#deterministically-keyed-entities-per-project-copies)
 copies, `projectId` comes with an identity change (below).
 
-This design adds **nothing else** to existing documents. Access fields (`ownerId`, `visibility`, …)
-are added separately by [auth-rbac.md](auth-rbac.md); the field sets are disjoint and independent (see
-[Landing order](#landing-order-independent)).
+This design adds no other fields to existing project-scoped documents. Authorization is resolved
+from the separate membership collection; it adds neither document ownership nor visibility.
 
 ### Which entities are project-scoped
 
@@ -234,9 +219,9 @@ only platform infrastructure stays global.
   project-independent), meaning the same logical entity computed in two projects collides; scoping
   them means **each project keeps its own copy**. Full mechanics in
   [Deterministically-keyed entities](#deterministically-keyed-entities-per-project-copies).
-- **Global platform catalog** (not project-scoped): **agents** and **models** — the platform-level
-  registry of available coding agents and LLMs, shared by every project. Whether either ever needs
-  project scoping (e.g. a project-private model endpoint) is an [open question](#open-questions).
+- **Global platform resources** (not project-scoped): **agents, models, feature flags, and
+  secrets**. They are platform-admin-only for every method, as defined in
+  [auth-rbac.md](auth-rbac.md).
 
 ### Deterministically-keyed entities: per-project copies
 
@@ -285,53 +270,55 @@ over a shared doc spanning multiple projects; see [Alternatives](#alternatives-c
   (Multi-project filing is an [alternative considered](#alternatives-considered).)
 - **Flat projects.** Nested/hierarchical projects (org → team → project) are deferred; a flat list
   covers the near-term need without path-scoping cost.
-- **No owner/member fields.** A project is a bucket; its access model (owner, members, roles,
-  visibility) is [auth-rbac's](#non-goals), added later without re-modelling anything here.
+- **Membership is external to the project document.** `project_memberships` records the `user` or
+  `admin` project role. Projects and their contents remain free of owner and visibility fields.
 
 ---
 
 ## Organization semantics
 
-Projects are an **organizational**, not access-control, construct. They decide how data is
-*filed and found*, never *who may see it* (that is [auth-rbac's](#non-goals)).
+Projects are both the organizational container and the **authorization boundary** for
+project-scoped data. This document defines filing and active-project selection; auth-rbac checks
+membership before a caller can use the selected project.
 
 - **`projectId` files an entity under exactly one project.** It is set at creation from the
   caller's **active project** (below) and stays fixed — moving an entity between projects is
-  [out of scope](#non-goals). Filing has no effect on who can see the entity.
+  [out of scope](#non-goals). Auth-rbac uses the field to identify which membership grants access.
 - **The active-project context is always set and acts as a narrowing filter.** A caller always
-  operates inside exactly one project; that project adds an `AND { projectId }` clause to list/read
-  queries, so you see only that project's data. It can only show **less**, never more — it does not
-  grant access to anything. There is **no** "all projects" / cleared state; to reach other data you
-  **switch** the active project (one at a time).
+  operates inside exactly one project; that project selects an `AND { projectId }` clause after
+  the API verifies membership. It does not grant access by itself. There is no "all projects" /
+  cleared state; to reach other data a caller switches between projects they may access.
 - **Only platform infra is global.** `agents` and `models` are the sole global catalog — they have
   no `projectId` and appear the same in every project. Everything else (including the
   deterministically-keyed [per-project copies](#deterministically-keyed-entities-per-project-copies))
   carries a `projectId` and filters accordingly.
 
-Because none of this is access control, **who can see across projects is entirely auth-rbac's
-concern** — its `readScope` decides the visible set, and the always-set active-project filter only
-narrows *within* it. See [Relationship to access control](#relationship-to-access-control-auth-rbac).
+The platform administrator may list all project metadata and administer memberships, but cannot
+access a project's content without membership. Auth-rbac also defines the narrow explicit
+readonly-share exception for one run or report and one recipient bound by immutable IdP
+tenant/subject.
 
 ---
 
 ## Relationship to access control (auth-rbac)
 
-**This layer defines no authorization.** It introduces no permissions, no roles, no membership,
-and no changes to `readScope`/`writeScope`. All of that is owned by [auth-rbac.md](auth-rbac.md)
-(see [Non-goals](#non-goals)). Concretely, this design does **not** add:
+**This document defines no authorization policy.** [auth-rbac.md](auth-rbac.md) owns the
+platform-admin role, project `user`/`admin` roles, membership routes, readonly shares, and route
+guards. The integration contract is:
 
-- `scope/project:*` (or `scope/group:*`) permissions, project-admin roles, or any role bundles;
-- a `project` visibility tier, or any change to `private`/`shared`;
-- any clause in the `readScope`/`writeScope` chokepoint.
+- Every project-scoped route resolves an immutable `projectId` from the selected project, route
+  path, validated create body, or parent entity.
+- The guard loads the caller's `(projectId, userId)` membership before list/read/write/delete
+  access. A project user can mutate user-editable resources and read the shared catalogs needed to
+  compose runs; a project admin can manage all project resources and project RBAC.
+- A platform admin may list all projects, delete any project, and manage RBAC on any project, but
+  has no implicit project-content membership.
+- The only membership exception is an explicit, read-only share of one run or report with one
+  immutable IdP subject. The share does not permit project discovery, lists, writes, or any other
+  resource, and neither a resource URL nor the current holder of an email/UPN alias gains access.
 
-The **one** forward hook it leaves for the access layer is the `projectId` field itself. If and
-when auth-rbac wants project-scoped visibility (e.g. "data is discoverable to a project's
-members"), its `readScope` **may** add a clause keyed on `projectId` — for example
-`{ projectId: { $in: myProjects } }`. Whether to do that, how membership is defined, and what
-visibility tiers exist are **auth-rbac's decisions** (its Open Question B), not this doc's.
-
-Until then, `projectId` is an **unenforced organizing dimension**: present, indexed, and
-filterable, but it never widens or restricts access on its own.
+`projectId` is therefore a required authorization input, but never an authorization grant by
+itself.
 
 ---
 
@@ -347,23 +334,19 @@ its fields.
   `_id`** as `projectId` onto all existing docs in the project-scoped collections. No id is
   special-cased — the Default is an ordinary project that happens to be seeded first and flagged
   `isDefault`. After it runs, every project-scoped entity physically carries a `projectId` — there is no null/global bucket. The
-  Default project has **no** owner and **no** members (those are access concepts, out of scope); it
-  is simply the bucket everything starts in.
-- **Unset coalesces to Default (safety net, not a second meaning).** Reads/lookups treat a missing
-  `projectId` as the **Default project's `_id`** — resolved once from the `isDefault` project and
-  cached (`projectId ?? defaultProjectId`), not a hard-coded constant. This only covers the transient window
-  between schema deploy and backfill completion (or a doc a batch misses), so nothing ever lands in
-  a "global / no-project" limbo. Backfill is therefore an **indexing/filtering optimization**, not a
-  correctness requirement.
-- **Why it "keeps working."** This layer adds **no** enforcement, so filing data under Default
-  changes *who can see what* not at all — every list simply gains a `projectId` it can now
-  filter/group by. The active project defaults to **Default**, which holds all pre-existing data, so
-  the first post-migration view is exactly today's list. Net: **behavior-preserving**.
-- **Going forward**, new data lands in the caller's **active project**, which defaults to Default
-  until they create or select another. Users can create projects and switch between them.
-- **Landing order.** This Default backfill is **independent of** auth-rbac. It mirrors the *shape*
-  of auth-rbac's legacy backfill but shares no field with it, so the two migrations can run in
-  either order over the same data with no conflict.
+  Default project has no owner; its memberships are added explicitly through auth-rbac before
+  anyone receives access to its contents.
+- **Missing project IDs fail closed after migration.** The temporary pre-backfill compatibility
+  path may resolve a missing `projectId` to the Default project only while the migration is in
+  progress. After completion, every project-scoped document must have a `projectId`; routes reject
+  a missing value rather than silently treating it as globally accessible or falling back to
+  Default.
+- **Authorization rollout.** The project migration itself does not infer legacy access. Before
+  project guards are enforced, a platform admin explicitly establishes Default-project
+  memberships. Once enforcement starts, only those memberships or an explicit readonly share
+  resolved and persisted against the recipient's immutable IdP subject expose legacy content.
+- **Going forward**, platform admins create projects and become their project admin atomically.
+  New data lands only in an active project for which the caller has the required role.
 
 Migration mechanics (`mongo-migrate-ts`, CosmosDB-RU constraints — see
 [db-migrations.md](db-migrations.md)):
@@ -377,8 +360,10 @@ Migration mechanics (`mongo-migrate-ts`, CosmosDB-RU constraints — see
 |------------|-------|---------|
 | `projects` | `{ isDefault: 1 }` sparse | Resolve the Default project (one cached lookup); exactly one doc carries it (seed migration + app invariant) |
 | `projects` | `{ createdAt: -1 }`, `{ deletedAt: 1 }` | Newest-first list, active (non-deleted) filter |
-| scoped entities (e.g. `requests`) | `{ projectId: 1 }` sparse | Project filter |
+| scoped entities (e.g. `requests`) | `{ projectId: 1 }` sparse | Project authorization/filter |
 | scoped entities | `{ projectId: 1, _id: 1 }` | Project-scoped newest-first / cursor sort |
+| `project_memberships` | `{ projectId: 1, userId: 1 }` unique | Membership lookup and one role per account/project |
+| `project_memberships` | `{ userId: 1, projectId: 1 }` | List the caller's accessible projects |
 
 ---
 
@@ -389,23 +374,29 @@ rule, every project capability in the Portal is also in the CLI.
 
 ### API
 
-- **CRUD**: `GET/POST /api/v1/projects`, `GET/PATCH/DELETE /api/v1/projects/:id` (soft-delete). No
-  member/role routes — membership is an
-  [access concern](#relationship-to-access-control-auth-rbac).
-- **How the project reaches the API — an ambient header.** The active project is carried as a
-  request header **`X-Scope-Project: <id>`**: **additive** (no existing route changes shape),
-  cross-cutting (Portal/CLI set it once and it applies to every call), and keeping project *context*
-  out of each resource's *address*. On **create**, the target `projectId` may instead be supplied in
-  the request **body**. *(A future `?projectId=<id>` query-param override on list/read endpoints, for
-  explicit deep-linkable requests, is a possible additive nicety — not part of the core design.)*
+- **Project operations:** only a platform admin may create a project; its creator becomes the
+  project's admin. Members can list their projects; platform admins can list all project metadata.
+  Project admins can update project metadata; only platform admins can soft-delete a project.
+- **Membership operations:** `GET /api/v1/projects/:projectId/members` and
+  the member-invitation plus `PUT`/`DELETE /api/v1/projects/:projectId/members/:userId` routes are
+  authorized for a project admin of that project or a platform admin. They are defined in
+  [auth-rbac.md](auth-rbac.md).
+- **How the project reaches the API — an explicit query parameter.** Root project-scoped
+  operations carry `?projectId=<id>`. It makes the target visible in every request and follows the
+  [by-id invariant](app-design.md#never-a-global-slug-only-action-on-a-project-scoped-entity-the-by-id-invariant).
+  Child resources derive their project from their parent. A run/report readonly share remains an
+  exact-resource grant to one immutable IdP subject as defined in
+  [auth-rbac.md](auth-rbac.md); it is not a project-context override, and neither the resource URL
+  nor a mutable email/UPN alias is a capability.
 - **Not a URL path segment.** We deliberately do **not** nest routes under `/api/v1/projects/:id/…`.
   That would rewrite **every** existing route (a breaking change, contradicting the
   [non-breaking goal](#impact-on-existing-endpoints)) and conflate *context* with *identity* — an
   entity's `_id` is globally unique, so the project is scoping context, not part of its address.
-  Point lookups stay at `…/:id` and remain [unscoped](#impact-on-existing-endpoints).
+  Point lookups stay at `…/:id`, but the API resolves the entity's `projectId` and enforces its
+  project membership before returning it.
 - **Resolution**: the header resolves through the
-  [resolution order](#default-project-resolution-order), **always** yielding exactly one project
-  (ultimately **Default**); list handlers AND-filter to it.
+  [project-selection contract](#project-selection) to one selected project; the API verifies
+  membership before list handlers apply its `projectId` filter.
 - **Runs list integration**: `projectId` becomes a categorical **filter** + **facet** dimension and
   a new `groupBy: "project"` value, composing with the existing server-side
   filter/facet/group/cursor pipeline (app-design.md "Runs List Query API") — no new query engine,
@@ -416,25 +407,22 @@ rule, every project capability in the Portal is also in the CLI.
 
 ### Impact on existing endpoints
 
-**Non-breaking, and invisible until projects are actually used.** No current route is renamed,
-removed, or changes shape in a breaking way; every change is additive and phased — during **P0**
-the API is byte-for-byte identical (only the schema field + backfill land). The
-[resolution order](#default-project-resolution-order) guarantees that a request carrying no project
-context resolves to **Default**, which after backfill holds all pre-existing data, so an unchanged
-client sees exactly today's results.
+**Routes remain stable, but access changes when project authorization is enabled.** P0 adds only
+the schema field and backfill. Once P2 project guards land, callers must select a project they
+belong to; an unchanged client cannot rely on falling back to the Default project.
 
 | Endpoint class | Change | Backward compatibility |
 |----------------|--------|------------------------|
-| **List** — `GET /api/v1/{requests, profiles, criteria, codebases, reports, insights, mcp-servers, skills, extensions, task-prompts, prompt-features, report-templates}` | AND-filter by the resolved active project (`X-Scope-Project` header / resolution order) | No project context ⇒ Default ⇒ all legacy data ⇒ same list as today. Results only narrow once a user creates other projects and files data there. |
-| **Runs list** — `GET /api/v1/requests` | `projectId` added as a **filter + facet + `groupBy:"project"`** value in the existing filter/facet/group/cursor pipeline (#1138) — no new query engine | All new params optional; omit them and behavior is unchanged. |
-| **Create** — `POST /api/v1/…` | Accepts an optional `projectId`; when omitted, defaults to the active project (ultimately Default) | Old create calls keep working and land in Default. |
-| **Point read/update/delete** — `GET/PATCH/DELETE /api/v1/…/:id` | Unchanged; responses gain an additive `projectId`. Point lookups stay **unscoped** — `_id` is a globally-unique UUID, so deep links and stored ids keep resolving | `projectId` is immutable, so update/delete never re-file. Enforcing project boundaries on point reads is an [access concern](#relationship-to-access-control-auth-rbac), not added here. |
+| **List** — `GET /api/v1/{requests, profiles, criteria, codebases, reports, insights, mcp-servers, skills, extensions, task-prompts, prompt-features, report-templates}` | AND-filter by `?projectId=` after membership is verified | The caller must select a project they may access; results never cross project boundaries. |
+| **Runs list** — `GET /api/v1/requests` | `projectId` added as a **filter + facet + `groupBy:"project"`** value in the existing filter/facet/group/cursor pipeline (#1138) — no new query engine | The selected project is mandatory after authorization is enabled. |
+| **Create** — `POST /api/v1/…` | Accepts a target `projectId` or uses the active project | The API validates the caller's required project role before creating the document. |
+| **Point read/update/delete** — `GET/PATCH/DELETE /api/v1/…/:id` | Routes remain stable; the API resolves the entity's project and checks membership before access. | `projectId` is immutable, so update/delete never re-file. A readonly share resolved to the recipient's immutable IdP subject is the narrow exception for one run or report. |
 | **Global catalog** — `GET /api/v1/agents`, `GET /api/v1/models` | **No change** — stay global platform infrastructure | Fully unaffected. |
 | **Infra / config** — `system`, `feature-flags`, `secrets` | **No change** — not user content, outside this layer | Fully unaffected. |
 
 Two cross-cutting notes: (1) responses across project-scoped resources gain an additive `projectId`
-field and the OpenAPI spec is regenerated (field + `X-Scope-Project` header **added**; nothing
-removed), so schema-strict clients keep validating. (2) The one **identity** change is for the two
+field and the OpenAPI spec is regenerated (field + required `?projectId=` query parameter **added**;
+nothing removed), so schema-strict clients keep validating. (2) The one **identity** change is for the two
 [deterministically-keyed entities](#deterministically-keyed-entities-per-project-copies)
 (`task-prompts`, `skill-revisions`): their `_id` moves from a bare deterministic id to a per-project
 key, so an
@@ -446,65 +434,59 @@ internal lookup by that content id becomes project-scoped — called out in that
   one is **always** selected ([never a cleared "All projects" state](#organization-semantics)). Runs
   and catalog lists scope to it, shown as a context indicator (not a removable filter chip); other
   filters remain removable.
-- Project management: **create / rename / describe / soft-delete** and list. (Members and roles are
-  [out of scope](#non-goals) — added later by the access layer.)
+- Project management: a platform admin can create, list, and delete projects; a project admin can
+  rename, describe, and manage members of their project.
 - Project shown on list rows and detail pages.
 
 ### CLI
 
 - `scope project list | create | use <id> | show`.
 - Active project stored in CLI config (like `SCOPE_API_URL`); `--project <id>` per-command
-  override; `SCOPE_PROJECT` env var. `scope run list` gains `--project` alongside its existing
+  override; `SCOPE_PROJECT` env var. The client serializes that selection as `?projectId=` on
+  every root project-scoped request. `scope run list` gains `--project` alongside its existing
   filters, keeping parity.
 
-### Default-project resolution order
+### Project selection
 
-`X-Scope-Project` header (CLI: `--project` flag / `SCOPE_PROJECT` env) → configured active project →
-the **Default** project (the one flagged `isDefault`). The most explicit signal wins, and the chain
-**always** resolves to exactly one project.
+Portal and CLI may persist an active project for convenience, but every root project-scoped API
+call sends its selection explicitly as `?projectId=`. The caller must have a membership in that
+project. The Default project is a migration target, not an implicit fallback for a caller without
+a selected, authorized project.
 
 ---
 
 ## Phased rollout
 
-The sequence deliberately **starts with the single Project structure** (P0–P1), so the core
-organize-and-group goal ships as one additive layer. Each phase is independently shippable,
-reversible, and non-breaking; earlier phases change **no** behavior because everything defaults into
-the Default project and unset `projectId` is treated as Default.
+The project schema and Default-project backfill can land before access enforcement. Project CRUD,
+active-project context, and all project-scoped routes must then ship with the membership rules in
+[auth-rbac.md](auth-rbac.md); they are not independently deployable as unrestricted project access.
 
 ```mermaid
 flowchart LR
-    P0["P0 Schema + Default<br/>+ backfill (invisible)"] --> P1["P1 Projects CRUD +<br/>active-project context +<br/>Runs projectId dimension"]
+    P0["P0 Schema + Default<br/>+ backfill"] --> P1["P1 Auth + memberships<br/>+ project CRUD"] --> P2["P2 Project guards +<br/>active-project context"]
 ```
 
-- **P0 — Schema + Default + backfill (invisible).** Add `projectId` (optional, ignored by
-  logic); create the `projects` collection; create the Default project; backfill `projectId`. No
-  behavior change.
-- **P1 — Projects CRUD + context + Runs dimension.** `/api/v1/projects` CRUD; active-project context
-  narrows lists; `projectId` as a Runs **filter/facet/`groupBy:"project"`**; Portal switcher + CLI
-  `project` commands. Default is the initial active project ⇒ status quo preserved; new projects are
-  opt-in.
-
-> **Independent of auth-rbac.** No phase needs an identity or access layer — every phase adds only
-> organization and can ship in any order relative to auth-rbac; project-scoped *access enforcement*
-> stays [auth-rbac's to deliver](#relationship-to-access-control-auth-rbac), keyed off the
-> `projectId` this design exposes. See [Landing order](#landing-order-independent).
+- **P0 — Schema + Default + backfill.** Add `projectId`; create `projects`; create the Default
+  project; backfill scoped documents. No access is inferred from old documents.
+- **P1 — Identity, memberships, and project APIs.** Add authenticated user records and
+  `project_memberships`; let platform admins create projects and atomically become their project
+  admin; add immutable-subject-bound project membership and pending-invitation management.
+- **P2 — Project guards + context.** Require membership before applying project filters or serving
+  point reads; add active-project context, Runs `projectId` filter/facet/`groupBy:"project"`, Portal
+  switcher, and CLI project commands. Project and platform role semantics come from auth-rbac.
 
 ---
 
 ## Open questions
 
-Project-scoped **access** questions are deferred to auth-rbac **Open Question B**. The questions
-that belong to *this* (organization) layer are:
+The questions that belong to this organization layer are:
 
-- **Backfill target.** One global **Default** project for all legacy data (status-quo-preserving,
-  **recommended**) vs per-user buckets (more separation, but reshuffles where legacy data shows up
-  in listings). Recommendation: single Default for backfill.
-- **Should the access layer key off `projectId`?** Whether project membership should drive
-  visibility — and how membership is even defined — is **deferred to auth-rbac** (its Open
-  Question B). This doc only guarantees `projectId` is present, indexed, and filterable.
-- **Global platform catalog.** `agents` and `models` stay global platform infrastructure; confirm
-  neither ever needs project scoping (e.g. a project-private custom model or agent endpoint).
+- **Backfill target.** One global **Default** project for all legacy data is recommended. A platform
+  administrator explicitly assigns project memberships before it becomes accessible; no historical
+  user ownership is inferred.
+- **Global platform resources.** Agents, models, feature flags, and secrets remain global and are
+  platform-admin-only. A future project-private agent or model endpoint would require a separate
+  design.
 - **Deterministic-id dedup cost.** Per-project copies of `task-prompts` and `skill-revisions` trade
   cluster-wide dedup for isolation; confirm the storage/write amplification is acceptable, or whether
   high-reuse content warrants a shared-with-`projectIds` exception. (Large codebase snapshots are
@@ -549,9 +531,8 @@ that belong to *this* (organization) layer are:
 
 - [data-tags.md](data-tags.md) — the **companion** cross-cutting **tags** layer that composes on
   top of the project filter (same organization, not access; ships additively after projects).
-- [auth-rbac.md](auth-rbac.md) — the **access-control layer** (ownership, visibility, membership,
-  `readScope`/`writeScope`) that composes with this organization layer; it reserves the `projectId`
-  field and owns project-scoped *access* (§5, Open Question B).
+- [auth-rbac.md](auth-rbac.md) — the access-control layer: platform administration, project
+  membership roles, immutable-subject-bound run/report shares, and project-scoped route guards.
 - [app-design.md](app-design.md) — Runs list query API (filters/facets/grouping/cursors) that
   the `projectId` dimension plugs into.
 - [codebases.md](codebases.md) — the first-class-entity pattern (fresh-UUID `_id`, soft-delete,
