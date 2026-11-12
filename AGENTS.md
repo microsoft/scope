@@ -247,10 +247,20 @@ before changing any AI-facing instruction surface.
 
 ## Contributing (Pull Requests)
 
-Before pushing or opening a pull request, inspect `git remote -v` rather than
-assuming remote names or ownership. Push the branch to an already configured
-writable remote and target the intended base repository and branch. Never
-create or configure a fork unless the user explicitly requests or approves it.
+Before pushing or opening a pull request, inspect `git remote -v` and determine
+the user's actual write permission for `microsoft/scope`; do not infer ownership
+or access from remote names such as `origin` or `upstream`.
+
+- **Developers with branch write access:** push the branch to an already
+  configured remote whose URL points to `microsoft/scope`, then open a
+  same-repository pull request against the intended base branch. Do not use a
+  fork when direct branch push access is available.
+- **Community contributors without branch write access:** push the branch to
+  their already configured fork, then open a cross-fork pull request targeting
+  `microsoft/scope` and the intended base branch.
+- Never create or configure a fork unless the user explicitly requests or
+  approves it. If the required writable remote is not configured, stop and ask
+  the user rather than creating a fork or changing the target repository.
 
 - If the target org enforces **SAML SSO** and the PR call fails with a `403`
   ("Resource protected by organization SAML enforcement"), stop and ask the
