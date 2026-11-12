@@ -7,6 +7,7 @@ import { createHash, randomInt } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { basename } from "node:path";
+import { pipeline } from "node:stream/promises";
 
 export const DOCKER_IMAGE = "mongo:4.2";
 export const EXPECTED_SUBSCRIPTION_ID = "f7de4384-8753-4910-95d7-650b9d23cb6f";
@@ -378,24 +379,40 @@ export interface RunBinaryToFilesOptions {
   stderrPath: string;
 }
 
+/** Complete both local files before callers hash or validate the archive. */
 export async function runBinaryToFiles(opts: RunBinaryToFilesOptions): Promise<number> {
-  return new Promise((resolve) => {
-    const out = createWriteStream(opts.stdoutPath, { flags: "w" });
-    const err = createWriteStream(opts.stderrPath, { flags: "w" });
-    const child = spawn(opts.command, opts.args, { stdio: ["pipe", "pipe", "pipe"] });
-    child.stdout.pipe(out);
-    child.stderr.pipe(err);
+  const out = createWriteStream(opts.stdoutPath, { flags: "w" });
+  const err = createWriteStream(opts.stderrPath, { flags: "w" });
+  const child = spawn(opts.command, opts.args, { stdio: ["pipe", "pipe", "pipe"] });
+  let inputFailed = false;
+
+  // A command can close stdin early (including a failed spawn). Treat that as
+  // failure without allowing the stream's error event to crash the process.
+  child.stdin.on("error", () => { inputFailed = true; });
+  const exitCode = new Promise<number>((resolve) => {
     child.on("error", (error) => {
       err.write(`${error.message}\n`);
       resolve(1);
     });
-    child.on("close", (code) => {
-      out.end();
-      err.end();
-      resolve(code ?? 1);
-    });
-    child.stdin.end(opts.input.endsWith("\n") ? opts.input : `${opts.input}\n`);
+    child.on("close", (code) => resolve(code ?? 1));
   });
+
+  // Child close only closes the pipes; writes queued in the destination files
+  // may still be pending. Pipelines await those writes and propagate disk errors.
+  const stdoutComplete = pipeline(child.stdout, out);
+  const stderrComplete = pipeline(child.stderr, err);
+  child.stdin.end(opts.input.endsWith("\n") ? opts.input : `${opts.input}\n`);
+
+  try {
+    const [code] = await Promise.all([exitCode, stdoutComplete, stderrComplete]);
+    return code === 0 && inputFailed ? 1 : code;
+  } catch (error) {
+    // Stop producing an archive that cannot be persisted, and settle the other
+    // pipe before returning control to the caller's pod cleanup.
+    child.kill();
+    await Promise.allSettled([exitCode, stdoutComplete, stderrComplete]);
+    throw error;
+  }
 }
 
 export async function gzipIntegrityOk(path: string): Promise<boolean> {
