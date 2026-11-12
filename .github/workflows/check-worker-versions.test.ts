@@ -24,6 +24,7 @@ interface WorkerVersionWorkflow {
 
 const workflow = parse(readFileSync(".github/workflows/check-worker-versions.yml", "utf8")) as WorkerVersionWorkflow;
 const setupStep = workflow.jobs["setup-matrix"].steps.find((candidate) => candidate.id === "set")!;
+const createIssueStep = workflow.jobs["check-versions"].steps.find((candidate) => candidate.id === "create_issue")!;
 const expectedWorkers = [
   { worker: "coder-acp-copilot", checker: "version-checker-acp-copilot" },
   { worker: "coder-acp-claude-code", checker: "version-checker-claude-code" },
@@ -67,5 +68,10 @@ describe("Check Worker Versions workflow", () => {
 
   it.each(expectedWorkers)("selects only $worker when requested", ({ worker, checker }) => {
     expect(selectedWorkers(worker)).toEqual([{ worker, checker }]);
+  });
+
+  it("uses a non-default token so issue creation triggers the upgrade workflow", () => {
+    expect(createIssueStep.env?.GH_TOKEN).toBe("${{ secrets.GH_AW_AGENT_TOKEN }}");
+    expect(createIssueStep.env?.GH_TOKEN).not.toContain("secrets.GITHUB_TOKEN");
   });
 });

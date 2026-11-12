@@ -176,7 +176,8 @@ jobs:
         id: create_issue
         if: steps.check.outputs.updates_available == 'true' && (steps.existing.outputs.exists == 'false' || steps.existing.outputs.same_version == 'false')
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN-created issue events cannot trigger another workflow.
+          GH_TOKEN: ${{ secrets.GH_AW_AGENT_TOKEN }}
         run: |
           cat > /tmp/issue-body.md <<'ISSUE_EOF'
           ## Version updates available for ${{ matrix.worker }}
