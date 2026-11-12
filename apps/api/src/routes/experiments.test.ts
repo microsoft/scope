@@ -12,6 +12,10 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { RouteContext } from "../route-context.js";
 import { ExperimentStore, type ExperimentDocument } from "shared";
+import {
+  ExperimentLifecycleCoordinator,
+  ExperimentLifecycleError,
+} from "../experiment-lifecycle.js";
 import { registerExperimentsRoutes } from "./experiments.js";
 
 extendZodWithOpenApi(z);
@@ -72,6 +76,108 @@ function generateDocument(registry: OpenAPIRegistry) {
 }
 
 describe("Experiment API contract", () => {
+  it("scopes lifecycle operations and returns stable asynchronous progress", async () => {
+    const lifecycleExperiment = {
+      experimentId: "experiment-1",
+      lifecycle: {
+        operationId: "operation-1",
+        phase: "deleting",
+        stateVersion: 2,
+        progress: {
+          expectedRequests: 2,
+          completedRequests: 1,
+          expectedReports: 1,
+          completedReports: 0,
+        },
+        blocking: [],
+        deleteRequestedAt: new Date("2026-10-16T12:00:00.000Z"),
+      },
+    } as ExperimentDocument;
+    const startDelete = vi
+      .spyOn(ExperimentLifecycleCoordinator.prototype, "startDelete")
+      .mockResolvedValue(lifecycleExperiment);
+    const repair = vi
+      .spyOn(ExperimentLifecycleCoordinator.prototype, "repair")
+      .mockResolvedValue(lifecycleExperiment);
+    const { app } = harness();
+
+    const missingScope = await request(app)
+      .delete("/api/v1/experiments/experiment-1");
+    const started = await request(app)
+      .delete("/api/v1/experiments/experiment-1?projectId=project-1");
+    const status = await request(app)
+      .get("/api/v1/experiments/experiment-1/lifecycle?projectId=project-1");
+
+    expect(missingScope.status).toBe(400);
+    expect(started.status).toBe(202);
+    expect(started.body).toMatchObject({
+      experimentId: "experiment-1",
+      operationId: "operation-1",
+      phase: "deleting",
+      progress: {
+        expectedRequests: 2,
+        completedRequests: 1,
+      },
+    });
+    expect(status.status).toBe(200);
+    expect(startDelete).toHaveBeenCalledWith("project-1", "experiment-1");
+    expect(repair).toHaveBeenCalledWith("project-1", "experiment-1");
+
+    startDelete.mockRestore();
+    repair.mockRestore();
+  });
+
+  it("starts restore and exposes machine-readable lifecycle conflicts", async () => {
+    const restoringExperiment = {
+      experimentId: "experiment-1",
+      lifecycle: {
+        operationId: "operation-restore",
+        phase: "restoring",
+        stateVersion: 4,
+        progress: {
+          expectedRequests: 2,
+          completedRequests: 0,
+          expectedReports: 1,
+          completedReports: 0,
+        },
+        blocking: [],
+        deleteRequestedAt: new Date("2026-10-16T12:00:00.000Z"),
+        restoreRequestedAt: new Date("2026-10-16T13:00:00.000Z"),
+      },
+    } as ExperimentDocument;
+    const startRestore = vi
+      .spyOn(ExperimentLifecycleCoordinator.prototype, "startRestore")
+      .mockResolvedValueOnce(restoringExperiment)
+      .mockRejectedValueOnce(
+        new ExperimentLifecycleError(
+          "Experiment restore conflicts with an active delete",
+          409,
+          "lifecycle-conflict",
+          restoringExperiment.lifecycle,
+        ),
+      );
+    const { app } = harness();
+
+    const started = await request(app)
+      .post("/api/v1/experiments/experiment-1/restore?projectId=project-1");
+    const conflict = await request(app)
+      .post("/api/v1/experiments/experiment-1/restore?projectId=project-1");
+
+    expect(started.status).toBe(202);
+    expect(started.body).toMatchObject({
+      operationId: "operation-restore",
+      phase: "restoring",
+    });
+    expect(conflict.status).toBe(409);
+    expect(conflict.body).toMatchObject({
+      code: "lifecycle-conflict",
+      operationId: "operation-restore",
+      phase: "restoring",
+    });
+
+    startRestore.mockRestore();
+  });
+
   it("requires project scope on root routes", async () => {
     const { app } = harness();
 
@@ -121,6 +227,10 @@ describe("Experiment API contract", () => {
       _id: "experiment-1",
       projectId: "wrong-project",
       finalizedAt: { $exists: true },
+      deletedAt: { $exists: false },
+      "lifecycle.phase": {
+        $nin: ["deleting", "deleted", "restoring"],
+      },
     });
   });
 
@@ -275,8 +385,10 @@ describe("Experiment API contract", () => {
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports",
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports/{reportId}/structured",
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports/{templateId}/retry",
+      "/api/v1/experiments/{id}/lifecycle",
       "/api/v1/experiments/{id}/report-templates",
       "/api/v1/experiments/{id}/requests",
+      "/api/v1/experiments/{id}/restore",
       "/api/v1/experiments/{id}/retry",
     ]);
     expect(document.paths).not.toHaveProperty("/api/v1/submissions");
@@ -327,6 +439,10 @@ describe("Experiment API contract", () => {
       const getExecution = vi
         .spyOn(ExperimentStore.prototype, "getExecution")
         .mockResolvedValue(execution);
+      vi.spyOn(ExperimentStore.prototype, "get").mockResolvedValue({
+        _id: "experiment-1",
+        projectId: "project-1",
+      } as ExperimentDocument);
       const toArray = vi.fn().mockResolvedValue([{
         _id: "report-1",
         projectId: "project-1",
@@ -354,11 +470,13 @@ describe("Experiment API contract", () => {
         projectId: "project-1",
         experimentId: "experiment-1",
         experimentExecutionId: "execution-2",
+        includeDeleted: false,
       });
       expect(find).toHaveBeenCalledWith({
         projectId: "project-1",
         experimentId: "experiment-1",
         experimentExecutionId: "execution-2",
+        deletedAt: { $exists: false },
       });
       expect(response.body).toEqual([
         expect.objectContaining({

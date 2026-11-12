@@ -30,6 +30,47 @@ export type FixedPayload<T> =
   | InlineFixedPayload<T>
   | ChunkedFixedPayload<T>;
 
+export type ExperimentLifecyclePhase =
+  | "deleting"
+  | "deleted"
+  | "restoring"
+  | "restored";
+
+export type ExperimentLifecycleTargetKind = "request" | "report";
+
+export interface ExperimentLifecycleTarget {
+  kind: ExperimentLifecycleTargetKind;
+  id: string;
+}
+
+export interface ExperimentLifecycleBlocker {
+  kind: ExperimentLifecycleTargetKind | "experiment";
+  id: string;
+  reason: "target-missing" | "target-conflict" | "reconciliation-failed";
+  error?: string;
+}
+
+export interface ExperimentLifecycleProgress {
+  expectedRequests: number;
+  completedRequests: number;
+  expectedReports: number;
+  completedReports: number;
+}
+
+export interface ExperimentLifecycleState {
+  operationId: string;
+  phase: ExperimentLifecyclePhase;
+  stateVersion: number;
+  targets: FixedPayload<ExperimentRequestState>;
+  targetFingerprint: string;
+  progress: ExperimentLifecycleProgress;
+  blocking: ExperimentLifecycleBlocker[];
+  deleteRequestedAt: Date;
+  deleteCompletedAt?: Date;
+  restoreRequestedAt?: Date;
+  restoreCompletedAt?: Date;
+}
+
 export type ExperimentDependencyState =
   | "waiting"
   | "ready"
@@ -189,6 +230,8 @@ export interface ExperimentDocument {
   createdAt: Date;
   updatedAt: Date;
   finalizedAt?: Date;
+  deletedAt?: Date;
+  lifecycle?: ExperimentLifecycleState;
 }
 
 export interface ExperimentExecutionHistoryDocument

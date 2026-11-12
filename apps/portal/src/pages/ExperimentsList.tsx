@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Atom, Plus } from "lucide-react";
+import { ArchiveRestore, Atom, Plus } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   CheckboxFilterGroup,
@@ -86,6 +86,7 @@ export function ExperimentsList() {
     filterKeys: FILTER_KEYS,
   });
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
   const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([
     undefined,
   ]);
@@ -99,9 +100,13 @@ export function ExperimentsList() {
   });
   const cursor = cursorStack[state.page - 1];
   const experimentsQuery = useQuery({
-    queryKey: ["experiments", cursor, state.pageSize],
+    queryKey: ["experiments", cursor, state.pageSize, showDeleted],
     queryFn: () =>
-      api.listExperiments({ cursor, limit: state.pageSize }),
+      api.listExperiments({
+        cursor,
+        limit: state.pageSize,
+        includeDeleted: showDeleted,
+      }),
     placeholderData: keepPreviousData,
   });
 
@@ -200,7 +205,9 @@ export function ExperimentsList() {
         hidden: columnVisibility.isHidden("readiness"),
         cell: (experiment) => (
           <Badge variant={readinessVariant(experiment.readiness)}>
-            {experiment.readiness ?? "unknown"}
+            {experiment.lifecycle?.phase === "deleted"
+              ? "deleted"
+              : experiment.lifecycle?.phase ?? experiment.readiness ?? "unknown"}
           </Badge>
         ),
       },
@@ -305,12 +312,25 @@ export function ExperimentsList() {
       description="Reproducible benchmark compositions and processing history"
       railStorageKey="experiments"
       actions={
-        <Button asChild>
-          <Link to="/experiments/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New Experiment
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={showDeleted ? "secondary" : "outline"}
+            onClick={() => {
+              setShowDeleted((value) => !value);
+              state.setPage(1);
+              setCursorStack([undefined]);
+            }}
+          >
+            <ArchiveRestore className="mr-2 h-4 w-4" />
+            {showDeleted ? "Hide deleted" : "Show deleted"}
+          </Button>
+          <Button asChild>
+            <Link to="/experiments/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Experiment
+            </Link>
+          </Button>
+        </div>
       }
       filterRail={
         <FilterRail
@@ -375,7 +395,11 @@ export function ExperimentsList() {
               columns={columns}
               getRowId={(experiment) => experiment.experimentId}
               onRowClick={(experiment) =>
-                navigate(`/experiments/${experiment.experimentId}`)
+                navigate(
+                  `/experiments/${experiment.experimentId}${
+                    experiment.lifecycle ? "?includeDeleted=true" : ""
+                  }`,
+                )
               }
               sort={state.sort}
               sortDir={state.sortDir}

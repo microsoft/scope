@@ -119,6 +119,47 @@ afterEach(() => {
 });
 
 describe("ExperimentsList", () => {
+  it("includes deleted Experiments on demand and preserves deleted navigation", async () => {
+    const deletedExperiment = {
+      ...experiment("experiment-deleted", "Deleted benchmark", "done"),
+      deletedAt: "2026-10-16T12:00:00.000Z",
+      lifecycle: {
+        operationId: "operation-delete",
+        phase: "deleted" as const,
+        stateVersion: 3,
+        progress: {
+          expectedRequests: 2,
+          completedRequests: 2,
+          expectedReports: 1,
+          completedReports: 1,
+        },
+        blocking: [],
+      },
+    };
+    vi.mocked(api.listExperiments)
+      .mockResolvedValueOnce({ items: firstPage })
+      .mockResolvedValueOnce({ items: [deletedExperiment] });
+    renderList();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Show deleted" }),
+    );
+    expect(
+      (await screen.findAllByText("Deleted benchmark")).length,
+    ).toBeGreaterThan(0);
+    expect(api.listExperiments).toHaveBeenLastCalledWith({
+      cursor: undefined,
+      includeDeleted: true,
+      limit: 25,
+    });
+    fireEvent.click(screen.getAllByText("Deleted benchmark")[0]);
+    await waitFor(() => {
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/experiments/experiment-deleted",
+      );
+    });
+  });
+
   it("uses the shared list controls for filtering and customization", async () => {
     vi.mocked(api.listExperiments).mockResolvedValue({
       items: firstPage,
@@ -159,6 +200,7 @@ describe("ExperimentsList", () => {
     expect((await screen.findAllByText("Gamma benchmark")).length).toBeGreaterThan(0);
     expect(api.listExperiments).toHaveBeenLastCalledWith({
       cursor: "next-page",
+      includeDeleted: false,
       limit: 25,
     });
 

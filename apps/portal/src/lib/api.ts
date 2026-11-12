@@ -13,10 +13,12 @@ import {
   parseExperiment,
   parseExperimentExecution,
   parseExperimentExecutionPage,
+  parseExperimentLifecycle,
   parseExperimentPage,
   type ExistingRunExperimentCreateView,
   type ExperimentExecutionPageView,
   type ExperimentExecutionView,
+  type ExperimentLifecycleView,
   type ExperimentMembershipMutationView,
   type ExperimentMetadataView,
   type ExperimentPageView,
@@ -390,11 +392,13 @@ export const api = {
   listExperiments: async (opts?: {
     cursor?: string;
     limit?: number;
+    includeDeleted?: boolean;
   }): Promise<ExperimentPageView> => {
     const value = await request<unknown>(
       `/experiments${qs({
         after: opts?.cursor,
         limit: opts?.limit ? String(opts.limit) : undefined,
+        includeDeleted: opts?.includeDeleted ? "true" : undefined,
       })}`,
       undefined,
       { scoped: true },
@@ -402,23 +406,58 @@ export const api = {
     return parseExperimentPage(value);
   },
 
-  getExperiment: async (id: string): Promise<ExperimentView> => {
+  getExperiment: async (
+    id: string,
+    opts?: { includeDeleted?: boolean },
+  ): Promise<ExperimentView> => {
     const value = await request<unknown>(
-      `/experiments/${encodeURIComponent(id)}`,
+      `/experiments/${encodeURIComponent(id)}${qs({
+        includeDeleted: opts?.includeDeleted ? "true" : undefined,
+      })}`,
       undefined,
       { scoped: true },
     );
     return parseExperiment(value);
   },
 
+  deleteExperiment: async (id: string): Promise<ExperimentLifecycleView> => {
+    const value = await request<unknown>(
+      `/experiments/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+      { scoped: true },
+    );
+    return parseExperimentLifecycle(value);
+  },
+
+  restoreExperiment: async (id: string): Promise<ExperimentLifecycleView> => {
+    const value = await request<unknown>(
+      `/experiments/${encodeURIComponent(id)}/restore`,
+      { method: "POST" },
+      { scoped: true },
+    );
+    return parseExperimentLifecycle(value);
+  },
+
+  getExperimentLifecycle: async (
+    id: string,
+  ): Promise<ExperimentLifecycleView> => {
+    const value = await request<unknown>(
+      `/experiments/${encodeURIComponent(id)}/lifecycle`,
+      undefined,
+      { scoped: true },
+    );
+    return parseExperimentLifecycle(value);
+  },
+
   listExperimentExecutions: async (
     id: string,
-    opts?: { cursor?: string; limit?: number },
+    opts?: { cursor?: string; limit?: number; includeDeleted?: boolean },
   ): Promise<ExperimentExecutionPageView> => {
     const value = await request<unknown>(
       `/experiments/${encodeURIComponent(id)}/executions${qs({
         after: opts?.cursor,
         limit: opts?.limit ? String(opts.limit) : undefined,
+        includeDeleted: opts?.includeDeleted ? "true" : undefined,
       })}`,
       undefined,
       { scoped: true },
@@ -429,9 +468,12 @@ export const api = {
   getExperimentExecution: async (
     id: string,
     experimentExecutionId: string,
+    opts?: { includeDeleted?: boolean },
   ): Promise<ExperimentExecutionView> => {
     const value = await request<unknown>(
-      `/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(experimentExecutionId)}`,
+      `/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(experimentExecutionId)}${qs({
+        includeDeleted: opts?.includeDeleted ? "true" : undefined,
+      })}`,
       undefined,
       { scoped: true },
     );
@@ -441,9 +483,12 @@ export const api = {
   listExperimentReports: (
     id: string,
     experimentExecutionId: string,
+    opts?: { includeDeleted?: boolean },
   ): Promise<Report[]> =>
     request(
-      `/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(experimentExecutionId)}/reports`,
+      `/experiments/${encodeURIComponent(id)}/executions/${encodeURIComponent(experimentExecutionId)}/reports${qs({
+        includeDeleted: opts?.includeDeleted ? "true" : undefined,
+      })}`,
       undefined,
       { scoped: true },
     ),

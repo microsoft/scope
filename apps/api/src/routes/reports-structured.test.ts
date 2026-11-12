@@ -91,6 +91,7 @@ describe("structured report download", () => {
       projectId: "project-1",
       experimentId: "experiment-1",
       experimentExecutionId: "execution-1",
+      deletedAt: { $exists: false },
     });
     expect(response.body[0]).toMatchObject({
       id: "report-1",

@@ -27,6 +27,24 @@ interface ExperimentMetadata {
   description?: string;
 }
 
+interface ExperimentLifecycle {
+  operationId: string;
+  phase: "deleting" | "deleted" | "restoring" | "restored";
+  stateVersion: number;
+  progress: {
+    expectedRequests: number;
+    completedRequests: number;
+    expectedReports: number;
+    completedReports: number;
+  };
+  blocking: Array<{
+    kind: "request" | "report" | "experiment";
+    id: string;
+    reason: string;
+    error?: string;
+  }>;
+}
+
 interface ExperimentExecution {
   experimentExecutionId: string;
   attemptNumber: number;
@@ -93,6 +111,8 @@ interface ExperimentView {
   createdAt: string;
   updatedAt?: string;
   finalizedAt?: string;
+  deletedAt?: string;
+  lifecycle?: ExperimentLifecycle;
 }
 
 interface ExperimentPage {
@@ -331,6 +351,93 @@ function parseExperiment(value: unknown): ExperimentView {
     createdAt: stringField(experiment, "createdAt", "experiment")!,
     updatedAt: stringField(experiment, "updatedAt", "experiment", true),
     finalizedAt: stringField(experiment, "finalizedAt", "experiment", true),
+    deletedAt: stringField(experiment, "deletedAt", "experiment", true),
+    lifecycle:
+      experiment.lifecycle === undefined
+        ? undefined
+        : parseLifecycle(experiment.lifecycle),
+  };
+}
+
+function parseLifecycle(value: unknown): ExperimentLifecycle {
+  const lifecycle = asRecord(value, "experiment lifecycle");
+  const progress = asRecord(
+    lifecycle.progress,
+    "experiment lifecycle progress",
+  );
+  const phase = stringField(lifecycle, "phase", "experiment lifecycle")!;
+  if (
+    phase !== "deleting" &&
+    phase !== "deleted" &&
+    phase !== "restoring" &&
+    phase !== "restored"
+  ) {
+    throw new Error("Invalid experiment lifecycle.phase response from Scope");
+  }
+  const blocking = lifecycle.blocking;
+  if (!Array.isArray(blocking)) {
+    throw new Error("Invalid experiment lifecycle.blocking response from Scope");
+  }
+  return {
+    operationId: stringField(
+      lifecycle,
+      "operationId",
+      "experiment lifecycle",
+    )!,
+    phase,
+    stateVersion: numberField(
+      lifecycle,
+      "stateVersion",
+      "experiment lifecycle",
+    ),
+    progress: {
+      expectedRequests: numberField(
+        progress,
+        "expectedRequests",
+        "experiment lifecycle progress",
+      ),
+      completedRequests: numberField(
+        progress,
+        "completedRequests",
+        "experiment lifecycle progress",
+      ),
+      expectedReports: numberField(
+        progress,
+        "expectedReports",
+        "experiment lifecycle progress",
+      ),
+      completedReports: numberField(
+        progress,
+        "completedReports",
+        "experiment lifecycle progress",
+      ),
+    },
+    blocking: blocking.map((item) => {
+      const blocker = asRecord(item, "experiment lifecycle blocker");
+      const kind = stringField(
+        blocker,
+        "kind",
+        "experiment lifecycle blocker",
+      );
+      if (kind !== "request" && kind !== "report" && kind !== "experiment") {
+        throw new Error("Invalid experiment lifecycle blocker kind");
+      }
+      return {
+        kind,
+        id: stringField(blocker, "id", "experiment lifecycle blocker")!,
+        reason: stringField(
+          blocker,
+          "reason",
+          "experiment lifecycle blocker",
+        )!,
+        error: stringField(
+          blocker,
+          "error",
+          "experiment lifecycle blocker",
+          true,
+        ),
+      };
+    }),
   };
 }
 
@@ -879,6 +986,152 @@ export function registerExperimentCommands(program: Command): void {
     }
   });
 
+  const lifecycleAction = (
+    command: Command,
+    method: "DELETE" | "POST",
+    pathSuffix: "" | "/restore",
+    terminalPhase: "deleted" | "restored",
+  ) => {
+    withProjectOption(
+      withOutputOption(
+        command
+          .argument("<id>", "Experiment ID")
+          .option("--no-wait", "Return after the lifecycle operation starts")
+          .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
+      ),
+    ).action(async (id: string, options) => {
+      try {
+        const projectId = requireProjectId(options.project);
+        const response = await apiFetch(
+          options.url,
+          `/experiments/${encodeURIComponent(id)}${pathSuffix}`,
+          { method, projectId },
+        );
+        if (!response.ok) await throwApiError(response);
+        let state = parseLifecycle(await json(response));
+        while (options.wait !== false && state.phase !== terminalPhase) {
+          if (state.blocking.length > 0) {
+            throw new Error(
+              `Experiment lifecycle blocked: ${state.blocking
+                .map((blocker) =>
+                  `${blocker.kind}:${blocker.id} ${blocker.reason}${
+                    blocker.error ? ` (${blocker.error})` : ""
+                  }`
+                )
+                .join(", ")}`,
+            );
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1_000));
+          const status = await apiFetch(
+            options.url,
+            `/experiments/${encodeURIComponent(id)}/lifecycle`,
+            { projectId },
+          );
+          if (!status.ok) await throwApiError(status);
+          state = parseLifecycle(await json(status));
+        }
+        const format = (options.output ?? "table") as OutputFormat;
+        if (isMachineReadable(format)) {
+          console.log(formatData([state], [
+            { key: "operationId", label: "Operation" },
+            { key: "phase", label: "Phase" },
+            { key: "stateVersion", label: "Version" },
+          ], format));
+          return;
+        }
+        console.log(`${label("Operation:")} ${value(state.operationId)}`);
+        console.log(`${label("Phase:")} ${value(state.phase)}`);
+        console.log(
+          `${label("Requests:")} ${value(
+            `${state.progress.completedRequests}/${state.progress.expectedRequests}`,
+          )}`,
+        );
+        console.log(
+          `${label("Reports:")} ${value(
+            `${state.progress.completedReports}/${state.progress.expectedReports}`,
+          )}`,
+        );
+      } catch (error) {
+        console.error(
+          errorText("Error:"),
+          error instanceof Error ? error.message : error,
+        );
+        process.exitCode = 1;
+      }
+    });
+  };
+
+  lifecycleAction(
+    experiment
+      .command("delete")
+      .description("Cascade soft-delete an Experiment and poll its progress"),
+    "DELETE",
+    "",
+    "deleted",
+  );
+  lifecycleAction(
+    experiment
+      .command("restore")
+      .description("Restore an Experiment cascade and poll its progress"),
+    "POST",
+    "/restore",
+    "restored",
+  );
+
+  withProjectOption(
+    withOutputOption(
+      experiment
+        .command("status")
+        .description("Show Experiment lifecycle progress and blockers")
+        .argument("<id>", "Experiment ID")
+        .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
+    ),
+  ).action(async (id: string, options) => {
+    try {
+      const projectId = requireProjectId(options.project);
+      const response = await apiFetch(
+        options.url,
+        `/experiments/${encodeURIComponent(id)}/lifecycle`,
+        { projectId },
+      );
+      if (!response.ok) await throwApiError(response);
+      const state = parseLifecycle(await json(response));
+      console.log(
+        formatData(
+          [state as unknown as JsonRecord],
+          [
+            { key: "operationId", label: "Operation" },
+            { key: "phase", label: "Phase" },
+            { key: "stateVersion", label: "Version" },
+            {
+              key: "progress",
+              label: "Requests",
+              formatter: (row: JsonRecord) => {
+                const progress = row.progress as ExperimentLifecycle["progress"];
+                return `${progress.completedRequests}/${progress.expectedRequests}`;
+              },
+            },
+            {
+              key: "progress",
+              label: "Reports",
+              formatter: (row: JsonRecord) => {
+                const progress = row.progress as ExperimentLifecycle["progress"];
+                return `${progress.completedReports}/${progress.expectedReports}`;
+              },
+            },
+          ],
+          (options.output ?? "table") as OutputFormat,
+        ),
+      );
+    } catch (error) {
+      console.error(
+        errorText("Error:"),
+        error instanceof Error ? error.message : error,
+      );
+      process.exitCode = 1;
+    }
+  });
+
   withProjectOption(
     withOutputOption(
       experiment
@@ -886,6 +1139,7 @@ export function registerExperimentCommands(program: Command): void {
         .description("List experiments")
         .option("--cursor <cursor>", "Continue from a list cursor")
         .option("--limit <number>", "Maximum items", Number.parseInt)
+        .option("--include-deleted", "Include deleted Experiments")
         .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
     ),
   ).action(async (options) => {
@@ -894,6 +1148,7 @@ export function registerExperimentCommands(program: Command): void {
       const params = new URLSearchParams();
       if (options.cursor) params.set("after", options.cursor);
       if (options.limit) params.set("limit", String(options.limit));
+      if (options.includeDeleted) params.set("includeDeleted", "true");
       const response = await apiFetch(
         options.url,
         `/experiments${params.size ? `?${params}` : ""}`,
@@ -926,6 +1181,7 @@ export function registerExperimentCommands(program: Command): void {
         .command("get")
         .description("Get an experiment and its current execution")
         .argument("<id>", "Experiment ID")
+        .option("--include-deleted", "Include a deleted Experiment")
         .option("-u, --url <url>", "API base URL", getDefaultApiUrl()),
     ),
   ).action(async (id: string, options) => {
@@ -933,7 +1189,9 @@ export function registerExperimentCommands(program: Command): void {
       const projectId = requireProjectId(options.project);
       const response = await apiFetch(
         options.url,
-        `/experiments/${encodeURIComponent(id)}`,
+        `/experiments/${encodeURIComponent(id)}${
+          options.includeDeleted ? "?includeDeleted=true" : ""
+        }`,
         { projectId },
       );
       if (!response.ok) await throwApiError(response);

@@ -826,7 +826,40 @@ export class ExperimentCoordinator {
         summaries,
         now,
       });
-      if (!updated) return false;
+      if (!updated) {
+        const current = await this.store.getIncludingDeleted(
+          experiment.projectId,
+          experiment.experimentId,
+        );
+        if (
+          current?.lifecycle?.phase === "deleting" ||
+          current?.lifecycle?.phase === "deleted" ||
+          current?.lifecycle?.phase === "restoring"
+        ) {
+          await this.collections.reports.updateMany(
+            {
+              _id: {
+                $in: [...newlyQueued].flatMap((templateId) => {
+                  const reportId = summaries[templateId]?.report?.reportId;
+                  return reportId ? [reportId] : [];
+                }),
+              },
+              projectId: experiment.projectId,
+              experimentId: experiment.experimentId,
+              experimentExecutionId:
+                experiment.execution.experimentExecutionId,
+              status: "pending",
+              deletedAt: { $exists: false },
+            } as Document,
+            {
+              $set: {
+                deletedAt: new Date(),
+              },
+            } as Document,
+          );
+        }
+        return false;
+      }
       experiment = updated;
     }
 

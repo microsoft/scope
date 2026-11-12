@@ -177,6 +177,14 @@ export const RequestResponseSchema = z
     personaInstructions: z.string().optional(),
     persona: PersonaSchema.optional(),
     deletedAt: z.coerce.date().optional(),
+    deletionProvenance: z
+      .object({
+        kind: z.literal("experiment"),
+        experimentId: z.string().min(1),
+        operationId: z.string().min(1),
+      })
+      .strict()
+      .optional(),
     taskPromptId: z.string().optional(),
     agentsMdPromptId: z.string().optional(),
     agentsMdParentIds: z.array(z.string()).optional(),

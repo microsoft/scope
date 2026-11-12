@@ -169,6 +169,7 @@ export class ReadoutQueueProcessor extends BaseQueueProcessor<ExperimentDocument
                 projectId: payload.projectId,
                 experimentExecutionId: payload.experimentExecutionId,
                 templateVersionId: payload.templateVersionId,
+                deletedAt: { $exists: false },
               },
               {
                 $set: {
@@ -246,6 +247,7 @@ export class ReadoutQueueProcessor extends BaseQueueProcessor<ExperimentDocument
               templateId: payload.templateId,
               templateVersionId: payload.templateVersionId,
               status: { $in: ["pending", "generating"] },
+              deletedAt: { $exists: false },
             },
             {
               $set: {
@@ -310,6 +312,7 @@ export class ReadoutQueueProcessor extends BaseQueueProcessor<ExperimentDocument
               projectId: payload.projectId,
               experimentExecutionId: payload.experimentExecutionId,
               templateVersionId: payload.templateVersionId,
+              deletedAt: { $exists: false },
             },
             {
               $set: {
