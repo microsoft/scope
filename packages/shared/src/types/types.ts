@@ -370,6 +370,14 @@ export interface QueueMessagePayload {
   runId?: string;
 }
 
+/** Status of a single post-process handler for a specific run. */
+export interface HandlerRunStatus {
+  status: "queued" | "processing" | "done" | "failed";
+  version?: number;
+  updatedAt?: Date;
+  error?: string;
+}
+
 /**
  * RunState — represents one execution attempt of a request.
  *
@@ -452,12 +460,16 @@ export interface RunState {
   aiCallCount?: number;
   rawChatUrl?: string;
   rawChatFormat?: string;
-  /** Version of the post-processor that last successfully processed this run.
-   *  Used by the scheduler to detect runs needing (re-)processing when the
-   *  post-processor version advances. */
+  /** Per-handler post-processing status. Keys are handler IDs (e.g. "pp-atif"). */
+  handlerStatus?: Record<string, HandlerRunStatus>;
+  /** Set once the scheduler has triggered report generation for this run after
+   *  the handler DAG drained (every handler reached a terminal state). Acts as
+   *  an exactly-once guard so the scheduler POSTs /api/v1/reports/trigger at
+   *  most once per run, even under notify/poll races. */
+  reportsTriggeredAt?: Date;
+  /** @deprecated Use handlerStatus["pp-atif"].version instead. Kept for migration compatibility. */
   postProcessorVersion?: number;
-  /** Lifecycle status of post-processing for this run. Prevents duplicate
-   *  enqueuing and tracks processing progress. */
+  /** @deprecated Use handlerStatus["pp-atif"].status instead. Kept for migration compatibility. */
   postProcessorStatus?: "queued" | "processing" | "done" | "failed";
 }
 
@@ -468,6 +480,17 @@ export interface RunState {
 export interface RunHistoryDocument extends RunState {
   requestId: string;                        // FK → RequestDocument._id
   projectId: string;                        // FK → ProjectDocument._id (denormalized from request)
+}
+
+/** A post-process handler registered in the `services` collection. */
+export interface HandlerServiceDocument {
+  _id: string;
+  type: "post-process-handler";
+  version: number;
+  queue: string;
+  selector: string;
+  autoBackfill: boolean;
+  dependsOn: string[];
 }
 
 /**
