@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { execFileSync, spawn } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import { cpus, totalmem } from "node:os";

@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { describe, expect, it, vi } from "vitest";
 import { registerRedirect, verifyMetadata, workspaceName } from "./spike.js";
 import { DEFAULT_TENANT } from "./config.js";

@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { resolveRuntimeEnv, type RuntimeInputs } from "./config.js";

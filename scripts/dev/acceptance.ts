@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { existsSync, readFileSync } from "node:fs";
 import { request } from "node:https";
 import { resolve } from "node:path";

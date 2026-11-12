@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { isIP } from "node:net";
 
 export const DEFAULT_TENANT = "11111111-1111-1111-1111-111111111111";
