@@ -289,6 +289,7 @@ describe("useCriteriaWizard surfaces child-link failures", () => {
       createdAt: "",
       dependents: [],
     });
+
     updateCriterion.mockRejectedValue(new Error("would create a cycle"));
 
     const onSuccess = vi.fn();
@@ -346,5 +347,90 @@ describe("useCriteriaWizard surfaces child-link failures", () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("new_crit"));
     expect(updateCriterion).toHaveBeenCalledWith("child_ok", { dependsOn: ["new_crit"] });
     expect(toastWarning).not.toHaveBeenCalled();
+  });
+});
+
+describe("useCriteriaWizard Observation creation", () => {
+  afterEach(() => {
+    generateCriteriaPrompt.mockResolvedValue({
+      prompt: "generated",
+      suggestedId: "",
+      suggestedParents: [],
+      suggestedChildren: [],
+    });
+  });
+
+  it.each(["run", "iteration"] as const)("preserves the %s subject without gate fields", async (subject) => {
+    createCriterion.mockResolvedValue({ id: "has_tests", prompt: "p", createdAt: "" });
+    const { result } = renderHook(
+      () => useCriteriaWizard({
+        initialKind: "observation",
+        entityLabel: "Observation",
+        onSuccess: vi.fn(),
+      }),
+      { wrapper },
+    );
+    act(() => {
+      result.current.handleBehaviorChange("Has tests");
+      result.current.setPrompt("p");
+      result.current.setSubject(subject);
+    });
+    act(() => result.current.handleCreate());
+
+    await waitFor(() => expect(createCriterion.mock.calls[0]?.[0]).toEqual({
+      id: "has_tests",
+      prompt: "p",
+      dependsOn: undefined,
+      kind: "observation",
+      subject,
+    }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Observation "has_tests" created'));
+    act(() => result.current.reset());
+    expect(result.current.kind).toBe("observation");
+    expect(result.current.subject).toBe("run");
+    expect(result.current.step).toBe(1);
+  });
+
+  it("retains the existing AI subject suggestion and manual override", async () => {
+    generateCriteriaPrompt.mockResolvedValue({
+      prompt: "generated",
+      suggestedId: "",
+      suggestedParents: [],
+      suggestedChildren: [],
+      suggestedSubject: "iteration",
+    });
+    const { result } = renderHook(
+      () => useCriteriaWizard({ initialKind: "observation", onSuccess: vi.fn() }),
+      { wrapper },
+    );
+    act(() => result.current.handleBehaviorChange("Has tests"));
+    act(() => result.current.handleContinue());
+    await waitFor(() => expect(result.current.subject).toBe("iteration"));
+    expect(generateCriteriaPrompt).toHaveBeenCalledWith("Has tests", undefined, undefined);
+    act(() => result.current.setSubject("run"));
+    expect(result.current.subject).toBe("run");
+  });
+
+  it("uses Observation copy when reporting child-link failures", async () => {
+    createCriterion.mockResolvedValue({ id: "new_observation", prompt: "p", createdAt: "" });
+    getCriterion.mockResolvedValue({
+      id: "child_observation", kind: "observation", prompt: "c", createdAt: "", dependents: [],
+    });
+    updateCriterion.mockRejectedValue(new Error("would create a cycle"));
+    const onSuccess = vi.fn();
+    const { result } = renderHook(
+      () => useCriteriaWizard({ initialKind: "observation", entityLabel: "Observation", onSuccess }),
+      { wrapper },
+    );
+    act(() => result.current.setAcceptedChildren(["child_observation"]));
+    await act(async () => {
+      await result.current.createMutation.mutateAsync({
+        id: "new_observation", prompt: "p", kind: "observation", subject: "run",
+      });
+    });
+    expect(toastWarning).toHaveBeenCalledWith(
+      'Created "new_observation", but couldn\'t link 1 child observation (child_observation). Add the dependency manually.',
+    );
+    expect(onSuccess).toHaveBeenCalledWith("new_observation");
   });
 });
