@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -165,6 +165,7 @@ describe("ExperimentsList", () => {
       items: firstPage,
       nextCursor: "next-page",
     });
+
     renderList();
 
     expect((await screen.findAllByText("Alpha benchmark")).length).toBeGreaterThan(0);
@@ -210,5 +211,44 @@ describe("ExperimentsList", () => {
         "/experiments/experiment-gamma",
       );
     });
+  });
+
+  it.each(["deleting", "deleted", "restoring"] as const)("uses display-only %s consistently for labels, counts and filters", async (phase) => {
+    const resource = experiment("experiment-lifecycle", "Lifecycle benchmark", "done");
+    resource.lifecycle = {
+      operationId: "operation-1", phase, stateVersion: 1,
+      progress: { expectedRequests: 2, completedRequests: 0, expectedReports: 0, completedReports: 0 },
+      blocking: [],
+    };
+    vi.mocked(api.listExperiments).mockResolvedValue({ items: [resource] });
+    renderList();
+    await screen.findAllByText("Lifecycle benchmark");
+    const lifecycleFilter = screen.getByRole("checkbox", { name: new RegExp(`^${phase} \\(1\\)`) });
+    const doneFilter = screen.getByRole("checkbox", { name: /^done \(0\)/ });
+    fireEvent.click(doneFilter);
+    expect(screen.queryByText("Lifecycle benchmark")).toBeNull();
+    fireEvent.click(doneFilter);
+    fireEvent.click(lifecycleFilter);
+    expect(screen.getAllByText("Lifecycle benchmark").length).toBeGreaterThan(0);
+    expect(resource.readiness).toBe("done");
+    expect(resource.execution.experimentExecutionId).toBe("execution-experiment-lifecycle");
+  });
+
+  it("sorts Status by the same lifecycle override shown in each row", async () => {
+    const restoring = experiment("experiment-restoring", "A restoring benchmark", "done");
+    restoring.lifecycle = {
+      operationId: "operation-1", phase: "restoring", stateVersion: 1,
+      progress: { expectedRequests: 2, completedRequests: 0, expectedReports: 0, completedReports: 0 },
+      blocking: [],
+    };
+    vi.mocked(api.listExperiments).mockResolvedValue({
+      items: [restoring, experiment("experiment-done", "Z done benchmark", "done")],
+    });
+    renderList();
+    await screen.findAllByText("A restoring benchmark");
+    fireEvent.click(within(screen.getByRole("columnheader", { name: "Status" })).getByRole("button"));
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(rows[0]?.textContent).toContain("Z done benchmark");
+    expect(rows[1]?.textContent).toContain("A restoring benchmark");
   });
 });

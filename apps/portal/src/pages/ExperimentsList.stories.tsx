@@ -150,5 +150,15 @@ export const DeletedVisibility: Story = {
       (await screen.findAllByText("Deleted benchmark"))[0],
     ).toBeVisible();
     await expect(canvas.getByText("Hide deleted")).toBeVisible();
+    await expect(canvas.getByRole("checkbox", { name: /^deleted \(1\)/ })).toBeVisible();
+    await userEvent.click(canvas.getByRole("checkbox", { name: /^done \(0\)/ }));
+    await waitFor(() => {
+      expect(canvas.queryAllByText("Deleted benchmark")).toHaveLength(0);
+    });
+    await userEvent.click(canvas.getByRole("checkbox", { name: /^done \(0\)/ }));
+    await userEvent.click(canvas.getByRole("checkbox", { name: /^deleted \(1\)/ }));
+    await waitFor(() => {
+      expect(canvas.getAllByText("Deleted benchmark")[0]).toBeVisible();
+    });
   },
 };

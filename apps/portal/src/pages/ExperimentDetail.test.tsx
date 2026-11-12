@@ -315,6 +315,31 @@ describe("ExperimentDetail", { timeout: 10_000 }, () => {
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   });
 
+  it("clears the lifecycle status and restores Delete after a 200 resource response", async () => {
+    const deleted: ExperimentView = {
+      ...experiment, deletedAt: "2026-10-16T12:00:00Z",
+      lifecycle: {
+        operationId: "operation-delete", phase: "deleted", stateVersion: 3,
+        progress: { expectedRequests: 11, completedRequests: 11, expectedReports: 0, completedReports: 0 },
+        blocking: [],
+      },
+    };
+    vi.mocked(api.restoreExperiment).mockImplementation(async () => {
+      vi.mocked(api.getExperiment).mockResolvedValue(experiment);
+      return experiment;
+    });
+    renderDetail("/experiments/experiment-1?includeDeleted=true", deleted);
+    fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+    expect(await screen.findByRole("button", { name: "Delete" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /Lifecycle operation/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
+    const header = screen.getByRole("heading", { name: "Profile comparison" }).closest("header");
+    expect(header?.textContent).toContain("done");
+    expect(header?.textContent).not.toContain("restored");
+    expect(experiment.readiness).toBe("done");
+    expect(experiment.execution.experimentExecutionId).toBe("execution-current");
+  });
+
   it("defaults to the current attempt and paginates its shared runs table", async () => {
     renderDetail();
 

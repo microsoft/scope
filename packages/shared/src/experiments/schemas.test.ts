@@ -9,6 +9,20 @@ import {
 } from "./schemas.js";
 
 describe("experiment schemas", () => {
+  it("accepts pending lifecycle bookkeeping but not a persisted completed restore", () => {
+    const schema = ExperimentDocumentSchema.shape.lifecycle;
+    const operation = {
+      operationId: "operation-1", phase: "restoring", stateVersion: 1,
+      targets: { storage: "inline", entryCount: 0, entries: [], payloadVersion: 1, payloadFingerprint: "empty" },
+      targetFingerprint: "empty",
+      progress: { expectedRequests: 0, completedRequests: 0, expectedReports: 0, completedReports: 0 },
+      blocking: [], deleteRequestedAt: new Date(),
+    };
+    expect(schema.parse(operation)?.phase).toBe("restoring");
+    expect(schema.parse(undefined)).toBeUndefined();
+    expect(() => schema.parse({ ...operation, phase: "restored" })).toThrow();
+  });
+
   it("accepts only canonical Experiment metadata fields", () => {
     expect(
       ExperimentMetadataSchema.parse({

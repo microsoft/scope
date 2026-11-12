@@ -81,7 +81,7 @@ export interface ExperimentExecutionView {
 
 export interface ExperimentLifecycleView {
   operationId: string;
-  phase: "deleting" | "deleted" | "restoring" | "restored";
+  phase: "deleting" | "deleted" | "restoring";
   stateVersion: number;
   progress: {
     expectedRequests: number;
@@ -98,7 +98,6 @@ export interface ExperimentLifecycleView {
   deleteRequestedAt?: string;
   deleteCompletedAt?: string;
   restoreRequestedAt?: string;
-  restoreCompletedAt?: string;
 }
 
 export function parseExperimentLifecycle(
@@ -110,8 +109,7 @@ export function parseExperimentLifecycle(
   if (
     phase !== "deleting" &&
     phase !== "deleted" &&
-    phase !== "restoring" &&
-    phase !== "restored"
+    phase !== "restoring"
   ) {
     throw new Error("Invalid experiment lifecycle phase");
   }
@@ -173,7 +171,6 @@ export function parseExperimentLifecycle(
     deleteRequestedAt: optionalString(item, "deleteRequestedAt"),
     deleteCompletedAt: optionalString(item, "deleteCompletedAt"),
     restoreRequestedAt: optionalString(item, "restoreRequestedAt"),
-    restoreCompletedAt: optionalString(item, "restoreCompletedAt"),
   };
 }
 
@@ -196,6 +193,21 @@ export interface ExperimentView {
 export interface ExperimentPageView {
   items: ExperimentView[];
   nextCursor?: string;
+}
+
+/** Lifecycle is presentation-only; never overwrite canonical readiness. */
+export function experimentDisplayStatus(experiment: ExperimentView): string {
+  return experiment.lifecycle?.phase ?? experiment.readiness ?? "unknown";
+}
+
+/** A completed lifecycle returns the same resource as a normal scoped GET. */
+export function parseExperimentOperation(
+  value: unknown,
+): ExperimentView | ExperimentLifecycleView {
+  const item = record(value, "experiment operation");
+  return "phase" in item
+    ? parseExperimentLifecycle(item)
+    : parseExperiment(item);
 }
 
 export interface ExperimentExecutionPageView {

@@ -345,6 +345,9 @@ export interface RequestDocument {
   personaInstructions?: string;  // Resolved persona prose (from traits.yaml)
   persona?: Persona;             // Original persona object for traceability
   deletedAt?: Date;              // Soft-delete timestamp (null/absent = active)
+  /** Last cascade tombstone applied; retained across restoration to fence
+   * delayed writers from that completed operation. Not a processing state. */
+  lastDeletionOperationId?: string;
   deletionProvenance?: {
     kind: "experiment";
     experimentId: string;
@@ -565,6 +568,15 @@ export interface RunState {
    *  an exactly-once guard so the scheduler POSTs /api/v1/reports/trigger at
    *  most once per run, even under notify/poll races. */
   reportsTriggeredAt?: Date;
+  /** Automatic report publication finished for this exact attempt, including
+   * zero matching templates. Absence means the pipeline has not drained. */
+  reportsTriggerCompletedAt?: Date;
+  /** Exact report IDs being published. Claims compete with deletion on this
+   * embedded attempt and are released only after the report is durable. */
+  reportPublicationIds?: string[];
+  /** Monotonic report-publication fence; prevents an insert/release ABA race
+   * from making an old deletion preflight appear current. */
+  reportPublicationVersion?: number;
   /** @deprecated Use handlerStatus["pp-atif"].version instead. Kept for migration compatibility. */
   postProcessorVersion?: number;
   /** @deprecated Use handlerStatus["pp-atif"].status instead. Kept for migration compatibility. */
@@ -899,6 +911,8 @@ export interface ReportDocument {
   createdAt: Date;
   updatedAt?: Date;
   deletedAt?: Date;
+  /** Idempotency fence against delayed writes from a completed cascade. */
+  lastDeletionOperationId?: string;
   deletionProvenance?: {
     kind: "experiment";
     experimentId: string;

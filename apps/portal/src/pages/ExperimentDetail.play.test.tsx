@@ -32,6 +32,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
 
 import { api } from "@/lib/api";
 import experimentDetailMeta, {
+  ActiveAfterRestore,
   AttemptSelectionAndRunsTable,
   DeletedLifecycleAndRestore,
   ReportTemplateConfiguration,
@@ -238,6 +239,18 @@ describe("ExperimentDetail stories", () => {
       canvas: within(container),
       canvasElement: container,
     });
+  });
+
+  it("runs the active-after-restore presentation", async () => {
+    const StoryRender = experimentDetailMeta.render;
+    const { container } = render(<StoryRender />);
+    const play = ActiveAfterRestore.play as unknown as
+      | ((context: {
+          canvas: ReturnType<typeof within>;
+          canvasElement: HTMLElement;
+        }) => Promise<void>)
+      | undefined;
+    await play?.({ canvas: within(container), canvasElement: container });
   });
 
   it("runs the deleted lifecycle restore interaction", async () => {

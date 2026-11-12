@@ -346,6 +346,16 @@ export const DeletedLifecycleAndRestore: Story = {
   },
 };
 
+export const ActiveAfterRestore: Story = {
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("button", { name: "Delete" })).toBeVisible();
+    const header = canvas.getByRole("heading", { name: "Profile comparison" }).closest("header");
+    await expect(header).toHaveTextContent("done");
+    await expect(canvas.queryByRole("heading", { name: /Lifecycle operation/ })).toBeNull();
+    await expect(canvas.queryByRole("button", { name: "Restore" })).toBeNull();
+  },
+};
+
 export const ReportTemplateConfiguration: Story = {
   play: async ({ canvas }) => {
     await expect(
