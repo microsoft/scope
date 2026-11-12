@@ -71,7 +71,7 @@ describe("Check Worker Versions workflow", () => {
   });
 
   it("uses a non-default token so issue creation triggers the upgrade workflow", () => {
-    expect(createIssueStep.env?.GH_TOKEN).toBe("${{ secrets.GH_AW_AGENT_TOKEN }}");
+    expect(createIssueStep.env?.GH_TOKEN).toBe("${{ secrets.COPILOT_GITHUB_TOKEN }}");
     expect(createIssueStep.env?.GH_TOKEN).not.toContain("secrets.GITHUB_TOKEN");
   });
 });
