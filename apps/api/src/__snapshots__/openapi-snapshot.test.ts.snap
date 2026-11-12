@@ -1084,6 +1084,11 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       },
       "CreateTaskPromptInput": {
         "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string",
+          },
           "text": {
             "type": "string",
           },
@@ -3621,6 +3626,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "keyId": {
             "type": "string",
           },
+          "name": {
+            "type": "string",
+          },
           "projectId": {
             "type": "string",
           },
@@ -3922,6 +3930,22 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
             "type": "string",
           },
         },
+        "type": "object",
+      },
+      "UpdateTaskPromptInput": {
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": [
+              "string",
+              "null",
+            ],
+          },
+        },
+        "required": [
+          "name",
+        ],
         "type": "object",
       },
       "UserMeResponse": {
@@ -11468,6 +11492,7 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
     },
     "/api/v1/task-prompts": {
       "get": {
+        "description": "\`search\` matches the prompt name or text (case-insensitive).",
         "parameters": [
           {
             "in": "query",
@@ -11723,6 +11748,49 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
         },
         "summary": "Get task prompt",
+        "tags": [
+          "Task Prompts",
+        ],
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaskPromptInput",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskPromptResponse",
+                },
+              },
+            },
+            "description": "Success",
+          },
+          "400": {
+            "description": "Invalid name",
+          },
+          "404": {
+            "description": "Task prompt not found",
+          },
+        },
+        "summary": "Rename task prompt",
         "tags": [
           "Task Prompts",
         ],

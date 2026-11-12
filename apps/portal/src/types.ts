@@ -256,6 +256,7 @@ export interface SuggestedPromptFeature {
 
 export interface TaskPrompt {
   _id: string;                          // UUIDv5 content-addressed ID
+  name?: string;                        // Optional human-readable label (not part of the ID)
   text?: string;                        // Full task prompt text (absent when blob-backed)
   type?: PromptType;                    // Gate id or "agents.md"; absent ⇒ legacy "select"
   contentBlobUrl?: string;              // Blob reference when body exceeds the inline threshold
