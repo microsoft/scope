@@ -362,13 +362,14 @@ export async function runMultiTurnLoop(
     // Step 2: Snapshot workspace to blob storage
     await iterLog("info", "Uploading workspace snapshot...");
     let snapshotUrl: string;
+    let workspaceSizeBytes: number;
     try {
-      snapshotUrl = await blobStorage.uploadWorkspaceSnapshot(
+      ({ url: snapshotUrl, sizeBytes: workspaceSizeBytes } = await blobStorage.uploadWorkspaceSnapshot(
         workspacePath,
         requestId,
         runId,
         iteration
-      );
+      ));
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       await iterLog("error", `Snapshot upload failed: ${errorMsg}`, { error: errorMsg });
@@ -404,7 +405,7 @@ export async function runMultiTurnLoop(
       };
     }
 
-    await iterLog("info", "Snapshot uploaded", { snapshotUrl });
+    await iterLog("info", "Snapshot uploaded", { snapshotUrl, workspaceSizeBytes });
 
     // Skip judge evaluation when no criteria are provided and maxIterations is 1
     // (single-iteration pass-through mode: run the agent, snapshot, done)
@@ -417,6 +418,7 @@ export async function runMultiTurnLoop(
         ...(codingResponse && { codingAgentResponse: codingResponse }),
         judgeFeedback: "No criteria — judge evaluation skipped",
         snapshotUrl,
+        workspaceSizeBytes,
         passed: true,
         timestamp: new Date(),
         startedAt: iterationStartedAt,
@@ -487,6 +489,7 @@ export async function runMultiTurnLoop(
         ...(codingResponse && { codingAgentResponse: codingResponse }),
         judgeFeedback: `${label}: ${errorMsg}`,
         snapshotUrl,
+        workspaceSizeBytes,
         passed: false,
         timestamp: new Date(),
         startedAt: iterationStartedAt,
@@ -539,6 +542,7 @@ export async function runMultiTurnLoop(
       ...(codingResponse && { codingAgentResponse: codingResponse }),
       judgeFeedback,
       snapshotUrl,
+      workspaceSizeBytes,
       passed: judgePassed,
       timestamp: new Date(),
       startedAt: iterationStartedAt,
