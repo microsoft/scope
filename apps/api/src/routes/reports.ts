@@ -13,10 +13,11 @@ import {
   CreateReportInputSchema,
   InsightResponseSchema,
   ReportResponseSchema,
+  ReportEligibilityResponseSchema,
   TriggerReportsInputSchema,
   evaluateTrigger,
 } from "shared";
-import type { TaskPromptDocument } from "shared";
+import type { ReportEligibilityResponse } from "shared";
 import { apiRoute } from "../openapi/api-route.js";
 import type {
   InsightReference,
@@ -28,9 +29,49 @@ import { subscribeClient, unsubscribeClient } from "../utils/sse.js";
 import type { SSEClient } from "../utils/sse.js";
 import { getQueryProjectId } from "../utils/project-scope.js";
 
+async function getReportEligibility(ctx: RouteContext, run: RequestDocument): Promise<ReportEligibilityResponse> {
+  if (!run.projectId) {
+    throw new Error(`Run ${run._id} has no projectId; cannot select report templates`);
+  }
+  const templates = await ctx.reportTemplateCollection
+    .find({ projectId: run.projectId, deletedAt: { $exists: false } })
+    .toArray();
+  const taskPrompt = run.taskPromptId
+    ? await ctx.taskPromptCollection.findOne({ _id: run.taskPromptId })
+    : null;
+  return {
+    activeTemplateCount: templates.length,
+    templates: templates
+      .filter((template) => evaluateTrigger(template.trigger, run, taskPrompt))
+      .map(({ id, name }) => ({ id, name })),
+  };
+}
+
 export function registerReportsRoutes(ctx: RouteContext): void {
 
 // ==================== Report Endpoints ====================
+
+apiRoute(ctx.app, ctx.registry, {
+  method: "get",
+  path: "/api/v1/reports/eligibility",
+  tags: ["Reports"],
+  summary: "Preview applicable report templates for a run",
+  query: z.object({ requestId: z.string().min(1) }),
+  response: ReportEligibilityResponseSchema,
+  errorResponses: { 404: { description: "Run not found" } },
+  handler: async (req, res, next) => {
+    try {
+      const run = await ctx.requestCollection.findOne({ _id: req.query.requestId });
+      if (!run) {
+        res.status(404).json({ error: `Run ${req.query.requestId} not found` });
+        return;
+      }
+      res.json(await getReportEligibility(ctx, run));
+    } catch (error) {
+      next(error);
+    }
+  },
+});
 
 // Create a report for a run (POST /api/v1/reports)
 // Accepts optional templateId to associate the report with a report template.
@@ -502,48 +543,30 @@ apiRoute(ctx.app, ctx.registry, {
         return;
       }
 
-      // Fetch task prompt document (needed for promptFeature trigger evaluation)
-      let taskPrompt: TaskPromptDocument | null = null;
-      if (run.taskPromptId) {
-        taskPrompt = await ctx.taskPromptCollection.findOne({ _id: run.taskPromptId });
-      }
-
-      // Load all active report templates
-      const templates = await ctx.reportTemplateCollection
-        .find({ deletedAt: { $exists: false } })
-        .toArray();
+      const eligibility = await getReportEligibility(ctx, run);
 
       // Evaluate each template's trigger against the run
       const created: Array<{ id: string; requestId: string; templateId: string; status: string }> = [];
 
-      for (const template of templates) {
-        // Cast the run to the shared RequestDocument shape for evaluateTrigger
-        const triggerResult = evaluateTrigger(
-          template.trigger as any,
-          run as any,
-          taskPrompt as any
-        );
+      for (const template of eligibility.templates) {
+        const reportId = uuidv4();
+        const reportDoc: ReportDocument = {
+          _id: reportId,
+          projectId: run.projectId,
+          requestId,
+          templateId: template.id,
+          status: "pending",
+          createdAt: new Date(),
+        };
+        await ctx.reportCollection.insertOne(reportDoc);
+        const messageContent = Buffer.from(JSON.stringify({ reportId })).toString("base64");
+        await ctx.reportQueueClient.sendMessage(messageContent);
 
-        if (triggerResult) {
-          const reportId = uuidv4();
-          const reportDoc: ReportDocument = {
-            _id: reportId,
-            projectId: run.projectId,
-            requestId,
-            templateId: template.id,
-            status: "pending",
-            createdAt: new Date(),
-          };
-          await ctx.reportCollection.insertOne(reportDoc);
-          const messageContent = Buffer.from(JSON.stringify({ reportId })).toString("base64");
-          await ctx.reportQueueClient.sendMessage(messageContent);
-
-          created.push({ id: reportId, requestId, templateId: template.id, status: "pending" });
-          console.log(`Trigger matched template '${template.id}' — created report ${reportId} for run ${requestId}`);
-        }
+        created.push({ id: reportId, requestId, templateId: template.id, status: "pending" });
+        console.log(`Trigger matched template '${template.id}' — created report ${reportId} for run ${requestId}`);
       }
 
-      console.log(`Trigger evaluation for run ${requestId}: ${created.length}/${templates.length} templates matched`);
+      console.log(`Trigger evaluation for run ${requestId}: ${created.length}/${eligibility.activeTemplateCount} templates matched`);
       res.status(201).json({ triggered: created.length, reports: created });
     } catch (error) {
       next(error);
@@ -577,42 +600,24 @@ apiRoute(ctx.app, ctx.registry, {
       const foundIds = new Set(runs.map(r => r._id));
       const notFound = requestIds.filter(id => !foundIds.has(id));
 
-      // Load all active templates
-      const templates = await ctx.reportTemplateCollection
-        .find({ deletedAt: { $exists: false } })
-        .toArray();
-
       const created: Array<{ reportId: string; requestId: string; templateId: string }> = [];
 
       for (const run of runs) {
-        // Fetch task prompt for trigger evaluation
-        let taskPrompt: TaskPromptDocument | null = null;
-        if (run.taskPromptId) {
-          taskPrompt = await ctx.taskPromptCollection.findOne({ _id: run.taskPromptId });
-        }
-
-        for (const template of templates) {
-          const triggerResult = evaluateTrigger(
-            template.trigger as any,
-            run as any,
-            taskPrompt as any
-          );
-
-          if (triggerResult) {
-            const reportId = uuidv4();
-            const reportDoc: ReportDocument = {
-              _id: reportId,
-              projectId: run.projectId,
-              requestId: run._id,
-              templateId: template.id,
-              status: "pending",
-              createdAt: new Date(),
-            };
-            await ctx.reportCollection.insertOne(reportDoc);
-            const messageContent = Buffer.from(JSON.stringify({ reportId })).toString("base64");
-            await ctx.reportQueueClient.sendMessage(messageContent);
-            created.push({ reportId, requestId: run._id, templateId: template.id });
-          }
+        const eligibility = await getReportEligibility(ctx, run);
+        for (const template of eligibility.templates) {
+          const reportId = uuidv4();
+          const reportDoc: ReportDocument = {
+            _id: reportId,
+            projectId: run.projectId,
+            requestId: run._id,
+            templateId: template.id,
+            status: "pending",
+            createdAt: new Date(),
+          };
+          await ctx.reportCollection.insertOne(reportDoc);
+          const messageContent = Buffer.from(JSON.stringify({ reportId })).toString("base64");
+          await ctx.reportQueueClient.sendMessage(messageContent);
+          created.push({ reportId, requestId: run._id, templateId: template.id });
         }
       }
 

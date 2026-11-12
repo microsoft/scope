@@ -10,6 +10,7 @@ import type { OutputFormat, DisplayField } from "../utils/types.js";
 import { normalizeUrl, withOutputOption, withProjectOption, getCliName, getDefaultApiUrl } from "../utils/shared.js";
 import { requireProjectId } from "../utils/config.js";
 import { apiFetch, getApiBasePath } from "../utils/api-client.js";
+import { ReportEligibilityResponseSchema } from "shared";
 
 export function registerReportCommands(program: Command): void {
 // ─── Report management ──────────────────────────────────────────────────────
@@ -22,6 +23,39 @@ const report = program
   });
 
 configureHelp(report);
+
+withOutputOption(
+report
+  .command("eligibility")
+  .description("Preview matching report templates for a run without generating reports")
+  .requiredOption("-i, --id <requestId>", "Run ID to check")
+  .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
+)
+  .action(async (options) => {
+    try {
+      const response = await apiFetch(options.url, `/reports/eligibility?${new URLSearchParams({ requestId: options.id })}`);
+      if (!response.ok) {
+        throw new Error(`Unable to check report eligibility: HTTP ${response.status}`);
+      }
+      const eligibility = ReportEligibilityResponseSchema.parse(await response.json());
+      const format = (options.output || "table") as OutputFormat;
+      if (format === "json") {
+        console.log(JSON.stringify(eligibility, null, 2));
+      } else if (eligibility.templates.length || isMachineReadable(format)) {
+        console.log(formatData(eligibility.templates, [
+          { key: "id", label: "Template ID" },
+          { key: "name", label: "Name" },
+        ], format));
+      } else {
+        console.log(warnBanner(eligibility.activeTemplateCount === 0
+          ? "No active report templates in this run's project. Configure a report template first."
+          : "No active report template triggers match this run. Review template triggers."));
+      }
+    } catch (error) {
+      console.error(errorText("Error:"), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
 
 report
   .command("generate")

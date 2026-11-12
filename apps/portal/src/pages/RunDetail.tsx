@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { StatusBadge, OutcomeBadge } from "@/components/StatusBadge";
 import { EnrichmentBadge } from "@/components/EnrichmentBadge";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
+import { ReportGenerationControls } from "@/components/ReportGenerationControls";
 import { LogViewer } from "@/components/LogViewer";
 import { TurnTimeline } from "@/components/TurnTimeline";
 import { CriteriaGraphView } from "@/components/CriteriaGraphView";
@@ -32,7 +33,7 @@ import { CriteriaBadge } from "@/components/CriteriaBadge";
 import { TaskPromptBadge } from "@/components/TaskPromptBadge";
 import { AgentBadge } from "@/components/AgentBadge";
 import { SkillRevisionLinks } from "@/components/SkillRevisionLinks";
-import { AlertTriangle, ArrowLeft, Copy, Check, Sparkles, CheckCircle2, XCircle, MinusCircle, FileText, Plus, Download, Loader2, Archive, Video, LayoutGrid, List, Puzzle, RotateCcw, ChevronDown, Clock, Pause, Play, ArrowUpDown, X, Boxes } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Copy, Check, Sparkles, CheckCircle2, XCircle, MinusCircle, FileText, Download, Loader2, Archive, Video, LayoutGrid, List, Puzzle, RotateCcw, ChevronDown, Clock, Pause, Play, ArrowUpDown, X, Boxes } from "lucide-react";
 import { formatDate, formatId, formatDuration, cn } from "@/lib/utils";
 import {
   GATE_METADATA,
@@ -370,6 +371,13 @@ export function RunDetail() {
     queryFn: () => api.listReportTemplates(),
   });
   const templateMap = new Map(reportTemplates?.map((t) => [t.id, t.name]));
+
+  const reportEligibility = useQuery({
+    queryKey: ["report-eligibility", id],
+    queryFn: () => api.getReportEligibility(id!),
+    enabled: !!id,
+    refetchInterval: 10_000,
+  });
 
   // Filter reports: "latest" keeps only the most recent per templateId
   const filteredReports = useMemo(() => {
@@ -1117,17 +1125,17 @@ export function RunDetail() {
                   <List className="h-4 w-4" />
                 </Button>
               </div>
-              <Button
-                size="sm"
-                onClick={() => generateReport.mutate()}
-                disabled={generateReport.isPending}
-                className="gap-1.5"
-              >
-                <Plus className="h-4 w-4" />
-                Generate Report
-              </Button>
             </div>
           </div>
+
+          <ReportGenerationControls
+            eligibility={reportEligibility.data}
+            loading={reportEligibility.isPending}
+            error={reportEligibility.isError}
+            pending={generateReport.isPending}
+            onGenerate={() => generateReport.mutate()}
+            onRetry={() => { void reportEligibility.refetch(); }}
+          />
 
           {filteredReports.length > 0 ? (
             reportsView === "grid" ? (
@@ -1195,6 +1203,7 @@ export function RunDetail() {
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p>No reports for this run yet.</p>
+              <p className="mt-2 text-sm">Reports appear here after generation. Matching templates and generation availability are shown above.</p>
             </div>
           )}
         </TabsContent>

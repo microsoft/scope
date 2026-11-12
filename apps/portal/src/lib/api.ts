@@ -9,6 +9,7 @@ import { recordServerDate } from "./serverClock";
 import { apiClient } from "./api-client";
 import { getSelectedProjectId, ProjectRequiredError } from "./project-scope";
 import { MAX_ARCHIVE_UPLOAD_LABEL } from "./codebaseUpload";
+import type { ReportEligibilityResponse } from "@/types";
 
 const BASE = "/api/v1";
 
@@ -714,6 +715,10 @@ export const api = {
   },
 
   // ─── Reports ──────────────────────────────────────────────────────────────
+
+  getReportEligibility: (requestId: string): Promise<ReportEligibilityResponse> => {
+    return request(`/reports/eligibility?${qs({ requestId })}`);
+  },
 
   /** Trigger report generation for a run — evaluates all templates and creates one report per match */
   triggerReports: (requestId: string): Promise<{ triggered: number; reports: { id: string; requestId: string; templateId?: string; status: string }[] }> => {

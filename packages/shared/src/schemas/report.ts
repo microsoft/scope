@@ -75,6 +75,15 @@ export const TriggerReportsInputSchema = z
   })
   .openapi("TriggerReportsInput");
 
+export const ReportEligibilityResponseSchema = z
+  .object({
+    activeTemplateCount: z.number().int().nonnegative(),
+    templates: z.array(z.object({ id: z.string(), name: z.string() })),
+  })
+  .openapi("ReportEligibilityResponse");
+
+export type ReportEligibilityResponse = z.infer<typeof ReportEligibilityResponseSchema>;
+
 export const BulkTriggerReportsInputSchema = z
   .object({
     requestIds: z.array(z.string()),

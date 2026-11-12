@@ -3,10 +3,14 @@
 
 import {
   ReportTrigger,
-  RequestDocument,
   TaskPromptDocument,
   PromptFeatureResult,
 } from '../types/types.js';
+
+type TriggerRun = {
+  taskPromptId?: string;
+  scenario?: { criteria?: string[] };
+};
 
 /**
  * Evaluate whether a report template's trigger matches a completed run.
@@ -20,7 +24,7 @@ import {
  */
 export function evaluateTrigger(
   trigger: ReportTrigger | undefined | null,
-  run: RequestDocument,
+  run: TriggerRun,
   taskPrompt?: TaskPromptDocument | null
 ): boolean {
   // No trigger = always fire
@@ -51,7 +55,7 @@ export function evaluateTrigger(
 function evaluateCriteriaTrigger(
   criteriaIds: string[],
   match: 'any' | 'all' | undefined,
-  run: RequestDocument
+  run: TriggerRun
 ): boolean {
   const runCriteria = run.scenario?.criteria ?? [];
   if (criteriaIds.length === 0) return false;
@@ -68,7 +72,7 @@ function evaluateCriteriaTrigger(
  */
 function evaluateTaskPromptTrigger(
   taskPromptIds: string[],
-  run: RequestDocument
+  run: TriggerRun
 ): boolean {
   if (!run.taskPromptId) return false;
   return taskPromptIds.includes(run.taskPromptId);

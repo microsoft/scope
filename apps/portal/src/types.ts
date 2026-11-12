@@ -459,6 +459,11 @@ export interface BulkReportSummary {
   [requestId: string]: ReportSummary;
 }
 
+export interface ReportEligibilityResponse {
+  activeTemplateCount: number;
+  templates: Pick<ReportTemplate, "id" | "name">[];
+}
+
 // =============================================================================
 // Report Template types
 // =============================================================================
