@@ -361,24 +361,6 @@ MongoDB is CosmosDB-compatible — avoid MongoDB features that CosmosDB's MongoD
 See [Reviewing and merging community contributions](#reviewing-and-merging-community-contributions)
 for what to expect, including our acknowledgement target and follow-up on PRs waiting for a response.
 
-### Automated PR description check
-
-When a human-authored pull request is ready for review, the
-`PR contribution guidelines` check compares its description with
-`.github/PULL_REQUEST_TEMPLATE.md` and this guide. It reruns when the description or head commit
-changes. Draft pull requests and automation-authored pull requests are skipped.
-
-The check verifies that the description explains what changed and why, records testing commands or
-manual checks with their results, covers documentation and compatibility impacts, and supplies demo
-evidence when the change is user-visible. Conditional checklist items such as Portal/CLI parity,
-Storybook stories, migrations, dependency notices, and recordings are evaluated against the files
-changed by the pull request. Mark inapplicable sections or items `N/A` and briefly explain why.
-
-If the check fails, update the PR description using the actionable items in its comment. The workflow
-minimizes older findings when it reruns and passes without posting a success comment. Maintainers
-who configure repository rulesets should require the stable `PR contribution guidelines` check name
-so an incomplete description blocks merging.
-
 ### Recording a demo
 
 For user-visible changes (Portal/CLI features or UX changes), attach a short recording in the PR's
