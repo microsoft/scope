@@ -433,7 +433,7 @@ describe("run submit gates", () => {
       await program.parseAsync([
         "run",
         "submit",
-        "--message",
+        "--task",
         "Implement the task",
         "--worker",
         "dynamic-worker",
