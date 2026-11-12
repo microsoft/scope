@@ -1,8 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSelectedProjectId } from "@/contexts/ProjectContext";
 import { api } from "@/lib/api";
+import { openLogStream, readLogStream } from "@/lib/log-stream";
 import type { LogEvent } from "@/types";
 
 interface UseLogStreamOptions {
@@ -18,13 +21,18 @@ interface UseLogStreamOptions {
   urlBuilder?: (id: string, fromStart: boolean) => string;
 }
 
-interface UseLogStreamReturn {
+interface StreamState {
   logs: LogEvent[];
   isConnected: boolean;
   isDone: boolean;
   error: string | null;
+}
+
+interface UseLogStreamReturn extends StreamState {
   clear: () => void;
 }
+
+const EMPTY: StreamState = { logs: [], isConnected: false, isDone: false, error: null };
 
 export function useLogStream({
   id,
@@ -33,92 +41,57 @@ export function useLogStream({
   attemptNumber,
   urlBuilder = api.logsUrl,
 }: UseLogStreamOptions): UseLogStreamReturn {
-  const [logs, setLogs] = useState<LogEvent[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isDone, setIsDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const { account, user, isReady } = useAuth();
+  const projectId = useSelectedProjectId();
+  const identity = useMemo(() => ({
+    id, enabled, fromStart, attemptNumber, urlBuilder, isReady, projectId,
+  }), [
+    id, enabled, fromStart, attemptNumber, urlBuilder, isReady, projectId,
+    user?.id, account?.homeAccountId, account?.localAccountId, account?.tenantId, account?.environment,
+  ]);
+  const [snapshot, setSnapshot] = useState<(StreamState & { identity: typeof identity }) | null>(null);
 
-  const clear = useCallback(() => setLogs([]), []);
+  const clear = useCallback(() => {
+    setSnapshot((previous) => previous?.identity === identity ? { ...previous, logs: [] } : previous);
+  }, [identity]);
 
   useEffect(() => {
-    if (!enabled || !id) return;
-
-    // Close any existing connection when dependencies change (especially attemptNumber)
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    // Reset state for fresh connection
-    setLogs([]);
-    setIsDone(false);
-    setError(null);
-
-    const url = urlBuilder(id, fromStart);
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
-
-    es.onopen = () => {
-      setIsConnected(true);
-      setError(null);
+    const projectId = identity.projectId;
+    if (!identity.enabled || !identity.id || !identity.isReady || !projectId) return;
+    const controller = new AbortController();
+    setSnapshot({ identity, ...EMPTY });
+    const update = (change: (state: StreamState) => Partial<StreamState>) => {
+      if (controller.signal.aborted) return;
+      setSnapshot((previous) => previous?.identity === identity
+        ? { ...previous, ...change(previous) }
+        : previous);
     };
-
-    es.onmessage = (event) => {
+    void (async () => {
       try {
-        const parsed = JSON.parse(event.data);
-        // The SSE stream multiplexes log events with summary payloads
-        // (e.g. { type: "turns_summary", ... }). Only treat well-formed
-        // log events with a timestamp as logs — otherwise the LogViewer
-        // would render "Invalid Date" for the summary row.
-        if (!parsed || typeof parsed.timestamp !== "string" || typeof parsed.message !== "string") {
-          return;
-        }
-        setLogs((prev) => [...prev, parsed as LogEvent]);
-      } catch {
-        // Non-JSON messages (heartbeats, etc.)
+        const url = new URL(identity.urlBuilder(identity.id, identity.fromStart), window.location.href);
+        url.searchParams.set("projectId", projectId);
+        const response = await openLogStream(url.toString(), controller.signal);
+        update(() => ({ isConnected: true, error: null }));
+        await readLogStream(response, controller.signal, (event) => {
+          if (event.type === "log") update((state) => ({ logs: [...state.logs, event.log] }));
+          else if (event.type === "done") update(() => ({ isDone: true, isConnected: false }));
+          else update(() => ({
+            error: event.type === "timeout" ? "Stream timed out" : event.message,
+            isConnected: false,
+          }));
+        });
+      } catch (cause) {
+        if (controller.signal.aborted) return;
+        update(() => ({
+          isConnected: false,
+          error: cause instanceof Error ? cause.message : "Unable to connect to log stream.",
+        }));
       }
-    };
+    })();
+    return () => controller.abort();
+  }, [identity]);
 
-    es.addEventListener("done", () => {
-      setIsDone(true);
-      setIsConnected(false);
-      es.close();
-    });
-
-    es.addEventListener("timeout", () => {
-      setError("Stream timed out");
-      setIsConnected(false);
-      es.close();
-    });
-
-    es.addEventListener("error", (event: MessageEvent) => {
-      try {
-        const { message } = JSON.parse(event.data) as { message: string };
-        setError(message);
-      } catch {
-        setError("Cannot connect to log storage");
-      }
-      setIsConnected(false);
-      es.close();
-    });
-
-    es.onerror = () => {
-      setIsConnected(false);
-      // EventSource auto-reconnects; only set error if CLOSED.
-      // Use functional update to avoid overwriting a more specific error
-      // already set by the named "error" event listener.
-      if (es.readyState === EventSource.CLOSED) {
-        setError((prev) => prev ?? "Connection lost");
-      }
-    };
-
-    return () => {
-      es.close();
-      eventSourceRef.current = null;
-      setIsConnected(false);
-    };
-  }, [id, enabled, fromStart, attemptNumber, urlBuilder]);
-
-  return { logs, isConnected, isDone, error, clear };
+  // Hide the previous identity's logs during render, before effect cleanup can run.
+  const state = snapshot?.identity === identity ? snapshot : EMPTY;
+  return { logs: state.logs, isConnected: state.isConnected, isDone: state.isDone, error: state.error, clear };
 }
