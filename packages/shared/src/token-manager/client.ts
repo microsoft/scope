@@ -100,7 +100,12 @@ export class TokenManagerClient {
       return {
         value: envValue,
         keyId: "env",
-        keyType: capability === "claude-code-cli" ? "anthropic-api-key" : "github-oauth",
+        keyType:
+          capability === "claude-code-cli" || capability === "anthropic-api"
+            ? "anthropic-api-key"
+            : capability === "azure-ai-inference"
+              ? "azure-ai-foundry"
+              : "github-oauth",
         capability,
       };
     }
