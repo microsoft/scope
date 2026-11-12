@@ -1,0 +1,80 @@
+{
+  "input-01": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "supplied",
+              "path": "$.steps[0]"
+            },
+            {
+              "role": "request",
+              "path": "$.steps[1]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "input-02": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "input-03": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "supplied",
+              "path": "$.steps[0]"
+            },
+            {
+              "role": "request",
+              "path": "$.steps[1]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "input-04": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  },
+  "input-05": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": true,
+      "occurrences": [
+        {
+          "evidence": [
+            {
+              "role": "supplied",
+              "path": "$.steps[0]"
+            },
+            {
+              "role": "request",
+              "path": "$.steps[1]"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "input-06": {
+    "acme-repeated-request": {
+      "state": "completed",
+      "observed": false
+    }
+  }
+}

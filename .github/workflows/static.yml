@@ -6,11 +6,17 @@ on:
     branches: ["main"]
     paths:
       - "website/**"
+      - "packages/ax-taxonomy/taxonomy/**"
+      - "packages/ax-taxonomy/src/**"
+      - "packages/taxonomy-engine/src/**"
       - ".github/workflows/static.yml"
   pull_request:
     branches: ["main"]
     paths:
       - "website/**"
+      - "packages/ax-taxonomy/taxonomy/**"
+      - "packages/ax-taxonomy/src/**"
+      - "packages/taxonomy-engine/src/**"
       - ".github/workflows/static.yml"
   workflow_dispatch:
 

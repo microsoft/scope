@@ -106,6 +106,34 @@ from the root pnpm workspace.
 
 ## Authoring docs
 
+### Taxonome reference data
+
+The [Taxonome guide](src/content/docs/guides/taxonome.mdx) links the CLI,
+format, default taxonomy/elements, and handler reference pages.
+[ElementCatalog.astro](src/components/taxonome/ElementCatalog.astro)
+renders its file index and complete source disclosures from the canonical
+manifest and referenced YAML in
+[`packages/ax-taxonomy/taxonomy/`](../packages/ax-taxonomy/taxonomy/).
+
+The website-only loader in
+[taxonome-catalog.mjs](src/lib/taxonome-catalog.mjs) reads bounded local
+YAML as data. It does not import the runtime engine/catalog, resolve or
+execute handlers/plugins, initialize an SDK/model, or fetch a catalog.
+Keep this property: installing and building only `website/` must suffice
+when the checkout includes the canonical YAML and source-text files. Do not hand-maintain
+a second element list. Canonical YAML changes are included in the Pages
+workflow path filters.
+
+Catalog loader regressions run with `pnpm test`. Browser coverage in
+[taxonome.spec.ts](tests/taxonome.spec.ts) checks generated source fidelity,
+base-prefixed links, keyboard disclosures and accessibility.
+`CanonicalSource.astro` reads allowlisted implementation excerpts as text;
+the build pins their source root before Astro relocates prerender bundles.
+The Taxonome-only keyboard enhancement makes generated code frames
+focusable, and canonical source panels use high-contrast highlighting.
+
+### General authoring
+
 - Use `.md` for plain Markdown, `.mdx` whenever the page contains JSX
   (e.g. Starlight `<Tabs>`).
 - Write internal Markdown links and literal MDX `href`/`src` attributes

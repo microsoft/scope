@@ -1,0 +1,23 @@
+schema_version: scope/taxonomy/v1
+id: stale-step-after
+version: 1.0.0
+surfaces: []
+elements:
+  - id: stale
+    label: Stale Step After
+    implementation:
+      type: prompt
+      prompt: Stale.
+    preconditions: {}
+    output:
+      evidence_roles:
+        first:
+          type: atif.step
+          description: First.
+        second:
+          type: atif.step
+          description: Second.
+      constraints:
+        - kind: step_after
+          role: second
+          reference_role: first

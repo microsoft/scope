@@ -554,6 +554,31 @@ importers:
         specifier: ^5.6.2
         version: 5.9.3
 
+  apps/taxonome:
+    dependencies:
+      ax-taxonomy:
+        specifier: workspace:*
+        version: link:../../packages/ax-taxonomy
+      commander:
+        specifier: 14.0.3
+        version: 14.0.3
+      taxonomy-engine:
+        specifier: workspace:*
+        version: link:../../packages/taxonomy-engine
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.19.10
+      '@types/tar-stream':
+        specifier: ^3.1.4
+        version: 3.1.4
+      tar-stream:
+        specifier: 3.1.7
+        version: 3.1.7
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
+
   apps/token-manager:
     dependencies:
       '@azure/identity':
@@ -789,9 +814,15 @@ importers:
 
   evaluations/static-prompts:
     dependencies:
+      ax-taxonomy:
+        specifier: workspace:*
+        version: link:../../packages/ax-taxonomy
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
+      taxonomy-engine:
+        specifier: workspace:*
+        version: link:../../packages/taxonomy-engine
       telemetry:
         specifier: workspace:*
         version: link:../../packages/telemetry
@@ -807,6 +838,47 @@ importers:
         version: 4.21.0
       typescript:
         specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@opentelemetry/api@1.9.1)(@types/node@22.19.10)(happy-dom@20.9.0)(msw@2.14.6(@types/node@22.19.10)(typescript@5.9.3))(vite@7.3.5(@types/node@22.19.10)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.3))
+
+  examples/taxonome-custom-handler:
+    dependencies:
+      taxonomy-engine:
+        specifier: workspace:*
+        version: link:../../packages/taxonomy-engine
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.19.10
+      taxonome:
+        specifier: workspace:*
+        version: link:../../apps/taxonome
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@opentelemetry/api@1.9.1)(@types/node@22.19.10)(happy-dom@20.9.0)(msw@2.14.6(@types/node@22.19.10)(typescript@5.9.3))(vite@7.3.5(@types/node@22.19.10)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.3))
+
+  packages/ax-taxonomy:
+    dependencies:
+      taxonomy-engine:
+        specifier: workspace:*
+        version: link:../taxonomy-engine
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.6.2
         version: 5.9.3
       vitest:
         specifier: ^4.1.0
@@ -958,6 +1030,40 @@ importers:
         specifier: ^3.3.1
         version: 3.3.1
 
+  packages/taxonomy-engine:
+    dependencies:
+      '@ax-llm/ax':
+        specifier: 25.3.2
+        version: 25.3.2(zod@3.25.76)
+      '@github/copilot-sdk':
+        specifier: 1.0.1
+        version: 1.0.1(typescript@5.9.3)
+      shared:
+        specifier: workspace:*
+        version: link:../shared
+      tar-stream:
+        specifier: 3.1.7
+        version: 3.1.7
+      yaml:
+        specifier: 2.8.3
+        version: 2.8.3
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.0
+        version: 22.19.10
+      '@types/tar-stream':
+        specifier: ^3.1.4
+        version: 3.1.4
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@opentelemetry/api@1.9.1)(@types/node@22.19.10)(happy-dom@20.9.0)(msw@2.14.6(@types/node@22.19.10)(typescript@5.9.3))(vite@7.3.5(@types/node@22.19.10)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.3))
+
   packages/telemetry:
     dependencies:
       '@azure/monitor-opentelemetry':
@@ -1065,6 +1171,15 @@ packages:
     resolution: {integrity: sha512-SABbKiObg5dLRiTFnqiW1WWwGcg1BJfmHtT2asIBnBHg6Smy/Ms2KHc650+JI4Hw7lSkdiNebEGXpwoxfben8Q==}
     peerDependencies:
       zod: ^4.0.0
+
+  '@ax-llm/ax@25.3.2':
+    resolution: {integrity: sha512-XtraQ5G6iseZfluf0W52z+b9J4kNPhg7X2x3NIpHuLxxLYuyM3FiZzw762LrWnGZlsnpI9q8dUEi5KIBD3XY+w==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@ax-llm/ax/-/ax-25.3.2.tgz}
+    hasBin: true
+    peerDependencies:
+      zod: ^3.24.0 || ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@azure-rest/ai-inference@1.0.0-beta.6':
     resolution: {integrity: sha512-j5FrJDTHu2P2+zwFVe5j2edasOIhqkFj+VkDjbhGkQuOoIAByF0egRkgs0G1k03HyJ7bOOT9BkRF7MIgr/afhw==}
@@ -6449,9 +6564,6 @@ packages:
     resolution: {integrity: sha512-Mcc5wHehp9aXz1ax6bZUyY5afg9u2rv5cqQI3mRrYkGC8rW2hM02jWuwjtL++LS5qinSyhj2QfLyNsuc+VsExg==}
     engines: {node: '>=10.0.0'}
 
-  streamx@2.23.0:
-    resolution: {integrity: sha512-kn+e44esVfn2Fa/O0CPFcex27fjIL6MkVae0Mm6q+E6f0hWv578YCERbv+4m02cjxvDsPKLnmxral/rR6lBMAg==}
-
   streamx@2.27.0:
     resolution: {integrity: sha512-WZ189TKnHoAokYHvwzaAQMpd55cgUmFIcJFzBSgGcb886jau5DL+XdDhTWV4ps3FLvk+OORp0dLRTPsLZ21CSA==}
 
@@ -7022,6 +7134,9 @@ packages:
     resolution: {integrity: sha512-zK7YHHz4ZXpW89AHXUPbQVGKI7uvkd3hzusTdotCg1UxyaVtg0zFJSTfW/Dq5f7OBBVnq6cZIaC8Ti4hb6dtCA==}
     engines: {node: '>= 14'}
 
+  zod@3.25.76:
+    resolution: {integrity: sha1-JoQcP2/SKmonYOfMtxkXl2hHHjQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-3.25.76.tgz}
+
   zod@4.3.6:
     resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
@@ -7083,6 +7198,12 @@ snapshots:
     dependencies:
       openapi3-ts: 4.5.0
       zod: 4.3.6
+
+  '@ax-llm/ax@25.3.2(zod@3.25.76)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+    optionalDependencies:
+      zod: 3.25.76
 
   '@azure-rest/ai-inference@1.0.0-beta.6':
     dependencies:
@@ -13237,15 +13358,6 @@ snapshots:
 
   streamsearch@1.1.0: {}
 
-  streamx@2.23.0:
-    dependencies:
-      events-universal: 1.0.1
-      fast-fifo: 1.3.2
-      text-decoder: 1.2.7
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - react-native-b4a
-
   streamx@2.27.0:
     dependencies:
       events-universal: 1.0.1
@@ -13254,7 +13366,6 @@ snapshots:
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a
-    optional: true
 
   strict-event-emitter@0.5.1: {}
 
@@ -13433,7 +13544,7 @@ snapshots:
     dependencies:
       b4a: 1.8.0
       fast-fifo: 1.3.2
-      streamx: 2.23.0
+      streamx: 2.27.0
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a
@@ -13845,6 +13956,8 @@ snapshots:
       archiver-utils: 5.0.2
       compress-commons: 6.0.2
       readable-stream: 4.7.0
+
+  zod@3.25.76: {}
 
   zod@4.3.6: {}
 

@@ -2,6 +2,7 @@ packages:
   - apps/api
   - apps/key-updaters/*
   - apps/cli
+  - apps/taxonome
   - apps/judge
   - apps/portal
   - apps/scheduler
@@ -15,9 +16,12 @@ packages:
   - packages/model-scanning
   - packages/db-migrations
   - packages/llm-eval
+  - packages/taxonomy-engine
+  - packages/ax-taxonomy
   - packages/telemetry
   - packages/test-utils
   - evaluations/*
+  - examples/*
 
 # Runtime language version pinning (for worker Docker images)
 # - python: 3.x (system package)

@@ -17,7 +17,8 @@ added to CI without a separate design decision.
 ### Static prompt quality inventory
 
 The committed evaluation manifest covers ten Scope-owned runtime prompt
-families:
+families in the Azure-backed quality runner, plus one isolated SDK-only spike
+family in `standaloneFamilies`:
 
 | Family | Variants and important coverage |
 |--------|---------------------------------|
@@ -31,6 +32,26 @@ families:
 | Judge instructions | Bundled and independent strategies; file, tool-history, response, conflicting, missing, and prior-pass evidence |
 | Developer feedback | Default persona, custom persona, descendant guard on/off, and multiple root failures |
 | Run reports | Default and appended system prompts; override as a control where the default prompt is intentionally absent |
+| Taxonome prompt elements (standalone) | Skipped Invocation, Wrong Discovery, and Content Misused shared assessments with typed evidence-role JSONPaths, positive/negative/unknown inputs, preflights, untrusted evidence, and the bounded Ax initial/correction production compositions; actual Copilot SDK only |
+
+The three Taxonome targets are registered in `adapter/standalone.ts`, which
+calls production `scope/taxonomy/v1` YAML through the same typed loader, Ax
+program, trust wrapper, and validator used by the CLI. Each has a separate
+opaque-ID ATIF/ground-truth packet and fixed deterministic metric. They intentionally
+do not use the Azure quality runner or add another model transport. Run them
+through the unified package command and stable element selectors documented in
+[taxonome.md](taxonome.md); the
+offline composition check is
+`pnpm --filter static-prompt-evals test:ts`.
+The optimizer scores raw parsed candidates with the same
+role/path/type/constraint validator and performs no correction; the standalone
+production-path tests cover first-attempt success and the single permitted Ax
+correction composition. The adapter does not claim native structured output:
+the production path uses `trajectory_context:string -> observation:json`, Ax
+parsing, and a forward-scoped client-side Taxonome assertion. The input field
+name intentionally does not overlap assessment property names; composition
+tests ensure Ax rendering preserves the exact lower-case nested key
+`evidence`.
 
 Judge and report tool descriptions are static AI-facing instructions, but they
 are evaluated through their owning end-to-end judge and report families rather

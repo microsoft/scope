@@ -1,0 +1,1450 @@
+{
+  "passed": 33,
+  "total": 36,
+  "pass_rate": 0.9166666666666666,
+  "metadata": {
+    "before": {
+      "model": "gpt-5.6-sol-fast",
+      "contract_hash": "1c76389e7dea34b9e75313cf77b703a89e0c4048db71267620de09a637f463a9",
+      "artifact_hash": null,
+      "budget": {
+        "cap": 500,
+        "used": 2,
+        "remaining": 498
+      }
+    },
+    "after": {
+      "model": "gpt-5.6-sol-fast",
+      "contract_hash": "1c76389e7dea34b9e75313cf77b703a89e0c4048db71267620de09a637f463a9",
+      "artifact_hash": null,
+      "budget": {
+        "cap": 500,
+        "used": 38,
+        "remaining": 462
+      }
+    }
+  },
+  "rows": [
+    {
+      "case_id": "train-skill",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "storage-skill",
+                "source": {
+                  "id": "storage",
+                  "label": "storage-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1827,
+      "context": {
+        "run_id": "run-0001",
+        "scenario": {
+          "id": "storage",
+          "label": "Storage app",
+          "task": "Build a storage app"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "storage",
+            "label": "storage-skill",
+            "surface_id": "surface-skills"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "train-used",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1378,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "db",
+            "label": "db/query",
+            "surface_id": "surface-mcp"
+          }
+        ],
+        "timeout_policy": {
+          "threshold_ms": 1000
+        }
+      }
+    },
+    {
+      "case_id": "train-none",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1239,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "db",
+            "label": "db/query",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "train-irrelevant",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1103,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "weather",
+            "label": "weather-forecast",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "train-partial",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "The agent discovered the task-relevant auth.md at step_id 2, but the partial evidence does not establish whether it was later used."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1347,
+      "context": {
+        "completeness": "partial",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "train-mixed",
+      "split": "train",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "source": {
+                  "id": "account",
+                  "label": "account/query",
+                  "surface_id": "surface-mcp"
+                },
+                "related_turns": [
+                  3
+                ],
+                "tool_call_id": "mixed-call"
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1310,
+      "context": {
+        "run_id": "run-0006",
+        "scenario": {
+          "id": "auth",
+          "label": "Authentication",
+          "task": "Configure auth and query account"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          },
+          {
+            "id": "account",
+            "label": "account/query",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "val-reference",
+      "split": "validation",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "references/identity.md",
+                "source": {
+                  "id": "identity-ref",
+                  "label": "references/identity.md",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1318,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "identity-ref",
+            "label": "references/identity.md",
+            "surface_id": "surface-skills"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "val-reference-irrelevant",
+      "split": "validation",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "inapplicable",
+            "reason": "The referenced file applies only to authentication, which the task explicitly excludes."
+          }
+        }
+      ],
+      "errors": [
+        "beh-skipped-invocation: state expected completed, got inapplicable",
+        "beh-skipped-invocation: observed expected false"
+      ],
+      "latency_ms": 1218,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "identity-ref",
+            "label": "references/identity.md",
+            "surface_id": "surface-skills"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "val-multiple",
+      "split": "validation",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "partition.md",
+                "source": {
+                  "id": "partition",
+                  "label": "partition.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1605,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          },
+          {
+            "id": "partition",
+            "label": "partition.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "val-repeat",
+      "split": "validation",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "build-guide.md",
+                "source": {
+                  "id": "build",
+                  "label": "build-guide.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1270,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "build",
+            "label": "build-guide.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "val-unknown",
+      "split": "validation",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "The agent discovered task-relevant deploy.md at step_id 2, but the evidence does not establish whether it was read or used before the run ended."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1369,
+      "context": {
+        "completeness": "unknown",
+        "sources": [
+          {
+            "id": "deploy",
+            "label": "deploy.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-cli",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "deployctl",
+                "source": {
+                  "id": "deployctl",
+                  "label": "deployctl",
+                  "surface_id": "surface-cli"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1583,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "deployctl",
+            "label": "deployctl",
+            "surface_id": "surface-cli"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-used-reference",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 966,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "creds",
+            "label": "credentials.md",
+            "surface_id": "surface-instructions"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-irrelevant",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1078,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "image",
+            "label": "image/render",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-partial",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "The run ends after discovery of deploy-skill at step_id 2, but evidence is partial and explicitly states deployment continues in a later iteration, so post-discovery invocation cannot be determined."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1477,
+      "context": {
+        "completeness": "partial",
+        "sources": [
+          {
+            "id": "deploy-skill",
+            "label": "deploy-skill",
+            "surface_id": "surface-skills"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-several",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "database-skill",
+                "source": {
+                  "id": "database-skill",
+                  "label": "database-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "cloud/db-check",
+                "source": {
+                  "id": "check",
+                  "label": "cloud/db-check",
+                  "surface_id": "surface-mcp"
+                },
+                "discovery_turn": 3
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1503,
+      "context": {
+        "run_id": "run-0016",
+        "scenario": {
+          "id": "db",
+          "label": "Cloud database",
+          "task": "Create and verify database"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "database-skill",
+            "label": "database-skill",
+            "surface_id": "surface-skills"
+          },
+          {
+            "id": "check",
+            "label": "cloud/db-check",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-injection",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "backup.md",
+                "source": {
+                  "id": "backup",
+                  "label": "backup.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1445,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "backup",
+            "label": "backup.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-atif-review",
+      "split": "heldout",
+      "sample": 0,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1111,
+      "context": {
+        "completeness": "complete",
+        "sources": []
+      }
+    },
+    {
+      "case_id": "train-skill",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "storage-skill",
+                "source": {
+                  "id": "storage",
+                  "label": "storage-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1451,
+      "context": {
+        "run_id": "run-0001",
+        "scenario": {
+          "id": "storage",
+          "label": "Storage app",
+          "task": "Build a storage app"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "storage",
+            "label": "storage-skill",
+            "surface_id": "surface-skills"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "train-used",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 941,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "db",
+            "label": "db/query",
+            "surface_id": "surface-mcp"
+          }
+        ],
+        "timeout_policy": {
+          "threshold_ms": 1000
+        }
+      }
+    },
+    {
+      "case_id": "train-none",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 964,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "db",
+            "label": "db/query",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "train-irrelevant",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1316,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "weather",
+            "label": "weather-forecast",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "train-partial",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "The agent discovered task-relevant auth.md at step_id 2, but the partial evidence does not establish whether it was later read or used."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1448,
+      "context": {
+        "completeness": "partial",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "train-mixed",
+      "split": "train",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "source": {
+                  "id": "account",
+                  "label": "account/query",
+                  "surface_id": "surface-mcp"
+                },
+                "related_turns": [
+                  3
+                ],
+                "tool_call_id": "mixed-call"
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1121,
+      "context": {
+        "run_id": "run-0006",
+        "scenario": {
+          "id": "auth",
+          "label": "Authentication",
+          "task": "Configure auth and query account"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          },
+          {
+            "id": "account",
+            "label": "account/query",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "val-reference",
+      "split": "validation",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "references/identity.md",
+                "source": {
+                  "id": "identity-ref",
+                  "label": "references/identity.md",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1132,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "identity-ref",
+            "label": "references/identity.md",
+            "surface_id": "surface-skills"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "val-reference-irrelevant",
+      "split": "validation",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "inapplicable",
+            "reason": "The referenced file applies only to authentication, which the task explicitly excludes."
+          }
+        }
+      ],
+      "errors": [
+        "beh-skipped-invocation: state expected completed, got inapplicable",
+        "beh-skipped-invocation: observed expected false"
+      ],
+      "latency_ms": 1323,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "identity-ref",
+            "label": "references/identity.md",
+            "surface_id": "surface-skills"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "val-multiple",
+      "split": "validation",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "auth.md",
+                "source": {
+                  "id": "auth",
+                  "label": "auth.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "partition.md",
+                "source": {
+                  "id": "partition",
+                  "label": "partition.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1289,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "auth",
+            "label": "auth.md",
+            "surface_id": "surface-docs"
+          },
+          {
+            "id": "partition",
+            "label": "partition.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "val-repeat",
+      "split": "validation",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "build-guide.md",
+                "source": {
+                  "id": "build",
+                  "label": "build-guide.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1233,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "build",
+            "label": "build-guide.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "val-unknown",
+      "split": "validation",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "deploy.md",
+                "source": {
+                  "id": "deploy",
+                  "label": "deploy.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [
+        "beh-skipped-invocation: state expected indeterminate, got completed"
+      ],
+      "latency_ms": 1367,
+      "context": {
+        "completeness": "unknown",
+        "sources": [
+          {
+            "id": "deploy",
+            "label": "deploy.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-cli",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "deployctl CLI",
+                "source": {
+                  "id": "deployctl",
+                  "label": "deployctl",
+                  "surface_id": "surface-cli"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1364,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "deployctl",
+            "label": "deployctl",
+            "surface_id": "surface-cli"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-used-reference",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1272,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "creds",
+            "label": "credentials.md",
+            "surface_id": "surface-instructions"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-irrelevant",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1065,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "image",
+            "label": "image/render",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-partial",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "indeterminate",
+            "reason": "Step 2 discovers deploy-skill, but the partial record ends at step 3 before showing whether it is later invoked."
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1961,
+      "context": {
+        "completeness": "partial",
+        "sources": [
+          {
+            "id": "deploy-skill",
+            "label": "deploy-skill",
+            "surface_id": "surface-skills"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-several",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "database-skill",
+                "source": {
+                  "id": "database-skill",
+                  "label": "database-skill",
+                  "surface_id": "surface-skills"
+                },
+                "discovery_turn": 2
+              },
+              {
+                "extension_point": "cloud/db-check",
+                "source": {
+                  "id": "check",
+                  "label": "cloud/db-check",
+                  "surface_id": "surface-mcp"
+                },
+                "discovery_turn": 3
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1273,
+      "context": {
+        "run_id": "run-0016",
+        "scenario": {
+          "id": "db",
+          "label": "Cloud database",
+          "task": "Create and verify database"
+        },
+        "profile": {
+          "id": "fixture",
+          "label": "Fixture agent"
+        },
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "database-skill",
+            "label": "database-skill",
+            "surface_id": "surface-skills"
+          },
+          {
+            "id": "check",
+            "label": "cloud/db-check",
+            "surface_id": "surface-mcp"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-injection",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": true,
+            "occurrences": [
+              {
+                "extension_point": "backup.md",
+                "source": {
+                  "id": "backup",
+                  "label": "backup.md",
+                  "surface_id": "surface-docs"
+                },
+                "discovery_turn": 2
+              }
+            ]
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 1225,
+      "context": {
+        "completeness": "complete",
+        "sources": [
+          {
+            "id": "backup",
+            "label": "backup.md",
+            "surface_id": "surface-docs"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "held-atif-review",
+      "split": "heldout",
+      "sample": 1,
+      "results": [
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-skipped-invocation",
+          "implementation": "prompt",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        },
+        {
+          "schema_version": "taxonome.observation.v1",
+          "element_id": "beh-timeout",
+          "implementation": "deterministic",
+          "result": {
+            "state": "completed",
+            "observed": false
+          }
+        }
+      ],
+      "errors": [],
+      "latency_ms": 972,
+      "context": {
+        "completeness": "complete",
+        "sources": []
+      }
+    }
+  ]
+}

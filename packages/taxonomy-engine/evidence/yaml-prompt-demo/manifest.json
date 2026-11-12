@@ -1,0 +1,132 @@
+{
+  "format": "scope/taxonome-demo-evidence/v1",
+  "date": "2026-10-22",
+  "source_commit": "77443f87438f496666951129c96793e24603610d",
+  "historical_snapshot": {
+    "calls": 256,
+    "cap": 500,
+    "ledger_sha256": "89a42e00cbc3c3a62fc14d47995704c64bc5a169d2d8670a9435c75749ba303a",
+    "preserved_unchanged": true
+  },
+  "fresh_cumulative_budget": {
+    "cap": 500,
+    "used": 267,
+    "remaining": 233,
+    "new_calls": 11
+  },
+  "fresh_usage": {
+    "calls": 11,
+    "input_tokens": 12768,
+    "output_tokens": 252,
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "model_attempts": 11,
+    "failed_calls": 0,
+    "latency_ms": 12312,
+    "usd_cost": null
+  },
+  "purpose_counts": {
+    "run": 2,
+    "eval": 4,
+    "optimize_teacher": 3,
+    "optimize_student": 2
+  },
+  "settings": {
+    "model": "gpt-5.6-sol-fast",
+    "reasoning_effort": "low",
+    "sampling": "sdk-managed",
+    "ax_version": "25.3.2",
+    "sdk_version": "1.0.1",
+    "max_metric_calls": 12,
+    "seed": 42
+  },
+  "contracts": {
+    "taxonomy_schema": "scope/taxonomy/v1",
+    "evaluation_schema": "scope/taxonomy-evaluation/v1",
+    "artifact_format": "scope/taxonome-ax/v2",
+    "taxonomy_digest": "c04b2f500e32fe15e0bd8628eb42ab10c7f92277baf500a4b45d0c66ef054328",
+    "prompt_contract_hash": "45dad89fa891502f5d3fb416a069fc0ab66a365b61d57c26879eceab7659d6ac",
+    "corpus_hash": "0cec8afe7aac068f7a49813c6ffdddbae5d7f72fa6fd1faa849caaf87353cefd"
+  },
+  "dataset": {
+    "train_ids": [
+      "train-port-repeat",
+      "train-port-choice"
+    ],
+    "validation_ids": [
+      "validation-format-repeat",
+      "validation-format-confirm"
+    ],
+    "heldout_ids": [
+      "heldout-path-repeat",
+      "heldout-path-detail"
+    ],
+    "families_disjoint": true,
+    "originating_runs_disjoint": true,
+    "element_identity_leaked_in_transcript": false
+  },
+  "results": {
+    "custom_prompt_run": {
+      "state": "completed",
+      "observed": true,
+      "related_turns": [
+        1,
+        2
+      ]
+    },
+    "heldout_baseline": {
+      "passed": 2,
+      "total": 2,
+      "pass_rate": 1
+    },
+    "optimization": {
+      "best_score": 1,
+      "components": 2,
+      "learned_traces": 3,
+      "examples": 2,
+      "metric_entries": 5
+    },
+    "heldout_replay": {
+      "passed": 2,
+      "total": 2,
+      "pass_rate": 1,
+      "accuracy_gain": false
+    },
+    "built_in_taxonomy_run": {
+      "taxonomy_id": "agent-behavior",
+      "prompt_element": {
+        "id": "beh-skipped-invocation",
+        "observed": false
+      },
+      "deterministic_element": {
+        "id": "beh-timeout",
+        "observed": true
+      }
+    }
+  },
+  "commands": [
+    "taxonome run inputs/repeated-request.atif.json --taxonomy taxonomy.yaml --plugin ./dist/handlers/index.js --elements acme-repeated-request --ledger \"$DEMO_LEDGER\"",
+    "taxonome eval --taxonomy taxonomy.yaml --plugin ./dist/handlers/index.js --cases cases/prompt-cases.jsonl --gold cases/prompt-gold.json --split heldout --elements acme-repeated-request --ledger \"$DEMO_LEDGER\"",
+    "taxonome optimize --taxonomy taxonomy.yaml --plugin ./dist/handlers/index.js --cases cases/prompt-cases.jsonl --gold cases/prompt-gold.json --element acme-repeated-request --output artifacts/repeated-request.ax.json --max-metric-calls 12 --ledger \"$DEMO_LEDGER\"",
+    "taxonome eval --taxonomy taxonomy.yaml --plugin ./dist/handlers/index.js --cases cases/prompt-cases.jsonl --gold cases/prompt-gold.json --split heldout --elements acme-repeated-request --artifact artifacts/repeated-request.ax.json --ledger \"$DEMO_LEDGER\"",
+    "taxonome run inputs/built-in.atif.json --taxonomy taxonomies/built-in/taxonomy.yaml --ledger \"$DEMO_LEDGER\""
+  ],
+  "source_sha256": {
+    "examples/taxonome-custom-handler/taxonomy.yaml": "35a6e8565b3c8cb122a94e397a4e7b97cab9e557309b3fae09095807cb6b537d",
+    "examples/taxonome-custom-handler/elements/repeated-request.yaml": "be764afa399a084ee028cbe30ebaaf33d4df3923423c0f39055a44efdc0a815c",
+    "examples/taxonome-custom-handler/cases/prompt-cases.jsonl": "3bc5e7bddb2508e3eae4c7c827b2c8bb2c9df55aadffac80626b1ae17214dc50",
+    "examples/taxonome-custom-handler/cases/prompt-gold.json": "d0529cd779d725e470176148e1153e4dba9204f0d8e8b3e2620f92f171c8e3f5",
+    "examples/taxonome-custom-handler/src/handlers/index.ts": "6fc0c6ab1b377db31d51e52b08239cd9a3e81804eb6c9f839785503f709b60d1",
+    "apps/taxonome/src/custom-handler-example.test.ts": "28169ecae151a7ad801a39410e037272b3123bb842d2fab6ef60b3e07ef39faa"
+  },
+  "artifact_sha256": {
+    "prompt-run.json": "5d997fbc818f11b13e98f8a68e9840b571d2c662cf0c029da4648bade328005a",
+    "baseline.json": "f85e4b5cda571259ca6de2f9df8d97e2f0a49bf203565f438e156932ef39ac45",
+    "optimized.ax.json": "01ca6d7adb2c8500bd860dc46c328de816da814c75a34947a6ae178113f08eef",
+    "replay.json": "2026b957f2b41395475b1a875a64696d69a20d2e8f7406c1feefba0e8c3c80c4",
+    "built-in-run.json": "918b331ed9495fec39cf79bd1d4f14352fe250de5aa473c97c85048ca5bd8285",
+    "readout.json": "8d1be55a67c87977286c940e4a33494754f61e90a1da2afc46a52d607cbec6ef",
+    "readout.md": "091b3ad152fcbcef75669cbb4865bc7599ca95ecf62b5319f4008c0aee1ab285",
+    "call-ledger-delta.jsonl": "3f8b8d6e9184101464fe6887df5c56284512d9f75ad452ed3fe2508d2c62af81"
+  }
+}

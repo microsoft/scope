@@ -1,0 +1,11 @@
+{
+  "canonical_json": {
+    "value": { "b": 2, "a": [3, { "z": false, "é": "text" }] },
+    "serialized": "{\"a\":[3,{\"z\":false,\"é\":\"text\"}],\"b\":2}",
+    "sha256": "0abd23271492b02886cb3f22661f44b59637d6cd5eefc9ad288d9ac3d40210af"
+  },
+  "normalized_atif": {
+    "file": "valid/atif-v18-mixed-media.json",
+    "sha256": "193a61263eb1b92a89e074b5d216759297410ed9a306a7308b4af0f7f29fc396"
+  }
+}

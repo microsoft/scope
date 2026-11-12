@@ -1,0 +1,33 @@
+schema_version: scope/taxonomy/v1
+id: acme-repeated-request
+label: Repeated Information Request
+description: The agent asks for a concrete fact that the user already supplied.
+category_id: behavior-category-communication
+implementation:
+  type: prompt
+  prompt: >-
+    Assess Repeated Information Request. Mark observed only when the agent asks
+    the user to provide a concrete fact that an earlier user turn already
+    supplied clearly and completely. Cite the supplying user step using role
+    supplied and the later agent request using role request. Do not count
+    confirmation, paraphrasing, requests for different details, or genuinely
+    ambiguous requirements.
+preconditions:
+  requires_recorded_discovery: false
+  requires_complete_trajectory: true
+  requires_task: true
+output:
+  evidence_roles:
+    supplied:
+      type: atif.step
+      max: 1
+      description: Earlier user step that supplied the fact.
+    request:
+      type: atif.step
+      max: 1
+      description: Later agent step that asks for the same fact.
+  constraints:
+    - kind: after
+      role: request
+      reference_role: supplied
+      within: $.steps

@@ -1,0 +1,143 @@
+{
+  "schema_version": "taxonome.readout.v1",
+  "groups": [
+    {
+      "scenario": {
+        "id": "auth",
+        "label": "Authentication",
+        "task": "Configure auth and query account"
+      },
+      "profile": {
+        "id": "fixture",
+        "label": "Fixture agent"
+      },
+      "behaviors": [
+        {
+          "element_id": "beh-skipped-invocation",
+          "label": "Skipped Invocation",
+          "category_id": "behavior-category-invocation",
+          "coverage": {
+            "total": 2,
+            "assessed": 1,
+            "unknown": 1,
+            "inapplicable": 0,
+            "error": 0,
+            "missing": 1
+          },
+          "distinct_runs": 1,
+          "occurrences": 1,
+          "sources": [
+            {
+              "source": {
+                "id": "auth",
+                "label": "auth.md",
+                "surface_id": "surface-docs"
+              },
+              "distinct_runs": 1,
+              "occurrences": 1,
+              "evidence": [
+                {
+                  "run_id": "run-0006",
+                  "extension_point": "auth.md",
+                  "source": {
+                    "id": "auth",
+                    "label": "auth.md",
+                    "surface_id": "surface-docs"
+                  },
+                  "discovery_turn": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "element_id": "beh-timeout",
+          "label": "Timeout",
+          "category_id": "behavior-category-invocation",
+          "coverage": {
+            "total": 2,
+            "assessed": 2,
+            "unknown": 0,
+            "inapplicable": 0,
+            "error": 0,
+            "missing": 0
+          },
+          "distinct_runs": 2,
+          "occurrences": 4,
+          "sources": [
+            {
+              "source": {
+                "id": "account",
+                "label": "account/query",
+                "surface_id": "surface-mcp"
+              },
+              "distinct_runs": 2,
+              "occurrences": 3,
+              "evidence": [
+                {
+                  "run_id": "run-0006",
+                  "source": {
+                    "id": "account",
+                    "label": "account/query",
+                    "surface_id": "surface-mcp"
+                  },
+                  "related_turns": [
+                    3
+                  ],
+                  "tool_call_id": "mixed-call"
+                },
+                {
+                  "run_id": "run-9201",
+                  "source": {
+                    "id": "account",
+                    "label": "account/query",
+                    "surface_id": "surface-mcp"
+                  },
+                  "related_turns": [
+                    2
+                  ],
+                  "tool_call_id": "p-a1"
+                },
+                {
+                  "run_id": "run-9201",
+                  "source": {
+                    "id": "account",
+                    "label": "account/query",
+                    "surface_id": "surface-mcp"
+                  },
+                  "related_turns": [
+                    3
+                  ],
+                  "tool_call_id": "p-a2"
+                }
+              ]
+            },
+            {
+              "source": {
+                "id": "auth-cli",
+                "label": "authctl",
+                "surface_id": "surface-cli"
+              },
+              "distinct_runs": 1,
+              "occurrences": 1,
+              "evidence": [
+                {
+                  "run_id": "run-9201",
+                  "source": {
+                    "id": "auth-cli",
+                    "label": "authctl",
+                    "surface_id": "surface-cli"
+                  },
+                  "related_turns": [
+                    4
+                  ],
+                  "tool_call_id": "p-b1"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

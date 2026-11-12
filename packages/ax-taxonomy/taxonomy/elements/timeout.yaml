@@ -1,0 +1,20 @@
+schema_version: scope/taxonomy/v1
+id: beh-timeout
+label: Timeout
+description: A slow or unresponsive extension point interrupts the agent's progress.
+category_id: behavior-category-invocation
+implementation:
+  type: deterministic
+  handler: scope/timeout-v1
+  config:
+    threshold_ms: 30000
+preconditions:
+  requires_recorded_discovery: false
+  requires_complete_trajectory: false
+  requires_task: false
+output:
+  evidence_roles:
+    call:
+      type: atif.tool_call
+      max: 1
+      description: Exact invocation with explicit timeout evidence.
