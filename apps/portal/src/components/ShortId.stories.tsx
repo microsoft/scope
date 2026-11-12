@@ -32,6 +32,13 @@ export const CustomLength: Story = {
   },
 };
 
+export const FullSubmissionId: Story = {
+  args: { length: FULL_ID.length, label: "submission ID" },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText(FULL_ID)).toBeVisible();
+  },
+};
+
 export const HoverRevealsFullIdAndCopy: Story = {
   play: async ({ canvas }) => {
     await userEvent.hover(canvas.getByText("abcdef12"));

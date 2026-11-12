@@ -31,6 +31,7 @@ import { ReportThumbnail } from "@/components/ReportThumbnail";
 import { CriteriaBadge } from "@/components/CriteriaBadge";
 import { TaskPromptBadge } from "@/components/TaskPromptBadge";
 import { AgentBadge } from "@/components/AgentBadge";
+import { ShortId } from "@/components/ShortId";
 import { SkillRevisionLinks } from "@/components/SkillRevisionLinks";
 import { AlertTriangle, ArrowLeft, Copy, Check, Sparkles, CheckCircle2, XCircle, MinusCircle, FileText, Plus, Download, Loader2, Archive, Video, LayoutGrid, List, Puzzle, RotateCcw, ChevronDown, Clock, Pause, Play, ArrowUpDown, X, Boxes } from "lucide-react";
 import { formatDate, formatId, formatDuration, cn } from "@/lib/utils";
@@ -710,6 +711,12 @@ export function RunDetail() {
                 />
               )}
               <MetaItem label="Created" value={formatDate(run.createdAt)} />
+              {run.submissionId && (
+                <MetaItem
+                  label="Submission ID"
+                  value={<ShortId id={run.submissionId} length={run.submissionId.length} label="submission ID" className="break-all text-sm" />}
+                />
+              )}
               {run.maxIterations && <MetaItem label="Max iterations" value={run.maxIterations} />}
               {(() => {
                 const totalDuration = activeRun?.turns?.reduce((sum, t) => sum + (t.durationMs ?? 0), 0);
