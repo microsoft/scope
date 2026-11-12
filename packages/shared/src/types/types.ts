@@ -718,6 +718,7 @@ export interface ReportDocument {
   insightReferences?: InsightReference[];  // Insights discovered/referenced by this report
   createdAt: Date;
   updatedAt?: Date;
+  deletedAt?: Date;      // Soft-delete marker; set when the parent run is deleted
 }
 
 /** Queue message payload for report generation */
