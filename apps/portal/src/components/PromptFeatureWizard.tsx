@@ -4,6 +4,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { PORTAL_AI_REGISTRATION_GUIDANCE } from "@/lib/portal-ai-copy";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -362,7 +363,7 @@ export function PromptFeatureWizard({
 
                 {generateMutation.isError && (
                   <p className="text-xs text-amber-600">
-                    AI generation failed — {generateMutation.error instanceof Error ? generateMutation.error.message : "register an Azure AI Foundry or GitHub Models key at /secrets/keys/new, or write your prompt manually"}
+                    AI generation failed — {generateMutation.error instanceof Error ? generateMutation.error.message : PORTAL_AI_REGISTRATION_GUIDANCE}
                   </p>
                 )}
               </div>
