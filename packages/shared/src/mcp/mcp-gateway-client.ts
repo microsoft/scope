@@ -55,7 +55,17 @@ export class McpGatewayClient {
 
     if (config.type === 'stdio') {
       body.command = config.command;
-      body.args = config.args ?? [];
+      const args = [...(config.args ?? [])];
+      if (config.version) {
+        // Ponytail: pin the executable package without changing the gateway name or tool names.
+        for (let index = args.length - 1; index >= 0; index--) {
+          const packageArg = args[index];
+          if (!/^(?:@[\w.-]+\/)?[\w.-]+(?:@[^\s/]+)?$/.test(packageArg) || packageArg.startsWith('-')) continue;
+          args[index] = `${packageArg.replace(/@[^@/]+$/, '')}@${config.version}`;
+          break;
+        }
+      }
+      body.args = args;
       if (config.env && Object.keys(config.env).length > 0) body.env = config.env;
       body.session_mode = config.sessionMode ?? 'stateful';
     } else {

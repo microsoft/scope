@@ -95,6 +95,7 @@ mcpServer
           { key: 'name', label: 'Name' },
           { key: 'type', label: 'Type' },
           { key: 'url', label: 'URL' },
+          { key: 'version', label: 'Package Version' },
           { key: 'description', label: 'Description', formatter: (s: any) => s.description || '' },
           { key: 'createdAt', label: 'Created' },
           { key: 'updatedAt', label: 'Updated' },
@@ -111,6 +112,7 @@ mcpServer
         if (server.args && server.args.length > 0) {
           console.log(`${label('Args:')} ${value(server.args.join(' '))}`);
         }
+        if (server.version) console.log(`${label('Package version:')} ${value(server.version)}`);
         if (server.env && Object.keys(server.env).length > 0) {
           console.log(`${label('Env:')}`);
           for (const [k, v] of Object.entries(server.env)) {
@@ -144,6 +146,7 @@ mcpServer
   .option("--url <url>", "Server URL (required for sse/http)")
   .option("--command <command>", "Executable to spawn (required for stdio)")
   .option("--args <args>", "Space-separated CLI arguments for stdio command")
+  .option("--pkg-version <version>", "Package version for stdio command")
   .option("--env <env...>", "Environment variables in KEY=VALUE format (repeatable)")
   .option("--description <desc>", "Description")
   .option("--header <header...>", "Headers in name:value format (repeatable)")
@@ -174,6 +177,7 @@ mcpServer
       if (isStdio) {
         body.command = options.command;
         if (options.args) body.args = options.args.trim().split(/\s+/);
+        if (options.pkgVersion) body.version = options.pkgVersion;
         if (env && Object.keys(env).length > 0) body.env = env;
       } else {
         body.url = options.url;
@@ -210,6 +214,7 @@ mcpServer
   .option("--url <url>", "Server URL")
   .option("--command <command>", "Executable to spawn (stdio)")
   .option("--args <args>", "Space-separated CLI arguments for stdio command")
+  .option("--pkg-version <version>", "Package version for stdio command")
   .option("--env <env...>", "Environment variables in KEY=VALUE format (replaces all env vars)")
   .option("--description <desc>", "Description")
   .option("--header <header...>", "Headers in name:value format (replaces all headers)")
@@ -224,6 +229,7 @@ mcpServer
       if (options.url) body.url = options.url;
       if (options.command) body.command = options.command;
       if (options.args) body.args = options.args.trim().split(/\s+/);
+      if (options.pkgVersion) body.version = options.pkgVersion;
       if (options.env) body.env = parseEnvPairs(options.env);
       if (options.description) body.description = options.description;
       if (options.header) body.headers = parseHeaderPairs(options.header);
