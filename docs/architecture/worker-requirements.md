@@ -227,6 +227,16 @@ interface WorkerProcessor {
 
 For multi-turn runs, the lifecycle is: `setup()` → `processMessage()` × N → `teardown()`. The worker instance is reused across iterations — `setup()` and `teardown()` are called exactly once.
 
+**Temporary files.** Create the workspace with `createFreshWorkspace()` in
+`setup()` and call `cleanupWorkspaces()` in `teardown()` (both in
+`packages/shared/src/utils/workspace.ts`). Write any other per-run temporary
+file that lives outside the workspace into `getRunScratchDir()`
+(`<os tmpdir>/scope-run-scratch/`), not bare `os.tmpdir()`. Both helpers wipe
+that directory along with `/tmp/workspaces/`, so nothing a run leaves behind
+survives into the next run in the same pod. The gateway proxy adapter already
+writes its downloaded HARs there; they only need to last until the multi-turn
+loop uploads them, which happens before `teardown()`.
+
 **Source:** [`packages/shared/src/queue/queue-processor.ts`](../../packages/shared/src/queue/queue-processor.ts) — lifecycle orchestration.
 
 ---

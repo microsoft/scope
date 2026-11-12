@@ -14,7 +14,7 @@ import type { ProxyClient } from "./proxy-client.js";
 import { extractHarMetadata } from "../har/extract-metadata.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { getRunScratchDir } from "../utils/workspace.js";
 
 const DEFAULT_API_URL = "http://localhost:18000";
 
@@ -75,8 +75,9 @@ export function createProxyClient(): ProxyClient {
           await log("info", "Gateway session stopped");
           const har = await gw.downloadHar(1);
           if (har) {
-            // Write HAR to temp file so the upload pipeline can pick it up
-            const harFilePath = join(tmpdir(), `gateway-${Date.now()}.har`);
+            // Write HAR to the run scratch dir so the upload pipeline can pick
+            // it up; worker teardown deletes it with the workspace.
+            const harFilePath = join(getRunScratchDir(), `gateway-${Date.now()}.har`);
             await writeFile(harFilePath, JSON.stringify(har), "utf-8");
             const result = extractHarMetadata(har, harFilePath, log);
             // Clean up session on the gateway after collecting data
@@ -96,7 +97,7 @@ export function createProxyClient(): ProxyClient {
         try {
           const har = await gw.downloadHar(iteration);
           if (har) {
-            const harFilePath = join(tmpdir(), `gateway-iter${iteration}-${Date.now()}.har`);
+            const harFilePath = join(getRunScratchDir(), `gateway-iter${iteration}-${Date.now()}.har`);
             await writeFile(harFilePath, JSON.stringify(har), "utf-8");
             await log("info", `Downloaded HAR for iteration ${iteration}`);
             // Rotate so subsequent exchanges go to iteration+1
