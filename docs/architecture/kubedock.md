@@ -38,6 +38,11 @@ Kubedock gives coding agents the ability to run Docker commands (build, run, exe
 
 ## Feature Flag (Kustomize Component)
 
+The devcontainer's [Kind mode](devcontainer.md#kubedock-and-task-identities)
+ships its own local copy of this component (`SCOPE_DEV_KUBEDOCK=true`). Its scoped
+RBAC has been verified, but no worker has run Docker operations through it yet,
+so Kind worker support is not claimed.
+
 Kubedock is deployed as a **Kustomize Component** that overlays opt into per environment.
 
 ### Enabling in an environment

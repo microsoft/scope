@@ -1,0 +1,3552 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "name": "scope-dev"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "scope-runtime",
+        "namespace": "scope-dev"
+      },
+      "data": {
+        "PUBLIC_ORIGIN": "https://localhost:8443",
+        "ISSUER": "https://localhost:8443/11111111-1111-1111-1111-111111111111/v2.0",
+        "VITE_AUTH_AUTHORITY": "https://localhost:8443/11111111-1111-1111-1111-111111111111/v2.0",
+        "VITE_AUTH_KNOWN_AUTHORITIES": "localhost:8443",
+        "VITE_AUTH_REDIRECT_URI": "https://localhost:8443",
+        "VITE_AUTH_POST_LOGOUT_REDIRECT_URI": "https://localhost:8443",
+        "VITE_AUTH_PROTOCOL_MODE": "OIDC",
+        "AUTH_AUTHORITY": "https://localhost:8443/11111111-1111-1111-1111-111111111111",
+        "AUTH_ISSUER_TEMPLATE": "https://localhost:8443/{tenantid}/v2.0",
+        "AUTH_JWKS_URI": "https://entra-local:8443/11111111-1111-1111-1111-111111111111/discovery/v2.0/keys",
+        "AUTH_PROVIDER": "entra",
+        "AUTH_TENANT_ID": "11111111-1111-1111-1111-111111111111",
+        "AUTH_API_CLIENT_ID": "cccccccc-0000-0000-0000-000000000005",
+        "AUTH_PORTAL_CLIENT_ID": "cccccccc-0000-0000-0000-000000000001",
+        "VITE_AUTH_CLIENT_ID": "cccccccc-0000-0000-0000-000000000001",
+        "VITE_AUTH_SCOPES": "api://cccccccc-0000-0000-0000-000000000005/access_as_user",
+        "VITE_AUTH_ENABLED_LOCAL": "true",
+        "VITE_DEV_EDGE_ORIGIN": "https://localhost:8443",
+        "API_ENDPOINT": "http://api:80",
+        "MONGO_CONNECTION_STRING": "mongodb://mongodb:27017/?replicaSet=rs0",
+        "MONGO_DATABASE": "scope-dev",
+        "REDIS_HOST": "redis",
+        "REDIS_PORT": "6379",
+        "REDIS_PASSWORD": "",
+        "AZURE_STORAGE_ACCOUNT_NAME": "devstoreaccount1",
+        "STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;",
+        "JUDGE_SERVICE_URL": "http://judge:80",
+        "TOKEN_MANAGER_URL": "http://token-manager:80",
+        "NODE_TLS_REJECT_UNAUTHORIZED": "1",
+        "WORKER_CONCURRENCY": "1",
+        "SCOPE_MT_API_URL": "http://api:80",
+        "PORT": "80",
+        "NODE_EXTRA_CA_CERTS": "/ca/rootCA.pem",
+        "AZURE_KEYVAULT_URI": "https://lowkey-vault:8443",
+        "IDENTITY_ENDPOINT": "http://lowkey-vault:8080/metadata/identity/oauth2/token",
+        "IDENTITY_HEADER": "header"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "dev-edge",
+        "namespace": "scope-dev"
+      },
+      "data": {
+        "default.conf": "map $http_upgrade $connection_upgrade {\n  default upgrade;\n  '' close;\n}\nserver {\n  listen 8080 ssl;\n  ssl_certificate /certs/edge.pem;\n  ssl_certificate_key /certs/edge-key.pem;\n\n  server_name localhost;\n  client_max_body_size 100m;\n  proxy_http_version 1.1;\n  proxy_set_header Host localhost:8443;\n  proxy_set_header X-Forwarded-Proto https;\n  # Keep every header at server level: nginx drops all inherited proxy_set_header\n  # directives in a location that declares any of its own.\n  proxy_set_header Upgrade $http_upgrade;\n  proxy_set_header Connection $connection_upgrade;\n  proxy_read_timeout 3600s;\n  proxy_send_timeout 3600s;\n  proxy_buffering off;\n  proxy_ssl_verify on;\n  proxy_ssl_trusted_certificate /ca/rootCA.pem;\n  proxy_ssl_server_name on;\n  location ~ ^/(?:api(?:/|$)|openapi\\.json$|api-docs(?:/|$)|health$|ready$|about$) {\n    proxy_pass http://api:80;\n  }\n  location ~ ^/(?:11111111-1111-1111-1111-111111111111|common|organizations|consumers)/(?:v2\\.0/\\.well-known/openid-configuration$|discovery/v2\\.0/keys$|oauth2/v2\\.0(?:/|$)) {\n    proxy_pass https://entra-local:8443;\n  }\n  location = /graph/oidc/userinfo {\n    proxy_pass https://entra-local:8443;\n  }\n  location ~ ^/(?:admin(?:/|$)|graph(?:/|$)|(?:11111111-1111-1111-1111-111111111111|common|organizations|consumers)(?:/|$)|[^/]+/(?:v2\\.0|discovery|oauth2|openid)(?:/|$)) {\n    return 404;\n  }\n  location / {\n    proxy_pass http://portal:5100;\n  }\n}\n"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolume",
+      "metadata": {
+        "name": "scope-dev-mongodb"
+      },
+      "spec": {
+        "capacity": {
+          "storage": "20Gi"
+        },
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "persistentVolumeReclaimPolicy": "Retain",
+        "storageClassName": "",
+        "hostPath": {
+          "path": "/scope-state/mongodb",
+          "type": "DirectoryOrCreate"
+        },
+        "claimRef": {
+          "name": "mongodb",
+          "namespace": "scope-dev"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "mongodb",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "storageClassName": "",
+        "volumeName": "scope-dev-mongodb",
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "20Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolume",
+      "metadata": {
+        "name": "scope-dev-redis"
+      },
+      "spec": {
+        "capacity": {
+          "storage": "20Gi"
+        },
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "persistentVolumeReclaimPolicy": "Retain",
+        "storageClassName": "",
+        "hostPath": {
+          "path": "/scope-state/redis",
+          "type": "DirectoryOrCreate"
+        },
+        "claimRef": {
+          "name": "redis",
+          "namespace": "scope-dev"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "redis",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "storageClassName": "",
+        "volumeName": "scope-dev-redis",
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "20Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolume",
+      "metadata": {
+        "name": "scope-dev-azurite"
+      },
+      "spec": {
+        "capacity": {
+          "storage": "20Gi"
+        },
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "persistentVolumeReclaimPolicy": "Retain",
+        "storageClassName": "",
+        "hostPath": {
+          "path": "/scope-state/azurite",
+          "type": "DirectoryOrCreate"
+        },
+        "claimRef": {
+          "name": "azurite",
+          "namespace": "scope-dev"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "azurite",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "storageClassName": "",
+        "volumeName": "scope-dev-azurite",
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "20Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolume",
+      "metadata": {
+        "name": "scope-dev-lowkey-vault"
+      },
+      "spec": {
+        "capacity": {
+          "storage": "20Gi"
+        },
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "persistentVolumeReclaimPolicy": "Retain",
+        "storageClassName": "",
+        "hostPath": {
+          "path": "/scope-state/lowkey-vault",
+          "type": "DirectoryOrCreate"
+        },
+        "claimRef": {
+          "name": "lowkey-vault",
+          "namespace": "scope-dev"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "lowkey-vault",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "storageClassName": "",
+        "volumeName": "scope-dev-lowkey-vault",
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "20Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolume",
+      "metadata": {
+        "name": "scope-dev-entra-local"
+      },
+      "spec": {
+        "capacity": {
+          "storage": "20Gi"
+        },
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "persistentVolumeReclaimPolicy": "Retain",
+        "storageClassName": "",
+        "hostPath": {
+          "path": "/scope-state/entra-local",
+          "type": "DirectoryOrCreate"
+        },
+        "claimRef": {
+          "name": "entra-local",
+          "namespace": "scope-dev"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "entra-local",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "storageClassName": "",
+        "volumeName": "scope-dev-entra-local",
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "20Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolume",
+      "metadata": {
+        "name": "scope-dev-agent-workspaces"
+      },
+      "spec": {
+        "capacity": {
+          "storage": "20Gi"
+        },
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "persistentVolumeReclaimPolicy": "Retain",
+        "storageClassName": "",
+        "hostPath": {
+          "path": "/scope-state/agent-workspaces",
+          "type": "DirectoryOrCreate"
+        },
+        "claimRef": {
+          "name": "agent-workspaces",
+          "namespace": "scope-dev"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "agent-workspaces",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "storageClassName": "",
+        "volumeName": "scope-dev-agent-workspaces",
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "20Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "mongodb",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "mongodb",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "mongodb"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 27017,
+            "targetPort": 27017
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "mongodb",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "mongodb"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "mongodb"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "mongodb",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "mongodb",
+                "image": "mongo:7.0.17",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "command": [
+                  "mongod",
+                  "--replSet",
+                  "rs0",
+                  "--bind_ip_all",
+                  "--dbpath",
+                  "/data/db"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/data"
+                  }
+                ],
+                "readinessProbe": {
+                  "exec": {
+                    "command": [
+                      "mongosh",
+                      "--quiet",
+                      "--eval",
+                      "db.adminCommand({ping:1}).ok || quit(1)"
+                    ]
+                  },
+                  "periodSeconds": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "mongodb"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "mongo-init",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "mongo-init",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "mongo-init"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "mongo-init",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "mongo-init",
+                "image": "mongo:7.0.17",
+                "imagePullPolicy": "IfNotPresent",
+                "command": [
+                  "mongosh",
+                  "--host",
+                  "mongodb",
+                  "--quiet",
+                  "--eval",
+                  "for (let attempt = 0; attempt < 90; attempt++) {\n  try {\n    try { rs.status() } catch (error) {\n      if (error.code !== 94) throw error;\n      rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongodb:27017' }] });\n    }\n    if (db.hello().isWritablePrimary) quit(0);\n  } catch (error) { print(error.message) }\n  sleep(2000);\n}\nquit(1);"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "redis",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "redis",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "redis"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 6379,
+            "targetPort": 6379
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "redis",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "redis"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "redis"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "redis",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "redis",
+                "image": "redis:7.4.2-alpine",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "command": [
+                  "redis-server",
+                  "--appendonly",
+                  "yes"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/data"
+                  }
+                ],
+                "readinessProbe": {
+                  "exec": {
+                    "command": [
+                      "redis-cli",
+                      "ping"
+                    ]
+                  },
+                  "periodSeconds": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "redis"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "azurite",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "azurite",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "azurite"
+        },
+        "ports": [
+          {
+            "name": "port-10000",
+            "port": 10000
+          },
+          {
+            "name": "port-10001",
+            "port": 10001
+          },
+          {
+            "name": "port-10002",
+            "port": 10002
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "azurite",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "azurite"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "azurite"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "azurite",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "azurite",
+                "image": "mcr.microsoft.com/azure-storage/azurite:3.29.0",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "command": [
+                  "azurite",
+                  "--skipApiVersionCheck",
+                  "--loose",
+                  "--blobHost",
+                  "0.0.0.0",
+                  "--queueHost",
+                  "0.0.0.0",
+                  "--tableHost",
+                  "0.0.0.0",
+                  "--location",
+                  "/data"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/data"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 10001
+                  },
+                  "periodSeconds": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "azurite"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "entra-local",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "entra-local",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "entra-local"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 8443,
+            "targetPort": 8443
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "entra-local",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "entra-local"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "entra-local"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "entra-local",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "entra-local",
+                "image": "ghcr.io/cmaneu/entra-local@sha256:70584ef110914d100409cb3d63a63548ccdde10ca780f9751755f1482dec5d7e",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "env": [
+                  {
+                    "name": "PUBLIC_ORIGIN",
+                    "value": "https://localhost:8443"
+                  },
+                  {
+                    "name": "ISSUER",
+                    "value": "https://localhost:8443/11111111-1111-1111-1111-111111111111/v2.0"
+                  },
+                  {
+                    "name": "TLS_ENABLED",
+                    "value": "true"
+                  },
+                  {
+                    "name": "TLS_CERT",
+                    "value": "/certs/edge.pem"
+                  },
+                  {
+                    "name": "TLS_KEY",
+                    "value": "/certs/edge-key.pem"
+                  },
+                  {
+                    "name": "TENANT_ID",
+                    "value": "11111111-1111-1111-1111-111111111111"
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "certificates",
+                    "mountPath": "/certs",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "data",
+                    "mountPath": "/app/data"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 8443
+                  },
+                  "periodSeconds": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "certificates",
+                "secret": {
+                  "secretName": "development-certificates"
+                }
+              },
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              },
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "entra-local"
+                }
+              }
+            ],
+            "securityContext": {
+              "fsGroup": 1000
+            },
+            "initContainers": [
+              {
+                "name": "permissions",
+                "image": "ghcr.io/cmaneu/entra-local@sha256:70584ef110914d100409cb3d63a63548ccdde10ca780f9751755f1482dec5d7e",
+                "securityContext": {
+                  "runAsUser": 0
+                },
+                "command": [
+                  "chown",
+                  "1000:1000",
+                  "/app/data"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/app/data"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "lowkey-vault",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "lowkey-vault",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "lowkey-vault"
+        },
+        "ports": [
+          {
+            "name": "https",
+            "port": 8443
+          },
+          {
+            "name": "identity",
+            "port": 8080
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "lowkey-vault",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "lowkey-vault"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "lowkey-vault"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "lowkey-vault",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "lowkey-vault",
+                "image": "nagyesta/lowkey-vault:7.2.0-ubi10-minimal",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "env": [
+                  {
+                    "name": "SERVER_SSL_KEY_STORE",
+                    "value": "file:/certs/lowkey.p12"
+                  },
+                  {
+                    "name": "SERVER_SSL_KEY_STORE_PASSWORD",
+                    "value": "scope-local-development"
+                  },
+                  {
+                    "name": "LOWKEY_ARGS",
+                    "value": "--server.port=8443 --LOWKEY_VAULT_NAMES=- --LOWKEY_EXPORT_LOCATION=/data/export.json --LOWKEY_IMPORT_LOCATION=/data/export.json"
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "certificates",
+                    "mountPath": "/certs",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "data",
+                    "mountPath": "/data"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 8443
+                  },
+                  "periodSeconds": 5
+                },
+                "command": [
+                  "/bin/sh",
+                  "-c",
+                  "[ -f /data/export.json ] || printf '%s\\n' '{\"vaults\":[{\"attributes\":{\"baseUri\":\"https://lowkey-vault:8443\",\"recoveryLevel\":\"Recoverable+Purgeable\",\"recoverableDays\":90,\"created\":0,\"deleted\":null},\"keys\":{},\"secrets\":{},\"certificates\":{}}]}' > /data/export.json; exec java -jar /lowkey-vault.jar $LOWKEY_ARGS"
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "certificates",
+                "secret": {
+                  "secretName": "development-certificates"
+                }
+              },
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              },
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "lowkey-vault"
+                }
+              }
+            ],
+            "securityContext": {
+              "runAsUser": 1000,
+              "runAsGroup": 1000,
+              "fsGroup": 1000
+            },
+            "initContainers": [
+              {
+                "name": "permissions",
+                "image": "nagyesta/lowkey-vault:7.2.0-ubi10-minimal",
+                "securityContext": {
+                  "runAsUser": 0
+                },
+                "command": [
+                  "chown",
+                  "1000:1000",
+                  "/data"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/data"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "api",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "api",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "api"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 80,
+            "targetPort": 80
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "api",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "api"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "api"
+            },
+            "annotations": {
+              "scope.dev/config-hash": "b478df2f9d1172af"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "api",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "api",
+                "image": "scope-local/api:development",
+                "imagePullPolicy": "Never",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "workingDir": "/app",
+                "command": [
+                  "node",
+                  "--watch",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/api/src/index.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PORT",
+                    "value": "80"
+                  },
+                  {
+                    "name": "NODE_EXTRA_CA_CERTS",
+                    "value": "/ca/rootCA.pem"
+                  },
+                  {
+                    "name": "SCHEDULER_TARGET_QUEUE_DEPTH",
+                    "value": "1"
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 80
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ],
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 80
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 100
+                },
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/ready",
+                    "port": 80
+                  },
+                  "periodSeconds": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "portal",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "portal",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "portal"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 5100,
+            "targetPort": 5100
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "portal",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "portal"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "portal"
+            },
+            "annotations": {
+              "scope.dev/config-hash": "b478df2f9d1172af"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "portal",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "portal",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "workingDir": "/app",
+                "command": [
+                  "pnpm",
+                  "--filter",
+                  "portal",
+                  "dev",
+                  "--host",
+                  "0.0.0.0",
+                  "--port",
+                  "5100",
+                  "--strictPort"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PORT",
+                    "value": "5100"
+                  },
+                  {
+                    "name": "NODE_EXTRA_CA_CERTS",
+                    "value": "/ca/rootCA.pem"
+                  },
+                  {
+                    "name": "SCHEDULER_TARGET_QUEUE_DEPTH",
+                    "value": "1"
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 5100
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ],
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 5100
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 100
+                },
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 5100
+                  },
+                  "periodSeconds": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "judge",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "judge",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "judge"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 80,
+            "targetPort": 80
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "judge",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "judge"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "judge"
+            },
+            "annotations": {
+              "scope.dev/config-hash": "b478df2f9d1172af"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "judge",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "judge",
+                "image": "scope-local/judge:development",
+                "imagePullPolicy": "Never",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "workingDir": "/app",
+                "command": [
+                  "node",
+                  "--watch",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/judge/src/index.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PORT",
+                    "value": "80"
+                  },
+                  {
+                    "name": "NODE_EXTRA_CA_CERTS",
+                    "value": "/ca/rootCA.pem"
+                  },
+                  {
+                    "name": "SCHEDULER_TARGET_QUEUE_DEPTH",
+                    "value": "1"
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 80
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ],
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 80
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 100
+                },
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 80
+                  },
+                  "periodSeconds": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "token-manager",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "token-manager",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "token-manager"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 80,
+            "targetPort": 80
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "token-manager",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "token-manager"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "token-manager"
+            },
+            "annotations": {
+              "scope.dev/config-hash": "b478df2f9d1172af"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "token-manager",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "token-manager",
+                "image": "scope-local/token-manager:development",
+                "imagePullPolicy": "Never",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "workingDir": "/app",
+                "command": [
+                  "node",
+                  "--watch",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/token-manager/src/index.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PORT",
+                    "value": "80"
+                  },
+                  {
+                    "name": "NODE_EXTRA_CA_CERTS",
+                    "value": "/ca/rootCA.pem"
+                  },
+                  {
+                    "name": "SCHEDULER_TARGET_QUEUE_DEPTH",
+                    "value": "1"
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 80
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ],
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 80
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 100
+                },
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 80
+                  },
+                  "periodSeconds": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "scheduler",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "scheduler",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "scheduler"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 80,
+            "targetPort": 80
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "scheduler",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "scheduler"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "scheduler"
+            },
+            "annotations": {
+              "scope.dev/config-hash": "b478df2f9d1172af"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "scheduler",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "scheduler",
+                "image": "scope-local/scheduler:development",
+                "imagePullPolicy": "Never",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "workingDir": "/app",
+                "command": [
+                  "node",
+                  "--watch",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/scheduler/src/index.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PORT",
+                    "value": "80"
+                  },
+                  {
+                    "name": "NODE_EXTRA_CA_CERTS",
+                    "value": "/ca/rootCA.pem"
+                  },
+                  {
+                    "name": "SCHEDULER_TARGET_QUEUE_DEPTH",
+                    "value": "1"
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 80
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ],
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 80
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 100
+                },
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 80
+                  },
+                  "periodSeconds": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "gateway",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "gateway",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "gateway"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 18000,
+            "targetPort": 18000
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "gateway",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "gateway"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "gateway"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "gateway",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "gateway",
+                "image": "scope-local/gateway:development",
+                "imagePullPolicy": "Never",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "ports": [
+                  {
+                    "containerPort": 18000
+                  },
+                  {
+                    "containerPort": 18897
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 18897
+                  },
+                  "periodSeconds": 5
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "coder-acp-copilot",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "coder-acp-copilot",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "coder-acp-copilot"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 80,
+            "targetPort": 80
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "coder-acp-copilot",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 0,
+        "selector": {
+          "matchLabels": {
+            "app": "coder-acp-copilot"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "coder-acp-copilot"
+            },
+            "annotations": {
+              "scope.dev/config-hash": "b478df2f9d1172af"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "coder-acp-copilot",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "coder-acp-copilot",
+                "image": "scope-local/coder-acp-copilot:development",
+                "imagePullPolicy": "Never",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "workingDir": "/app",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/workers/coder-acp-copilot/src/index.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PORT",
+                    "value": "80"
+                  },
+                  {
+                    "name": "NODE_EXTRA_CA_CERTS",
+                    "value": "/ca/rootCA.pem"
+                  },
+                  {
+                    "name": "SCHEDULER_TARGET_QUEUE_DEPTH",
+                    "value": "1"
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 80
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "coder-acp-claude-code",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "coder-acp-claude-code",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "coder-acp-claude-code"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 80,
+            "targetPort": 80
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "coder-acp-claude-code",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 0,
+        "selector": {
+          "matchLabels": {
+            "app": "coder-acp-claude-code"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "coder-acp-claude-code"
+            },
+            "annotations": {
+              "scope.dev/config-hash": "b478df2f9d1172af"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "coder-acp-claude-code",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "coder-acp-claude-code",
+                "image": "scope-local/coder-acp-claude-code:development",
+                "imagePullPolicy": "Never",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "workingDir": "/app",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/workers/coder-acp-claude-code/src/index.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PORT",
+                    "value": "80"
+                  },
+                  {
+                    "name": "NODE_EXTRA_CA_CERTS",
+                    "value": "/ca/rootCA.pem"
+                  },
+                  {
+                    "name": "SCHEDULER_TARGET_QUEUE_DEPTH",
+                    "value": "1"
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 80
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "report-generator",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "report-generator",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "report-generator"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 80,
+            "targetPort": 80
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "report-generator",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 0,
+        "selector": {
+          "matchLabels": {
+            "app": "report-generator"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "report-generator"
+            },
+            "annotations": {
+              "scope.dev/config-hash": "b478df2f9d1172af"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "report-generator",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "report-generator",
+                "image": "scope-local/report-generator:development",
+                "imagePullPolicy": "Never",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "workingDir": "/app",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/workers/report-generator/src/index.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PORT",
+                    "value": "80"
+                  },
+                  {
+                    "name": "NODE_EXTRA_CA_CERTS",
+                    "value": "/ca/rootCA.pem"
+                  },
+                  {
+                    "name": "SCHEDULER_TARGET_QUEUE_DEPTH",
+                    "value": "1"
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 80
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "post-processor",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "post-processor",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "selector": {
+          "app": "post-processor"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 80,
+            "targetPort": 80
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "post-processor",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 0,
+        "selector": {
+          "matchLabels": {
+            "app": "post-processor"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "post-processor"
+            },
+            "annotations": {
+              "scope.dev/config-hash": "b478df2f9d1172af"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "post-processor",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "post-processor",
+                "image": "scope-local/post-processor:development",
+                "imagePullPolicy": "Never",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "workingDir": "/app",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/workers/post-processor/src/index.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PORT",
+                    "value": "80"
+                  },
+                  {
+                    "name": "NODE_EXTRA_CA_CERTS",
+                    "value": "/ca/rootCA.pem"
+                  },
+                  {
+                    "name": "SCHEDULER_TARGET_QUEUE_DEPTH",
+                    "value": "1"
+                  }
+                ],
+                "ports": [
+                  {
+                    "containerPort": 80
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "model-scanner-copilot",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "model-scanner-copilot",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "model-scanner-copilot"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "model-scanner-copilot",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "model-scanner-copilot",
+                "image": "scope-local/model-scanner-copilot:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/model-scanners/copilot/src/index.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "model-scanner-anthropic",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "model-scanner-anthropic",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "model-scanner-anthropic"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "model-scanner-anthropic",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "model-scanner-anthropic",
+                "image": "scope-local/model-scanner-anthropic:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/model-scanners/anthropic/src/index.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "version-checker-acp-copilot",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "version-checker-acp-copilot",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "version-checker-acp-copilot"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "version-checker-acp-copilot",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "version-checker-acp-copilot",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/version-checkers/acp-copilot/src/check-versions.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "version-checker-claude-code",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "version-checker-claude-code",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "version-checker-claude-code"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "version-checker-claude-code",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "version-checker-claude-code",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/version-checkers/claude-code/src/check-versions.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "github-cookie-updater",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "github-cookie-updater",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "github-cookie-updater"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "github-cookie-updater",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "github-cookie-updater",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/key-updaters/github-cookie-updater/src/github-cookie-updater.ts"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "cli",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "cli",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "cli"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "cli",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "cli",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "apps/cli/src/index.ts",
+                  "--help"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "db-migrations",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "db-migrations",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "db-migrations"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "db-migrations",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "db-migrations",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--conditions=source",
+                  "--enable-source-maps",
+                  "--import",
+                  "tsx",
+                  "packages/db-migrations/src/migrate.ts",
+                  "up"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "tests",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "tests",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "tests"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "tests",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "tests",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "pnpm",
+                  "exec",
+                  "vitest",
+                  "run"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "prompt-evaluations",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "prompt-evaluations",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "prompt-evaluations"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "prompt-evaluations",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "prompt-evaluations",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "pnpm",
+                  "eval:static-prompts:smoke"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "storybook",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "storybook",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "storybook"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "storybook",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "storybook",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "pnpm",
+                  "--filter",
+                  "portal",
+                  "exec",
+                  "storybook",
+                  "dev",
+                  "--host",
+                  "0.0.0.0",
+                  "--port",
+                  "6100",
+                  "--no-open"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "website",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "website",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "website"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "website",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "website",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "pnpm",
+                  "--dir",
+                  "website",
+                  "exec",
+                  "astro",
+                  "dev",
+                  "--host",
+                  "0.0.0.0"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "dev-edge",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "dev-edge",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "dev-edge"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "dev-edge"
+            },
+            "annotations": {
+              "scope.dev/config-hash": "e75131b474f494d4"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "dev-edge",
+            "automountServiceAccountToken": false,
+            "terminationGracePeriodSeconds": 120,
+            "containers": [
+              {
+                "name": "dev-edge",
+                "image": "nginx@sha256:5b4900b042ccfa8b0a73df622c3a60f2322faeb2be800cbee5aa7b44d241649e",
+                "imagePullPolicy": "IfNotPresent",
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "certificates",
+                    "mountPath": "/certs",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/nginx/conf.d",
+                    "readOnly": true
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 8080
+                  },
+                  "periodSeconds": 3
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "certificates",
+                "secret": {
+                  "secretName": "development-certificates"
+                }
+              },
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              },
+              {
+                "name": "config",
+                "configMap": {
+                  "name": "dev-edge"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "dev-edge",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "type": "NodePort",
+        "selector": {
+          "app": "dev-edge"
+        },
+        "ports": [
+          {
+            "name": "edge",
+            "port": 8080,
+            "targetPort": 8080,
+            "nodePort": 30080
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "storage-init",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "storage-init",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "storage-init"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "storage-init",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "storage-init",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--import",
+                  "tsx",
+                  "scripts/dev/bootstrap.ts",
+                  "storage-init"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "redirect-init",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "redirect-init",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "redirect-init"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "redirect-init",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "redirect-init",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--import",
+                  "tsx",
+                  "scripts/dev/bootstrap.ts",
+                  "redirect-init"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "db-migrate",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "db-migrate",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "db-migrate"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "db-migrate",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "db-migrate",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--import",
+                  "tsx",
+                  "scripts/dev/bootstrap.ts",
+                  "db-migrate"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "register-agents",
+        "namespace": "scope-dev"
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "metadata": {
+        "name": "register-agents",
+        "namespace": "scope-dev"
+      },
+      "spec": {
+        "suspend": true,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 600,
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "register-agents"
+            }
+          },
+          "spec": {
+            "serviceAccountName": "register-agents",
+            "automountServiceAccountToken": false,
+            "restartPolicy": "Never",
+            "containers": [
+              {
+                "name": "register-agents",
+                "image": "scope-local/tools:development",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "node",
+                  "--import",
+                  "tsx",
+                  "scripts/dev/bootstrap.ts",
+                  "register-agents"
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "scope-runtime"
+                    }
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "public-ca",
+                    "mountPath": "/ca",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "public-ca",
+                "configMap": {
+                  "name": "public-ca"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

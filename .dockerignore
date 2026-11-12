@@ -31,6 +31,7 @@ ctrf
 
 # Local development TLS material is mounted at runtime, never built into images.
 .certs
+.dev-state
 
 # Documentation (not needed in images)
 docs
