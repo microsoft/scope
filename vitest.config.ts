@@ -17,7 +17,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["packages/*/src/**/*.test.{ts,tsx}", "apps/*/src/**/*.test.{ts,tsx}", "apps/workers/*/src/**/*.test.{ts,tsx}", "apps/workers/*/scripts/**/*.test.{ts,tsx}", "apps/model-scanners/*/src/**/*.test.{ts,tsx}", "apps/version-checkers/*/src/**/*.test.{ts,tsx}", "apps/key-updaters/*/src/**/*.test.{ts,tsx}", "scripts/**/*.test.{ts,tsx}"],
+    include: [".github/workflows/**/*.test.{ts,tsx}", "packages/*/src/**/*.test.{ts,tsx}", "apps/*/src/**/*.test.{ts,tsx}", "apps/workers/*/src/**/*.test.{ts,tsx}", "apps/workers/*/scripts/**/*.test.{ts,tsx}", "apps/model-scanners/*/src/**/*.test.{ts,tsx}", "apps/version-checkers/*/src/**/*.test.{ts,tsx}", "apps/key-updaters/*/src/**/*.test.{ts,tsx}", "scripts/**/*.test.{ts,tsx}"],
     exclude: ["**/node_modules/**", "**/.git/**", "**/*.integration.test.ts", "**/*.eval.test.ts"],
     environment: "node",
     globals: false,
