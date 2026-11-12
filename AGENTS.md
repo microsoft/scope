@@ -247,28 +247,15 @@ before changing any AI-facing instruction surface.
 
 ## Contributing (Pull Requests)
 
-This repository is commonly worked on from a **fork**. When opening a pull
-request, **always target the upstream repository when one is available** — do
-not open the PR against the fork unless the user explicitly asks you to.
+Before pushing or opening a pull request, inspect `git remote -v` rather than
+assuming remote names or ownership. Push the branch to an already configured
+writable remote and target the intended base repository and branch. Never
+create or configure a fork unless the user explicitly requests or approves it.
 
-- Detect the upstream: check `git remote -v`. If an `upstream` remote exists
-  (e.g. `microsoft/scope`), that is the PR base. The `origin` remote is
-  typically your personal fork (e.g. `cedricvidal/scope`).
-- Push the branch to your fork (`origin`), then open the PR **across forks**
-  with the upstream as the base:
-  ```bash
-  gh pr create \
-    --repo <upstream-owner>/<repo> \
-    --base main \
-    --head <fork-owner>:<branch> \
-    --title "..." --body-file <path>
-  ```
-- Only fall back to opening the PR against the fork (`origin`) when there is no
-  `upstream` remote, or when the user explicitly requests it.
-- If the upstream org enforces **SAML SSO** and the PR call fails with a `403`
+- If the target org enforces **SAML SSO** and the PR call fails with a `403`
   ("Resource protected by organization SAML enforcement"), stop and ask the
   user to authorize their token for that org via the SSO link, then retry —
-  do not silently downgrade to a fork PR.
+  do not silently change the target repository.
 
 ## Documentation Workflow
 
