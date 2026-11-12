@@ -16,6 +16,7 @@ on:
           - coder-acp-claude-code
 
 permissions:
+  actions: write
   contents: read
   issues: write
 
@@ -176,8 +177,7 @@ jobs:
         id: create_issue
         if: steps.check.outputs.updates_available == 'true' && (steps.existing.outputs.exists == 'false' || steps.existing.outputs.same_version == 'false')
         env:
-          # GITHUB_TOKEN-created issue events cannot trigger another workflow.
-          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cat > /tmp/issue-body.md <<'ISSUE_EOF'
           ## Version updates available for ${{ matrix.worker }}
@@ -208,7 +208,25 @@ jobs:
             --title "${{ steps.check.outputs.title }}" \
             --body-file /tmp/issue-body.md \
             --label "type: worker-update")
+          ISSUE_NUMBER="${ISSUE_URL##*/}"
           echo "issue_url=$ISSUE_URL" >> $GITHUB_OUTPUT
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+
+      - name: Dispatch worker version upgrade
+        if: steps.create_issue.outputs.issue_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          AW_CONTEXT=$(jq -Rs \
+            --arg issue_number "${{ steps.create_issue.outputs.issue_number }}" \
+            '{issue_number: $issue_number, issue_body: .}' \
+            /tmp/issue-body.md)
+
+          # workflow_dispatch is allowed to create a downstream run with GITHUB_TOKEN.
+          gh workflow run worker-version-upgrade.lock.yml \
+            --ref "${{ github.ref_name }}" \
+            -f issue_number="${{ steps.create_issue.outputs.issue_number }}" \
+            -f aw_context="$AW_CONTEXT"
 
       - name: Close superseded issue
         if: steps.existing.outputs.exists == 'true' && steps.existing.outputs.same_version == 'false' && steps.create_issue.outputs.issue_url != ''

@@ -9,6 +9,11 @@ on:
     types: [opened, edited]
     names: ["type: worker-update"]
   workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Worker update issue number
+        required: true
+        type: string
   # Workaround: gh-aw compiler bug — `names:` is commented out in the lock file
   # and no label condition is injected. Use on.steps to enforce label filtering.
   steps:
@@ -22,6 +27,9 @@ on:
 
 if: github.event_name == 'workflow_dispatch' || needs.pre_activation.outputs.label_check_result == 'success'
 
+concurrency:
+  job-discriminator: ${{ github.event.issue.number || inputs.issue_number || github.run_id }}
+
 permissions:
   contents: read
   issues: read
@@ -31,7 +39,7 @@ network: defaults
 safe-outputs:
   assign-to-agent:
     name: copilot
-    target: "triggering"
+    target: ${{ github.event.issue.number || inputs.issue_number }}
     github-token: ${{ secrets.GH_AW_AGENT_TOKEN }}
 ---
 
@@ -42,7 +50,7 @@ apply the update and open a pull request.
 
 ## Context
 
-Analyze the triggering issue: "${{ steps.sanitized.outputs.text }}"
+Analyze issue #${{ github.event.issue.number || inputs.issue_number }}: "${{ steps.sanitized.outputs.text }}"
 
 The issue was created by an automated version checker. It contains a structured
 body with:

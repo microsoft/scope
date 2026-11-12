@@ -14,17 +14,22 @@ const { parse }: { parse: (source: string) => unknown } =
 
 interface Step {
   id?: string;
+  name?: string;
   run?: string;
   env?: Record<string, string>;
 }
 
 interface WorkerVersionWorkflow {
+  permissions: Record<string, string>;
   jobs: Record<string, { steps: Step[] }>;
 }
 
 const workflow = parse(readFileSync(".github/workflows/check-worker-versions.yml", "utf8")) as WorkerVersionWorkflow;
 const setupStep = workflow.jobs["setup-matrix"].steps.find((candidate) => candidate.id === "set")!;
 const createIssueStep = workflow.jobs["check-versions"].steps.find((candidate) => candidate.id === "create_issue")!;
+const dispatchUpgradeStep = workflow.jobs["check-versions"].steps.find(
+  (candidate) => candidate.name === "Dispatch worker version upgrade",
+)!;
 const expectedWorkers = [
   { worker: "coder-acp-copilot", checker: "version-checker-acp-copilot" },
   { worker: "coder-acp-claude-code", checker: "version-checker-claude-code" },
@@ -70,8 +75,12 @@ describe("Check Worker Versions workflow", () => {
     expect(selectedWorkers(worker)).toEqual([{ worker, checker }]);
   });
 
-  it("uses a non-default token so issue creation triggers the upgrade workflow", () => {
-    expect(createIssueStep.env?.GH_TOKEN).toBe("${{ secrets.COPILOT_GITHUB_TOKEN }}");
-    expect(createIssueStep.env?.GH_TOKEN).not.toContain("secrets.GITHUB_TOKEN");
+  it("dispatches the upgrade workflow explicitly after creating an issue", () => {
+    expect(workflow.permissions.actions).toBe("write");
+    expect(createIssueStep.env?.GH_TOKEN).toBe("${{ secrets.GITHUB_TOKEN }}");
+    expect(createIssueStep.run).toContain('echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT');
+    expect(dispatchUpgradeStep.env?.GH_TOKEN).toBe("${{ secrets.GITHUB_TOKEN }}");
+    expect(dispatchUpgradeStep.run).toContain("gh workflow run worker-version-upgrade.lock.yml");
+    expect(dispatchUpgradeStep.run).toContain('-f issue_number="${{ steps.create_issue.outputs.issue_number }}"');
   });
 });
