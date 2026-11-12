@@ -460,6 +460,24 @@ export class BlobStorage {
     return blockBlobClient.url;
   }
 
+  /** Uploads an arbitrary in-memory artifact and returns its stable blob URL. */
+  async uploadBuffer(
+    blobName: string,
+    body: Buffer,
+    contentType: string,
+    contentEncoding?: string,
+  ): Promise<string> {
+    await this.ensureContainer();
+    const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
+    await blockBlobClient.uploadData(body, {
+      blobHTTPHeaders: {
+        blobContentType: contentType,
+        ...(contentEncoding ? { blobContentEncoding: contentEncoding } : {}),
+      },
+    });
+    return blockBlobClient.url;
+  }
+
   /**
    * Downloads a snapshot from blob storage and extracts it to the target directory.
    */
@@ -529,5 +547,28 @@ export class BlobStorage {
     }
     const buf = await this.downloadBlobToBuffer(blobName);
     return JSON.parse(buf.toString("utf-8")) as T;
+  }
+
+  /** Downloads arbitrary snapshot-container bytes by stable URL or blob name. */
+  async downloadBuffer(urlOrBlobName: string): Promise<Buffer> {
+    await this.ensureContainer();
+    let blobName = urlOrBlobName;
+    if (
+      urlOrBlobName.startsWith("http://") ||
+      urlOrBlobName.startsWith("https://")
+    ) {
+      const url = new URL(urlOrBlobName);
+      const containerPrefix = `/${SNAPSHOTS_CONTAINER}/`;
+      const containerIndex = url.pathname.indexOf(containerPrefix);
+      if (containerIndex === -1) {
+        throw new Error(
+          `Blob URL does not contain container '${SNAPSHOTS_CONTAINER}': ${urlOrBlobName}`,
+        );
+      }
+      blobName = decodeURIComponent(
+        url.pathname.substring(containerIndex + containerPrefix.length),
+      );
+    }
+    return this.downloadBlobToBuffer(blobName);
   }
 }

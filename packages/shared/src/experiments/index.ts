@@ -8,3 +8,4 @@ export * from "./layout.js";
 export * from "./fixed-payload-store.js";
 export * from "./lifecycle-target-store.js";
 export * from "./experiment-store.js";
+export * from "./taxonomy-expectation-store.js";

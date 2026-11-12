@@ -77,6 +77,7 @@ export class ExperimentMembershipCoordinator {
     metadata: ExperimentMetadata;
     requestIds: readonly string[];
     reportTemplateIds?: readonly string[];
+    taxonomy?: import("shared").ExperimentTaxonomySelection;
     now?: Date;
   }): Promise<ReplaceMembershipResult> {
     const requestIds = uniqueCanonicalRequestIds(input.requestIds);
@@ -163,7 +164,9 @@ export class ExperimentMembershipCoordinator {
           metadata: input.metadata,
           requestIds,
           reportTemplateIds,
+          taxonomy: input.taxonomy,
         }),
+        ...(input.taxonomy ? { taxonomy: input.taxonomy } : {}),
         createdAt: now,
       },
       experimentExecutionId: input.experimentExecutionId,

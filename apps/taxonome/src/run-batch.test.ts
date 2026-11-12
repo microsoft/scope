@@ -72,7 +72,7 @@ const compatibility = {
   taxonomy_digest: taxonomy.digest,
   element_ids: ["element-a", "element-b"],
   model: "model-a",
-  artifact_contract_hashes: { "element-a": "artifact-a" },
+  element_override_hashes: { "element-a": "override-a" },
   atif_ingestion_policy_hash: ATIF_INGESTION_POLICY_HASH,
 };
 
@@ -142,7 +142,7 @@ function success(
         digest: compatibility.taxonomy_digest,
       },
       model: compatibility.model,
-      artifact_contract_hashes: compatibility.artifact_contract_hashes,
+      element_override_hashes: compatibility.element_override_hashes,
       atif_ingestion_policy_hash:
         compatibility.atif_ingestion_policy_hash,
       element_ids: compatibility.element_ids,

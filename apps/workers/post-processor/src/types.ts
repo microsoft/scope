@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Collection } from "mongodb";
+import type { Collection, Db } from "mongodb";
 import type { BlobStorage, LogEvent } from "shared";
 
 /** Queue message dispatched by the PostProcessorDispatcher in the scheduler. */
@@ -19,6 +19,8 @@ export interface HandlerContext {
   /** The `criteria` collection — lets handlers resolve criterion metadata
    *  (e.g. observation `subject`/`taxonomyElementId`) by id. #1156. */
   criteriaCollection: Collection;
+  db?: Db;
+  claimToken?: string;
   log: (level: LogEvent["level"], msg: string, data?: Record<string, unknown>) => Promise<void>;
 }
 

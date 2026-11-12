@@ -148,6 +148,7 @@ export default defineConfig({
 							label: 'Design your benchmark',
 							collapsed: true,
 							items: [
+								{ label: 'Create your own taxonomy', slug: 'guides/create-taxonomy' },
 								{ label: 'Task prompts', slug: 'guides/managing-task-prompts' },
 								{ label: 'Codebases', slug: 'guides/managing-codebases' },
 								{ label: 'Evaluation criteria', slug: 'guides/defining-criteria' },

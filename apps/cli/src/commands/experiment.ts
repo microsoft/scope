@@ -696,6 +696,10 @@ export function registerExperimentCommands(program: Command): void {
             collectRepeatable,
             [],
           )
+          .option(
+            "--taxonomy-revision <id>",
+            "Pin one exact taxonomy revision database ID",
+          )
           .option("--empty", "Create an explicit empty experiment")
           .option(
             "--request-id <id>",
@@ -768,6 +772,9 @@ export function registerExperimentCommands(program: Command): void {
             requests: [],
             requestIds: [],
             reportTemplateIds: options.reportTemplate as string[],
+            ...(options.taxonomyRevision
+              ? { taxonomyRevisionId: options.taxonomyRevision as string }
+              : {}),
           }
         : requestIds.length > 0
           ? {
@@ -776,6 +783,9 @@ export function registerExperimentCommands(program: Command): void {
               requests: [],
               requestIds,
               reportTemplateIds: options.reportTemplate as string[],
+              ...(options.taxonomyRevision
+                ? { taxonomyRevisionId: options.taxonomyRevision as string }
+                : {}),
             }
           : {
             mode: "compose" as const,
@@ -783,6 +793,9 @@ export function registerExperimentCommands(program: Command): void {
             requests: [built!.request],
             requestIds: [],
             reportTemplateIds: options.reportTemplate as string[],
+            ...(options.taxonomyRevision
+              ? { taxonomyRevisionId: options.taxonomyRevision as string }
+              : {}),
           };
       const expandedRunCount = built
         ? built.profileCount * built.occurrences

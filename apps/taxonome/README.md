@@ -12,13 +12,13 @@ for practical workflows and authoring a custom taxonomy. The
 [default taxonomy reference](../../website/src/content/docs/reference/taxonome-elements.mdx)
 generates its element/file list and full YAML sources from the catalog.
 
-The generic runtime is `packages/taxonomy-engine`; the shipped
-agent-behavior definitions and deterministic handlers are isolated in
+The generic runtime is `packages/taxonomy-engine`; the shipped Ax taxonomy
+definitions and deterministic handlers are isolated in
 `packages/ax-taxonomy`. The CLI explicitly composes both packages.
 
 See [the architecture and usage guide](../../docs/architecture/taxonome.md)
 for YAML and `extra.scope` contracts, archive safety, plugin authoring,
-build/run/eval/optimization/replay commands, the typed API, evidence policy,
+build, run, evaluation, optimization, optimized-element, and readout commands,
 and scope limitations. A runnable custom project lives in
 [`examples/taxonome-custom-handler`](../../examples/taxonome-custom-handler/README.md).
 The language-neutral authoring/result/reference contract is the

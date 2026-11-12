@@ -152,6 +152,8 @@ export interface TaxonomyLoadLimits {
 export interface TaxonomyLoadOptions {
   /** Combined built-in/local/package registry. */
   handlers: HandlerRegistry;
+  /** Complete authored element replacements keyed by exact element ID. */
+  elementOverrides?: ReadonlyMap<string, unknown>;
   /** Optional safety-limit overrides used primarily by tests. */
   limits?: TaxonomyLoadLimits;
 }
@@ -405,6 +407,78 @@ export function serializableTaxonomy(taxonomy: Omit<NormalizedTaxonomy, "digest"
   };
 }
 
+/** Normalizes already-resolved taxonomy and element documents from a trusted store. */
+export function normalizeTaxonomyDocuments(
+  taxonomy: unknown,
+  elementDocuments: readonly unknown[],
+  options: TaxonomyLoadOptions,
+): NormalizedTaxonomy {
+  const document = taxonomyDocumentSchema.parse(taxonomy);
+  const authoredElements = elementDocuments.map((element, index) =>
+    parseAuthoredElement(element, `stored element ${index + 1}`),
+  );
+  if (document.elements.length !== authoredElements.length) {
+    throw new Error(
+      `Taxonomy declares ${document.elements.length} elements but ${authoredElements.length} were resolved`,
+    );
+  }
+
+  const surfaceIds = new Set<string>();
+  for (const surface of document.surfaces) {
+    if (surfaceIds.has(surface.id)) {
+      throw new Error(`Duplicate taxonomy surface ID '${surface.id}'`);
+    }
+    surfaceIds.add(surface.id);
+  }
+
+  const elementIds = new Set<string>();
+  const elements: NormalizedElement[] = authoredElements.map(authored => {
+    if (authored.schema_version && authored.schema_version !== document.schema_version) {
+      throw new Error(`Element '${authored.id}' schema version conflicts with taxonomy`);
+    }
+    if (elementIds.has(authored.id)) {
+      throw new Error(`Duplicate taxonomy element ID '${authored.id}'`);
+    }
+    elementIds.add(authored.id);
+
+    const output = validateOutputContract(authored.id, authored.output);
+    if (authored.implementation.type === "prompt") {
+      return { ...authored, implementation: authored.implementation, output };
+    }
+    const registered = options.handlers.resolve(authored.implementation.handler);
+    const config = registered.handler.configSchema.parse(authored.implementation.config ?? {});
+    return {
+      ...authored,
+      implementation: {
+        type: "deterministic" as const,
+        handler: authored.implementation.handler,
+        config,
+      },
+      output,
+      resolvedHandler: registered.handler,
+      handlerProvider: registered.provider,
+    };
+  });
+
+  const withoutDigest = {
+    schema_version: TAXONOMY_SCHEMA_VERSION,
+    id: document.id,
+    version: document.version,
+    surfaces: document.surfaces,
+    elements,
+    elementById: new Map(elements.map(element => [element.id, element])),
+    surfaceById: new Map(document.surfaces.map(surface => [surface.id, surface])),
+  } satisfies Omit<NormalizedTaxonomy, "digest">;
+  const normalized: NormalizedTaxonomy = {
+    ...withoutDigest,
+    digest: taxonomyDigest(serializableTaxonomy(withoutDigest)),
+  };
+  Object.freeze(normalized.surfaces);
+  Object.freeze(normalized.elements);
+  Object.freeze(normalized);
+  return normalized;
+}
+
 /**
  * Loads embedded/referenced YAML forms into one immutable normalized taxonomy.
  *
@@ -439,6 +513,7 @@ export async function loadTaxonomy(
       if (loadedReferences.size >= limits.maxReferences) {
         throw new Error(`Taxonomy exceeds maximum reference count ${limits.maxReferences}`);
       }
+
       const elementPath = await resolveElementPath(root, reference.data.path);
       if (loadedReferences.has(elementPath)) {
         throw new Error(`Duplicate or cyclic taxonomy element reference '${reference.data.path}'`);
@@ -455,64 +530,35 @@ export async function loadTaxonomy(
     }
   }
 
-  const surfaceIds = new Set<string>();
-  for (const surface of document.surfaces) {
-    if (surfaceIds.has(surface.id)) {
-      throw new Error(`Duplicate taxonomy surface ID '${surface.id}'`);
+  if (options.elementOverrides?.size) {
+    const matched = new Set<string>();
+    for (let index = 0; index < authoredElements.length; index++) {
+      const authored = authoredElements[index]!;
+      const override = options.elementOverrides.get(authored.id);
+      if (override === undefined) continue;
+      const parsed = parseAuthoredElement(
+        override,
+        `element override '${authored.id}'`,
+      );
+      if (parsed.id !== authored.id) {
+        throw new Error(
+          `Element override ID '${parsed.id}' does not match taxonomy element '${authored.id}'`,
+        );
+      }
+      authoredElements[index] = parsed;
+      matched.add(authored.id);
     }
-    surfaceIds.add(surface.id);
+    const unknown = [...options.elementOverrides.keys()].filter(
+      id => !matched.has(id),
+    );
+    if (unknown.length) {
+      throw new Error(`Unknown element override ID(s): ${unknown.join(", ")}`);
+    }
   }
 
-  const elementIds = new Set<string>();
-  const elements: NormalizedElement[] = authoredElements.map(authored => {
-    if (authored.schema_version && authored.schema_version !== document.schema_version) {
-      throw new Error(`Element '${authored.id}' schema version conflicts with taxonomy`);
-    }
-    if (elementIds.has(authored.id)) {
-      throw new Error(`Duplicate taxonomy element ID '${authored.id}'`);
-    }
-    elementIds.add(authored.id);
-
-    const output = validateOutputContract(authored.id, authored.output);
-    if (authored.implementation.type === "prompt") {
-      return {
-        ...authored,
-        implementation: authored.implementation,
-        output,
-      };
-    }
-
-    const registered = options.handlers.resolve(authored.implementation.handler);
-    const config = registered.handler.configSchema.parse(authored.implementation.config ?? {});
-    return {
-      ...authored,
-      implementation: {
-        type: "deterministic" as const,
-        handler: authored.implementation.handler,
-        config,
-      },
-      output,
-      resolvedHandler: registered.handler,
-      handlerProvider: registered.provider,
-    };
-  });
-
-  const withoutDigest = {
-    schema_version: TAXONOMY_SCHEMA_VERSION,
-    id: document.id,
-    version: document.version,
-    surfaces: document.surfaces,
-    elements,
-    elementById: new Map(elements.map(element => [element.id, element])),
-    surfaceById: new Map(document.surfaces.map(surface => [surface.id, surface])),
-  } satisfies Omit<NormalizedTaxonomy, "digest">;
-  const normalized: NormalizedTaxonomy = {
-    ...withoutDigest,
-    digest: taxonomyDigest(serializableTaxonomy(withoutDigest)),
-  };
-
-  Object.freeze(normalized.surfaces);
-  Object.freeze(normalized.elements);
-  Object.freeze(normalized);
-  return normalized;
+  return normalizeTaxonomyDocuments(
+    { ...document, elements: authoredElements },
+    authoredElements,
+    options,
+  );
 }

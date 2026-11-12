@@ -171,6 +171,7 @@ describe("PostProcessor", () => {
         _id: "req-1",
         "run._id": "run-1",
         "run.handlerStatus.pp-atif.status": "processing",
+        "run.handlerStatus.pp-atif.claimToken": expect.any(String),
       },
       {
         $set: expect.objectContaining({
@@ -228,6 +229,7 @@ describe("PostProcessor", () => {
         _id: "req-1",
         "run._id": "run-1",
         "run.handlerStatus.pp-atif.status": "processing",
+        "run.handlerStatus.pp-atif.claimToken": expect.any(String),
       },
       {
         $set: expect.objectContaining({

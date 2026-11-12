@@ -38,7 +38,9 @@ import {
   orderGates,
   computeTaskPromptId,
   ExperimentStore,
+  TaxonomyExpectationStore,
   LEGACY_REQUEST_COMPOSITION_DEPRECATION_ID,
+  taxonomyHandlerSummary,
 } from "shared";
 import { trackMetric } from "telemetry";
 import type {
@@ -1581,7 +1583,13 @@ apiRoute(ctx.app, ctx.registry, {
     }
 
     // Map _id back to id for API response
-    res.json({ ...resource, id: resource._id });
+    res.json({
+      ...resource,
+      id: resource._id,
+      ...(taxonomyHandlerSummary(resource.run)
+        ? { taxonomyHandler: taxonomyHandlerSummary(resource.run) }
+        : {}),
+    });
   },
 });
 
@@ -1941,7 +1949,40 @@ apiRoute(ctx.app, ctx.registry, {
       resources.reverse();
     }
 
-    const data = resources.map((r) => ({ ...r, id: r._id }));
+    const experimentRunPairs = resources.flatMap((resource) =>
+      resource.experimentId && resource.run?._id
+        ? [{
+            experimentId: resource.experimentId,
+            requestId: resource._id,
+            runId: resource.run._id,
+          }]
+        : []
+    );
+    const expectedTaxonomyPairs = await new TaxonomyExpectationStore({
+      experiments: ctx.experimentCollection,
+      executions: ctx.experimentExecutionsCollection,
+      chunks: ctx.experimentChunksCollection,
+    }).findExpectedPairs(projectId, experimentRunPairs);
+    const data = resources.map((resource) => {
+      const exactPair = resource.experimentId && resource.run?._id
+        ? {
+            experimentId: resource.experimentId,
+            requestId: resource._id,
+            runId: resource.run._id,
+          }
+        : undefined;
+      const taxonomyHandler = taxonomyHandlerSummary(
+        resource.run,
+        exactPair
+          ? expectedTaxonomyPairs.has(TaxonomyExpectationStore.key(exactPair))
+          : false,
+      );
+      return {
+        ...resource,
+        id: resource._id,
+        ...(taxonomyHandler ? { taxonomyHandler } : {}),
+      };
+    });
 
     // Enrich `processing` runs with the latest liveness heartbeat from
     // Redis. The store's mget is cluster-safe (a pipeline of single-key GETs,

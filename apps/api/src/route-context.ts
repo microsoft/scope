@@ -55,6 +55,12 @@ import type {
   RunHistoryDocumentSchema,
   ExperimentDocument,
   ExperimentExecutionHistoryDocument,
+  TaxonomyDocument,
+  TaxonomyElementDocument,
+  TaxonomyRevisionDocument,
+  TaxonomyElementRevisionDocument,
+  TaxonomyRootStore,
+  TaxonomyRevisionStore,
 } from "shared";
 
 // ─── Document types (inferred from Zod schemas) ─────────────────────────────
@@ -118,6 +124,10 @@ export interface RouteContext {
   codebaseRevisionCollection: Collection<CodebaseRevisionDocument>;
   resourceCollection: Collection<ResourceDocument>;
   resourceRevisionCollection: Collection<ResourceRevisionDocument>;
+  taxonomyCollection: Collection<TaxonomyDocument>;
+  taxonomyRevisionCollection: Collection<TaxonomyRevisionDocument>;
+  taxonomyElementCollection: Collection<TaxonomyElementDocument>;
+  taxonomyElementRevisionCollection: Collection<TaxonomyElementRevisionDocument>;
 
   // Services
   taskPromptStore: TaskPromptStore;
@@ -129,6 +139,18 @@ export interface RouteContext {
   resourceStore: ResourceStore;
   resourceRevisionStore: ResourceRevisionStore;
   resourceResolver: ResourceResolver;
+  taxonomyStore: TaxonomyRootStore<TaxonomyDocument>;
+  taxonomyRevisionStore: TaxonomyRevisionStore<
+    TaxonomyRevisionDocument,
+    TaxonomyDocument,
+    import("shared").PortableTaxonomyDocument
+  >;
+  taxonomyElementStore: TaxonomyRootStore<TaxonomyElementDocument>;
+  taxonomyElementRevisionStore: TaxonomyRevisionStore<
+    TaxonomyElementRevisionDocument,
+    TaxonomyElementDocument,
+    import("shared").PortableTaxonomyElementDocument
+  >;
   projectStore: ProjectStore;
 
   // Token Manager client (null when TOKEN_MANAGER_URL not set)

@@ -118,6 +118,7 @@ export const Expanded: Story = {
     ).toBeVisible();
     // With a project selected, scoped nav is present.
     await expect(canvas.getByRole("link", { name: "Runs" })).toBeVisible();
+    await expect(canvas.queryByRole("link", { name: "Taxonomies" })).toBeNull();
     const experimentsLink = canvas.getByRole("link", { name: "Experiments" });
     const runsLink = canvas.getByRole("link", { name: "Runs" });
     const criteriaLink = canvas.getByRole("link", { name: "Criteria" });
@@ -129,6 +130,32 @@ export const Expanded: Story = {
     await expect(
       canvas.getByRole("link", { name: "Runs" }).querySelector(".lucide-list"),
     ).toBeTruthy();
+  },
+};
+
+export const TaxonomeEnabled: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...mswHandlers,
+        http.get("/api/v1/feature-flags", () =>
+          HttpResponse.json([
+            {
+              key: "taxonome",
+              label: "Taxonome and Taxonomies",
+              enabled: true,
+              updatedAt: "2026-10-28T00:00:00.000Z",
+            },
+          ]),
+        ),
+      ],
+    },
+  },
+  play: async ({ canvas }) => {
+    localStorage.setItem("scope:layout:sidebar-expanded", "true");
+    await expect(
+      await canvas.findByRole("link", { name: "Taxonomies" }),
+    ).toHaveAttribute("href", "/taxonomies");
   },
 };
 

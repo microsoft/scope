@@ -30,15 +30,28 @@ async function fixture(t, entries = [{ path: 'elements/example.yaml' }]) {
 	return { root, manifest, value };
 }
 
-test('canonical catalog preserves manifest order, references and full source', async () => {
+test('canonical catalog preserves Ax identity, order, references and full source', async () => {
 	const loaded = await loadTaxonomeCatalog();
 	const manifest = new URL('../../../packages/ax-taxonomy/taxonomy/taxonomy.yaml', import.meta.url);
 	const raw = await readFile(manifest, 'utf8');
 	const document = YAML.parse(raw);
 	assert.equal(loaded.source, raw);
+	assert.equal(loaded.id, 'ax-taxonomy');
+	assert.equal(loaded.version, '1.0.0');
 	assert.equal(loaded.id, document.id);
 	assert.equal(loaded.version, document.version);
 	assert.deepEqual(loaded.elements.map(item => item.file), document.elements.map(item => item.path));
+	assert.deepEqual(
+		loaded.elements.map(item => item.id),
+		[
+			'beh-discovered',
+			'beh-skipped-invocation',
+			'beh-wrong-discovery',
+			'beh-content-misused',
+			'beh-malformed-invocation',
+			'beh-timeout',
+		],
+	);
 	for (const item of loaded.elements) {
 		const source = await readFile(new URL(item.file, manifest), 'utf8');
 		const authored = YAML.parse(source);

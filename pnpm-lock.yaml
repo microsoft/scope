@@ -565,6 +565,9 @@ importers:
       taxonomy-engine:
         specifier: workspace:*
         version: link:../../packages/taxonomy-engine
+      yaml:
+        specifier: 2.8.3
+        version: 2.8.3
     devDependencies:
       '@types/node':
         specifier: ^22.7.0
@@ -761,6 +764,9 @@ importers:
       atifact:
         specifier: ^0.10.1
         version: 0.10.1
+      ax-taxonomy:
+        specifier: workspace:*
+        version: link:../../../packages/ax-taxonomy
       dotenv:
         specifier: 16.6.1
         version: 16.6.1
@@ -770,6 +776,9 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../../../packages/shared
+      taxonomy-engine:
+        specifier: workspace:*
+        version: link:../../../packages/taxonomy-engine
       telemetry:
         specifier: workspace:*
         version: link:../../../packages/telemetry
@@ -7139,7 +7148,7 @@ packages:
     engines: {node: '>=18'}
 
   yaml@2.8.3:
-    resolution: {integrity: sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg==}
+    resolution: {integrity: sha1-oNa9Lvs90DxZNwIjcBg05gQJvX0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yaml/-/yaml-2.8.3.tgz}
     engines: {node: '>= 14.6'}
     hasBin: true
 

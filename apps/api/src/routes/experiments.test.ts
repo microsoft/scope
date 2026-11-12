@@ -10,7 +10,7 @@ import {
 } from "@asteasolutions/zod-to-openapi";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import type { RouteContext } from "../route-context.js";
+import type { RequestDocument, RouteContext } from "../route-context.js";
 import { ExperimentStore, type ExperimentDocument } from "shared";
 import {
   ExperimentLifecycleCoordinator,
@@ -339,20 +339,48 @@ describe("Experiment API contract", () => {
 
   it("inserts composed requests before publishing their exact revision", async () => {
     const experimentCollection = emptyExperimentCollection();
-    const insertMany = vi.fn().mockResolvedValue({
-      acknowledged: true,
-      insertedCount: 1,
+    let insertedDocuments: RequestDocument[] = [];
+    const insertMany = vi.fn(async (documents: RequestDocument[]) => {
+      insertedDocuments = structuredClone(documents);
+      return {
+        acknowledged: true,
+        insertedCount: documents.length,
+      };
     });
     const updateMany = vi.fn().mockResolvedValue({
       acknowledged: true,
       matchedCount: 1,
       modifiedCount: 1,
     });
+    const find = vi.fn(() => ({
+      toArray: vi.fn(async () => structuredClone(insertedDocuments)),
+    }));
     const { app } = harness({
       experimentCollection,
       experimentExecutionsCollection: {},
       experimentChunksCollection: {},
-      requestCollection: { insertMany, updateMany },
+      requestCollection: { insertMany, updateMany, find },
+      runsCollection: { find: vi.fn() },
+      agentCollection: {
+        findOne: vi.fn().mockResolvedValue({
+          _id: "coder",
+          name: "Coder",
+          available: true,
+          supportedModels: [],
+          versions: [{
+            agentVersion: "coder-v1",
+            workerVersion: "coder-v1-build",
+            components: {},
+            gitCommit: "abcdef0",
+            buildTime: "20261029T000000Z",
+            imageTag: "coder-v1-build",
+            queueName: "queue-coder",
+            status: "active",
+            createdAt: new Date(),
+          }],
+          createdAt: new Date(),
+        }),
+      },
       taskPromptStore: {
         findOrCreate: vi.fn().mockResolvedValue({ _id: "prompt-1" }),
       },
@@ -385,6 +413,7 @@ describe("Experiment API contract", () => {
       experimentExpectedRequestCount: 1,
       experimentRequestIndex: 0,
       experimentInitialRunId: expect.any(String),
+      agentVersion: "coder-v1",
       run: {
         _id: expect.any(String),
         status: "pending",
@@ -397,6 +426,180 @@ describe("Experiment API contract", () => {
       }),
       { $set: { experimentFinalizedAt: expect.any(Date) } },
     );
+  });
+
+  it("resolves and persists every mixed-model profile target before publication", async () => {
+    const experimentCollection = emptyExperimentCollection();
+    let insertedDocuments: RequestDocument[] = [];
+    const insertMany = vi.fn(async (documents: RequestDocument[]) => {
+      insertedDocuments = structuredClone(documents);
+      return {
+        acknowledged: true,
+        insertedCount: documents.length,
+      };
+    });
+    const find = vi.fn(() => ({
+      toArray: vi.fn(async () => structuredClone(insertedDocuments)),
+    }));
+    const findAgent = vi.fn().mockResolvedValue({
+      _id: "coder-acp-copilot",
+      name: "GitHub Copilot CLI",
+      available: true,
+      supportedModels: ["claude-haiku-4.5", "gpt-5.6-sol-fast"],
+      versions: [{
+        agentVersion: "copilot-dev",
+        workerVersion: "copilot-dev-build",
+        components: {},
+        gitCommit: "abcdef0",
+        buildTime: "20261029T000000Z",
+        imageTag: "copilot-dev-build",
+        queueName: "queue-coder-acp-copilot",
+        status: "active",
+        createdAt: new Date(),
+      }],
+      createdAt: new Date(),
+    });
+    const requests = Array.from({ length: 6 }, (_, index) => ({
+      scenario: { task: "Build it", criteria: ["works"] },
+      workerType: "coder-acp-copilot",
+      model: "client-value-must-not-control-profile-composition",
+      profileId: index < 3 ? "profile-a@1" : "profile-b@2",
+    }));
+    const { app } = harness({
+      experimentCollection,
+      experimentExecutionsCollection: {},
+      experimentChunksCollection: {},
+      requestCollection: {
+        insertMany,
+        updateMany: vi.fn().mockResolvedValue({
+          acknowledged: true,
+          matchedCount: requests.length,
+          modifiedCount: requests.length,
+        }),
+        find,
+      },
+      runsCollection: { find: vi.fn() },
+      profileCollection: {
+        findOne: vi.fn(async (filter: { _id: string }) => ({
+          _id: filter._id,
+          projectId: "project-1",
+          name: filter._id,
+          latestVersion: filter._id === "profile-a" ? 1 : 2,
+          createdAt: new Date(),
+        })),
+      },
+      profileVersionCollection: {
+        findOne: vi.fn(async (filter: { profileId: string; version: number }) =>
+          filter.profileId === "profile-a"
+            ? {
+                _id: "profile-version-a",
+                ref: "profile-a@1",
+                profileId: "profile-a",
+                projectId: "project-1",
+                version: 1,
+                workerType: "coder-acp-copilot",
+                model: "claude-haiku-4.5",
+                agentVersion: "copilot-dev",
+                mcpServers: ["ms-learn"],
+                createdAt: new Date(),
+              }
+            : {
+                _id: "profile-version-b",
+                ref: "profile-b@2",
+                profileId: "profile-b",
+                projectId: "project-1",
+                version: 2,
+                workerType: "coder-acp-copilot",
+                model: "gpt-5.6-sol-fast",
+                agentVersion: "copilot-dev",
+                skillRevisions: ["owner/skill@commit"],
+                createdAt: new Date(),
+              }
+        ),
+      },
+      agentCollection: { findOne: findAgent },
+      taskPromptStore: {
+        findOrCreate: vi.fn().mockResolvedValue({ _id: "prompt-1" }),
+      },
+      blobStorage: {
+        getLogsBlobUrl: vi.fn(
+          (path: string) => `https://storage.invalid/${path}`,
+        ),
+      },
+    } as unknown as Partial<RouteContext>);
+
+    const response = await request(app)
+      .post("/api/v1/experiments?projectId=project-1")
+      .send({
+        mode: "compose",
+        metadata: { name: "Mixed targets" },
+        requests,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.requestIds).toHaveLength(6);
+    expect(insertedDocuments).toHaveLength(6);
+    expect(insertedDocuments.map((document) => document.agentVersion)).toEqual(
+      Array(6).fill("copilot-dev"),
+    );
+    expect(insertedDocuments.map((document) => document.model)).toEqual([
+      "claude-haiku-4.5",
+      "claude-haiku-4.5",
+      "claude-haiku-4.5",
+      "gpt-5.6-sol-fast",
+      "gpt-5.6-sol-fast",
+      "gpt-5.6-sol-fast",
+    ]);
+    expect(insertedDocuments.map((document) => document.profileId)).toEqual([
+      "profile-a@1",
+      "profile-a@1",
+      "profile-a@1",
+      "profile-b@2",
+      "profile-b@2",
+      "profile-b@2",
+    ]);
+    expect(insertedDocuments.map((document) => document.mcpServers)).toEqual([
+      ["ms-learn"],
+      ["ms-learn"],
+      ["ms-learn"],
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(insertedDocuments.map((document) => document.skillRevisions)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      ["owner/skill@commit"],
+      ["owner/skill@commit"],
+      ["owner/skill@commit"],
+    ]);
+    expect(findAgent).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects criterion-free multi-turn composition before inserting requests", async () => {
+    const insertMany = vi.fn();
+    const { app } = harness({
+      experimentCollection: emptyExperimentCollection(),
+      requestCollection: { insertMany },
+    } as unknown as Partial<RouteContext>);
+
+    const response = await request(app)
+      .post("/api/v1/experiments?projectId=project-1")
+      .send({
+        mode: "compose",
+        metadata: { name: "Invalid multi-turn" },
+        requests: [{
+          scenario: { task: "Build it", criteria: [] },
+          workerType: "coder-acp-copilot",
+        }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain(
+      "At least one criterion is required",
+    );
+    expect(insertMany).not.toHaveBeenCalled();
   });
 
   it("publishes only the canonical routes and public execution fields", () => {
@@ -432,6 +635,8 @@ describe("Experiment API contract", () => {
       type: "object",
       properties: {
         experimentExecutionId: { type: "string" },
+        requestCount: { type: "integer", minimum: 0 },
+        requests: { type: "array" },
         readiness: expect.any(Object),
         blockers: expect.any(Object),
         progress: expect.any(Object),
@@ -443,6 +648,335 @@ describe("Experiment API contract", () => {
     expect(JSON.stringify(executionSchema)).not.toMatch(
       /claimToken|stateVersion|vectorFingerprint|storageProfile/,
     );
+  });
+
+  it("hydrates current execution members in exact vector order with bounded reads", async () => {
+    const now = new Date("2026-10-29T21:57:18.488Z");
+    const states = [
+      { requestId: "request-active", runId: "run-active", dependencies: [], blockers: [] },
+      { requestId: "request-deleted", runId: "run-deleted", dependencies: [], blockers: [] },
+      { requestId: "request-missing", runId: "run-missing", dependencies: [], blockers: [] },
+    ];
+    const execution = {
+      experimentExecutionId: "execution-1",
+      attemptNumber: 1,
+      version: 3,
+      requests: {
+        storage: "inline" as const,
+        entryCount: states.length,
+        payloadFingerprint: "payload",
+        payloadVersion: 1,
+        entries: states,
+      },
+      vectorFingerprint: "vector",
+      taxonomy: {
+        taxonomyRevisionId: "taxonomy-revision-1",
+        ref: "ax-taxonomy@r1",
+        contentSha256: "b".repeat(64),
+      },
+      handlerSummary: {},
+      blocking: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    const experiment = {
+      _id: "experiment-1",
+      experimentId: "experiment-1",
+      projectId: "project-1",
+      storageProfileVersion: "cosmos-mongo-2mb-v1",
+      stateVersion: 1,
+      metadata: { name: "Hydration test" },
+      revision: {
+        experimentRevisionId: "revision-1",
+        revisionNumber: 1,
+        memberCount: states.length,
+        membershipFingerprint: "membership",
+        definitionFingerprint: "definition",
+        reportTemplateIds: [],
+        createdAt: now,
+      },
+      execution,
+      createdAt: now,
+      updatedAt: now,
+      finalizedAt: now,
+    } as ExperimentDocument;
+    const get = vi
+      .spyOn(ExperimentStore.prototype, "get")
+      .mockResolvedValue(experiment);
+    const readExecutionRequests = vi
+      .spyOn(ExperimentStore.prototype, "readExecutionRequests")
+      .mockResolvedValue(states);
+    const requestToArray = vi.fn().mockResolvedValue([
+      {
+        _id: "request-active",
+        projectId: "project-1",
+        scenario: { task: "Active task", criteria: [] },
+        taskPromptId: "prompt-active",
+        workerType: "coder-acp-copilot",
+        model: "model-a",
+        reasoningEffort: "high",
+        agentVersion: "copilot-dev",
+        mcpServers: ["github"],
+        skillRevisions: ["owner/skill@r1"],
+        extensions: ["ms-python.python@1.0.0"],
+        profileId: "profile-a@1",
+        priority: 5,
+        run: {
+          _id: "run-active",
+          attemptNumber: 1,
+          status: "processing",
+          os: { platform: "linux", release: "6.8", arch: "arm64" },
+          worker: { instanceId: "worker-1", podName: "pod-1" },
+          lastHeartbeatAt: now,
+          startedAt: now,
+          handlerStatus: {
+            "pp-taxonomy": {
+              status: "done",
+              version: "1",
+              updatedAt: now,
+              claimToken: "claim-1",
+            },
+          },
+          taxonomyEvaluation: {
+            url: "https://storage.example/result.json.gz",
+            schemaVersion: "2",
+            contentSha256: "a".repeat(64),
+            sizeBytes: 123,
+          },
+        },
+      },
+      {
+        _id: "request-deleted",
+        projectId: "project-1",
+        scenario: { task: "Deleted task", criteria: [] },
+        workerType: "coder-acp-copilot",
+        model: "model-b",
+        deletedAt: now,
+        run: {
+          _id: "run-deleted",
+          attemptNumber: 1,
+          status: "done",
+          outcome: "succeeded",
+        },
+      },
+    ]);
+    const requestFind = vi.fn(() => ({ toArray: requestToArray }));
+    const runsToArray = vi.fn().mockResolvedValue([]);
+    const runsFind = vi.fn(() => ({ toArray: runsToArray }));
+    const { app } = harness({
+      requestCollection: { find: requestFind },
+      runsCollection: { find: runsFind },
+    } as unknown as Partial<RouteContext>);
+
+    const response = await request(app).get(
+      "/api/v1/experiments/experiment-1?projectId=project-1",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.currentExecution).toMatchObject({
+      requestCount: 3,
+      requests: [
+        {
+          requestId: "request-active",
+          runId: "run-active",
+          status: "processing",
+          task: "Active task",
+          criteria: [],
+          taskPromptId: "prompt-active",
+          workerType: "coder-acp-copilot",
+          model: "model-a",
+          reasoningEffort: "high",
+          agentVersion: "copilot-dev",
+          os: { platform: "linux", release: "6.8", arch: "arm64" },
+          mcpServers: ["github"],
+          skillRevisions: ["owner/skill@r1"],
+          extensions: ["ms-python.python@1.0.0"],
+          profileId: "profile-a@1",
+          priority: 5,
+          attemptNumber: 1,
+          worker: { instanceId: "worker-1", podName: "pod-1" },
+          taxonomyHandler: {
+            status: "done",
+            updatedAt: now.toISOString(),
+            resultAvailable: true,
+          },
+        },
+        {
+          requestId: "request-deleted",
+          runId: "run-deleted",
+          status: "deleted",
+          outcome: "succeeded",
+          task: "Deleted task",
+          taxonomyHandler: {
+            status: "pending",
+            resultAvailable: false,
+          },
+        },
+        {
+          requestId: "request-missing",
+          runId: "run-missing",
+          status: "missing",
+        },
+      ],
+    });
+    expect(requestFind).toHaveBeenCalledTimes(1);
+    expect(runsFind).toHaveBeenCalledTimes(1);
+    expect(readExecutionRequests).toHaveBeenCalledWith({
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      experimentExecutionId: "execution-1",
+      includeDeleted: false,
+    });
+
+    get.mockRestore();
+    readExecutionRequests.mockRestore();
+  });
+
+  it("hydrates a historical execution from the exact archived run", async () => {
+    const now = new Date("2026-10-29T20:00:00.000Z");
+    const states = [
+      { requestId: "request-1", runId: "run-historical", dependencies: [], blockers: [] },
+      { requestId: "request-2", runId: "run-historical-unselected", dependencies: [], blockers: [] },
+    ];
+    const execution = {
+      experimentExecutionId: "execution-historical",
+      attemptNumber: 1,
+      version: 2,
+      requests: {
+        storage: "inline" as const,
+        entryCount: 1,
+        payloadFingerprint: "payload",
+        payloadVersion: 1,
+        entries: states,
+      },
+      vectorFingerprint: "vector",
+      handlerSummary: {},
+      blocking: [],
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: now,
+    };
+    const getExecution = vi
+      .spyOn(ExperimentStore.prototype, "getExecution")
+      .mockResolvedValue(execution);
+    const readExecutionRequests = vi
+      .spyOn(ExperimentStore.prototype, "readExecutionRequests")
+      .mockResolvedValue(states);
+    const findOne = vi.fn().mockResolvedValue({
+      _id: "experiment-1",
+      experimentId: "experiment-1",
+      projectId: "project-1",
+    });
+    const requestFind = vi.fn(() => ({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "request-1",
+          projectId: "project-1",
+          scenario: { task: "Historical task", criteria: [] },
+          workerType: "coder-acp-copilot",
+          model: "model-a",
+          run: {
+            _id: "run-current",
+            attemptNumber: 2,
+            status: "queued",
+          },
+        },
+        {
+          _id: "request-2",
+          projectId: "project-1",
+          scenario: { task: "Historical unselected task", criteria: [] },
+          workerType: "coder-acp-copilot",
+          model: "model-a",
+          run: {
+            _id: "run-current-2",
+            attemptNumber: 2,
+            status: "queued",
+          },
+        },
+      ]),
+    }));
+    const runsFind = vi.fn(() => ({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "run-historical",
+          requestId: "request-1",
+          projectId: "project-1",
+          attemptNumber: 1,
+          status: "done",
+          outcome: "failed",
+          os: { platform: "linux", release: "6.7", arch: "x64" },
+          worker: { instanceId: "worker-history" },
+          startedAt: now,
+          handlerStatus: {
+            "pp-taxonomy": {
+              status: "processing",
+              version: 1,
+              updatedAt: now,
+              claimToken: "claim-history",
+            },
+          },
+        },
+        {
+          _id: "run-historical-unselected",
+          requestId: "request-2",
+          projectId: "project-1",
+          attemptNumber: 1,
+          status: "done",
+          outcome: "succeeded",
+          startedAt: now,
+        },
+      ]),
+    }));
+    const { app } = harness({
+      experimentCollection: { findOne },
+      requestCollection: { find: requestFind },
+      runsCollection: { find: runsFind },
+    } as unknown as Partial<RouteContext>);
+
+    const response = await request(app).get(
+      "/api/v1/experiments/experiment-1/executions/execution-historical?projectId=project-1",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      experimentExecutionId: "execution-historical",
+      requestCount: 2,
+      requests: [
+        {
+          requestId: "request-1",
+          runId: "run-historical",
+          status: "done",
+          outcome: "failed",
+          task: "Historical task",
+          workerType: "coder-acp-copilot",
+          model: "model-a",
+          attemptNumber: 1,
+          os: { platform: "linux", release: "6.7", arch: "x64" },
+          worker: { instanceId: "worker-history" },
+          taxonomyHandler: {
+            status: "processing",
+            updatedAt: now.toISOString(),
+            resultAvailable: false,
+          },
+        },
+        {
+          requestId: "request-2",
+          runId: "run-historical-unselected",
+          status: "done",
+          outcome: "succeeded",
+          task: "Historical unselected task",
+          workerType: "coder-acp-copilot",
+          model: "model-a",
+          attemptNumber: 1,
+        },
+      ],
+    });
+    expect(response.body.requests[1]).not.toHaveProperty("taxonomyHandler");
+    expect(requestFind).toHaveBeenCalledTimes(1);
+    expect(runsFind).toHaveBeenCalledTimes(1);
+
+    getExecution.mockRestore();
+    readExecutionRequests.mockRestore();
   });
 
   it("lists reports for one exact current or archived execution", async () => {

@@ -12,7 +12,12 @@ const handlerAnchor = (id: string) => id.replace('/', '-');
 
 <section aria-labelledby="catalog-identity" data-taxonome-catalog>
 	<h2 id="catalog-identity">{catalog.id} <small>v{catalog.version}</small></h2>
-	<p>This reference is generated at build time from <code>{catalog.file}</code> and its referenced files. No classifier, handler or model runs to build this page.</p>
+	<p>
+		This reference is generated at build time from <code>{catalog.file}</code>
+		and its referenced files. No classifier, handler, or model runs to build
+		this page. Scope stores the first immutable database revision separately as
+		<code>{catalog.id}@r1</code>.
+	</p>
 	<details id="taxonomy-source">
 		<summary>Full manifest source: {catalog.file}</summary>
 		<Code code={catalog.source} lang="yaml" theme="github-dark-high-contrast" tabindex="0" />

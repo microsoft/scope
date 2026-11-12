@@ -15,13 +15,25 @@ interface FeatureFlagContextValue {
   isLoading: boolean;
   /** Check if a feature is enabled. Returns true by default (fail-open) if flags haven't loaded. */
   isFeatureEnabled: (key: string) => boolean;
+  /** Fail-closed check for sensitive preview features. */
+  isFeatureEnabledFailClosed: (key: string) => boolean;
 }
 
 const FeatureFlagContext = createContext<FeatureFlagContextValue>({
   flags: [],
   isLoading: true,
   isFeatureEnabled: () => true,
+  isFeatureEnabledFailClosed: () => false,
 });
+
+export function featureEnabledFailClosed(
+  flags: FeatureFlag[],
+  isLoading: boolean,
+  key: string,
+): boolean {
+  if (isLoading) return false;
+  return flags.find((flag) => flag.key === key)?.enabled === true;
+}
 
 export function FeatureFlagProvider({ children }: { children: ReactNode }) {
   const auth = useContext(AuthContext);
@@ -41,8 +53,12 @@ export function FeatureFlagProvider({ children }: { children: ReactNode }) {
     return flag?.enabled ?? true;
   }
 
+  function isFeatureEnabledFailClosed(key: string): boolean {
+    return featureEnabledFailClosed(flags, isLoading, key);
+  }
+
   return (
-    <FeatureFlagContext.Provider value={{ flags, isLoading, isFeatureEnabled }}>
+    <FeatureFlagContext.Provider value={{ flags, isLoading, isFeatureEnabled, isFeatureEnabledFailClosed }}>
       {children}
     </FeatureFlagContext.Provider>
   );

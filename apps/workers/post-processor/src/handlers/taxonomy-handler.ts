@@ -1,214 +1,292 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { JudgeClient, isRetryableJudgeError } from "shared";
-import type { ConversationTurn, CriterionResult, CriterionSubject } from "shared";
-import type { PostProcessHandler, PostProcessorMessage, HandlerContext } from "../types.js";
+import { createHash } from "node:crypto";
+import { promisify } from "node:util";
+import { gzip } from "node:zlib";
+import { createAgentBehaviorHandlerRegistry } from "ax-taxonomy";
+import {
+  evaluate,
+  normalizeTaxonomyDocuments,
+  parseScopeAtif,
+  taxonomyRunResultSchema,
+  type PromptExecutor,
+} from "taxonomy-engine";
+import {
+  copilotAI,
+  openCopilotTransport,
+  taxonomyPromptExecutor,
+  type OpenCopilotTransportOptions,
+  type CopilotTransport,
+} from "taxonomy-engine/copilot";
+import type {
+  ExperimentDocument,
+  PortableTaxonomyDocument,
+  PortableTaxonomyElementDocument,
+  RequestDocument,
+  TaxonomyElementRevisionDocument,
+  TaxonomyRevisionDocument,
+} from "shared";
+import type {
+  HandlerContext,
+  PostProcessHandler,
+  PostProcessorMessage,
+} from "../types.js";
 import { POST_PROCESSOR_VERSION } from "../version.js";
+import { resolveTaxonomeModel } from "../taxonomy-config.js";
 
-/** Minimal shape of the request document fields this handler reads/writes. */
-interface RequestDoc {
-  projectId: string;
-  /** Observation-criteria ids selected at submit. Stored at the request
-   *  top-level by the API (see RequestDocument.observations / issue #1156),
-   *  NOT under `run` — the run subdocument only carries per-turn results. */
-  observations?: string[];
-  run?: {
-    _id?: string;
-    turns?: ConversationTurn[];
+const gzipAsync = promisify(gzip);
+const RUN_RESULT_SCHEMA_VERSION = "scope/taxonomy-run-result/v1";
+
+interface PromptExecutorLease {
+  executor?: PromptExecutor;
+  close(): Promise<void>;
+}
+
+export type PromptExecutorFactory = (
+  hasPromptElements: boolean,
+) => Promise<PromptExecutorLease>;
+
+export interface PromptExecutorFactoryDependencies {
+  /** Environment containing only dedicated post-processor configuration. */
+  environment?: NodeJS.ProcessEnv;
+  /** Injectable isolated transport factory for offline tests. */
+  openTransport?: (
+    model: string,
+    options: OpenCopilotTransportOptions,
+  ) => Promise<CopilotTransport>;
+}
+
+/** Builds the lazy production executor without consulting coding-run settings. */
+export function createPromptExecutorFactory(
+  dependencies: PromptExecutorFactoryDependencies = {},
+): PromptExecutorFactory {
+  return async (hasPromptElements): Promise<PromptExecutorLease> => {
+    if (!hasPromptElements) {
+      return { close: async () => undefined };
+    }
+
+    const model = resolveTaxonomeModel(dependencies.environment);
+    const transport = await (
+      dependencies.openTransport ??
+      ((configuredModel, options) =>
+        openCopilotTransport(configuredModel, undefined, options))
+    )(model, { reasoningEffort: false });
+    return {
+      executor: taxonomyPromptExecutor(copilotAI(transport, model)),
+      close: () => transport.close(),
+    };
   };
 }
 
-/** Minimal projection of a criterion needed to route by evaluation granularity. */
-interface CriterionMeta {
-  id: string;
-  subject?: CriterionSubject;
+const defaultPromptExecutorFactory = createPromptExecutorFactory();
+
+function portableTaxonomy(
+  revision: TaxonomyRevisionDocument,
+): PortableTaxonomyDocument {
+  return {
+    schema_version: revision.schema_version,
+    id: revision.id,
+    version: revision.version,
+    surfaces: revision.surfaces,
+    elements: revision.elements,
+  };
 }
 
-/**
- * Taxonomy Handler (pp-taxonomy): records boolean observations.
- *
- * Each selected observation criterion is routed by its `subject` (#1156):
- *
- * - **`subject:"iteration"`** — evaluated on each iteration in isolation against
- *   that turn's snapshot + ATIF; written to `turn.observationResults` (mirrors
- *   gate `criteriaResults`).
- * - **`subject:"run"`** (the observation default) — evaluated ONCE against the
- *   whole run: the final iteration's snapshot + the MERGED trajectory of every
- *   iteration's ATIF (`atifUrls`) + the full conversation history; written to the
- *   run-level `run.observationResults`. This is what makes cross-iteration
- *   behavior (e.g. a dependency added in one turn and removed in another) visible.
- *
- * Reuses the judge service; never gates, never steers the agent. Empty/absent
- * `observations` → no-op. pp-taxonomy is dispatched exactly once per run (the
- * scheduler never sets `message.iteration`), so the run-subject branch runs once
- * with no idempotency guard.
- */
+function portableElement(
+  revision: TaxonomyElementRevisionDocument,
+): PortableTaxonomyElementDocument {
+  return {
+    ...(revision.schema_version
+      ? { schema_version: revision.schema_version }
+      : {}),
+    id: revision.id,
+    label: revision.label,
+    ...(revision.description ? { description: revision.description } : {}),
+    ...(revision.category_id ? { category_id: revision.category_id } : {}),
+    implementation: revision.implementation,
+    preconditions: revision.preconditions,
+    output: revision.output,
+  };
+}
+
+function mergeAtif(values: unknown[]): unknown {
+  if (values.length === 1) return values[0];
+  const documents = values.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("ATIF artifact must be a JSON object");
+    }
+    return value as Record<string, unknown>;
+  });
+  const first = structuredClone(documents[0]!);
+  first.steps = documents.flatMap((document) =>
+    Array.isArray(document.steps) ? document.steps : [],
+  );
+  return first;
+}
+
+/** Evaluates one exact run with one exact pinned taxonomy revision. */
 export class TaxonomyHandler implements PostProcessHandler {
   readonly type = "taxonomy";
   readonly version = POST_PROCESSOR_VERSION;
   readonly autoBackfill = true;
-  private readonly judge: JudgeClient;
 
-  constructor(judge?: JudgeClient, judgeUrl = process.env.JUDGE_URL || process.env.JUDGE_SERVICE_URL || "http://localhost:3002") {
-    this.judge = judge ?? new JudgeClient(judgeUrl);
-  }
+  constructor(
+    private readonly executorFactory: PromptExecutorFactory =
+      defaultPromptExecutorFactory,
+  ) {}
 
-  async process(message: PostProcessorMessage, ctx: HandlerContext): Promise<void> {
-    const { requestId, iteration } = message;
-
-    const doc = (await ctx.collection.findOne({ _id: requestId } as any)) as RequestDoc | null;
-    const observations = doc?.observations ?? [];
-    const turns = doc?.run?.turns ?? [];
-    const projectId = doc?.projectId;
-
-    if (observations.length === 0) {
-      await ctx.log("info", "No observations selected, skipping taxonomy evaluation");
-      return;
-    }
-    if (turns.length === 0) {
-      await ctx.log("info", "No turns found, skipping taxonomy evaluation");
-      return;
-    }
-    if (!projectId) {
-      throw new Error(`Request '${requestId}' is missing projectId`);
-    }
-
-    // Resolve each selected observation's evaluation granularity. A missing/unknown
-    // subject defaults to "run" (the observation default), so legacy criteria authored
-    // before the `subject` field get whole-run evaluation.
-    const metas = (await ctx.criteriaCollection
-      .find(
-        { projectId, id: { $in: observations } },
-        { projection: { id: 1, subject: 1 } } as any,
-      )
-      .toArray()) as unknown as CriterionMeta[];
-    const subjectById = new Map(metas.map((m) => [m.id, m.subject]));
-    const iterationObs = observations.filter((id) => subjectById.get(id) === "iteration");
-    const runObs = observations.filter((id) => subjectById.get(id) !== "iteration");
-
-    await this.evaluateIterationObservations(iterationObs, turns, iteration, requestId, projectId, ctx);
-    await this.evaluateRunObservations(runObs, turns, iteration, requestId, projectId, ctx);
-  }
-
-  /** Per-iteration observations → `turn.observationResults` (one judge call per turn). */
-  private async evaluateIterationObservations(
-    iterationObs: string[],
-    turns: ConversationTurn[],
-    iteration: number | undefined,
-    requestId: string,
-    projectId: string,
+  async process(
+    message: PostProcessorMessage,
     ctx: HandlerContext,
   ): Promise<void> {
-    if (iterationObs.length === 0) return;
-
-    const turnsToProcess = iteration ? turns.filter((t) => t.iteration === iteration) : turns;
-    let processedCount = 0;
-
-    for (const turn of turnsToProcess) {
-      if (!turn.snapshotUrl) {
-        await ctx.log("info", `Iteration ${turn.iteration}: no snapshot, skipping`);
-        continue;
-      }
-
-      try {
-        const result = await this.judge.evaluate({
-          snapshotUrl: turn.snapshotUrl,
-          criteria: iterationObs,
-          conversationHistory: turns,
-          ...(turn.atifUrl ? { atifUrl: turn.atifUrl } : {}),
-          requestId,
-          projectId,
-        });
-
-        const observationResults: CriterionResult[] = result.criteriaResults ?? [];
-
-        await ctx.collection.updateOne(
-          { _id: requestId, "run.turns.iteration": turn.iteration } as any,
-          { $set: { "run.turns.$.observationResults": observationResults } } as any,
-        );
-
-        processedCount++;
-        await ctx.log("info", `Iteration ${turn.iteration}: ${observationResults.length} observations recorded`);
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        if (isRetryableJudgeError(err)) {
-          await ctx.log("error", `Iteration ${turn.iteration}: judge infrastructure error, failing handler: ${errMsg}`);
-          throw err;
-        }
-        await ctx.log("warn", `Iteration ${turn.iteration}: observation evaluation failed: ${errMsg}`);
-      }
+    const request = await ctx.collection.findOne({
+      _id: message.requestId,
+      "run._id": message.runId,
+    } as never) as unknown as RequestDocument | null;
+    if (!request?.run || request.run._id !== message.runId) {
+      throw new Error("Exact run no longer exists");
     }
-
-    await ctx.log(
-      "info",
-      `Iteration-subject evaluation complete: ${processedCount}/${turnsToProcess.length} iterations processed`,
-    );
-  }
-
-  /**
-   * Whole-run observations → `run.observationResults` (one judge call over the
-   * merged trajectory). Skipped when a single-iteration dispatch is requested
-   * (forward-compat: a whole-run eval needs every turn). Today `message.iteration`
-   * is never set, so this runs once per run.
-   */
-  private async evaluateRunObservations(
-    runObs: string[],
-    turns: ConversationTurn[],
-    iteration: number | undefined,
-    requestId: string,
-    projectId: string,
-    ctx: HandlerContext,
-  ): Promise<void> {
-    if (runObs.length === 0) return;
-    if (iteration) {
-      await ctx.log(
-        "info",
-        `Skipping ${runObs.length} run-subject observation(s): single-iteration dispatch cannot evaluate the whole run`,
-      );
+    if (!request.experimentId) {
+      await ctx.log("info", "Run is not attached to an Experiment; skipping Taxonome");
       return;
     }
-
-    const turnsWithSnapshot = turns.filter((t) => t.snapshotUrl);
-    const finalTurn = turnsWithSnapshot[turnsWithSnapshot.length - 1];
-    if (!finalTurn?.snapshotUrl) {
-      await ctx.log("info", "No turn with a snapshot, skipping run-subject observations");
-      return;
+    if (!ctx.db || !ctx.claimToken) {
+      throw new Error("Taxonome handler requires database and claim context");
     }
 
-    // Merge every iteration's ATIF into one whole-run trajectory.
-    const atifUrls = turns
-      .map((t) => t.atifUrl)
-      .filter((u): u is string => typeof u === "string" && u.length > 0);
-
-    try {
-      const result = await this.judge.evaluate({
-        snapshotUrl: finalTurn.snapshotUrl,
-        criteria: runObs,
-        conversationHistory: turns,
-        ...(atifUrls.length > 0 ? { atifUrls } : {}),
-        requestId,
-        projectId,
+    const experiment = await ctx.db
+      .collection<ExperimentDocument>("experiments")
+      .findOne({
+        _id: request.experimentId,
+        projectId: request.projectId,
       });
+    const selection = experiment?.execution.taxonomy;
+    if (!experiment || !selection) {
+      await ctx.log("info", "Experiment has no pinned taxonomy; skipping Taxonome");
+      return;
+    }
+    const taxonomyRevision = await ctx.db
+      .collection<TaxonomyRevisionDocument>("taxonomy-revisions")
+      .findOne({
+        _id: selection.taxonomyRevisionId,
+        projectId: request.projectId,
+        ref: selection.ref,
+        contentSha256: selection.contentSha256,
+      });
+    if (!taxonomyRevision) {
+      throw new Error("Pinned taxonomy revision integrity check failed");
+    }
 
-      const runObservationResults: CriterionResult[] = result.criteriaResults ?? [];
-
-      await ctx.collection.updateOne(
-        { _id: requestId } as any,
-        { $set: { "run.observationResults": runObservationResults } } as any,
-      );
-
-      await ctx.log(
-        "info",
-        `Run-subject evaluation complete: ${runObservationResults.length} whole-run observation(s) recorded over ${atifUrls.length} merged trajectory(ies)`,
-      );
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      if (isRetryableJudgeError(err)) {
-        await ctx.log("error", `Run-subject: judge infrastructure error, failing handler: ${errMsg}`);
-        throw err;
+    const elementRevisions: TaxonomyElementRevisionDocument[] = [];
+    for (const reference of taxonomyRevision.elements) {
+      if (!("ref" in reference)) {
+        throw new Error(
+          `Stored taxonomy revision '${taxonomyRevision.ref}' contains unresolved path '${reference.path}'`,
+        );
       }
-      await ctx.log("warn", `Run-subject observation evaluation failed: ${errMsg}`);
+      const element = await ctx.db
+        .collection<TaxonomyElementRevisionDocument>(
+          "taxonomy-element-revisions",
+        )
+        .findOne({ projectId: request.projectId, ref: reference.ref });
+      if (!element) {
+        throw new Error(`Pinned taxonomy element '${reference.ref}' was not found`);
+      }
+      elementRevisions.push(element);
+    }
+
+    const taxonomy = normalizeTaxonomyDocuments(
+      {
+        ...portableTaxonomy(taxonomyRevision),
+        elements: elementRevisions.map(portableElement),
+      },
+      elementRevisions.map(portableElement),
+      { handlers: createAgentBehaviorHandlerRegistry() },
+    );
+    const atifUrls = (request.run.turns ?? [])
+      .map((turn) => turn.atifUrl)
+      .filter((url): url is string => Boolean(url));
+    if (atifUrls.length === 0) {
+      throw new Error("Exact run has no ATIF artifacts");
+    }
+    const atifDocuments = await Promise.all(
+      atifUrls.map((url) => ctx.blobStorage.downloadJson(url)),
+    );
+    const atif = parseScopeAtif(mergeAtif(atifDocuments), {
+      label: `${message.requestId}/${message.runId}`,
+    });
+
+    const lease = await this.executorFactory(
+      taxonomy.elements.some((element) => element.implementation.type === "prompt"),
+    );
+    try {
+      const results = await evaluate(
+        { atif, taxonomy },
+        taxonomy.elements.map((element) => element.id),
+        lease.executor,
+        undefined,
+        { requestId: message.requestId, runId: message.runId },
+      );
+      const scenario = request.scenario;
+      const result = taxonomyRunResultSchema.parse({
+        run: {
+          id: message.runId,
+          scenario: {
+            id: message.requestId,
+            label: "Scope scenario",
+            ...(scenario.task ? { task: scenario.task } : {}),
+          },
+          profile: {
+            id: request.profileId ?? "unprofiled",
+            label: request.profileId ?? "Unprofiled",
+          },
+        },
+        results,
+        metadata: {
+          requestId: message.requestId,
+          runId: message.runId,
+          experimentId: request.experimentId,
+          experimentExecutionId: experiment.execution.experimentExecutionId,
+          taxonomyRevisionId: taxonomyRevision._id,
+          taxonomyRef: taxonomyRevision.ref,
+        },
+      });
+      const json = Buffer.from(JSON.stringify(result), "utf8");
+      const compressed = await gzipAsync(json);
+      const contentSha256 = createHash("sha256").update(json).digest("hex");
+      const blobName =
+        `${message.requestId}/runs/${message.runId}/taxonomy-evaluation/` +
+        `${ctx.claimToken}/result.json.gz`;
+      const url = await ctx.blobStorage.uploadBuffer(
+        blobName,
+        compressed,
+        "application/json",
+        "gzip",
+      );
+      const publication = await ctx.collection.updateOne(
+        {
+          _id: message.requestId,
+          "run._id": message.runId,
+          "run.handlerStatus.pp-taxonomy.status": "processing",
+          "run.handlerStatus.pp-taxonomy.claimToken": ctx.claimToken,
+        } as never,
+        {
+          $set: {
+            "run.taxonomyEvaluation": {
+              url,
+              schemaVersion: RUN_RESULT_SCHEMA_VERSION,
+              contentSha256,
+              sizeBytes: json.byteLength,
+            },
+          },
+        },
+      );
+      if (publication.matchedCount !== 1) {
+        throw new Error("Taxonomy evaluation claim became stale before publication");
+      }
+    } finally {
+      await lease.close();
     }
   }
 }

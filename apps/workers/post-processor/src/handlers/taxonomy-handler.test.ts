@@ -1,230 +1,391 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { JudgeInfrastructureError, type JudgeClient } from "shared";
-import { TaxonomyHandler } from "./taxonomy-handler.js";
-import type { HandlerContext, PostProcessorMessage } from "../types.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createPromptExecutorFactory,
+  TaxonomyHandler,
+} from "./taxonomy-handler.js";
+import type { PromptExecutor } from "taxonomy-engine";
+import { taxonomyContentSha256 } from "shared";
 
-interface CriterionMeta {
-  id: string;
-  subject?: "run" | "iteration";
-}
+const promptElement = {
+  schema_version: "scope/taxonomy/v1" as const,
+  id: "beh-wrong-discovery",
+  label: "Wrong Discovery",
+  implementation: { type: "prompt" as const, prompt: "Assess wrong discovery." },
+  preconditions: {
+    requires_recorded_discovery: true,
+    requires_complete_trajectory: true,
+    requires_task: true,
+  },
+  output: {
+    evidence_roles: {
+      discovery: {
+        type: "scope.discovery",
+        max: 1,
+        description: "Exact recorded discovery.",
+      },
+    },
+  },
+};
 
-function makeCtx(
-  doc: unknown,
-  metas: CriterionMeta[] = [],
-): HandlerContext & { collection: { updateOne: ReturnType<typeof vi.fn> } } {
-  const scopedDoc =
-    typeof doc === "object" && doc !== null
-      ? { projectId: "proj-test", ...doc }
-      : doc;
+function atifWithDiscoveries(count: number) {
   return {
-    blobStorage: {} as any,
-    collection: {
-      findOne: vi.fn().mockResolvedValue(scopedDoc),
-      updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
-    } as any,
-    criteriaCollection: {
-      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(metas) }),
-    } as any,
-    log: vi.fn().mockResolvedValue(undefined),
-  } as any;
+    schema_version: "ATIF-v1.7",
+    session_id: "session-1",
+    agent: { name: "fixture", version: "1.0.0" },
+    steps: [
+      { step_id: 1, source: "user", message: "Implement merge sort." },
+      ...Array.from({ length: count }, (_, index) => ({
+        step_id: index + 2,
+        source: "agent",
+        message: `Discovery ${index + 1}`,
+        extra: {
+          scope: {
+            discoveries: [
+              { source_id: `wrong-${index + 1}`, extension_point: "weather" },
+            ],
+          },
+        },
+      })),
+    ],
+    extra: {
+      scope: {
+        schema_version: "scope.atif-extension.v1",
+        trajectory_state: "complete",
+        task: "Implement merge sort.",
+        run: {
+          id: "run-1",
+          scenario_id: "scenario-1",
+          scenario_label: "Scenario",
+          profile_id: "profile-1",
+          profile_label: "Profile",
+        },
+        available_sources: Array.from({ length: count }, (_, index) => ({
+          id: `wrong-${index + 1}`,
+          label: `Wrong ${index + 1}`,
+          surface_id: "surface-mcp",
+        })),
+      },
+    },
+  };
 }
 
-const msg: PostProcessorMessage = { type: "taxonomy", requestId: "req-1", runId: "run-1" };
+function acceptanceContext(input: {
+  sourceType: "builtin" | "user";
+  occurrenceCount: number;
+  deterministic?: boolean;
+}) {
+  const elementContent = input.deterministic
+    ? {
+        ...promptElement,
+        id: "beh-discovered",
+        label: "Discovered",
+        implementation: {
+          type: "deterministic" as const,
+          handler: "scope/discovered-v1",
+          config: {},
+        },
+        preconditions: {
+          requires_recorded_discovery: false,
+          requires_complete_trajectory: false,
+          requires_task: false,
+        },
+      }
+    : promptElement;
+  const taxonomyContent = {
+    schema_version: "scope/taxonomy/v1" as const,
+    id: input.sourceType === "builtin" ? "ax-taxonomy" : "user-managed",
+    version: "1.0.0",
+    surfaces: [{ id: "surface-mcp", label: "MCP" }],
+    elements: [{ ref: `${elementContent.id}@r1` }],
+  };
+  const taxonomyRevision = {
+    ...taxonomyContent,
+    _id: "taxonomy-revision-1",
+    taxonomyId: "taxonomy-root-1",
+    projectId: "project-1",
+    sourceType: input.sourceType,
+    revision: 1,
+    ref: `${taxonomyContent.id}@r1`,
+    contentSha256: taxonomyContentSha256(taxonomyContent),
+    createdAt: new Date(),
+  };
+  const elementRevision = {
+    ...elementContent,
+    _id: "element-revision-1",
+    elementId: "element-root-1",
+    projectId: "project-1",
+    sourceType: input.sourceType,
+    revision: 1,
+    ref: `${elementContent.id}@r1`,
+    contentSha256: taxonomyContentSha256(elementContent),
+    createdAt: new Date(),
+  };
+  const experiment = {
+    _id: "experiment-1",
+    experimentId: "experiment-1",
+    projectId: "project-1",
+    execution: {
+      experimentExecutionId: "execution-1",
+      taxonomy: {
+        taxonomyRevisionId: taxonomyRevision._id,
+        ref: taxonomyRevision.ref,
+        contentSha256: taxonomyRevision.contentSha256,
+      },
+    },
+  };
+  const collection = {
+    findOne: vi.fn(async () => ({
+      _id: "request-1",
+      projectId: "project-1",
+      experimentId: "experiment-1",
+      scenario: { task: "Implement merge sort." },
+      model: "claude-haiku-4.5",
+      reasoningEffort: "xhigh",
+      run: {
+        _id: "run-1",
+        attemptNumber: 1,
+        status: "done",
+        turns: [{ iteration: 1, atifUrl: "https://blob/atif.json" }],
+      },
+    })),
+    updateOne: vi.fn(async () => ({ matchedCount: 1 })),
+  };
+  const db = {
+    collection: vi.fn((name: string) => ({
+      findOne: vi.fn(async () => {
+        if (name === "experiments") return experiment;
+        if (name === "taxonomy-revisions") return taxonomyRevision;
+        if (name === "taxonomy-element-revisions") return elementRevision;
+        return null;
+      }),
+    })),
+  };
+  const blobStorage = {
+    downloadJson: vi.fn(async () => atifWithDiscoveries(input.occurrenceCount)),
+    uploadBuffer: vi.fn(async () => "https://blob/result.json.gz"),
+  };
+  return { collection, db, blobStorage };
+}
 
 describe("TaxonomyHandler", () => {
-  let judge: { evaluate: ReturnType<typeof vi.fn> };
-
-  beforeEach(() => {
-    judge = { evaluate: vi.fn() };
-  });
-
-  it("has type 'taxonomy'", () => {
-    expect(new TaxonomyHandler(judge as unknown as JudgeClient).type).toBe("taxonomy");
-  });
-
-  it("no-ops when no observations are selected", async () => {
-    const ctx = makeCtx({ _id: "req-1", observations: [], run: { turns: [{ iteration: 1, snapshotUrl: "s://1" }] } });
-    await new TaxonomyHandler(judge as unknown as JudgeClient).process(msg, ctx);
-    expect(judge.evaluate).not.toHaveBeenCalled();
-    expect(ctx.collection.updateOne).not.toHaveBeenCalled();
-  });
-
-  it("reads observations from the request top-level, not run.observations (#1156 regression)", async () => {
-    // The API persists selected observation ids at the request top-level
-    // (RequestDocument.observations). A doc that only carries the legacy
-    // run.observations must be treated as "none selected" → no-op, proving the
-    // handler reads the canonical location the submit path actually writes.
-    const ctx = makeCtx({
-      _id: "req-1",
-      run: { observations: ["dep_removed"], turns: [{ iteration: 1, snapshotUrl: "s://1", atifUrl: "a://1" }] },
+  it("uses only the dedicated Taxonome model and omits reasoning effort", async () => {
+    const close = vi.fn(async () => undefined);
+    const openTransport = vi.fn(async () => ({
+      complete: vi.fn(),
+      close,
+    }));
+    const factory = createPromptExecutorFactory({
+      environment: {
+        TAXONOME_MODEL: "taxonome-model",
+        MODEL: "coding-model",
+        REASONING_EFFORT: "xhigh",
+      },
+      openTransport,
     });
-    await new TaxonomyHandler(judge as unknown as JudgeClient).process(msg, ctx);
-    expect(judge.evaluate).not.toHaveBeenCalled();
-    expect(ctx.collection.updateOne).not.toHaveBeenCalled();
+
+    const lease = await factory(true);
+    expect(openTransport).toHaveBeenCalledWith(
+      "taxonome-model",
+      { reasoningEffort: false },
+    );
+    expect(lease.executor).toBeDefined();
+    await lease.close();
+    expect(close).toHaveBeenCalledOnce();
   });
 
-  describe("subject:iteration", () => {
-    it("writes judge criteriaResults to each turn's observationResults and sends atifUrl", async () => {
-      judge.evaluate.mockResolvedValue({
-        passed: true,
-        feedback: "ok",
-        criteriaResults: [{ criterionId: "uses_ts", passed: true, feedback: "tsconfig present", evaluated: true }],
-      });
-      const ctx = makeCtx(
-        {
-          _id: "req-1",
-          observations: ["uses_ts"],
-          run: { turns: [{ iteration: 1, snapshotUrl: "s://1", atifUrl: "a://1" }] },
+  it("uses the dedicated default when no Taxonome model is configured", async () => {
+    const openTransport = vi.fn(async () => ({
+      complete: vi.fn(),
+      close: vi.fn(async () => undefined),
+    }));
+    const factory = createPromptExecutorFactory({
+      environment: {
+        MODEL: "claude-haiku-4.5",
+        REASONING_EFFORT: "high",
+      },
+      openTransport,
+    });
+
+    await factory(true);
+    expect(openTransport).toHaveBeenCalledWith(
+      "claude-haiku-4.5",
+      { reasoningEffort: false },
+    );
+  });
+
+  it("does not open a Copilot transport for deterministic elements", async () => {
+    const openTransport = vi.fn();
+    const factory = createPromptExecutorFactory({ openTransport });
+
+    const lease = await factory(false);
+
+    expect(openTransport).not.toHaveBeenCalled();
+    expect(lease.executor).toBeUndefined();
+    await expect(lease.close()).resolves.toBeUndefined();
+  });
+
+  it("does not initialize a prompt executor for runs without a taxonomy", async () => {
+    const executorFactory = vi.fn();
+    const log = vi.fn(async () => undefined);
+    const handler = new TaxonomyHandler(executorFactory);
+
+    await handler.process(
+      { type: "taxonomy", requestId: "request-1", runId: "run-1" },
+      {
+        blobStorage: {} as never,
+        collection: {
+          findOne: vi.fn(async () => ({
+            _id: "request-1",
+            projectId: "project-1",
+            scenario: { task: "Test task" },
+            run: { _id: "run-1", attemptNumber: 1, status: "done" },
+          })),
+        } as never,
+        criteriaCollection: {} as never,
+        log,
+      },
+    );
+
+    expect(executorFactory).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "Run is not attached to an Experiment; skipping Taxonome",
+    );
+  });
+
+  it("publishes a user-managed prompt result with exactly three occurrences using a fake executor", async () => {
+    const context = acceptanceContext({ sourceType: "user", occurrenceCount: 3 });
+    const executor: PromptExecutor = {
+      evaluate: vi.fn(async () => ({
+        status: "succeeded" as const,
+        attempts: [{
+          attempt: 1 as const,
+          kind: "initial" as const,
+          outcome: "succeeded" as const,
+        }],
+        candidate: {
+          state: "completed",
+          observed: true,
+          occurrences: [1, 2, 3].map((step) => ({
+            evidence: [{
+              role: "discovery",
+              path: `$.steps[${step}].extra.scope.discoveries[0]`,
+            }],
+          })),
         },
-        [{ id: "uses_ts", subject: "iteration" }],
-      );
+      })),
+    };
+    const factory = vi.fn(async () => ({
+      executor,
+      close: async () => undefined,
+    }));
+    const handler = new TaxonomyHandler(factory);
 
-      await new TaxonomyHandler(judge as unknown as JudgeClient).process(msg, ctx);
+    await handler.process(
+      { type: "taxonomy", requestId: "request-1", runId: "run-1" },
+      {
+        blobStorage: context.blobStorage as never,
+        collection: context.collection as never,
+        criteriaCollection: {} as never,
+        db: context.db as never,
+        claimToken: "claim-1",
+        log: vi.fn(async () => undefined),
+      },
+    );
 
-      expect(judge.evaluate).toHaveBeenCalledWith(
-        expect.objectContaining({ snapshotUrl: "s://1", criteria: ["uses_ts"], atifUrl: "a://1" }),
-      );
-      const call = judge.evaluate.mock.calls[0][0];
-      expect(call.gate).toBeUndefined();
-      expect(call.toolCallsUrl).toBeUndefined();
-      expect(call.atifUrls).toBeUndefined();
-      expect(ctx.collection.updateOne).toHaveBeenCalledWith(
-        { _id: "req-1", "run.turns.iteration": 1 },
-        { $set: { "run.turns.$.observationResults": [{ criterionId: "uses_ts", passed: true, feedback: "tsconfig present", evaluated: true }] } },
-      );
-    });
-
-    it("skips iterations without a snapshotUrl", async () => {
-      judge.evaluate.mockResolvedValue({ passed: true, feedback: "", criteriaResults: [] });
-      const ctx = makeCtx(
-        { _id: "req-1", observations: ["c1"], run: { turns: [{ iteration: 1 }] } },
-        [{ id: "c1", subject: "iteration" }],
-      );
-      await new TaxonomyHandler(judge as unknown as JudgeClient).process(msg, ctx);
-      expect(judge.evaluate).not.toHaveBeenCalled();
-    });
-
-    it("throws on judge infrastructure error so the handler is marked failed", async () => {
-      judge.evaluate.mockRejectedValue(new JudgeInfrastructureError("down", { httpStatus: 503 }));
-      const ctx = makeCtx(
-        { _id: "req-1", observations: ["c1"], run: { turns: [{ iteration: 1, snapshotUrl: "s://1" }] } },
-        [{ id: "c1", subject: "iteration" }],
-      );
-      await expect(new TaxonomyHandler(judge as unknown as JudgeClient).process(msg, ctx)).rejects.toThrow("down");
-    });
-  });
-
-  describe("subject:run", () => {
-    it("evaluates ONCE over the merged trajectory and writes run-level observationResults", async () => {
-      judge.evaluate.mockResolvedValue({
-        passed: true,
-        feedback: "ok",
-        criteriaResults: [
-          { criterionId: "dep_added_then_removed", passed: true, feedback: "left-pad added then removed", evaluated: true },
-        ],
-      });
-      const ctx = makeCtx(
-        {
-          _id: "req-1",
-          observations: ["dep_added_then_removed"],
-          run: {
-            turns: [
-              { iteration: 1, snapshotUrl: "s://1", atifUrl: "a://1" },
-              { iteration: 2, snapshotUrl: "s://2", atifUrl: "a://2" },
-            ],
-          },
-        },
-        [{ id: "dep_added_then_removed", subject: "run" }],
-      );
-
-      await new TaxonomyHandler(judge as unknown as JudgeClient).process(msg, ctx);
-
-      // One judge call, using the FINAL snapshot + EVERY iteration's atif merged.
-      expect(judge.evaluate).toHaveBeenCalledTimes(1);
-      expect(judge.evaluate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          snapshotUrl: "s://2",
-          criteria: ["dep_added_then_removed"],
-          atifUrls: ["a://1", "a://2"],
+    expect(factory).toHaveBeenCalledWith(true);
+    expect(context.blobStorage.uploadBuffer).toHaveBeenCalledWith(
+      "request-1/runs/run-1/taxonomy-evaluation/claim-1/result.json.gz",
+      expect.any(Buffer),
+      "application/json",
+      "gzip",
+    );
+    expect(context.collection.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: "request-1",
+        "run._id": "run-1",
+        "run.handlerStatus.pp-taxonomy.claimToken": "claim-1",
+      }),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          "run.taxonomyEvaluation": expect.objectContaining({
+            url: "https://blob/result.json.gz",
+          }),
         }),
-      );
-      const call = judge.evaluate.mock.calls[0][0];
-      expect(call.atifUrl).toBeUndefined();
-      // Written at the RUN level, not on any turn.
-      expect(ctx.collection.updateOne).toHaveBeenCalledWith(
-        { _id: "req-1" },
-        { $set: { "run.observationResults": [{ criterionId: "dep_added_then_removed", passed: true, feedback: "left-pad added then removed", evaluated: true }] } },
-      );
-    });
-
-    it("defaults a subject-less observation to run (whole-run evaluation)", async () => {
-      judge.evaluate.mockResolvedValue({ passed: false, feedback: "no", criteriaResults: [] });
-      const ctx = makeCtx(
-        {
-          _id: "req-1",
-          observations: ["legacy_obs"],
-          run: { turns: [{ iteration: 1, snapshotUrl: "s://1", atifUrl: "a://1" }] },
-        },
-        [{ id: "legacy_obs" }], // no subject → defaults to run
-      );
-
-      await new TaxonomyHandler(judge as unknown as JudgeClient).process(msg, ctx);
-
-      expect(judge.evaluate).toHaveBeenCalledTimes(1);
-      const call = judge.evaluate.mock.calls[0][0];
-      expect(call.atifUrls).toEqual(["a://1"]);
-      expect(ctx.collection.updateOne).toHaveBeenCalledWith(
-        { _id: "req-1" },
-        expect.objectContaining({ $set: expect.objectContaining({ "run.observationResults": [] }) }),
-      );
-    });
-
-    it("throws on judge infrastructure error during the run-subject evaluation", async () => {
-      judge.evaluate.mockRejectedValue(new JudgeInfrastructureError("down", { httpStatus: 503 }));
-      const ctx = makeCtx(
-        { _id: "req-1", observations: ["r1"], run: { turns: [{ iteration: 1, snapshotUrl: "s://1", atifUrl: "a://1" }] } },
-        [{ id: "r1", subject: "run" }],
-      );
-      await expect(new TaxonomyHandler(judge as unknown as JudgeClient).process(msg, ctx)).rejects.toThrow("down");
-    });
+      }),
+    );
   });
 
-  describe("mixed subjects", () => {
-    it("routes iteration and run observations to their respective evaluations", async () => {
-      judge.evaluate.mockResolvedValue({ passed: true, feedback: "ok", criteriaResults: [] });
-      const ctx = makeCtx(
-        {
-          _id: "req-1",
-          observations: ["iter_obs", "run_obs"],
-          run: {
-            turns: [
-              { iteration: 1, snapshotUrl: "s://1", atifUrl: "a://1" },
-              { iteration: 2, snapshotUrl: "s://2", atifUrl: "a://2" },
-            ],
-          },
+  it("evaluates an exact built-in revision directly without copying it", async () => {
+    const context = acceptanceContext({ sourceType: "builtin", occurrenceCount: 1 });
+    const executor: PromptExecutor = {
+      evaluate: vi.fn(async () => ({
+        status: "succeeded" as const,
+        attempts: [{
+          attempt: 1 as const,
+          kind: "initial" as const,
+          outcome: "succeeded" as const,
+        }],
+        candidate: {
+          state: "completed",
+          observed: true,
+          occurrences: [{
+            evidence: [{
+              role: "discovery",
+              path: "$.steps[1].extra.scope.discoveries[0]",
+            }],
+          }],
         },
-        [
-          { id: "iter_obs", subject: "iteration" },
-          { id: "run_obs", subject: "run" },
-        ],
-      );
+      })),
+    };
+    const handler = new TaxonomyHandler(async () => ({
+      executor,
+      close: async () => undefined,
+    }));
 
-      await new TaxonomyHandler(judge as unknown as JudgeClient).process(msg, ctx);
+    await handler.process(
+      { type: "taxonomy", requestId: "request-1", runId: "run-1" },
+      {
+        blobStorage: context.blobStorage as never,
+        collection: context.collection as never,
+        criteriaCollection: {} as never,
+        db: context.db as never,
+        claimToken: "claim-builtin",
+        log: vi.fn(async () => undefined),
+      },
+    );
 
-      // 2 iteration calls (one per turn) + 1 run call = 3 total.
-      expect(judge.evaluate).toHaveBeenCalledTimes(3);
-      const iterationCalls = judge.evaluate.mock.calls.filter((c) => c[0].criteria.includes("iter_obs"));
-      const runCalls = judge.evaluate.mock.calls.filter((c) => c[0].criteria.includes("run_obs"));
-      expect(iterationCalls).toHaveLength(2);
-      expect(runCalls).toHaveLength(1);
-      // The iteration eval only carries the iteration-subject criterion.
-      expect(iterationCalls[0][0].criteria).toEqual(["iter_obs"]);
-      // The run eval only carries the run-subject criterion, merged trajectory.
-      expect(runCalls[0][0].criteria).toEqual(["run_obs"]);
-      expect(runCalls[0][0].atifUrls).toEqual(["a://1", "a://2"]);
+    expect(context.db.collection).toHaveBeenCalledWith("taxonomy-revisions");
+    expect(context.blobStorage.uploadBuffer).toHaveBeenCalledOnce();
+  });
+
+  it("does not initialize a model executor for a deterministic-only taxonomy", async () => {
+    const context = acceptanceContext({
+      sourceType: "builtin",
+      occurrenceCount: 1,
+      deterministic: true,
     });
+    const factory = vi.fn(async () => ({
+      close: async () => undefined,
+    }));
+    const handler = new TaxonomyHandler(factory);
+
+    await handler.process(
+      { type: "taxonomy", requestId: "request-1", runId: "run-1" },
+      {
+        blobStorage: context.blobStorage as never,
+        collection: context.collection as never,
+        criteriaCollection: {} as never,
+        db: context.db as never,
+        claimToken: "claim-code",
+        log: vi.fn(async () => undefined),
+      },
+    );
+
+    expect(factory).toHaveBeenCalledWith(false);
+    expect(context.blobStorage.uploadBuffer).toHaveBeenCalledOnce();
   });
 });

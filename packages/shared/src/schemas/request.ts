@@ -205,6 +205,12 @@ export const RequestResponseSchema = z
     experimentFinalizedAt: z.coerce.date().optional(),
     experimentMembershipOperationId: z.string().optional(),
     experimentMembershipRevisionId: z.string().optional(),
+    taxonomyHandler: z.object({
+      status: z.enum(["pending", "queued", "processing", "done", "failed"]),
+      updatedAt: z.coerce.date().optional(),
+      error: z.string().optional(),
+      resultAvailable: z.boolean(),
+    }).strict().optional(),
     priority: z.number().int().default(0),
     gates: z.array(GateConfigSchema).optional(),
     observations: z.array(z.string()).optional(),
@@ -284,6 +290,16 @@ export const RunStateSchema = z
     reportsTriggerCompletedAt: z.coerce.date().optional(),
     reportPublicationIds: z.array(z.string()).optional(),
     reportPublicationVersion: z.number().int().nonnegative().optional(),
+    /** Immutable compressed Taxonome SDK result for this exact run attempt. */
+    taxonomyEvaluation: z
+      .object({
+        url: z.string().min(1),
+        schemaVersion: z.string().min(1),
+        contentSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        sizeBytes: z.number().int().nonnegative(),
+      })
+      .strict()
+      .optional(),
   })
   .openapi("RunState");
 

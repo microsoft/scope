@@ -96,8 +96,8 @@ describe("evaluation dashboard", () => {
     const dashboard = new EvaluationDashboard({
       jobs: jobs(),
       elementOrder: ["prompt", "code"],
-      taxonomyId: "agent-behavior",
-      taxonomyVersion: "3.0.0",
+      taxonomyId: "ax-taxonomy",
+      taxonomyVersion: "1.0.0",
       split: "test",
       concurrency: 2,
       style: createTaxonomeStyle(target.output, {}),
@@ -146,8 +146,8 @@ describe("evaluation dashboard", () => {
     const dashboard = new EvaluationDashboard({
       jobs: planned,
       elementOrder: ["prompt", "code"],
-      taxonomyId: "agent-behavior",
-      taxonomyVersion: "3.0.0",
+      taxonomyId: "ax-taxonomy",
+      taxonomyVersion: "1.0.0",
       split: "test",
       concurrency: 2,
       style,
@@ -177,7 +177,7 @@ describe("evaluation dashboard", () => {
     const text = target.text();
     expect(text).toContain("Taxonome eval");
     expect(text).toContain(
-      "agent-behavior v3.0.0 • split: test • 2 elements • concurrency: 2",
+      "ax-taxonomy v1.0.0 • split: test • 2 elements • concurrency: 2",
     );
     expect(text).toContain("\u001b[?25l");
     expect(text).toContain("\u001b[?25h");
@@ -204,8 +204,8 @@ describe("evaluation dashboard", () => {
     const dashboard = new EvaluationDashboard({
       jobs: jobs(),
       elementOrder: ["prompt", "code"],
-      taxonomyId: "agent-behavior-with-a-long-name",
-      taxonomyVersion: "3.0.0",
+      taxonomyId: "example-taxonomy-with-a-long-name",
+      taxonomyVersion: "1.0.0",
       split: "test",
       concurrency: 12,
       style: createTaxonomeStyle(target.output, { NO_COLOR: "1" }),
@@ -239,8 +239,8 @@ describe("evaluation dashboard", () => {
     const noColor = new EvaluationDashboard({
       jobs: planned,
       elementOrder: ["prompt", "code"],
-      taxonomyId: "agent-behavior",
-      taxonomyVersion: "3.0.0",
+      taxonomyId: "ax-taxonomy",
+      taxonomyVersion: "1.0.0",
       split: "test",
       concurrency: 2,
       style: createTaxonomeStyle(noColorTarget.output, { NO_COLOR: "1" }),
@@ -256,8 +256,8 @@ describe("evaluation dashboard", () => {
     const json = new EvaluationDashboard({
       jobs: planned,
       elementOrder: ["prompt", "code"],
-      taxonomyId: "agent-behavior",
-      taxonomyVersion: "3.0.0",
+      taxonomyId: "ax-taxonomy",
+      taxonomyVersion: "1.0.0",
       split: "test",
       concurrency: 2,
       style: createTaxonomeStyle(jsonTarget.output, { FORCE_COLOR: "1" }),
@@ -280,8 +280,8 @@ describe("evaluation dashboard", () => {
     const plain = new EvaluationDashboard({
       jobs: planned,
       elementOrder: ["prompt", "code"],
-      taxonomyId: "agent-behavior",
-      taxonomyVersion: "3.0.0",
+      taxonomyId: "ax-taxonomy",
+      taxonomyVersion: "1.0.0",
       split: "test",
       concurrency: 2,
       style: createTaxonomeStyle(plainTarget.output, {}),

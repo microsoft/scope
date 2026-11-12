@@ -13,7 +13,7 @@ test('canonical Taxonome sources are generated, readable and keyboard accessible
 		if (new URL(request.url()).origin !== 'http://127.0.0.1:14321') requests.push(request.url());
 	});
 	await page.goto('/scope/reference/taxonome-elements/');
-	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Default taxonomy and elements');
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Ax taxonomy and elements');
 	await expect(page.locator('[data-element-id]')).toHaveCount(catalog.elements.length);
 	const manifest = page.locator('#taxonomy-source');
 	await manifest.locator('summary').focus();

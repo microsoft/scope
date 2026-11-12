@@ -9,3 +9,4 @@ export * from "./resource.js";
 export * from "./extension.js";
 export * from "./profile.js";
 export * from "./project.js";
+export * from "./taxonomy.js";

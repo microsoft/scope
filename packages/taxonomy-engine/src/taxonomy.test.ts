@@ -65,6 +65,48 @@ function testHandlers(): HandlerRegistry {
 }
 
 describe("scope/taxonomy/v1 loader", () => {
+  it("applies complete element overrides before digest calculation", async () => {
+    const root = await tempProject();
+    await mkdir(join(root, "elements"));
+    await writeFile(join(root, "elements", "timeout.yaml"), timeoutElement);
+    await writeFile(join(root, "taxonomy.yaml"), `
+schema_version: scope/taxonomy/v1
+id: behavior
+version: 1.0.0
+surfaces:
+  - id: surface-mcp
+    label: MCP
+elements:
+  - path: elements/timeout.yaml
+`);
+    const original = await loadTaxonomy(join(root, "taxonomy.yaml"), {
+      handlers: testHandlers(),
+    });
+    const element = original.elementById.get("beh-timeout")!;
+    const overridden = await loadTaxonomy(join(root, "taxonomy.yaml"), {
+      handlers: testHandlers(),
+      elementOverrides: new Map([[
+        element.id,
+        {
+          id: element.id,
+          label: element.label,
+          implementation: {
+            type: "deterministic",
+            handler: "acme/test-v1",
+            config: { threshold_ms: 5000 },
+          },
+          preconditions: element.preconditions,
+          output: element.output,
+        },
+      ]]),
+    });
+
+    expect(overridden.elementById.get(element.id)?.implementation).toMatchObject({
+      config: { threshold_ms: 5000 },
+    });
+    expect(overridden.digest).not.toBe(original.digest);
+  });
+
   it("normalizes embedded and referenced elements to the same canonical digest", async () => {
     const root = await tempProject();
     await mkdir(join(root, "elements"));

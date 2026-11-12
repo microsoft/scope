@@ -3,6 +3,7 @@
 
 import { CopilotClient, SessionEvent } from "@github/copilot-sdk";
 import { CriteriaConfig, CriterionResult, DependencyGraph, TokenManagerClient } from "shared";
+import { resolveFeedbackModel } from "./model-config.js";
 
 export interface FeedbackContext {
   judgeResults: CriterionResult[];
@@ -147,7 +148,7 @@ export class FeedbackGenerator {
   private tokenClient: TokenManagerClient;
 
   constructor(model?: string) {
-    this.model = model || process.env.FEEDBACK_MODEL || "gpt-5.4-mini";
+    this.model = resolveFeedbackModel(model);
     this.tokenClient = new TokenManagerClient();
   }
 

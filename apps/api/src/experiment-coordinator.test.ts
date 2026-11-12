@@ -105,6 +105,64 @@ afterEach(() => {
 });
 
 describe("ExperimentCoordinator", () => {
+  it("projects the registered Taxonome handler as the readout dependency", () => {
+    const coordinator = new ExperimentCoordinator(
+      collections({ requests: [], services: [] }),
+    );
+    const request = {
+      _id: "request-1",
+      projectId: "project-1",
+      scenario: { task: "task", criteria: [] },
+      workerType: "worker",
+      createdAt: now,
+      priority: 0,
+      run: {
+        _id: "run-1",
+        attemptNumber: 1,
+        status: "done",
+        handlerStatus: {
+          "pp-taxonomy": {
+            status: "done",
+            version: 1,
+            updatedAt: now,
+          },
+        },
+      },
+    } as RequestDocument;
+    const handler = {
+      _id: "pp-taxonomy",
+      type: "post-process-handler",
+      version: 1,
+      queue: "post-processor-queue",
+      selector: "taxonomy",
+      autoBackfill: true,
+      dependsOn: ["pp-atif"],
+    } as ServiceHandlerDocument;
+
+    const projected = (
+      coordinator as unknown as {
+        projectRequest(
+          requestId: string,
+          runId: string,
+          request: RequestDocument,
+          handlers: ServiceHandlerDocument[],
+        ): ExperimentRequestState;
+      }
+    ).projectRequest(request._id, request.run!._id, request, [handler]);
+
+    expect(projected).toEqual({
+      requestId: "request-1",
+      runId: "run-1",
+      dependencies: [{
+        handlerId: "pp-taxonomy",
+        state: "ready",
+        version: 1,
+        updatedAt: now,
+      }],
+      blockers: [],
+    });
+  });
+
   it("queues ready Experiment reports independently from unused linked templates", async () => {
     const requestState: ExperimentRequestState = {
       requestId: "request-1",
