@@ -19,7 +19,7 @@ qualityFamilies:
   - id: developer-feedback
     variants: [default, persona, descendant-guard]
   - id: run-report
-    variants: [default, append, override-control]
+    variants: [default, append, override-control, experiment-readout]
 standaloneFamilies:
   - id: taxonome-skipped-invocation
     variants: [default]

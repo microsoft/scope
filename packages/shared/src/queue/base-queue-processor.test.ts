@@ -162,8 +162,10 @@ describe("BaseQueueProcessor visibility heartbeat lifecycle", () => {
     vi.useRealTimers();
   });
 
-  function makeMessage(): DequeuedMessageItem {
-    const payload = Buffer.from(JSON.stringify({ requestId: "doc-1" })).toString("base64");
+  function makeMessage(
+    messagePayload: Record<string, unknown> = { requestId: "doc-1" },
+  ): DequeuedMessageItem {
+    const payload = Buffer.from(JSON.stringify(messagePayload)).toString("base64");
     return {
       messageId: "msg-1",
       popReceipt: "receipt-0",
@@ -171,7 +173,16 @@ describe("BaseQueueProcessor visibility heartbeat lifecycle", () => {
     } as unknown as DequeuedMessageItem;
   }
 
-  function setupProcessor(handleRequest: (heartbeat: VisibilityHeartbeat) => Promise<void> | void) {
+  function setupProcessor(
+    handleRequest: (
+      heartbeat: VisibilityHeartbeat,
+      log: (
+        level: LogEvent["level"],
+        message: string,
+        data?: Record<string, unknown>,
+      ) => Promise<void>,
+    ) => Promise<void> | void,
+  ) {
     class HBProcessor extends BaseQueueProcessor<{ _id: string }> {
       public capturedHeartbeat: VisibilityHeartbeat | undefined;
       public handleRequestCalls = 0;
@@ -181,11 +192,24 @@ describe("BaseQueueProcessor visibility heartbeat lifecycle", () => {
         _doc: { _id: string },
         _message: DequeuedMessageItem,
         heartbeat: VisibilityHeartbeat,
+        log: (
+          level: LogEvent["level"],
+          message: string,
+          data?: Record<string, unknown>,
+        ) => Promise<void>,
       ): Promise<void> {
         this.capturedHeartbeat = heartbeat;
         this.popReceiptAtHandleStart = heartbeat.popReceipt;
         this.handleRequestCalls++;
-        await handleRequest(heartbeat);
+        await handleRequest(heartbeat, log);
+      }
+
+      protected override extractDocumentId(
+        payload: Record<string, unknown>,
+      ): string {
+        return typeof payload.experimentId === "string"
+          ? payload.experimentId
+          : super.extractDocumentId(payload);
       }
 
       protected override async cleanup(): Promise<void> {
@@ -203,11 +227,12 @@ describe("BaseQueueProcessor visibility heartbeat lifecycle", () => {
       findOne: vi.fn().mockResolvedValue({ _id: "doc-1", run: { _id: "run-1" } }),
       updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
     };
-    (proc as any).logPublisher = {
+    const logPublisher = {
       publish: vi.fn().mockResolvedValue(undefined),
       evictRun: vi.fn(),
     };
-    return { proc, updateMessage, deleteMessage };
+    (proc as any).logPublisher = logPublisher;
+    return { proc, updateMessage, deleteMessage, logPublisher };
   }
 
   it("starts the heartbeat before handleRequest runs", async () => {
@@ -221,6 +246,26 @@ describe("BaseQueueProcessor visibility heartbeat lifecycle", () => {
     // handleRequest returns synchronously here. updateMessage should not have
     // been called for a fast handler.
     expect(updateMessage).not.toHaveBeenCalled();
+  });
+
+  it("persists Experiment worker logs under the exact execution", async () => {
+    const { proc, logPublisher } = setupProcessor(async (_heartbeat, log) => {
+      await log("info", "Experiment processing started");
+    });
+    await (proc as any).processMessage(
+      makeMessage({
+        experimentId: "doc-1",
+        experimentExecutionId: "experiment-execution-1",
+      }),
+    );
+
+    expect(logPublisher.publish).toHaveBeenCalledWith(
+      "doc-1",
+      "experiment-execution-1",
+      "info",
+      "Experiment processing started",
+      undefined,
+    );
   });
 
   it("the heartbeat passed to handleRequest exposes the live pop receipt", async () => {

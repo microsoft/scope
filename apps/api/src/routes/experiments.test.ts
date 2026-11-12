@@ -11,7 +11,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { RouteContext } from "../route-context.js";
-import type { ExperimentDocument } from "shared";
+import { ExperimentStore, type ExperimentDocument } from "shared";
 import { registerExperimentsRoutes } from "./experiments.js";
 
 extendZodWithOpenApi(z);
@@ -271,6 +271,9 @@ describe("Experiment API contract", () => {
       "/api/v1/experiments/{id}",
       "/api/v1/experiments/{id}/executions",
       "/api/v1/experiments/{id}/executions/{experimentExecutionId}",
+      "/api/v1/experiments/{id}/executions/{experimentExecutionId}/logs",
+      "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports",
+      "/api/v1/experiments/{id}/executions/{experimentExecutionId}/reports/{reportId}/structured",
       "/api/v1/experiments/{id}/retry",
     ]);
     expect(document.paths).not.toHaveProperty("/api/v1/submissions");
@@ -290,11 +293,120 @@ describe("Experiment API contract", () => {
         readiness: expect.any(Object),
         blockers: expect.any(Object),
         progress: expect.any(Object),
+        report: expect.any(Object),
         supersededByExperimentExecutionId: { type: "string" },
       },
     });
     expect(JSON.stringify(executionSchema)).not.toMatch(
       /claimToken|stateVersion|vectorFingerprint|storageProfile/,
     );
+  });
+
+  it("lists reports for one exact current or archived execution", async () => {
+      const execution = {
+        experimentExecutionId: "execution-2",
+        attemptNumber: 2,
+        version: 4,
+        requests: {
+          storage: "inline" as const,
+          entryCount: 0,
+          payloadFingerprint: "payload",
+          payloadVersion: 1,
+          entries: [],
+        },
+        vectorFingerprint: "vector",
+        handlerSummary: {},
+        blocking: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const getExecution = vi
+        .spyOn(ExperimentStore.prototype, "getExecution")
+        .mockResolvedValue(execution);
+      const toArray = vi.fn().mockResolvedValue([{
+        _id: "report-1",
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-2",
+        status: "completed",
+        createdAt: new Date(),
+      }]);
+      const find = vi.fn(() => ({
+        sort: vi.fn(() => ({ toArray })),
+      }));
+      const { app } = harness({
+        experimentCollection: {},
+        experimentExecutionsCollection: {},
+        experimentChunksCollection: {},
+        reportCollection: { find },
+      } as unknown as Partial<RouteContext>);
+
+      const response = await request(app).get(
+        "/api/v1/experiments/experiment-1/executions/execution-2/reports?projectId=project-1",
+      );
+
+      expect(response.status).toBe(200);
+      expect(getExecution).toHaveBeenCalledWith({
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-2",
+      });
+      expect(find).toHaveBeenCalledWith({
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-2",
+      });
+      expect(response.body).toEqual([
+        expect.objectContaining({
+          id: "report-1",
+          experimentExecutionId: "execution-2",
+        }),
+      ]);
+  });
+
+  it("retrieves structured JSON only through the exact execution identity", async () => {
+      const findOne = vi.fn().mockResolvedValue({
+        _id: "report-1",
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-2",
+        status: "completed",
+        structuredArtifact: {
+          schemaId: "scope.experiment-readout",
+          schemaVersion: "1.0",
+          contentType: "application/json",
+          url: "https://storage.invalid/readout.json",
+        },
+        createdAt: new Date(),
+      });
+      const downloadJson = vi.fn().mockResolvedValue({
+        meta: {
+          experimentId: "experiment-1",
+          experimentExecutionId: "execution-2",
+        },
+      });
+      const { app } = harness({
+        reportCollection: { findOne },
+        blobStorage: { downloadJson },
+      } as unknown as Partial<RouteContext>);
+
+      const response = await request(app).get(
+        "/api/v1/experiments/experiment-1/executions/execution-2/reports/report-1/structured?projectId=project-1",
+      );
+
+      expect(response.status).toBe(200);
+      expect(findOne).toHaveBeenCalledWith({
+        _id: "report-1",
+        projectId: "project-1",
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-2",
+      });
+      expect(downloadJson).toHaveBeenCalledWith(
+        "https://storage.invalid/readout.json",
+      );
+      expect(response.body.meta).toEqual({
+        experimentId: "experiment-1",
+        experimentExecutionId: "execution-2",
+      });
   });
 });

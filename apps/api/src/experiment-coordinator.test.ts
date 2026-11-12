@@ -165,12 +165,25 @@ describe("ExperimentCoordinator", () => {
               _id: "run-1",
               attemptNumber: 1,
               status: "done",
+              outcome: "failed",
               logsUrl: "https://logs",
+              observationResults: [{
+                criterionId: "criterion-1",
+                evaluated: true,
+                passed: false,
+                feedback: "Valid negative evidence",
+              }],
               handlerStatus: {
                 "pp-observations": {
                   status: "done",
                   version: 3,
                   updatedAt: now,
+                },
+                "unrelated-handler": {
+                  status: "failed",
+                  version: 1,
+                  updatedAt: now,
+                  error: "Unrelated failure",
                 },
               },
             },
@@ -318,6 +331,151 @@ describe("ExperimentCoordinator", () => {
       vi.mocked(ExperimentStore.prototype.casUpdateRequestStates).mock
         .calls[0]?.[0].requests,
     ).toHaveLength(40);
+  });
+
+  it.each([
+    {
+      name: "failed observations",
+      services: [
+        {
+          _id: "pp-observations",
+          type: "post-process-handler" as const,
+          version: 1,
+          queue: "queue-pp-observations",
+          selector: "observations",
+          autoBackfill: false,
+          dependsOn: [],
+        },
+      ],
+      handlerStatus: {
+        "pp-observations": {
+          status: "failed" as const,
+          version: 1,
+          updatedAt: now,
+          error: "Observation processing failed",
+        },
+      },
+      expectedState: "failed",
+      expectedReason: "dependency-failed",
+    },
+    {
+      name: "dependency-blocked observations",
+      services: [
+        {
+          _id: "observation-prerequisite",
+          type: "post-process-handler" as const,
+          version: 1,
+          queue: "queue-observation-prerequisite",
+          selector: "observation-prerequisite",
+          autoBackfill: false,
+          dependsOn: [],
+        },
+        {
+          _id: "pp-observations",
+          type: "post-process-handler" as const,
+          version: 1,
+          queue: "queue-pp-observations",
+          selector: "observations",
+          autoBackfill: false,
+          dependsOn: ["observation-prerequisite"],
+        },
+      ],
+      handlerStatus: {
+        "observation-prerequisite": {
+          status: "failed" as const,
+          version: 1,
+          updatedAt: now,
+          error: "Prerequisite failed",
+        },
+      },
+      expectedState: "blocked",
+      expectedReason: "dependency-blocked",
+    },
+  ])("does not dispatch when $name", async ({
+    services,
+    handlerStatus,
+    expectedState,
+    expectedReason,
+  }) => {
+    const initialRequest: ExperimentRequestState = {
+      requestId: "request-1",
+      runId: "run-1",
+      dependencies: [],
+      blockers: [],
+    };
+    const projectedRequest: ExperimentRequestState = {
+      ...initialRequest,
+      dependencies: [{
+        handlerId: "pp-observations",
+        state: expectedState as "failed" | "blocked",
+      }],
+      blockers: [{
+        requestId: "request-1",
+        runId: "run-1",
+        handlerId: "pp-observations",
+        reason: expectedReason as "dependency-failed" | "dependency-blocked",
+        ...(expectedReason === "dependency-failed"
+          ? { error: "Observation processing failed" }
+          : {}),
+      }],
+    };
+    const initial = experiment([initialRequest]);
+    const projected = experiment([projectedRequest], {
+      version: 2,
+      blocking: projectedRequest.blockers,
+    });
+    vi.spyOn(ExperimentStore.prototype, "get").mockResolvedValue(initial);
+    vi.spyOn(FixedPayloadStore.prototype, "readRequests").mockResolvedValue([
+      initialRequest,
+    ]);
+    vi.spyOn(
+      ExperimentStore.prototype,
+      "casUpdateRequestStates",
+    ).mockResolvedValue({
+      status: "applied",
+      experiment: projected,
+      requests: [projectedRequest],
+    });
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    const coordinator = new ExperimentCoordinator(
+      collections({
+        requests: [{
+          _id: "request-1",
+          projectId: "project-1",
+          scenario: { task: "task", criteria: [] },
+          workerType: "worker",
+          createdAt: now,
+          taskPromptId: "prompt-1",
+          priority: 0,
+          run: {
+            _id: "run-1",
+            attemptNumber: 1,
+            status: "done",
+            logsUrl: "https://logs",
+            handlerStatus,
+          },
+        }],
+        services: [
+          ...services,
+          {
+            _id: "pp-readout",
+            type: "experiment-handler",
+            version: 1,
+            queue: "queue-pp-readout",
+            selector: "readout",
+            autoBackfill: false,
+            dependsOn: ["pp-observations"],
+            dependencyMode: "all-runs",
+          },
+        ],
+      }),
+      enqueue,
+    );
+
+    const result = await coordinator.reconcile("project-1", "experiment-1");
+
+    expect(result?.dispatched).toBe(false);
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
   it("re-enqueues a dropped notice without changing its exact identity", async () => {

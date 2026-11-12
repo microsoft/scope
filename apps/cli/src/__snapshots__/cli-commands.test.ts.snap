@@ -260,6 +260,22 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--url",
         ],
       },
+      "logs": {
+        "options": [
+          "--from-start",
+          "--project",
+          "--url",
+        ],
+      },
+      "reports": {
+        "options": [
+          "--output",
+          "--project",
+          "--report",
+          "--structured",
+          "--url",
+        ],
+      },
       "retry": {
         "options": [
           "--execution",
@@ -644,11 +660,14 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
         "options": [
           "--id",
           "--output",
+          "--structured",
           "--url",
         ],
       },
       "list": {
         "options": [
+          "--experiment",
+          "--experiment-execution",
           "--output",
           "--project",
           "--run",

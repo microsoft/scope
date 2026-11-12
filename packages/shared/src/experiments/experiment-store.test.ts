@@ -326,11 +326,34 @@ describe("ExperimentStore CAS contracts", () => {
       handlerVersion: 1,
       claimToken: "claim-1",
       status: "done",
+      report: {
+        reportId: "report-1",
+        url: "/api/v1/reports/report-1",
+        updatedAt: new Date("2026-01-01T00:01:00.000Z"),
+      },
     });
     expect(completed?.execution.handlerSummary.report).toMatchObject({
       status: "done",
       version: 1,
       claimToken: "claim-1",
+    });
+    expect(completed?.execution.report).toEqual({
+      reportId: "report-1",
+      url: "/api/v1/reports/report-1",
+      updatedAt: new Date("2026-01-01T00:01:00.000Z"),
+    });
+    expect(experiments.current().execution).toMatchObject({
+      handlerSummary: {
+        report: {
+          status: "done",
+          version: 1,
+          claimToken: "claim-1",
+        },
+      },
+      report: {
+        reportId: "report-1",
+        url: "/api/v1/reports/report-1",
+      },
     });
   });
 

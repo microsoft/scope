@@ -88,6 +88,11 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
     const generationStart = Date.now();
     const reportId = doc._id;
     const requestId = doc.requestId;
+    if (!requestId) {
+      throw new Error(
+        `Report ${reportId} has no requestId and cannot be processed by report-generator`,
+      );
+    }
 
     if (!ReportQueueProcessor.coldStartTracked) {
       ReportQueueProcessor.coldStartTracked = true;

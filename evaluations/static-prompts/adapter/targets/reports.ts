@@ -4,6 +4,10 @@
 import type { ReportTemplateSystemPrompt } from "../../../../packages/shared/src/index.js";
 import { createReportTools } from "../../../../apps/workers/report-generator/src/tools.js";
 import { resolveReportPrompts } from "../../../../apps/workers/report-generator/src/report-queue-processor.js";
+import {
+  READOUT_SYSTEM_PROMPT,
+  composeReadoutUserPrompt,
+} from "../../../../apps/workers/readout/src/prompt.js";
 import type {
   CompletionOptions,
   ComposedPromptRequest,
@@ -213,6 +217,32 @@ export function composeReportRequest(
   variant: string,
   defaultModel: string,
 ): ComposedPromptRequest {
+  if (variant === "experiment-readout") {
+    const value = record(input);
+    const evidence = record(value.evidence, "input.evidence");
+    return {
+      messages: [
+        { role: "system", content: READOUT_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: composeReadoutUserPrompt(
+            evidence as unknown as Parameters<typeof composeReadoutUserPrompt>[0],
+          ),
+        },
+      ],
+      model:
+        optionalString(value.model, "input.model") ?? defaultModel,
+      tools: [],
+      metadata: {
+        adapterId: "run-report/experiment-readout",
+        productionSources: [
+          "apps/workers/readout/src/prompt.ts#READOUT_SYSTEM_PROMPT",
+          "apps/workers/readout/src/readout-generator.ts#composeReadoutUserPrompt",
+        ],
+        fidelity: "exact",
+      },
+    };
+  }
   return composeParsedReportRequest(
     parseReportInput(input, variant),
     variant,
@@ -222,8 +252,18 @@ export function composeReportRequest(
 
 export const reportAdapter: PromptTargetAdapter<string> = {
   family: "run-report",
-  variants: ["default", "append", "override-control"],
+  variants: ["default", "append", "override-control", "experiment-readout"],
   async run(input, variant, context) {
+    if (variant === "experiment-readout") {
+      const request = composeReportRequest(input, variant, context.model);
+      const completion = await context.complete(request);
+      return {
+        request,
+        rawResponse: completion.content,
+        output: completion.content.trim(),
+        invocationMetadata: completion.metadata,
+      };
+    }
     const parsed = parseReportInput(input, variant);
     const request = composeParsedReportRequest(parsed, variant, context.model);
     const completion = await context.complete(

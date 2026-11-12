@@ -5,6 +5,7 @@
 import { describe, it, afterEach } from "vitest";
 import { cleanup, render, within } from "@testing-library/react";
 import { composeStories } from "@storybook/react-vite";
+import { MemoryRouter } from "react-router-dom";
 
 import * as alert from "./alert.stories";
 import * as alertDialog from "./alert-dialog.stories";
@@ -24,11 +25,12 @@ import * as tabs from "./tabs.stories";
 import * as textarea from "./textarea.stories";
 import * as tooltip from "./tooltip.stories";
 import * as sonner from "./sonner.stories";
+import * as experimentReports from "../ExperimentReportCard.stories";
 
 const modules: Record<string, Record<string, unknown>> = {
   alert, alertDialog, checkbox, dialog, dropdownMenu, label, popover, scrollArea,
   select, separator, sheet, skeleton, switch: sw, table, tabs, textarea,
-  tooltip, sonner,
+  tooltip, sonner, experimentReports,
 };
 
 afterEach(() => cleanup());
@@ -41,7 +43,11 @@ for (const [name, mod] of Object.entries(modules)) {
       it(`${storyName} renders and play passes`, async () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const S = Story as any;
-        const { container } = render(<S />);
+        const { container } = render(
+          <MemoryRouter>
+            <S />
+          </MemoryRouter>,
+        );
         // The story play functions only depend on `canvas` (userEvent/screen/expect
         // are imported directly in the story files). Invoke the raw play with a
         // canvas bound to the rendered container to avoid needing the vitest addon.

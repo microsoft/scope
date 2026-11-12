@@ -4,10 +4,13 @@
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import type { Document } from "mongodb";
+import type { Response } from "express";
 import {
   CreateRequestInputSchema,
   ExperimentStore,
   fingerprintExperimentPayload,
+  ReportResponseSchema,
+  withRetry,
   type ExperimentDocument,
   type ExperimentExecution,
   type ExperimentExecutionHistoryDocument,
@@ -20,6 +23,8 @@ import {
   ProjectIdQuerySchema,
   getQueryProjectId,
 } from "../utils/project-scope.js";
+import { subscribeClient, unsubscribeClient } from "../utils/sse.js";
+import type { SSEClient } from "../utils/sse.js";
 
 const CursorSchema = z.string().min(1).optional();
 const PageQuerySchema = ProjectIdQuerySchema.extend({
@@ -81,6 +86,12 @@ const ReadinessSchema = z.enum([
   "failed",
 ]);
 
+const ExperimentReportReferenceSchema = z.object({
+  reportId: z.string(),
+  url: z.string(),
+  updatedAt: z.coerce.date(),
+});
+
 const ExperimentResponseSchema = z
   .object({
     experimentId: z.string(),
@@ -114,13 +125,7 @@ const ExperimentResponseSchema = z
       finishedAt: z.coerce.date().optional(),
       discardedAt: z.coerce.date().optional(),
       discardReason: z.string().optional(),
-      report: z
-        .object({
-          reportId: z.string().optional(),
-          url: z.string().optional(),
-          updatedAt: z.coerce.date().optional(),
-        })
-        .optional(),
+      report: ExperimentReportReferenceSchema.optional(),
     }),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
@@ -156,6 +161,7 @@ const ExecutionResponseSchema = z
     supersededAt: z.coerce.date().optional(),
     supersededByExperimentExecutionId: z.string().optional(),
     supersededReason: z.enum(["rollover", "retry"]).optional(),
+    report: ExperimentReportReferenceSchema.optional(),
   })
   .openapi("ExperimentExecutionResponse");
 
@@ -257,7 +263,154 @@ function executionResponse(execution: ExperimentExecution) {
     ...(execution.supersededReason
       ? { supersededReason: execution.supersededReason }
       : {}),
+    ...(execution.report ? { report: execution.report } : {}),
   };
+}
+
+async function streamExperimentExecutionLogs(
+  ctx: RouteContext,
+  req: import("express").Request,
+  res: Response,
+  experiment: ExperimentDocument,
+  execution: ExperimentExecution,
+  fromStart: boolean,
+): Promise<void> {
+  const isCurrent =
+    experiment.execution.experimentExecutionId ===
+    execution.experimentExecutionId;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  if (fromStart) {
+    try {
+      const pastLogs = await ctx.blobStorage.getLogEvents(
+        experiment.experimentId,
+        execution.experimentExecutionId,
+      );
+      for (const log of pastLogs) {
+        res.write(`data: ${JSON.stringify(log)}\n\n`);
+      }
+    } catch (error) {
+      console.error(
+        `Failed to replay Experiment logs for ${experiment.experimentId}/${execution.experimentExecutionId}:`,
+        error,
+      );
+      res.write(
+        `event: error\ndata: ${JSON.stringify({ message: "Cannot connect to log storage" })}\n\n`,
+      );
+      res.end();
+      return;
+    }
+  }
+
+  const executionReadiness = readiness(execution);
+  if (
+    !isCurrent ||
+    executionReadiness === "done" ||
+    executionReadiness === "failed" ||
+    executionReadiness === "blocked"
+  ) {
+    res.write(
+      `event: done\ndata: ${JSON.stringify({ status: executionReadiness })}\n\n`,
+    );
+    res.end();
+    return;
+  }
+
+  let cleaned = false;
+  let redisSubscribed = false;
+  let changeStream: ReturnType<typeof ctx.experimentCollection.watch> | null =
+    null;
+  const heartbeat = setInterval(() => {
+    if (!cleaned) res.write(`:\n\n`);
+  }, 30_000);
+  const client: SSEClient = {
+    res,
+    accepts: (event) =>
+      event.data?.runId === execution.experimentExecutionId,
+    cleanup: () => {
+      if (cleaned) return;
+      cleaned = true;
+      clearInterval(heartbeat);
+      if (changeStream) {
+        changeStream.close().catch((error: unknown) => {
+          console.error("Error closing Experiment log change stream:", error);
+        });
+      }
+      if (redisSubscribed) {
+        unsubscribeClient(experiment.experimentId, client);
+      }
+      res.end();
+    },
+  };
+
+  if (process.env.REDIS_HOST) {
+    try {
+      await subscribeClient(experiment.experimentId, client);
+      redisSubscribed = true;
+    } catch (error) {
+      console.error(
+        `Redis subscription failed for Experiment ${experiment.experimentId}:`,
+        error,
+      );
+    }
+  }
+  try {
+    changeStream = ctx.experimentCollection.watch(
+      [
+        {
+          $match: {
+            "documentKey._id": experiment.experimentId,
+            operationType: "update",
+          },
+        },
+      ],
+      { fullDocument: "updateLookup" },
+    );
+    changeStream.on("change", (change: {
+      operationType?: string;
+      fullDocument?: ExperimentDocument;
+    }) => {
+      const updated = change.fullDocument;
+      if (change.operationType !== "update" || !updated) return;
+      if (
+        updated.execution.experimentExecutionId !==
+        execution.experimentExecutionId
+      ) {
+        res.write(
+          `event: done\ndata: ${JSON.stringify({ status: "superseded" })}\n\n`,
+        );
+        client.cleanup();
+        return;
+      }
+      const updatedReadiness = readiness(updated.execution);
+      if (
+        updatedReadiness === "done" ||
+        updatedReadiness === "failed" ||
+        updatedReadiness === "blocked"
+      ) {
+        res.write(
+          `event: done\ndata: ${JSON.stringify({ status: updatedReadiness })}\n\n`,
+        );
+        client.cleanup();
+      }
+    });
+    changeStream.on("error", (error: unknown) => {
+      console.error(
+        `Experiment log change stream failed for ${experiment.experimentId}:`,
+        error,
+      );
+    });
+  } catch (error) {
+    console.error(
+      `Failed to create Experiment log change stream for ${experiment.experimentId}:`,
+      error,
+    );
+  }
+  req.on("close", () => client.cleanup());
 }
 
 function experimentResponse(experiment: ExperimentDocument) {
@@ -618,6 +771,124 @@ export function registerExperimentsRoutes(ctx: RouteContext): void {
         return;
       }
       res.json(executionResponse(execution));
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/experiments/:id/executions/:experimentExecutionId/reports",
+    tags: ["Reports"],
+    summary: "List reports for one exact Experiment execution",
+    params: z.object({
+      id: z.string().min(1),
+      experimentExecutionId: z.string().min(1),
+    }),
+    query: ProjectIdQuerySchema,
+    response: z.array(ReportResponseSchema),
+    errorResponses: { 404: { description: "Experiment execution not found" } },
+    handler: async (req, res) => {
+      const projectId = getQueryProjectId(req);
+      const execution = await store(ctx).getExecution({
+        projectId,
+        experimentId: req.params.id,
+        experimentExecutionId: req.params.experimentExecutionId,
+      });
+      if (!execution) {
+        res.status(404).json({ error: "Experiment execution not found" });
+        return;
+      }
+      const reports = await ctx.reportCollection
+        .find({
+          projectId,
+          experimentId: req.params.id,
+          experimentExecutionId: req.params.experimentExecutionId,
+        })
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.json(reports.map((report) => ({ ...report, id: report._id })));
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/experiments/:id/executions/:experimentExecutionId/reports/:reportId/structured",
+    tags: ["Reports"],
+    summary: "Download structured JSON for an exact Experiment report",
+    params: z.object({
+      id: z.string().min(1),
+      experimentExecutionId: z.string().min(1),
+      reportId: z.string().min(1),
+    }),
+    query: ProjectIdQuerySchema,
+    response: z.any(),
+    rawResponse: true,
+    errorResponses: {
+      404: { description: "Experiment report or structured artifact not found" },
+    },
+    handler: async (req, res) => {
+      const projectId = getQueryProjectId(req);
+      const report = await ctx.reportCollection.findOne({
+        _id: req.params.reportId,
+        projectId,
+        experimentId: req.params.id,
+        experimentExecutionId: req.params.experimentExecutionId,
+      });
+      if (!report?.structuredArtifact) {
+        res.status(404).json({
+          error: "Experiment report structured artifact not found",
+        });
+        return;
+      }
+      const structured = await withRetry(() =>
+        ctx.blobStorage.downloadJson(report.structuredArtifact!.url)
+      );
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${req.params.reportId}.structured.json"`,
+      );
+      res.json(structured);
+    },
+  });
+
+  apiRoute(ctx.app, ctx.registry, {
+    method: "get",
+    path: "/api/v1/experiments/:id/executions/:experimentExecutionId/logs",
+    tags: ["Experiments"],
+    summary: "Stream logs for one exact Experiment execution",
+    params: z.object({
+      id: z.string().min(1),
+      experimentExecutionId: z.string().min(1),
+    }),
+    query: ProjectIdQuerySchema.extend({
+      fromStart: z.enum(["true", "false"]).optional(),
+    }),
+    response: z.any(),
+    rawResponse: true,
+    responseDescription: "Server-sent event stream of log entries",
+    errorResponses: { 404: { description: "Experiment execution not found" } },
+    handler: async (req, res) => {
+      const projectId = getQueryProjectId(req);
+      const experiment = await store(ctx).get(projectId, req.params.id);
+      const execution = experiment
+        ? await store(ctx).getExecution({
+            projectId,
+            experimentId: req.params.id,
+            experimentExecutionId: req.params.experimentExecutionId,
+          })
+        : null;
+      if (!experiment || !execution) {
+        res.status(404).json({ error: "Experiment execution not found" });
+        return;
+      }
+      await streamExperimentExecutionLogs(
+        ctx,
+        req,
+        res,
+        experiment,
+        execution,
+        req.query.fromStart === "true",
+      );
     },
   });
 
