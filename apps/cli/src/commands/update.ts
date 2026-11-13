@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { Command } from "commander";
-import { execSync } from "node:child_process";
-import { chmodSync, renameSync, unlinkSync } from "node:fs";
+import { execFileSync, execSync } from "node:child_process";
+import { chmodSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import semver from "semver";
 import { getCliName } from "../utils/shared.js";
@@ -64,19 +64,31 @@ export function registerUpdateCommand(program: Command): void {
       const currentBin = resolve(process.argv[1]);
       const installDir = dirname(currentBin);
       const binaryName = basename(currentBin);
-      const tmpFile = join(installDir, `.${binaryName}.tmp`);
+      const tmpFile = join(installDir, `.${binaryName}.tmp.mjs`);
 
       try {
-        // Download scope.mjs to a temp file, then atomically replace
+        // Stage the download beside the installation for an atomic replacement.
         execSync(
           `gh release download "${targetTag}" --repo ${RELEASES_REPO} --pattern scope.mjs -O "${tmpFile}" --clobber`,
           { stdio: "inherit" },
         );
+        if (!readFileSync(tmpFile, "utf-8").startsWith("#!/usr/bin/env node\n")) {
+          throw new Error("Downloaded bundle is missing its executable Node header.");
+        }
+        // Validate the staged ESM bundle before touching the working CLI. Use
+        // this Node executable and argument passing so install paths are literal.
+        const newVersion = execFileSync(process.execPath, [tmpFile, "--version"], {
+          encoding: "utf-8",
+          timeout: 10_000,
+          killSignal: "SIGKILL",
+          env: { ...process.env, SCOPE_NO_UPDATE_CHECK: "1" },
+        }).trim();
+        if (newVersion !== targetTag.slice("cli/v".length)) {
+          throw new Error(`Downloaded bundle version does not match ${targetTag}.`);
+        }
+
         chmodSync(tmpFile, 0o755);
         renameSync(tmpFile, currentBin);
-
-        // Verify
-        const newVersion = execSync(`"${currentBin}" --version`, { encoding: "utf-8" }).trim();
         console.log(`✓ Updated scope to v${newVersion} at ${currentBin}`);
       } catch {
         // Clean up temp file on failure
