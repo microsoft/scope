@@ -12,6 +12,7 @@ vi.mock("node:child_process", () => ({
 // Mock fs operations used during update
 vi.mock("node:fs", () => ({
   chmodSync: vi.fn(),
+  readFileSync: vi.fn(),
   renameSync: vi.fn(),
   unlinkSync: vi.fn(),
 }));
@@ -24,7 +25,7 @@ vi.mock("../utils/update-check.js", () => ({
 
 import { Command } from "commander";
 import { execFileSync, execSync } from "node:child_process";
-import { chmodSync, renameSync, unlinkSync } from "node:fs";
+import { chmodSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 import { fetchLatestVersion } from "../utils/update-check.js";
 import { registerUpdateCommand } from "./update.js";
 
@@ -32,6 +33,7 @@ const mockedExecSync = vi.mocked(execSync);
 const mockedExecFileSync = vi.mocked(execFileSync);
 const mockedFetchLatestVersion = vi.mocked(fetchLatestVersion);
 const mockedChmodSync = vi.mocked(chmodSync);
+const mockedReadFileSync = vi.mocked(readFileSync);
 const mockedRenameSync = vi.mocked(renameSync);
 const mockedUnlinkSync = vi.mocked(unlinkSync);
 
@@ -54,6 +56,7 @@ describe("update command", () => {
     // Simulate bundled CLI
     process.env.SCOPE_CLI_VERSION = "0.2.0";
     mockedExecFileSync.mockReturnValue("0.3.0\n");
+    mockedReadFileSync.mockReturnValue("#!/usr/bin/env node\n");
     // The download has no captured output; the fallback lookup returns its tag.
     mockedExecSync.mockImplementation((cmd: string) => {
       if (typeof cmd === "string" && cmd.includes("gh release list")) {
@@ -185,15 +188,14 @@ describe("update command", () => {
 
     await program.parseAsync(["node", "scope", "update"]);
 
-    expect(mockedExecFileSync).toHaveBeenCalledWith(
-      process.execPath,
-      [expect.stringMatching(/\.tmp\.mjs$/), "--version"],
-      expect.objectContaining({
-        encoding: "utf-8",
-        timeout: 10_000,
-        env: expect.objectContaining({ SCOPE_NO_UPDATE_CHECK: "1" }),
-      }),
-    );
+    expect(mockedExecFileSync).toHaveBeenCalledOnce();
+    const [executable, args, options] = mockedExecFileSync.mock.calls[0];
+    expect(executable).toBe(process.execPath);
+    expect(args).toEqual([expect.stringMatching(/\.tmp\.mjs$/), "--version"]);
+    expect(options?.encoding).toBe("utf-8");
+    expect(options?.timeout).toBe(10_000);
+    expect(options?.killSignal).toBe("SIGKILL");
+    expect(options?.env?.SCOPE_NO_UPDATE_CHECK).toBe("1");
     expect(mockedExecFileSync.mock.invocationCallOrder[0]).toBeLessThan(mockedRenameSync.mock.invocationCallOrder[0]);
     expect(logSpy).toHaveBeenCalledWith(
       expect.stringContaining("Updated scope to v0.3.0"),
@@ -208,6 +210,19 @@ describe("update command", () => {
     expect(mockedRenameSync).not.toHaveBeenCalled();
     expect(mockedUnlinkSync).toHaveBeenCalled();
   });
+
+  it.each(["", "console.log('0.3.0');", "#!/bin/sh\n", "#!/usr/bin/env node\r\n"])(
+    "keeps the current installation for an invalid executable header: %j",
+    async (downloadedSource) => {
+      mockedFetchLatestVersion.mockResolvedValue("0.3.0");
+      mockedReadFileSync.mockReturnValue(downloadedSource);
+
+      await expect(program.parseAsync(["node", "scope", "update"])).rejects.toThrow("process.exit");
+      expect(mockedExecFileSync).not.toHaveBeenCalled();
+      expect(mockedRenameSync).not.toHaveBeenCalled();
+      expect(mockedUnlinkSync).toHaveBeenCalled();
+    },
+  );
 
   it("keeps the current installation when the staged bundle cannot run", async () => {
     mockedFetchLatestVersion.mockResolvedValue("0.3.0");

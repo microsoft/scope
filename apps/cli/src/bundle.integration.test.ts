@@ -236,8 +236,13 @@ describe.skipIf(process.platform === "win32")("standalone CLI update validation"
   }
 
   it.each([
-    ["invalid JavaScript", "this is not JavaScript"],
-    ["wrong version", 'console.log("8.0.0");'],
+    ["invalid JavaScript", "#!/usr/bin/env node\nthis is not JavaScript"],
+    ["missing executable header", 'console.log("9.0.0");'],
+    ["wrong version", '#!/usr/bin/env node\nconsole.log("8.0.0");'],
+    [
+      "a bundle that ignores graceful termination",
+      '#!/usr/bin/env node\nprocess.on("SIGTERM", () => {}); console.log("9.0.0"); setInterval(() => {}, 1000);',
+    ],
   ])("preserves the installed CLI for %s", async (_description, downloadedSource) => {
     const result = await runUpdate(downloadedSource);
     expect(result.failed).toBe(true);
@@ -246,10 +251,14 @@ describe.skipIf(process.platform === "win32")("standalone CLI update validation"
   });
 
   it("installs a matching executable bundle", async () => {
-    const downloadedSource = 'console.log("9.0.0");';
+    const downloadedSource = '#!/usr/bin/env node\nconsole.log("9.0.0");';
     const result = await runUpdate(downloadedSource);
     expect(result.failed).toBe(false);
     expect(result.after).toBe(downloadedSource);
     expect(result.files).toEqual(["gh", "scope"]);
+    const { stdout } = await execFileAsync(join(updateDirectory!, "scope"), ["--version"], {
+      timeout: 10_000,
+    });
+    expect(stdout.trim()).toBe("9.0.0");
   });
 });

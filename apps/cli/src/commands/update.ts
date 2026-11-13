@@ -3,7 +3,7 @@
 
 import { Command } from "commander";
 import { execFileSync, execSync } from "node:child_process";
-import { chmodSync, renameSync, unlinkSync } from "node:fs";
+import { chmodSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import semver from "semver";
 import { getCliName } from "../utils/shared.js";
@@ -72,11 +72,15 @@ export function registerUpdateCommand(program: Command): void {
           `gh release download "${targetTag}" --repo ${RELEASES_REPO} --pattern scope.mjs -O "${tmpFile}" --clobber`,
           { stdio: "inherit" },
         );
+        if (!readFileSync(tmpFile, "utf-8").startsWith("#!/usr/bin/env node\n")) {
+          throw new Error("Downloaded bundle is missing its executable Node header.");
+        }
         // Validate the staged ESM bundle before touching the working CLI. Use
         // this Node executable and argument passing so install paths are literal.
         const newVersion = execFileSync(process.execPath, [tmpFile, "--version"], {
           encoding: "utf-8",
           timeout: 10_000,
+          killSignal: "SIGKILL",
           env: { ...process.env, SCOPE_NO_UPDATE_CHECK: "1" },
         }).trim();
         if (newVersion !== targetTag.slice("cli/v".length)) {
