@@ -34,11 +34,14 @@ packages:
 
 ignoredBuiltDependencies:
   - '@scarf/scarf'
+  # ssh2 works without these optional native accelerators. Scope reaches ssh2
+  # only through Docker test tooling, so keep clean image installs on its
+  # supported JavaScript fallback instead of invoking node-gyp.
+  - cpu-features
+  - ssh2
 
 onlyBuiltDependencies:
   - '@vscode/vsce-sign'
-  - cpu-features
   - esbuild
   - keytar
   - protobufjs
-  - ssh2

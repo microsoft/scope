@@ -1,12 +1,9 @@
 FROM node:22.22.0-slim AS builder
 
 ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
-ENV npm_config_registry=${NPM_CONFIG_REGISTRY} \
-    COREPACK_NPM_REGISTRY=${NPM_CONFIG_REGISTRY}
-# corepack bootstraps pnpm from the registry's per-version metadata endpoint,
-# which some private registry proxies don't serve; fall back to a pinned global
-# install (honors npm_config_registry) so restricted networks can still build.
-RUN corepack enable && (corepack prepare pnpm@10.29.1 --activate || npm install -g pnpm@10.29.1 --force)
+ARG COREPACK_NPM_REGISTRY=
+COPY scripts/bootstrap-pnpm.sh /usr/local/bin/bootstrap-pnpm
+RUN NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY}" COREPACK_NPM_REGISTRY="${COREPACK_NPM_REGISTRY}" sh /usr/local/bin/bootstrap-pnpm
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
@@ -16,7 +13,7 @@ COPY packages/telemetry/package.json ./packages/telemetry/
 COPY packages/model-scanning/package.json ./packages/model-scanning/
 COPY apps/model-scanners/copilot/package.json ./apps/model-scanners/copilot/
 
-RUN pnpm install --frozen-lockfile
+RUN NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY}" pnpm install --frozen-lockfile
 
 COPY packages/shared/tsconfig.json ./packages/shared/
 COPY packages/shared/src ./packages/shared/src/
@@ -34,12 +31,9 @@ FROM node:22.22.0-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
-ENV npm_config_registry=${NPM_CONFIG_REGISTRY} \
-    COREPACK_NPM_REGISTRY=${NPM_CONFIG_REGISTRY}
-# corepack bootstraps pnpm from the registry's per-version metadata endpoint,
-# which some private registry proxies don't serve; fall back to a pinned global
-# install (honors npm_config_registry) so restricted networks can still build.
-RUN corepack enable && (corepack prepare pnpm@10.29.1 --activate || npm install -g pnpm@10.29.1 --force)
+ARG COREPACK_NPM_REGISTRY=
+COPY scripts/bootstrap-pnpm.sh /usr/local/bin/bootstrap-pnpm
+RUN NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY}" COREPACK_NPM_REGISTRY="${COREPACK_NPM_REGISTRY}" sh /usr/local/bin/bootstrap-pnpm
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
@@ -48,7 +42,7 @@ COPY packages/telemetry/package.json ./packages/telemetry/
 COPY packages/model-scanning/package.json ./packages/model-scanning/
 COPY apps/model-scanners/copilot/package.json ./apps/model-scanners/copilot/
 
-RUN pnpm install --frozen-lockfile --prod
+RUN NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY}" pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist/
 COPY --from=builder /app/packages/telemetry/dist ./packages/telemetry/dist/

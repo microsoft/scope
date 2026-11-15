@@ -493,15 +493,36 @@ immediately for permanent errors such as invalid manifests, unknown agents, or
 other 4xx responses. Retry bounds can be configured with the positive-integer
 `SCOPE_REGISTRATION_MAX_ATTEMPTS`,
 `SCOPE_REGISTRATION_BASE_DELAY_SECONDS`, and
-`SCOPE_REGISTRATION_MAX_DELAY_SECONDS` variables. Curl calls are bounded by
-`SCOPE_REGISTRATION_CONNECT_TIMEOUT_SECONDS` (default 5) and
-`SCOPE_REGISTRATION_REQUEST_TIMEOUT_SECONDS` (default 30). Only transient DNS,
-connection, timeout, and transfer failures are retried; permanent curl
-configuration and certificate failures exit immediately. Registration Jobs
-must not hide helper failures with `|| true`.
+`SCOPE_REGISTRATION_MAX_DELAY_SECONDS` variables. BusyBox wget network waits are
+bounded by `SCOPE_REGISTRATION_CONNECT_TIMEOUT_SECONDS` (default 5), and the
+BusyBox `timeout` applet enforces a hard total
+`SCOPE_REGISTRATION_REQUEST_TIMEOUT_SECONDS` deadline (default 30). DNS,
+connection, timeout, interrupted transfer, and other failures without an HTTP
+response are retried within the same bound. Redirect diagnostics can contain
+multiple HTTP status lines, so the helper classifies the final status. Permanent
+HTTP errors exit immediately. BusyBox wget does not always write an HTTP error
+body; when no response body is available, the helper reports the final status
+and the client's bounded diagnostic tail instead. Registration Jobs must not
+hide helper failures with `|| true`.
 
 The OSS Compose `register-agents` service uses this contract for Copilot and
-Claude. It waits for the API's Docker health check (`GET /health` must return
+Claude. It runs as the non-root UID/GID 1000 from the multi-architecture
+`mikefarah/yq` 4.54.1 OCI index, pinned as
+`docker.io/mikefarah/yq:4.54.1@sha256:4b3d9475d65571d28cbb19544d3820ec2945e4c8b2f18279394282b8dc3a592e`.
+The container uses its bundled `yq`, BusyBox `sh`, `wget`, `timeout`, and CA
+certificates instead of installing packages at startup. It has a read-only root
+filesystem, drops all capabilities, forbids privilege escalation, and receives
+only a small writable `/tmp` tmpfs; worker manifests and the registration helper
+are mounted read-only.
+
+The reviewed upstream image is unsigned and has no authoritative signed image
+SBOM. Its Alpine musl 1.2.6-r2 and zlib 1.3.2-r0 packages have known High CVEs.
+Those residual findings are accepted for this one-shot registration workload:
+the `yq` binary is CGO-disabled, and neither vulnerable package path is exercised
+by manifest conversion or the static HTTP registration flow. Reassess the pinned
+digest when upgrading the image or expanding the service's responsibilities.
+
+The service waits for the API's Docker health check (`GET /health` must return
 200), not merely for the API container to start. The probe uses Node's built-in
 HTTP client, runs every 5 seconds with a 3-second timeout, and allows a 120-second
 startup grace period followed by 12 consecutive failures before marking the API
