@@ -125,7 +125,7 @@ pub struct SessionCreateRequest {
     pub id: String,
     pub plugins: Option<HashMap<String, serde_json::Value>>,
     /// Maximum session duration in seconds. Used as the TTL for Redis keys.
-    /// Falls back to `plugins.plugin.max_session_duration_secs` then 3600s.
+    /// Falls back to `plugins.plugin.max_session_duration_secs` then 7200s.
     #[serde(rename = "maxSessionDurationSecs")]
     pub max_session_duration_secs: Option<u64>,
 }
