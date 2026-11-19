@@ -195,6 +195,9 @@ apiRoute(ctx.app, ctx.registry, {
             ...(autoDefault ? { defaultModel: autoDefault } : {}),
             updatedAt: new Date(),
           },
+          // A default must name an active model. Clear it when the last
+          // catalog disappears; a future sync chooses a new default as usual.
+          ...(activeModelIds.length === 0 ? { $unset: { defaultModel: "" as const } } : {}),
         },
       );
     }
