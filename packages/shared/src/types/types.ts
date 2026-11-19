@@ -828,6 +828,13 @@ export interface TaskPromptDocument {
    */
   keyId: string;
   /**
+   * Optional human-readable label (e.g. `"cosmosdb-ecommerce-order-api"`) so a
+   * prompt can be recognised without reading its text (#176). Purely a label:
+   * it is not part of the content address, is not unique, and can be changed
+   * or cleared at any time without affecting `_id`/`keyId`.
+   */
+  name?: string;
+  /**
    * Inline prompt body. Present when the body is small enough to store in
    * Mongo (≤ PROMPT_INLINE_MAX_BYTES). Mutually exclusive with
    * `contentBlobUrl` — exactly one is set. Optional so large bodies can live

@@ -31,6 +31,7 @@ prompt text its own record, Scope can:
 | Field | Type | Description |
 | --- | --- | --- |
 | `_id` | string | Stable identifier (assigned by Scope). |
+| `name` | string (optional) | Human-readable label, e.g. `ecommerce-order-api`. Not part of the identity; editable any time. |
 | `text` | string | The full prompt text. Unique across the catalog. |
 | `features` | object | Detected prompt features (populated by extraction). |
 | `featuresExtractedAt` | string (ISO-8601) | Last extraction timestamp. |
@@ -63,16 +64,53 @@ Content-Type: application/json
 Creation is **idempotent by text** — submitting the same text returns
 the existing record rather than creating a duplicate.
 
+## Name a task prompt
+
+Prompt IDs are derived from the text, so they're unreadable on their
+own. Give a prompt a **name** (1–100 characters, e.g.
+`ecommerce-order-api`) to find it quickly, for example when comparing a
+baseline and a with-skills run of the same task. The name is only a
+label: it doesn't change the prompt's ID or text, isn't required to be
+unique, and can be changed or removed at any time.
+
+- **Portal:** enter an optional name when creating a prompt, or use the
+  pencil next to **Name** on the prompt's detail page. Named prompts
+  show their name as the primary label in the list.
+- **CLI:** `scope task-prompt create --text "…" --name ecommerce-order-api`,
+  then `scope task-prompt rename --id <id> --name <new-name>` or
+  `--clear` to remove it.
+- **REST API:**
+
+  ```http
+  POST /api/v1/task-prompts
+  Content-Type: application/json
+
+  { "text": "Create a Hello World Node.js / Express REST API.", "name": "hello-express" }
+  ```
+
+  ```http
+  PATCH /api/v1/task-prompts/{id}
+  Content-Type: application/json
+
+  { "name": "hello-express-v2" }
+  ```
+
+  Send `{ "name": null }` to clear it.
+
+Creating a prompt whose text already exists fills in the name only if
+the existing record has none. It never overwrites an existing name;
+use rename for that.
+
 ## Browse and search
 
 The **Tasks** page lists every task prompt. Use the search box to find
-prompts by text. Each entry links to a detail page showing the prompt
+prompts by name or text. Each entry links to a detail page showing the prompt
 text, detected features, and runs that referenced it.
 
 REST equivalents:
 
 ```http
-GET /api/v1/task-prompts
+GET /api/v1/task-prompts?search=order-api
 ```
 
 ```http

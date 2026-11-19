@@ -1001,6 +1001,7 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
       "create": {
         "options": [
           "--file",
+          "--name",
           "--project",
           "--text",
           "--type",
@@ -1037,6 +1038,14 @@ exports[`CLI command registration > full command tree matches snapshot 1`] = `
           "--project",
           "--search",
           "--type",
+          "--url",
+        ],
+      },
+      "rename": {
+        "options": [
+          "--clear",
+          "--id",
+          "--name",
           "--url",
         ],
       },

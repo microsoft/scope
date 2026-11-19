@@ -30,7 +30,7 @@ withProjectOption(withOutputOption(
 taskPrompt
   .command("list")
   .description("List all task prompts")
-  .option("-s, --search <search>", "Filter by text content")
+  .option("-s, --search <search>", "Filter by name or text content")
   .option("--type <type>", "Filter by prompt type/gate (select, build, test, run, deploy, agents.md)")
   .option("-l, --limit <n>", "Maximum number of results", "50")
   .option("--offset <n>", "Number of results to skip", "0")
@@ -55,7 +55,7 @@ taskPrompt
         process.exit(1);
       }
 
-      const data = await response.json() as { items: Array<{ _id: string; text: string; type?: PromptType; features?: Array<{ featureId: string; detected: boolean; evaluated: boolean }>; createdAt: string }>; total: number };
+      const data = await response.json() as { items: Array<{ _id: string; name?: string; text: string; type?: PromptType; features?: Array<{ featureId: string; detected: boolean; evaluated: boolean }>; createdAt: string }>; total: number };
       if (data.items.length === 0) {
         if (!isMachineReadable(format)) console.log(warnBanner("No task prompts found."));
         return;
@@ -69,6 +69,9 @@ taskPrompt
         { key: '_id', label: 'ID',
           formatter: (tp: any) => tp._id.substring(0, 8) + '…',
           tableFormatter: (tp: any) => value(tp._id.substring(0, 8) + '…'),
+        },
+        { key: 'name', label: 'Name', formatter: (tp: any) => tp.name ?? '—',
+          tableFormatter: (tp: any) => tp.name ? value(tp.name) : dimTimestamp('—'),
         },
         { key: 'type', label: 'Type', formatter: (tp: any) => tp.type ?? 'select' },
         { key: 'text', label: 'Text', formatter: (tp: any) => {
@@ -115,7 +118,7 @@ taskPrompt
       }
 
       const tp = await response.json() as {
-        _id: string; text?: string; type?: PromptType; contentBlobUrl?: string;
+        _id: string; name?: string; text?: string; type?: PromptType; contentBlobUrl?: string;
         features?: Array<{ featureId: string; detected: boolean; evaluated: boolean }>;
         featuresExtractedAt?: string;
         createdAt: string; deletedAt?: string;
@@ -124,6 +127,7 @@ taskPrompt
       if (isMachineReadable(format)) {
         const fields: DisplayField[] = [
           { key: '_id', label: 'ID' },
+          { key: 'name', label: 'Name' },
           { key: 'text', label: 'Text' },
           { key: 'type', label: 'Type', formatter: (item: any) => item.type ?? 'select' },
           { key: 'features', label: 'Features', formatter: (item: any) => {
@@ -140,6 +144,7 @@ taskPrompt
       }
 
       console.log(`${label('ID:')}        ${value(tp._id)}`);
+      console.log(`${label('Name:')}      ${tp.name ? value(tp.name) : dimTimestamp('(none)')}`);
       console.log(`${label('Type:')}      ${value(tp.type ?? 'select')}`);
       console.log(`${label('Created:')}   ${value(tp.createdAt)}`);
       if (tp.deletedAt) console.log(`${label('Deleted:')}   ${value(tp.deletedAt)}`);
@@ -189,6 +194,7 @@ taskPrompt
   .option("-t, --text <text>", "Task prompt text")
   .option("-f, --file <path>", "Read task prompt text from file")
   .option("--type <type>", "Prompt type/gate", "select")
+  .option("-n, --name <name>", "Human-readable name (fills in a missing name if the text already exists)")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
   .option("--project <id>", "Project ID for scoped operations (overrides SCOPE_PROJECT and the saved selection)")
   .action(async (options) => {
@@ -212,7 +218,7 @@ taskPrompt
       const response = await apiFetch(options.url, `/task-prompts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, type }),
+        body: JSON.stringify({ text, type, ...(options.name ? { name: options.name } : {}) }),
         projectId,
       });
 
@@ -222,11 +228,47 @@ taskPrompt
         process.exit(1);
       }
 
-      const tp = await response.json() as { _id: string; text?: string; type?: PromptType; createdAt: string };
+      const tp = await response.json() as { _id: string; name?: string; text?: string; type?: PromptType; createdAt: string };
       console.log(successText(`Task prompt registered.`));
       console.log(`${label('ID:')}      ${value(tp._id)}`);
+      if (tp.name) console.log(`${label('Name:')}    ${value(tp.name)}`);
       console.log(`${label('Type:')}    ${value(tp.type ?? type)}`);
       console.log(`${label('Created:')} ${value(tp.createdAt)}`);
+    } catch (error) {
+      console.error(errorText("Error:"), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+taskPrompt
+  .command("rename")
+  .description("Set or clear a task prompt's human-readable name (text and ID are unchanged)")
+  .requiredOption("-i, --id <id>", "Task prompt ID (UUID)")
+  .option("-n, --name <name>", "New name")
+  .option("--clear", "Remove the name")
+  .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
+  .action(async (options) => {
+    try {
+      // Exactly one of --name / --clear decides what to send.
+      if (Boolean(options.name) === Boolean(options.clear)) {
+        console.error(errorText("Error: provide either --name <name> or --clear"));
+        process.exit(1);
+      }
+
+      const response = await apiFetch(options.url, `/task-prompts/${encodeURIComponent(options.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: options.clear ? null : options.name }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error(errorText("Error:"), error.error || JSON.stringify(error));
+        process.exit(1);
+      }
+
+      const tp = await response.json() as { _id: string; name?: string };
+      console.log(successText(tp.name ? `Task prompt ${tp._id} renamed to "${tp.name}".` : `Name cleared on task prompt ${tp._id}.`));
     } catch (error) {
       console.error(errorText("Error:"), error instanceof Error ? error.message : error);
       process.exit(1);

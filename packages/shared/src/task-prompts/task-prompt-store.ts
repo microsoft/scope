@@ -107,11 +107,16 @@ export class TaskPromptStore {
    * **miss** (and the doc stores only a `contentBlobUrl`); smaller bodies are
    * stored inline. The dedup/lookup is by `{ projectId, keyId }` and never
    * touches blob.
+   *
+   * @param name - Optional human-readable label. Set on a new prompt; on an
+   *   existing match it only fills in a missing name and never overwrites one
+   *   (use {@link rename} to change it).
    */
   async findOrCreate(
     projectId: string,
     text: string,
     type: PromptType = 'select',
+    name?: string,
   ): Promise<TaskPromptDocument> {
     const trimmed = text.trim();
     const keyId = computePromptId(type, trimmed);
@@ -123,6 +128,7 @@ export class TaskPromptStore {
       const patch: Record<string, unknown> = {};
       const unset: Record<string, unknown> = {};
       if (existing.type === undefined) patch.type = type;
+      if (name && !existing.name) patch.name = name;
       if (existing.deletedAt) unset.deletedAt = '';
       if (Object.keys(patch).length > 0 || Object.keys(unset).length > 0) {
         await this.collection.updateOne(
@@ -151,6 +157,7 @@ export class TaskPromptStore {
       projectId,
       keyId,
       type,
+      ...(name ? { name } : {}),
       createdAt: new Date(),
     };
 
@@ -176,7 +183,7 @@ export class TaskPromptStore {
 
   /**
    * List active (non-deleted) task prompts.
-   * Supports pagination, optional substring search on text, and an optional
+   * Supports pagination, optional case-insensitive search on name or text, and an optional
    * `type` filter. Pass a `type` (e.g. `'select'` or `'agents.md'`) to scope the
    * list to a single type. With no `type`, all prompt types are returned — gate
    * prompts, non-gate types such as `agents.md`, and legacy untyped docs.
@@ -194,7 +201,8 @@ export class TaskPromptStore {
       filter.projectId = opts.projectId;
     }
     if (opts?.search) {
-      filter.text = { $regex: opts.search, $options: 'i' };
+      const pattern = { $regex: opts.search, $options: 'i' };
+      filter.$or = [{ name: pattern }, { text: pattern }];
     }
     if (opts?.type) {
       filter.type = opts.type;
@@ -214,6 +222,27 @@ export class TaskPromptStore {
 
     const items = await cursor.toArray();
     return { items, total };
+  }
+
+  /**
+   * Set or clear a task prompt's human-readable name. The name is a label
+   * only, so this never changes the prompt's identity (`_id` / `keyId`).
+   *
+   * @param name - New name, or `null` to remove it.
+   * @throws Error when the prompt does not exist or is soft-deleted.
+   */
+  async rename(id: string, name: string | null): Promise<TaskPromptDocument> {
+    const existing = await this.get(id);
+    if (!existing) {
+      throw new Error(`Task prompt '${id}' not found`);
+    }
+
+    await this.collection.updateOne(
+      { _id: id, deletedAt: { $exists: false } },
+      name === null ? { $unset: { name: '' } } : { $set: { name } },
+    );
+
+    return (await this.get(id))!;
   }
 
   /** Soft-delete a task prompt */

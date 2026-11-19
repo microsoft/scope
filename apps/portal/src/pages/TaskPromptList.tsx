@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import type { TaskPrompt, PromptType } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -24,6 +25,7 @@ import { formatDate, formatId, truncate } from "@/lib/utils";
 import { TaskPromptFeatures } from "@/components/TaskPromptFeatures";
 import { TaskPromptBadge } from "@/components/TaskPromptBadge";
 import { TaskPromptPicker } from "@/components/TaskPromptPicker";
+import { TASK_PROMPT_NAME_MAX_LENGTH } from "@/components/TaskPromptNameEditor";
 import { Stepper } from "@/components/Stepper";
 import { GATE_METADATA, promptTypeLabel } from "@/lib/gates";
 import { useVisibleGates } from "@/hooks/useVisibleGates";
@@ -51,7 +53,7 @@ const FILTER_KEYS = ["type"] as const;
 
 const COLUMN_OPTIONS: CustomizeColumnsOption[] = [
   { id: "id", label: "ID", required: true },
-  { id: "text", label: "Text" },
+  { id: "text", label: "Prompt" },
   { id: "type", label: "Type" },
   { id: "features", label: "Features" },
   { id: "created", label: "Created" },
@@ -63,6 +65,7 @@ export function TaskPromptList() {
   const [dialogStep, setDialogStep] = useState<1 | 2>(1);
   const [newText, setNewText] = useState("");
   const [newType, setNewType] = useState<PromptType>("select");
+  const [newName, setNewName] = useState("");
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const visibleGates = useVisibleGates();
   const queryClient = useQueryClient();
@@ -105,7 +108,8 @@ export function TaskPromptList() {
   });
 
   const createMutation = useMutation({
-    mutationFn: ({ text, type }: { text: string; type: PromptType }) => api.createTaskPrompt(text, type),
+    mutationFn: ({ text, type, name }: { text: string; type: PromptType; name?: string }) =>
+      api.createTaskPrompt(text, type, name),
     onSuccess: (prompt) => {
       queryClient.invalidateQueries({ queryKey: ["task-prompts"] });
       resetDialog();
@@ -118,6 +122,7 @@ export function TaskPromptList() {
     setDialogStep(1);
     setNewText("");
     setNewType("select");
+    setNewName("");
     createMutation.reset();
   };
 
@@ -177,11 +182,19 @@ export function TaskPromptList() {
     },
     {
       id: "text",
-      header: "Text",
+      header: "Prompt",
+      sortable: true,
       hidden: visibility.isHidden("text"),
-      cell: (tp) => (
-        <span className="text-sm text-muted-foreground">{truncate(tp.text ?? "", 80)}</span>
-      ),
+      // The name is the primary label when set; the text stays visible below it.
+      cell: (tp) =>
+        tp.name ? (
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-medium">{tp.name}</span>
+            <span className="truncate text-xs text-muted-foreground">{truncate(tp.text ?? "", 80)}</span>
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">{truncate(tp.text ?? "", 80)}</span>
+        ),
     },
     {
       id: "type",
@@ -321,6 +334,13 @@ export function TaskPromptList() {
                     </SelectContent>
                   </Select>
                 </div>
+                <Input
+                  aria-label="Task prompt name"
+                  placeholder="Name (optional), e.g. ecommerce-order-api"
+                  value={newName}
+                  maxLength={TASK_PROMPT_NAME_MAX_LENGTH}
+                  onChange={(e) => setNewName(e.target.value)}
+                />
                 <TaskPromptPicker type={newType} onSelect={(text) => setNewText(text)} />
                 <Textarea
                   placeholder="Enter task prompt text..."
@@ -346,6 +366,12 @@ export function TaskPromptList() {
               </>
             ) : (
               <>
+                {newName.trim() && (
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Name:</span>{" "}
+                    <span className="font-medium">{newName.trim()}</span>
+                  </p>
+                )}
                 <pre className="whitespace-pre-wrap text-sm bg-muted p-3 rounded-md font-mono leading-relaxed max-h-[150px] overflow-y-auto">
                   {newText}
                 </pre>
@@ -368,7 +394,7 @@ export function TaskPromptList() {
                     <ArrowLeft className="h-4 w-4" /> Back
                   </Button>
                   <Button
-                    onClick={() => createMutation.mutate({ text: newText, type: newType })}
+                    onClick={() => createMutation.mutate({ text: newText, type: newType, name: newName.trim() || undefined })}
                     disabled={createMutation.isPending}
                     className="gap-1.5"
                     data-command-enter
@@ -514,6 +540,9 @@ function sortKey(a: TaskPrompt, col: string): string | number {
   switch (col) {
     case "id":
       return a._id;
+    case "text":
+      // Named prompts sort by name; unnamed ones by their text.
+      return (a.name ?? a.text ?? "").toLowerCase();
     case "created":
       return new Date(a.createdAt).getTime();
     default:

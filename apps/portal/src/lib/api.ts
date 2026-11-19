@@ -558,12 +558,23 @@ export const api = {
     return request(`/task-prompts/${encodeURIComponent(id)}/content`);
   },
 
-  /** Create (or find existing) task prompt — idempotent */
-  createTaskPrompt: (text: string, type?: PromptType): Promise<TaskPrompt> => {
+  /**
+   * Create (or find existing) task prompt — idempotent. `name` labels a new
+   * prompt, or fills in a missing name on an existing match.
+   */
+  createTaskPrompt: (text: string, type?: PromptType, name?: string): Promise<TaskPrompt> => {
     return request("/task-prompts", {
       method: "POST",
-      body: JSON.stringify({ text, ...(type ? { type } : {}) }),
+      body: JSON.stringify({ text, ...(type ? { type } : {}), ...(name ? { name } : {}) }),
     }, { scoped: true });
+  },
+
+  /** Set a task prompt's human-readable name, or clear it with `null` */
+  renameTaskPrompt: (id: string, name: string | null): Promise<TaskPrompt> => {
+    return request(`/task-prompts/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
   },
 
   /** Soft-delete a task prompt */
