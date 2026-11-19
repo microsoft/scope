@@ -240,8 +240,8 @@ strictly ordered **migrate-then-enforce**:
    never an "unset" window and no read-time coalescing is needed. Any doc still missing
    `projectId` afterward is a bug to surface, not silently bucketed.
 2. **Ship the `projectId`-aware clients** (API + CLI + Portal) together.
-3. **Then enforce.** Because all first-party callers ship in this monorepo and deploy together
-   (there are no external API consumers), enforcement is **hard-400 from day one** — a scoped
+3. **Then enforce.** First-party callers ship in this monorepo; external integrations must
+   add `?projectId=` before upgrading. Enforcement is **hard-400 from day one** — a scoped
    request without a resolvable project is rejected immediately rather than run through a
    soft log-and-warn window. Deploying the migration before the enforcing API guarantees live
    traffic never 400s on already-stored data.
