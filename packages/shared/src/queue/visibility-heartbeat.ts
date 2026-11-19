@@ -9,6 +9,74 @@ export const HEARTBEAT_INTERVAL_MS = 15_000;
  *  Set to 4× the interval so up to 3 consecutive tick failures can occur
  *  before the message reappears for another worker. */
 export const HEARTBEAT_VISIBILITY_SECONDS = 60;
+/** Client-side deadline for a single `updateMessage` call (ms).
+ *  The Azure SDK has no request timeout of its own, so a frozen queue
+ *  endpoint would otherwise block the visibility loop forever without ever
+ *  reporting a failed tick (issue #805). Kept below the interval so a hung
+ *  request is reported before the next tick is due. */
+export const HEARTBEAT_REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * Error raised when a visibility extension does not settle within its
+ * client-side deadline.
+ */
+export class HeartbeatRequestTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Visibility heartbeat updateMessage timed out after ${timeoutMs}ms`);
+    this.name = "HeartbeatRequestTimeoutError";
+  }
+}
+
+/**
+ * Extend a message's visibility with a client-side deadline.
+ *
+ * The request is cancelled through the SDK's `abortSignal` when either the
+ * deadline elapses or the heartbeat is stopped. The call is also raced
+ * against the deadline so the loop makes progress even if the transport
+ * ignores the abort signal.
+ *
+ * @param queueClient - Queue holding the in-flight message.
+ * @param messageId - Message whose visibility is extended.
+ * @param popReceipt - Latest pop receipt for the message.
+ * @param visibilityTimeoutSeconds - New server-side visibility window (seconds).
+ * @param timeoutMs - Client-side deadline for the request (ms).
+ * @param stopSignal - Aborted when the heartbeat stops; cancels the request.
+ * @returns The new pop receipt.
+ * @throws {HeartbeatRequestTimeoutError} When the deadline elapses first.
+ */
+async function updateMessageWithTimeout(
+  queueClient: QueueClient,
+  messageId: string,
+  popReceipt: string,
+  visibilityTimeoutSeconds: number,
+  timeoutMs: number,
+  stopSignal: AbortSignal,
+): Promise<string> {
+  const requestAbort = new AbortController();
+  const abortRequest = () => requestAbort.abort();
+  stopSignal.addEventListener("abort", abortRequest, { once: true });
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      requestAbort.abort();
+      reject(new HeartbeatRequestTimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    const response = await Promise.race([
+      queueClient.updateMessage(messageId, popReceipt, undefined, visibilityTimeoutSeconds, {
+        abortSignal: requestAbort.signal,
+      }),
+      deadline,
+    ]);
+    return response.popReceipt!;
+  } finally {
+    clearTimeout(timer);
+    stopSignal.removeEventListener("abort", abortRequest);
+  }
+}
 
 /**
  * Handle returned by {@link startVisibilityHeartbeat}.
@@ -60,6 +128,12 @@ export type HeartbeatTickCallback = (tickInfo: { tickCount: number }) => Promise
  *      "stale heartbeat" (see issue #1064). Each loop tolerates the other
  *      failing.
  *
+ * Each visibility extension has a client-side deadline
+ * ({@link HEARTBEAT_REQUEST_TIMEOUT_MS} by default), so a frozen queue
+ * endpoint surfaces as a failed tick instead of silently stalling the loop.
+ *
+ * @param requestTimeoutMs - Client-side deadline for each `updateMessage`
+ *   call (ms). Defaults to {@link HEARTBEAT_REQUEST_TIMEOUT_MS}.
  * @returns A handle to stop the heartbeat and retrieve the latest pop receipt.
  */
 export function startVisibilityHeartbeat(
@@ -71,6 +145,7 @@ export function startVisibilityHeartbeat(
   visibilityTimeoutSeconds: number = HEARTBEAT_VISIBILITY_SECONDS,
   context: HeartbeatLogContext = {},
   onTick?: HeartbeatTickCallback,
+  requestTimeoutMs: number = HEARTBEAT_REQUEST_TIMEOUT_MS,
 ): VisibilityHeartbeat {
   let popReceipt = initialPopReceipt;
   let tickCount = 0;
@@ -103,10 +178,9 @@ export function startVisibilityHeartbeat(
       });
       if (abort.signal.aborted) break;
       try {
-        const response = await queueClient.updateMessage(
-          messageId, popReceipt, undefined, visibilityTimeoutSeconds,
+        popReceipt = await updateMessageWithTimeout(
+          queueClient, messageId, popReceipt, visibilityTimeoutSeconds, requestTimeoutMs, abort.signal,
         );
-        popReceipt = response.popReceipt!;
         tickCount++;
         failureCount = 0;
         console.log(
