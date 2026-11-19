@@ -781,7 +781,7 @@ describe("run import/export — round-trip (export → import)", () => {
         startedAt: new Date("2026-05-11T23:04:37.172Z"),
         finishedAt: new Date("2026-05-11T23:04:47.446Z"),
         durationMs: 10274, // finishedAt − startedAt; computed on write at import time
-        workerVersion: "copilot-unknown-unknown-unknown",
+        worker: { instanceId: "instance-rich-1", version: "copilot-unknown-unknown-unknown" },
         aiCallCount: 2,
         os: { platform: "linux", release: "6.6.114.1", arch: "x64" },
         tokenUsage: { promptTokens: 16, completionTokens: 397, totalTokens: 413 },
@@ -950,6 +950,58 @@ describe("run import/export — round-trip (export → import)", () => {
     expect(target.run.turns[0].toolCallsUrl).toMatch(
       new RegExp(`/snapshots/${requestId}/iteration-1/tool-calls\\.jsonl$`),
     );
+  });
+});
+
+describe("run import — legacy run.workerVersion (#855)", () => {
+  /** Minimal terminal run.yaml; `runExtra` lines are appended under `run:`. */
+  function makeYaml(id: string, runExtra: string[]) {
+    return [
+      `_id: ${id}`,
+      `projectId: ${TEST_PROJECT_ID}`,
+      `scenario:`,
+      `  task: "legacy worker version"`,
+      `  criteria: []`,
+      `workerType: coder-acp-copilot`,
+      `createdAt: 2026-01-01T00:00:00Z`,
+      `run:`,
+      `  _id: ${id}`,
+      `  attemptNumber: 1`,
+      `  status: done`,
+      ...runExtra,
+    ].join("\n") + "\n";
+  }
+
+  /** Upload a single-run archive and return the inserted request document. */
+  async function importYaml(id: string, yaml: string) {
+    const reqCollection = makeRequestCollection();
+    const app = buildApp(reqCollection, makeTaskPromptStore());
+    const archive = await buildTarGz({ [`${id}/run.yaml`]: yaml });
+
+    const res = await request(app)
+      .post(`/api/v1/runs/upload?projectId=${TEST_PROJECT_ID}`)
+      .attach("archive", archive, "archive.tar.gz");
+
+    expect(res.status).toBe(201);
+    return reqCollection.docs.get(id);
+  }
+
+  it("moves a legacy run.workerVersion into run.worker.version", async () => {
+    const inserted = await importYaml("legacy-wv-1", makeYaml("legacy-wv-1", [`  workerVersion: copilot-1.0-20260101T000000Z-abc`]));
+
+    expect(inserted.run.worker).toEqual({ version: "copilot-1.0-20260101T000000Z-abc" });
+    expect(inserted.run).not.toHaveProperty("workerVersion");
+  });
+
+  it("keeps existing worker identity alongside the folded version", async () => {
+    const inserted = await importYaml("legacy-wv-2", makeYaml("legacy-wv-2", [
+      `  workerVersion: copilot-1.0-x-y`,
+      `  worker:`,
+      `    instanceId: inst-1`,
+      `    podName: pod-a`,
+    ]));
+
+    expect(inserted.run.worker).toEqual({ instanceId: "inst-1", podName: "pod-a", version: "copilot-1.0-x-y" });
   });
 });
 

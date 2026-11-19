@@ -301,7 +301,7 @@ describe("CodingAgentQueueProcessor.handleRequest redelivery handling", () => {
     });
     // Atomic claim is now gated on the *current* worker identity (or its
     // absence), not on heartbeat timestamps.
-    expect(filter["run.worker"]).toEqual({ $exists: false });
+    expect(filter["run.worker.instanceId"]).toEqual({ $exists: false });
     expect(update.$set["run.status"]).toBe("done");
     expect(update.$set["run.outcome"]).toBe("failed");
     expect(update.$set["run.error"]).toMatch(/Worker presumed dead/);
@@ -536,6 +536,15 @@ describe("CodingAgentQueueProcessor pre-processing failures", () => {
       "run.status": "queued",
       "run.queuedQueueName": "test-queue",
     });
+    // The claim stamps the worker build inside run.worker, never the legacy
+    // top-level run.workerVersion (issue #855).
+    const claimSet = updateOne.mock.calls[0][1].$set;
+    expect(claimSet["run.worker"]).toEqual({
+      instanceId: (qp as any).instanceId,
+      ...((qp as any).podName ? { podName: (qp as any).podName } : {}),
+      version: expect.stringMatching(/^test-1\.0\.0-/),
+    });
+    expect(claimSet).not.toHaveProperty("run.workerVersion");
     expect(updateOne.mock.calls[1][0]).toEqual({
       _id: requestId,
       "run._id": runId,

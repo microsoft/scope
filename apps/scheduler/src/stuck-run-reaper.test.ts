@@ -219,7 +219,7 @@ describe("StuckRunReaper", () => {
     expect(errSpy).toHaveBeenCalled();
   });
 
-  it("uses {run.worker:{$exists:false}} filter when worker identity is absent", async () => {
+  it("uses {run.worker.instanceId:{$exists:false}} filter when worker identity is absent", async () => {
     const docs = [{ _id: "req-1", run: { _id: "run-1", startedAt: OLD() } }];
     const collection = mockCollection(docs);
     const store = new InMemoryHeartbeatStore();
@@ -228,8 +228,23 @@ describe("StuckRunReaper", () => {
     await reaper.sweep();
     await reaper.sweep();
     const [filter] = collection.findOneAndUpdate.mock.calls[0];
-    expect(filter).toMatchObject({ "run.worker": { $exists: false } });
-    expect(filter).not.toHaveProperty("run.worker.instanceId");
+    expect(filter).toMatchObject({ "run.worker.instanceId": { $exists: false } });
+    expect(filter).not.toHaveProperty("run.worker");
+  });
+
+  it("treats a legacy version-only worker sub-document as having no owner (#855)", async () => {
+    // Migration 031 moves a pre-#846 run's version into run.worker.version
+    // without an instanceId — the claim must still match that document.
+    const docs = [{ _id: "req-1", run: { _id: "run-1", startedAt: OLD(), worker: { version: "v-legacy" } } }];
+    const collection = mockCollection(docs);
+    const store = new InMemoryHeartbeatStore();
+    const reaper = makeReaper(collection, store);
+
+    await reaper.sweep();
+    await reaper.sweep();
+    const [filter, update] = collection.findOneAndUpdate.mock.calls[0];
+    expect(filter).toMatchObject({ "run.worker.instanceId": { $exists: false } });
+    expect(update.$set["run.error"]).toMatch(/instance=unknown/);
   });
 
   it("does not delete the heartbeat when the claim no-ops (ownership changed)", async () => {

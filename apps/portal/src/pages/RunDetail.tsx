@@ -692,7 +692,7 @@ export function RunDetail() {
               {run.agentVersion && (
                 <MetaItem
                   label="Version"
-                  title={activeRun?.workerVersion ? `Worker: ${activeRun?.workerVersion}` : undefined}
+                  title={activeRun?.worker?.version ? `Worker: ${activeRun.worker.version}` : undefined}
                   value={<span className="font-mono">{run.agentVersion}</span>}
                 />
               )}
@@ -1363,7 +1363,7 @@ export function RunDetail() {
             )}
 
             {/* Version Info card */}
-            {(run.agentVersion || activeRun?.workerVersion || activeRun?.os) && (
+            {(run.agentVersion || activeRun?.worker?.version || activeRun?.os) && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Version Info</CardTitle>
@@ -1375,10 +1375,10 @@ export function RunDetail() {
                       <span className="font-mono font-medium">{run.agentVersion}</span>
                     </div>
                   )}
-                  {activeRun?.workerVersion && (
+                  {activeRun?.worker?.version && (
                     <div>
                       <span className="text-muted-foreground">Worker Version:</span>{" "}
-                      <span className="font-mono font-medium">{activeRun?.workerVersion}</span>
+                      <span className="font-mono font-medium">{activeRun.worker.version}</span>
                     </div>
                   )}
                   {activeRun?.os && (

@@ -289,7 +289,7 @@ export class StuckRunReaper {
       if (startedAt && startedAt.getTime() > cutoff) continue;
       const worker = run.worker;
       const workerDesc = worker
-        ? `instance=${worker.instanceId}${worker.podName ? ` pod=${worker.podName}` : ""}`
+        ? `instance=${worker.instanceId ?? "unknown"}${worker.podName ? ` pod=${worker.podName}` : ""}`
         : "unknown worker";
       out.push({
         _id: d._id as any,
@@ -335,7 +335,7 @@ export class StuckRunReaper {
         "run.status": "processing",
         ...(c.ownerInstanceId
           ? { "run.worker.instanceId": c.ownerInstanceId }
-          : { "run.worker": { $exists: false } }),
+          : { "run.worker.instanceId": { $exists: false } }),
       } as any,
       {
         $set: {

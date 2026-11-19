@@ -135,21 +135,21 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
     await this.enqueuePostProcessing(requestId, runId);
   }
 
-  /** Build workerVersion and OS fields for stamping on request documents.
-   *  agentVersion is set at submission time by the API — the worker only adds workerVersion.
+  /** Build the worker build version and OS fields for stamping on request documents.
+   *  agentVersion is set at submission time by the API — the worker only adds
+   *  its build version (stored as `run.worker.version`, issue #855).
    *  OS info is always captured regardless of agentVersion availability. */
-  private getVersionFields(): { os: OsInfo; workerVersion?: string } {
-    const fields: { os: OsInfo; workerVersion?: string } = {
+  private getVersionFields(): { os: OsInfo; workerVersion: string } {
+    const gitCommit = process.env.GIT_COMMIT || "unknown";
+    const buildTime = process.env.BUILD_TIME || "unknown";
+    return {
       os: {
         platform: os.platform(),
         release: os.release(),
         arch: os.arch(),
       },
+      workerVersion: `${this.runtimeAgentVersion}-${buildTime}-${gitCommit}`,
     };
-    const gitCommit = process.env.GIT_COMMIT || "unknown";
-    const buildTime = process.env.BUILD_TIME || "unknown";
-    fields.workerVersion = `${this.runtimeAgentVersion}-${buildTime}-${gitCommit}`;
-    return fields;
   }
 
   protected async handleRequest(
@@ -285,7 +285,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
         : (!startedAt || Date.now() - startedAt.getTime() > staleThresholdMs);
       const workerInfo = requestDoc.run.worker;
       const workerDesc = workerInfo
-        ? `instance=${workerInfo.instanceId}${workerInfo.podName ? ` pod=${workerInfo.podName}` : ""}`
+        ? `instance=${workerInfo.instanceId ?? "unknown"}${workerInfo.podName ? ` pod=${workerInfo.podName}` : ""}`
         : "unknown worker";
 
       if (!isStale) {
@@ -330,7 +330,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
           "run.status": "processing",
           ...(currentOwnerId
             ? { "run.worker.instanceId": currentOwnerId }
-            : { "run.worker": { $exists: false } }),
+            : { "run.worker.instanceId": { $exists: false } }),
         } as any,
         {
           $set: {
@@ -516,13 +516,14 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
           "run.status": "processing",
           "run.startedAt": startedAt,
           "run.updatedAt": startedAt,
+          // Worker identity and build are one sub-document (issue #855).
           "run.worker": {
             instanceId: this.instanceId,
             ...(this.podName ? { podName: this.podName } : {}),
+            version: versionFields.workerVersion,
           },
           "run.turns": [],
           gateSummaries: [],
-          "run.workerVersion": versionFields.workerVersion,
           "run.os": versionFields.os,
           updatedAt: startedAt,
         },
@@ -539,6 +540,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
     requestDoc.run!.worker = {
       instanceId: this.instanceId,
       ...(this.podName ? { podName: this.podName } : {}),
+      version: versionFields.workerVersion,
     };
 
     // Seed liveness immediately so a fast redelivery observes this claim.

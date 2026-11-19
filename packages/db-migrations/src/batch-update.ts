@@ -88,3 +88,35 @@ export async function batchUpdate(
   console.log(`  ${label}: ${total} documents updated`);
   return total;
 }
+
+/**
+ * Run a single `updateOne`, retrying on CosmosDB 429 (error code 16500) with
+ * the server-suggested delay. For per-document migrations whose update value
+ * differs per document (so `batchUpdate`'s shared update cannot be used).
+ *
+ * @param col - Collection to update.
+ * @param filter - Selects the one document to update.
+ * @param update - Update document (`$set` / `$unset` …).
+ * @param label - Log label for retry messages.
+ * @param maxRetries - Attempts before giving up (default 10).
+ */
+export async function updateOneWithRetry(
+  col: Collection,
+  filter: Record<string, unknown>,
+  update: Record<string, unknown>,
+  label: string,
+  maxRetries = 10,
+): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await col.updateOne(filter, update);
+      return;
+    } catch (err: any) {
+      if (err?.code !== 16500 || attempt >= maxRetries) throw err;
+
+      const delay = Math.max(getRetryAfterMs(err), 500);
+      console.log(`  ${label}: 429, retry ${attempt}/${maxRetries - 1}, waiting ${delay}ms...`);
+      await sleep(delay);
+    }
+  }
+}
