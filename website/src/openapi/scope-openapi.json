@@ -200,7 +200,7 @@
       },
       "BulkReportStatusInput": {
         "properties": {
-          "reportIds": {
+          "requestIds": {
             "items": {
               "type": "string"
             },
@@ -208,7 +208,7 @@
           }
         },
         "required": [
-          "reportIds"
+          "requestIds"
         ],
         "type": "object"
       },
@@ -2335,6 +2335,13 @@
             "type": "string"
           },
           "createdAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deletedAt": {
             "format": "date-time",
             "type": [
               "string",
