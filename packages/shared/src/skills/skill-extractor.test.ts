@@ -48,9 +48,8 @@ describe('extractSkillsToWorkspace', () => {
     rmSync(workspacePath, { recursive: true, force: true });
   });
 
-  it('returns empty array when no refs provided', async () => {
+  it('returns empty array when no skills provided', async () => {
     const result = await extractSkillsToWorkspace({
-      refs: [],
       skillConfigs: [],
       skillClient: mockClient,
       projectId: 'proj-1',
@@ -71,7 +70,6 @@ describe('extractSkillsToWorkspace', () => {
     ];
 
     const result = await extractSkillsToWorkspace({
-      refs: ['owner/repo/my-skill@abc1234'],
       skillConfigs: configs,
       skillClient: mockClient,
       projectId: 'proj-1',
@@ -95,7 +93,6 @@ describe('extractSkillsToWorkspace', () => {
     ];
 
     const result = await extractSkillsToWorkspace({
-      refs: ['ref@abc'],
       skillConfigs: configs,
       skillClient: mockClient,
       projectId: 'proj-1',
@@ -120,7 +117,6 @@ describe('extractSkillsToWorkspace', () => {
     ];
 
     const result = await extractSkillsToWorkspace({
-      refs: ['ref@abc'],
       skillConfigs: configs,
       skillClient: mockClient,
       projectId: 'proj-1',
@@ -149,7 +145,6 @@ describe('extractSkillsToWorkspace', () => {
 
     const logMessages: string[] = [];
     const result = await extractSkillsToWorkspace({
-      refs: ['ref-bad@abc', 'ref-good@abc'],
       skillConfigs: configs,
       skillClient: mockClient,
       projectId: 'proj-1',
@@ -176,7 +171,6 @@ describe('extractSkillsToWorkspace', () => {
     ];
 
     await extractSkillsToWorkspace({
-      refs: ['ref@abc'],
       skillConfigs: configs,
       skillClient: mockClient,
       projectId: 'proj-1',
@@ -188,5 +182,28 @@ describe('extractSkillsToWorkspace', () => {
     expect(existsSync(join(skillDir, '.tmp-archive.tar.gz'))).toBe(false);
     // But SKILL.md should exist
     expect(existsSync(join(skillDir, 'SKILL.md'))).toBe(true);
+  });
+
+  it("downloads each skill's archive by that skill's own ref", async () => {
+    const spy = vi.spyOn(mockClient, 'downloadSkillArchive');
+    spy.mockResolvedValueOnce(createTestArchive('alpha', { 'SKILL.md': '# Alpha' }));
+    spy.mockResolvedValueOnce(createTestArchive('beta', { 'SKILL.md': '# Beta' }));
+
+    const configs: SkillConfig[] = [
+      { ref: 'owner/repo/alpha@111', name: 'alpha', description: 'A', content: 'a' },
+      { ref: 'owner/repo/beta@222', name: 'beta', description: 'B', content: 'b' },
+    ];
+
+    const result = await extractSkillsToWorkspace({
+      skillConfigs: configs,
+      skillClient: mockClient,
+      projectId: 'proj-1',
+      workspacePath,
+    });
+
+    expect(spy).toHaveBeenNthCalledWith(1, 'proj-1', 'owner/repo/alpha@111');
+    expect(spy).toHaveBeenNthCalledWith(2, 'proj-1', 'owner/repo/beta@222');
+    expect(result).toEqual(['.agents/skills/alpha', '.agents/skills/beta']);
+    expect(readFileSync(join(workspacePath, '.agents/skills/beta/SKILL.md'), 'utf-8')).toBe('# Beta');
   });
 });
