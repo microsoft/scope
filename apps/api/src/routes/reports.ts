@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { pipeline } from "stream/promises";
-import { v4 as uuidv4 } from "uuid";
+// Report IDs are UUIDv7 so they sort by creation time, like run IDs (#572).
+import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import {
   BulkCreateReportsInputSchema,
@@ -71,7 +72,7 @@ apiRoute(ctx.app, ctx.registry, {
         }
       }
 
-      const reportId = uuidv4();
+      const reportId = uuidv7();
 
       const reportDoc: ReportDocument = {
         _id: reportId,
@@ -172,7 +173,7 @@ apiRoute(ctx.app, ctx.registry, {
       const created: { reportId: string; requestId: string }[] = [];
 
       for (const requestId of validIds) {
-        const reportId = uuidv4();
+        const reportId = uuidv7();
         const reportDoc: ReportDocument = {
           _id: reportId,
           projectId: projectByRequestId.get(requestId)!,
@@ -525,7 +526,7 @@ apiRoute(ctx.app, ctx.registry, {
         );
 
         if (triggerResult) {
-          const reportId = uuidv4();
+          const reportId = uuidv7();
           const reportDoc: ReportDocument = {
             _id: reportId,
             projectId: run.projectId,
@@ -599,7 +600,7 @@ apiRoute(ctx.app, ctx.registry, {
           );
 
           if (triggerResult) {
-            const reportId = uuidv4();
+            const reportId = uuidv7();
             const reportDoc: ReportDocument = {
               _id: reportId,
               projectId: run.projectId,
