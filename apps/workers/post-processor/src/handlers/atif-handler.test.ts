@@ -73,6 +73,13 @@ describe("AtifHandler", () => {
       expect.objectContaining({ schema_version: "ATIF-v1.7" }),
     );
     expect(ctx.collection.updateOne).toHaveBeenCalledTimes(2);
+    expect(ctx.collection.findOne).toHaveBeenCalledWith({
+      _id: "req-1", "run._id": "run-1", "run.status": "done",
+    });
+    expect(ctx.collection.updateOne).toHaveBeenCalledWith(
+      { _id: "req-1", "run._id": "run-1", "run.status": "done", "run.turns.iteration": 1 },
+      expect.anything(),
+    );
   });
 
   it("processes only specified iteration when set", async () => {
