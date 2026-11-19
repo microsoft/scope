@@ -1054,6 +1054,63 @@ describe("API Endpoints", () => {
       expect(res.body).toHaveProperty("deleted", true);
     });
 
+    it("soft-deletes the run's active reports with the same timestamp (#127)", async () => {
+      (mocks.collection.updateOne as any).mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+      (mocks.reportCollection.updateMany as any).mockResolvedValue({ matchedCount: 2, modifiedCount: 2 });
+
+      const res = await request(testServer()).delete("/api/v1/requests/r1");
+      expect(res.status).toBe(200);
+
+      const runDeletedAt = (mocks.collection.updateOne as any).mock.calls.at(-1)[1].$set.deletedAt;
+      expect(mocks.reportCollection.updateMany).toHaveBeenCalledWith(
+        { requestId: { $in: ["r1"] }, deletedAt: { $exists: false } },
+        { $set: { deletedAt: runDeletedAt } },
+      );
+    });
+
+    it("does not touch reports when the run was not found", async () => {
+      (mocks.collection.updateOne as any).mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
+      (mocks.collection.findOne as any).mockResolvedValue(null);
+
+      await request(testServer()).delete("/api/v1/requests/missing");
+      expect(mocks.reportCollection.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("DELETE /api/v1/requests/bulk", () => {
+    it("cascades the soft-delete to reports of the runs that were deleted (#127)", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ _id: "r1" }]),
+      });
+      (mocks.collection.updateMany as any).mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+      (mocks.reportCollection.updateMany as any).mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+
+      const res = await request(testServer())
+        .delete("/api/v1/requests/bulk")
+        .send({ ids: ["r1", "gone"] });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ deleted: 1, notFound: ["gone"] });
+      expect(mocks.reportCollection.updateMany).toHaveBeenCalledWith(
+        { requestId: { $in: ["r1"] }, deletedAt: { $exists: false } },
+        { $set: { deletedAt: expect.any(Date) } },
+      );
+    });
+
+    it("skips the report cascade when no run matched", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+      (mocks.collection.updateMany as any).mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
+
+      const res = await request(testServer())
+        .delete("/api/v1/requests/bulk")
+        .send({ ids: ["gone"] });
+
+      expect(res.status).toBe(200);
+      expect(mocks.reportCollection.updateMany).not.toHaveBeenCalled();
+    });
+
     it("returns 404 when request not found", async () => {
       (mocks.collection.updateOne as any).mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
       (mocks.collection.findOne as any).mockResolvedValue(null);
@@ -1091,6 +1148,10 @@ describe("API Endpoints", () => {
       const res = await request(testServer()).get(`/api/v1/reports?projectId=${TEST_PROJECT_ID}`);
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
+      // Reports of deleted runs are hidden.
+      expect(mocks.reportCollection.find).toHaveBeenCalledWith(
+        expect.objectContaining({ deletedAt: { $exists: false } }),
+      );
     });
   });
 
