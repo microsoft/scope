@@ -4,7 +4,8 @@
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { api } from "@/lib/api";
-import { apiClient } from "@/lib/api-client";
+import { fetchArtifact } from "@/lib/artifact-delivery";
+import { useArtifactSession } from "./use-artifact-session";
 import type { ConversationTurn } from "@/types";
 import {
   extractChronologicalSegments,
@@ -17,23 +18,52 @@ import {
 
 export type { ConversationSegment, HarExtractedData, ToolCall };
 
+async function readHar<T>(url: string, projectId: string, signal: AbortSignal): Promise<T> {
+  const response = await fetchArtifact(url, projectId, signal);
+  const data: T = await response.json();
+  signal.throwIfAborted();
+  if (!data || typeof data !== "object" || !("log" in data) || !data.log ||
+      typeof data.log !== "object" || !("entries" in data.log) || !Array.isArray(data.log.entries)) {
+    throw new Error("The server returned an invalid HAR file.");
+  }
+  return data;
+}
+
+function parseToolCall(line: string): ToolCall {
+  const value: unknown = JSON.parse(line);
+  if (!value || typeof value !== "object" || !("id" in value) || typeof value.id !== "string" ||
+      !("name" in value) || typeof value.name !== "string" ||
+      !("arguments" in value) || !value.arguments || typeof value.arguments !== "object" ||
+      Array.isArray(value.arguments) ||
+      ("timestamp" in value && typeof value.timestamp !== "string") ||
+      ("response" in value && typeof value.response !== "string")) {
+    throw new Error("The server returned an invalid tool-call record.");
+  }
+  return {
+    id: value.id, name: value.name, arguments: value.arguments as Record<string, unknown>,
+    timestamp: "timestamp" in value ? value.timestamp as string : "",
+    ...("response" in value ? { response: value.response as string } : {}),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Shared HAR data hook — single source of truth for fetching HAR JSON.
 // All tabs (Conversation, Network, Tool Calls) share this cache.
 // Generic so each consumer can use their own HAR type definition.
 // ---------------------------------------------------------------------------
 export function useHarData<T = unknown>(runId: string, iteration?: number, enabled = true, attemptRunId?: string) {
-  return useQuery<T>({
-    queryKey: ["har", runId, iteration, attemptRunId],
-    queryFn: async () => {
+  const session = useArtifactSession(`${runId}/${attemptRunId ?? "latest"}`);
+  const result = useQuery<T>({
+    queryKey: ["har", runId, iteration, attemptRunId, session.key],
+    queryFn: async ({ signal }) => {
       const url = attemptRunId ? api.runHarUrl(runId, attemptRunId, iteration) : api.harUrl(runId, iteration);
-      const res = await apiClient(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+      return readHar<T>(url, session.projectId!, AbortSignal.any([signal, session.controller.signal]));
     },
-    enabled,
+    enabled: enabled && session.ready,
+    retry: false,
     staleTime: Infinity, // HAR data is immutable once created
   });
+  return { ...result, data: session.ready ? result.data : undefined };
 }
 
 // ---------------------------------------------------------------------------
@@ -42,15 +72,16 @@ export function useHarData<T = unknown>(runId: string, iteration?: number, enabl
 export function useHarExtraction(runId: string, iteration?: number, hasHar?: boolean, attemptRunId?: string): {
   data: HarExtractedData | undefined;
   isLoading: boolean;
+  error: Error | null;
 } {
-  const { data: har, isLoading } = useHarData<HarFile>(runId, iteration, !!hasHar, attemptRunId);
+  const { data: har, isLoading, error } = useHarData<HarFile>(runId, iteration, !!hasHar, attemptRunId);
 
   const data = useMemo(() => {
     if (!har) return undefined;
     return extractFromHar(har);
   }, [har]);
 
-  return { data, isLoading };
+  return { data, isLoading, error };
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +96,8 @@ export function useAllTurnsToolCalls(
   turns?: ConversationTurn[],
   topLevelHarUrl?: string,
   attemptRunId?: string,
-): { allToolCalls: AggregatedToolCall[]; isLoading: boolean } {
+): { allToolCalls: AggregatedToolCall[]; isLoading: boolean; error: Error | null } {
+  const session = useArtifactSession(`${runId}/${attemptRunId ?? "latest"}`);
   // Turns that already have pre-computed `toolCalls` (legacy inline shape)
   // don't need any blob fetch.
   const preComputed = useMemo(() => {
@@ -100,17 +132,20 @@ export function useAllTurnsToolCalls(
 
   const jsonlResults = useQueries({
     queries: jsonlQueries.map((q) => ({
-      queryKey: ["tool-calls", runId, q.iteration, attemptRunId],
-      queryFn: async () => {
+      queryKey: ["tool-calls", runId, q.iteration, attemptRunId, session.key],
+      queryFn: async ({ signal }: { signal: AbortSignal }) => {
         const url = attemptRunId ? api.runToolCallsUrl(runId, attemptRunId, q.iteration) : api.toolCallsUrl(runId, q.iteration);
-        const res = await apiClient(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const scopedSignal = AbortSignal.any([signal, session.controller.signal]);
+        const res = await fetchArtifact(url, session.projectId!, scopedSignal);
         const text = await res.text();
+        scopedSignal.throwIfAborted();
         return text
           .split("\n")
           .filter((line) => line.trim().length > 0)
-          .map((line) => JSON.parse(line) as ToolCall);
+          .map(parseToolCall);
       },
+      enabled: session.ready,
+      retry: false,
       staleTime: Infinity,
     })),
   });
@@ -142,14 +177,13 @@ export function useAllTurnsToolCalls(
 
   const results = useQueries({
     queries: queries.map((q) => ({
-      queryKey: ["har", runId, q.iteration, attemptRunId],
-      queryFn: async () => {
+      queryKey: ["har", runId, q.iteration, attemptRunId, session.key],
+      queryFn: async ({ signal }: { signal: AbortSignal }) => {
         const url = attemptRunId ? api.runHarUrl(runId, attemptRunId, q.iteration) : api.harUrl(runId, q.iteration);
-        const res = await apiClient(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<HarFile>;
+        return readHar<HarFile>(url, session.projectId!, AbortSignal.any([signal, session.controller.signal]));
       },
-      enabled: q.enabled,
+      enabled: q.enabled && session.ready,
+      retry: false,
       staleTime: Infinity,
     })),
   });
@@ -183,5 +217,6 @@ export function useAllTurnsToolCalls(
 
   const isLoading = results.some((r) => r.isLoading) || jsonlResults.some((r) => r.isLoading);
 
-  return { allToolCalls, isLoading };
+  const error = [...jsonlResults, ...results].find(result => result.error)?.error ?? null;
+  return { allToolCalls: session.ready ? allToolCalls : [], isLoading, error };
 }

@@ -183,7 +183,7 @@ function ToolCallInline({ tc }: { tc: ToolCall }) {
 
 function TurnMessages({ turn, scopedIteration, runId, attemptRunId }: { turn: ConversationTurn; scopedIteration: number; runId: string; attemptRunId?: string }) {
   const hasHar = !!turn.harUrl;
-  const { data: harData, isLoading: harLoading } = useHarExtraction(runId, turn.iteration, hasHar, attemptRunId);
+  const { data: harData, isLoading: harLoading, error: harError } = useHarExtraction(runId, turn.iteration, hasHar, attemptRunId);
 
   const segments = harData?.segments ?? [];
   const hasContentSegment = segments.some((s) => s.type === "content");
@@ -214,6 +214,9 @@ function TurnMessages({ turn, scopedIteration, runId, attemptRunId }: { turn: Co
       )}
 
       {/* Chronological segments from HAR */}
+      {harError && <p role="alert" className="text-sm text-destructive">
+        Unable to load HAR data: {harError.message}
+      </p>}
       {segments.map((segment, idx) => (
         <SegmentBlock key={`seg-${idx}`} segment={segment} turn={turn} />
       ))}

@@ -9,6 +9,7 @@ import { FaLinux } from "react-icons/fa";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { ArtifactDownloadButton } from "@/components/ArtifactDownloadButton";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -976,13 +977,7 @@ export function RunsList() {
     onError: (err: Error) => toast.error(`Failed to generate reports: ${err.message}`),
   });
 
-  const batchDownloadMutation = useMutation({
-    mutationFn: (ids: string[]) => api.batchArchive(ids),
-    onSuccess: (_, ids) => {
-      toast.success(`Downloading ${ids.length} run${ids.length !== 1 ? "s" : ""} as archive`);
-    },
-    onError: (err: Error) => toast.error(`Failed to download archive: ${err.message}`),
-  });
+  const [batchDownloading, setBatchDownloading] = useState(false);
 
   // ---- Selection helpers ----
   const toggleRowSelection = useCallback((id: Key) => {
@@ -1217,7 +1212,7 @@ export function RunsList() {
     bulkResumeMutation.isPending ||
     bulkSetPriorityMutation.isPending ||
     bulkReportMutation.isPending ||
-    batchDownloadMutation.isPending;
+    batchDownloading;
 
   const handleBulkRetry = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -1262,11 +1257,6 @@ export function RunsList() {
     setBulkPriorityValue(priorities.size === 1 ? [...priorities][0] : 0);
     setPriorityDialogOpen(true);
   }, [selectedRunsList, selectionCaps.prioritizable]);
-
-  const handleBulkDownload = useCallback(() => {
-    if (selectedIds.size === 0) return;
-    batchDownloadMutation.mutate([...selectedIds]);
-  }, [batchDownloadMutation, selectedIds]);
 
   // Filter-rail options come from the server facets endpoint (issue #1138), so
   // every selectable value appears with an accurate full-dataset count — not just
@@ -1835,20 +1825,18 @@ export function RunsList() {
             <Eye className="h-3.5 w-3.5" />
             <span className="sr-only">View</span>
           </Button>
-          <Button
+          <ArtifactDownloadButton
             type="button"
             variant="ghost"
             size="icon"
             className="h-7 w-7"
             title="Download archive"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open(api.archiveUrl(r._id), "_blank");
-            }}
+            url={r.run?._id ? api.runArchiveUrl(r._id, r.run._id) : api.archiveUrl(r._id)}
+            filename={`${r._id}.tar.gz`}
           >
             <Download className="h-3.5 w-3.5" />
             <span className="sr-only">Download</span>
-          </Button>
+          </ArtifactDownloadButton>
           <Button
             type="button"
             variant="ghost"
@@ -2170,17 +2158,12 @@ export function RunsList() {
           >
             <FileText className="h-3.5 w-3.5" /> Reports
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            disabled={isBusy || selectedIds.size === 0}
-            onClick={handleBulkDownload}
-            title="Download selected runs as archive"
-          >
-            <Download className="h-3.5 w-3.5" />
-            {batchDownloadMutation.isPending ? "Downloading…" : "Download"}
-          </Button>
+          <ArtifactDownloadButton variant="outline" size="sm" className="gap-1.5"
+            disabled={isBusy || selectedIds.size === 0} url="/api/v1/requests/archive"
+            batchIds={[...selectedIds]} onPendingChange={setBatchDownloading}
+            title="Download latest attempts of selected runs as archive">
+            <Download className="h-3.5 w-3.5" /> Download
+          </ArtifactDownloadButton>
 
           <Button
             variant="destructive"
