@@ -91,6 +91,14 @@ scope --help
 scope run --help
 ```
 
+For stdio MCP servers, `--pkg-version` pins the package used by the gateway:
+
+```bash
+scope mcp server create --id time --name Time --type stdio --command uvx --args mcp-server-time --pkg-version 1.2.3
+scope mcp server update --id time --pkg-version 1.2.4
+scope mcp server get --id time
+```
+
 ### Provider secrets
 
 `scope secret` manages provider credentials (GitHub tokens, Anthropic keys,
