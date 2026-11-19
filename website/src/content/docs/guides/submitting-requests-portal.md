@@ -110,6 +110,32 @@ The request detail page has these tabs:
 The status badge at the top tracks the run's lifecycle: **pending →
 running → completed** (or **failed**).
 
+## Generate reports
+
+The **Reports** tab lists generated reports independently of the templates
+currently configured, including manual reports and older reports.
+
+**Generate Report** needs at least one active report template in the
+request's project whose trigger matches the request. The tab lists the
+matching template names and IDs: clicking the button queues one report per
+match. A template with no trigger, or an `always` trigger, matches any
+request. Other triggers match criteria IDs, the task-prompt ID, or detected
+prompt features.
+
+If no active templates exist, follow **Configure report templates**. If
+templates exist but none match, follow **Review report template triggers**.
+Generation stays disabled while the template check is loading, fails, or
+finds no matches. A failed check provides a retry button.
+
+The preview is also available from the CLI:
+
+```sh
+scope report eligibility --id <request-id> --output json
+```
+
+Templates can change after the preview; generation checks them again when
+you click the button.
+
 ## Re-prioritize, pause, or resume
 
 Pending and running requests can be reordered or paused. See
