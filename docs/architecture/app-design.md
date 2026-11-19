@@ -461,6 +461,9 @@ resubmission resolves a currently active version unless a version is explicitly
 pinned. Invalid historical pending targets stay pending and produce scheduler
 telemetry rather than being sent to a guessed queue.
 
+The Portal profile picker shows full profile names when space permits and clips
+only at the available width; hovering a clipped name reveals the full name.
+
 When a codebase is selected, the API resolves the submitted spec (`codebaseRevisionId`, `{slug}@r{N}`, or bare `{slug}`) before enqueueing. Bare archive slugs resolve to the latest existing revision; bare Git slugs resolve the default branch at submit time and create a new immutable revision. The resolved revision UUID is stored as `RequestDocument.codebaseRevisionId`, and workers seed the workspace from that revision after setup and before skills extraction.
 
 Profile fan-out mode is also supported for comparative runs:
