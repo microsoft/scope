@@ -10370,6 +10370,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "404": {
             "description": "Not found",
           },
+          "416": {
+            "description": "Requested byte range is not satisfiable",
+          },
         },
         "summary": "Download session recording for a specific attempt",
         "tags": [
@@ -10455,6 +10458,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           },
           "404": {
             "description": "Not found",
+          },
+          "416": {
+            "description": "Requested byte range is not satisfiable",
           },
         },
         "summary": "Download session recording",

@@ -446,6 +446,14 @@ agent-version records may omit `queueName`; registry readers treat missing,
 blank, and whitespace-only values as unavailable rather than throwing. New
 registrations continue to require a non-empty queue.
 
+### Recording downloads
+
+The request-level and attempt-level `/video` routes support a single HTTP byte
+range, including open-ended and suffix ranges. Range ends are clamped to the
+recording size. Unsatisfiable ranges return **416** with
+`Content-Range: bytes */<size>` before downloading from storage. Unsupported
+range units and multipart ranges are ignored and receive the full **200** response.
+
 ### Run submission flow
 
 1. User submits via Portal or CLI with: **task**, **criteria** (required), **worker**, **model** (required), and optionally **agentVersion**, a **codebase** selection, and/or a per-gate **`gates`** configuration (see [Gates](#gates--multi-phase-evaluation-pipeline))
