@@ -10,6 +10,7 @@ import {
   UpdateReportTemplateInputSchema,
 } from "shared";
 import { apiRoute } from "../openapi/api-route.js";
+import { escapeSearchText } from "../utils/search.js";
 import type { ReportTemplateDocument, RouteContext } from "../route-context.js";
 import { validateTrigger } from "../utils/validate-trigger.js";
 import { ProjectIdQuerySchema, getQueryProjectId } from "../utils/project-scope.js";
@@ -64,9 +65,9 @@ apiRoute(ctx.app, ctx.registry, {
       const filter: Record<string, unknown> = { projectId: getQueryProjectId(req), deletedAt: { $exists: false } };
       if (q) {
         filter.$or = [
-          { id: { $regex: q, $options: "i" } },
-          { name: { $regex: q, $options: "i" } },
-          { description: { $regex: q, $options: "i" } },
+          { id: { $regex: escapeSearchText(q), $options: "i" } },
+          { name: { $regex: escapeSearchText(q), $options: "i" } },
+          { description: { $regex: escapeSearchText(q), $options: "i" } },
         ];
       }
       const templates = await ctx.reportTemplateCollection.find(filter).toArray();
