@@ -673,7 +673,7 @@ export function RunDetail() {
             )}
 
             {/* Tier 2 — labeled configuration + metrics */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
               <MetaItem
                 label="Worker"
                 value={<AgentBadge agentId={run.workerType} version={run.agentVersion} />}
