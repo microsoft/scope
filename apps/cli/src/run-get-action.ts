@@ -6,7 +6,7 @@
  */
 import { colorLevel, dimTimestamp, errorText, successText, label, value, banner, warnBanner, criterionIcon } from "./utils/style.js";
 import { GATE_METADATA, GATE_ORDER, type ConversationTurn, type GateId, type GateRunSummary, type RequestDocument } from "shared/types";
-import { formatData, isMachineReadable } from "./utils/formatters.js";
+import { formatBytes, formatData, isMachineReadable, summarizeWorkspaceSizes } from "./utils/formatters.js";
 import type { OutputFormat, DisplayField } from "./utils/types.js";
 import { apiFetch } from "./utils/api-client.js";
 
@@ -49,6 +49,7 @@ export async function runGetAction(options: RunGetOptions): Promise<void> {
   const run = await response.json() as RequestDocument & { id?: string; completedAt?: string | Date };
   // Per-attempt state is nested under run.run (RunState).
   const rs = run.run;
+  const workspaceSizes = summarizeWorkspaceSizes(rs?.turns ?? []);
 
   // Machine-readable output
   if (isMachineReadable(format)) {
@@ -62,6 +63,7 @@ export async function runGetAction(options: RunGetOptions): Promise<void> {
       { key: 'gatesCount', label: 'Gates' },
       { key: 'gateSummaries', label: 'Gate Status' },
       { key: 'turnsCount', label: 'Turns' },
+      { key: 'workspaceSizeBytes', label: 'Workspace Snapshot Bytes' },
       { key: 'passed', label: 'Passed' },
       { key: 'task', label: 'Task' },
       { key: 'criteriaCount', label: 'Criteria' },
@@ -75,6 +77,8 @@ export async function runGetAction(options: RunGetOptions): Promise<void> {
       outcome: rs?.outcome,
       error: rs?.error,
       turnsCount: rs?.turns?.length ?? 0,
+      // Total compressed snapshot bytes; empty (N/A) when no turn recorded a size.
+      workspaceSizeBytes: workspaceSizes.measured > 0 ? workspaceSizes.totalBytes : undefined,
       gatesCount: run.gates?.length ?? run.gateSummaries?.length ?? 0,
       gateSummaries: (run.gateSummaries ?? []).map((g) => `${g.gate}:${g.status}`).join(', '),
       passed: rs?.outcome === 'succeeded' ? 'yes' : rs?.outcome === 'failed' || rs?.outcome === 'finished' ? 'no' : '-',
@@ -165,9 +169,17 @@ export async function runGetAction(options: RunGetOptions): Promise<void> {
         const criteriaStr = turn.criteriaResults?.length
           ? ` — ${turn.criteriaResults.filter((cr: { passed: boolean }) => cr.passed).length}/${turn.criteriaResults.length} criteria passed`
           : '';
-        console.log(`    ${label(`Iteration ${turn.iteration}:`)} ${passIcon}${criteriaStr}`);
+        const sizeStr = turn.workspaceSizeBytes != null ? ` — snapshot ${formatBytes(turn.workspaceSizeBytes)}` : '';
+        console.log(`    ${label(`Iteration ${turn.iteration}:`)} ${passIcon}${criteriaStr}${sizeStr}`);
       });
     }
+
+    // Total workspace snapshot size; legacy/imported runs never recorded sizes.
+    const { totalBytes, measured, missing } = workspaceSizes;
+    const sizeSummary = measured === 0
+      ? dimTimestamp('unavailable')
+      : `${value(formatBytes(totalBytes))}${missing > 0 ? dimTimestamp(` (${measured}/${rs.turns.length} iterations measured)`) : ''}`;
+    console.log(`  ${label('Workspace snapshots:')} ${sizeSummary}`);
   }
 
   // Error

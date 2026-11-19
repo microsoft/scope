@@ -12,6 +12,8 @@ import {
   getValueOrNA,
   formatDate,
   maxColumnWidth,
+  formatBytes,
+  summarizeWorkspaceSizes,
 } from './formatters.js';
 import type { DisplayField, TableColumn } from './types.js';
 
@@ -354,5 +356,26 @@ describe('isMachineReadable', () => {
 
   it('returns false for table', () => {
     expect(isMachineReadable('table')).toBe(false);
+  });
+});
+
+describe('formatBytes', () => {
+  it('keeps small values in bytes and scales through GB', () => {
+    expect(formatBytes(0)).toBe('0 B');
+    expect(formatBytes(1023)).toBe('1023 B');
+    expect(formatBytes(1536)).toBe('1.5 KB');
+    expect(formatBytes(5 * 1024 * 1024)).toBe('5.0 MB');
+    expect(formatBytes(2.25 * 1024 ** 3)).toBe('2.3 GB');
+  });
+});
+
+describe('summarizeWorkspaceSizes', () => {
+  it('sums recorded sizes and counts turns without one as missing', () => {
+    expect(summarizeWorkspaceSizes([{ workspaceSizeBytes: 100 }, {}, { workspaceSizeBytes: 0 }]))
+      .toEqual({ totalBytes: 100, measured: 2, missing: 1 });
+  });
+
+  it('reports nothing measured for legacy turns', () => {
+    expect(summarizeWorkspaceSizes([{}, {}])).toEqual({ totalBytes: 0, measured: 0, missing: 2 });
   });
 });

@@ -10,6 +10,7 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/utils";
+import { formatSnapshotBytes } from "@/lib/workspace-size";
 import type { ConversationTurn } from "@/types";
 import { useState } from "react";
 
@@ -86,6 +87,17 @@ export function TurnTimeline({ turns, runId, attemptRunId }: TurnTimelineProps) 
                   {turn.aiCallCount !== undefined && (
                     <span className="font-mono" title="LLM completion calls">
                       {turn.aiCallCount} LLM calls
+                    </span>
+                  )}
+                  {/* Workspace snapshot size — legacy/imported turns have none recorded */}
+                  {turn.snapshotUrl && (
+                    <span
+                      className="font-mono"
+                      title={turn.workspaceSizeBytes != null
+                        ? `${turn.workspaceSizeBytes.toLocaleString()} bytes (compressed workspace snapshot)`
+                        : "Workspace snapshot size was not recorded for this iteration"}
+                    >
+                      {turn.workspaceSizeBytes != null ? formatSnapshotBytes(turn.workspaceSizeBytes) : "size unavailable"}
                     </span>
                   )}
                   {turn.snapshotUrl && (

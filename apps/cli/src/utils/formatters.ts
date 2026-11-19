@@ -122,6 +122,53 @@ export function formatAsTSV<T extends ListItem>(
   return output.trimEnd();
 }
 
+// ── Workspace snapshot sizes ─────────────────────────────────────────────────
+
+const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+
+/**
+ * Format a byte count using binary (1024-based) units up to TB.
+ *
+ * @param bytes - Non-negative byte count.
+ * @returns e.g. `"512 B"`, `"1.5 KB"`, `"2.3 GB"`.
+ */
+export function formatBytes(bytes: number): string {
+  let size = bytes;
+  let unitIndex = 0;
+
+  // Step up a unit while the value is at least 1024 and a larger unit exists.
+  while (size >= 1024 && unitIndex < BYTE_UNITS.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+
+  return unitIndex === 0 ? `${size} B` : `${size.toFixed(1)} ${BYTE_UNITS[unitIndex]}`;
+}
+
+/**
+ * Sum the recorded workspace snapshot sizes (`workspaceSizeBytes`) of a run's turns.
+ * Legacy/imported turns have no recorded size and are counted as `missing`
+ * rather than as zero bytes.
+ *
+ * @param turns - Turns of a single run attempt.
+ * @returns `totalBytes` over the `measured` turns, plus the `missing` count.
+ */
+export function summarizeWorkspaceSizes(
+  turns: ReadonlyArray<{ workspaceSizeBytes?: number }>,
+): { totalBytes: number; measured: number; missing: number } {
+  let totalBytes = 0;
+  let measured = 0;
+
+  for (const turn of turns) {
+    if (typeof turn.workspaceSizeBytes === 'number') {
+      totalBytes += turn.workspaceSizeBytes;
+      measured++;
+    }
+  }
+
+  return { totalBytes, measured, missing: turns.length - measured };
+}
+
 // ── Format: JSON ─────────────────────────────────────────────────────────────
 
 /**

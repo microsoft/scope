@@ -8,7 +8,7 @@ import {
 } from "@azure/storage-blob";
 import { DefaultAzureCredential } from "@azure/identity";
 import { execSync } from "child_process";
-import { mkdtempSync, rmSync, createReadStream, createWriteStream } from "fs";
+import { mkdtempSync, rmSync, createReadStream, createWriteStream, statSync } from "fs";
 import { tmpdir } from "os";
 import { join, basename } from "path";
 import { pipeline } from "stream/promises";
@@ -38,6 +38,14 @@ const EXCLUDE_PATTERNS = [
 export interface BlobStorageConfig {
   storageAccountName: string;
   storageConnectionString?: string; // For local Azurite
+}
+
+/** Result of {@link BlobStorage.uploadWorkspaceSnapshot}. */
+export interface WorkspaceSnapshotUpload {
+  /** Blob URL of the uploaded `workspace.tar.gz`. */
+  url: string;
+  /** Stored size of the compressed archive, in bytes. */
+  sizeBytes: number;
 }
 
 export class BlobStorage {
@@ -300,14 +308,17 @@ export class BlobStorage {
   /**
    * Uploads a workspace directory as a tar.gz snapshot to blob storage.
    * Path: `{requestId}/runs/{runId}/iteration-{iteration}/workspace.tar.gz`.
-   * Returns the blob URL.
+   *
+   * @returns The blob URL and the stored (compressed) archive size in bytes.
+   *   The size is read from the local archive before upload, so recording it
+   *   costs no extra Blob Storage request (#1564).
    */
   async uploadWorkspaceSnapshot(
     workspacePath: string,
     requestId: string,
     runId: string,
     iteration: number
-  ): Promise<string> {
+  ): Promise<WorkspaceSnapshotUpload> {
     await this.ensureContainer();
 
     const blobName = `${requestId}/runs/${runId}/iteration-${iteration}/workspace.tar.gz`;
@@ -326,6 +337,7 @@ export class BlobStorage {
         `tar czf "${archivePath}" ${excludeFlags} -C "${workspacePath}" .`,
         { stdio: "pipe" }
       );
+      const sizeBytes = statSync(archivePath).size;
 
       // Upload to blob storage
       await blockBlobClient.uploadFile(archivePath, {
@@ -339,7 +351,7 @@ export class BlobStorage {
         },
       });
 
-      return blockBlobClient.url;
+      return { url: blockBlobClient.url, sizeBytes };
     } finally {
       // Cleanup temp directory
       rmSync(tempDir, { recursive: true, force: true });

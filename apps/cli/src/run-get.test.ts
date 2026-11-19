@@ -228,6 +228,63 @@ describe('run get', () => {
     });
   });
 
+  describe('workspace snapshot sizes (#1564)', () => {
+    /** Run `run get` against a copy of `fullRun` whose turns carry the given sizes. */
+    async function runWithSizes(sizes: Array<number | undefined>, output: string) {
+      const run = {
+        ...fullRun,
+        run: {
+          ...fullRun.run,
+          turns: fullRun.run.turns.map((turn, i) => ({ ...turn, workspaceSizeBytes: sizes[i] })),
+        },
+      };
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(run) }));
+
+      const { lines, restore } = captureConsole();
+      try {
+        const { runGetAction } = await import('./run-get-action.js');
+        await runGetAction({ id: 'run-002', url: 'http://localhost:3100', output });
+      } finally {
+        restore();
+      }
+      return lines.join('\n');
+    }
+
+    it('shows per-iteration sizes and the total', async () => {
+      const output = await runWithSizes([1024, 2048], 'table');
+
+      expect(output).toContain('snapshot 1.0 KB');
+      expect(output).toContain('snapshot 2.0 KB');
+      expect(output).toMatch(/Workspace snapshots:.*3\.0 KB/);
+      expect(output).not.toContain('measured');
+    });
+
+    it('notes partial coverage when some iterations lack a size', async () => {
+      const output = await runWithSizes([1024, undefined], 'table');
+
+      expect(output).toMatch(/Workspace snapshots:.*1\.0 KB.*1\/2 iterations measured/);
+    });
+
+    it('shows unavailable for legacy runs without recorded sizes', async () => {
+      const output = await runWithSizes([undefined, undefined], 'table');
+
+      expect(output).toMatch(/Workspace snapshots:.*unavailable/);
+      expect(output).not.toContain('0 B');
+    });
+
+    it('includes the total bytes in JSON output', async () => {
+      const output = await runWithSizes([1024, 2048], 'json');
+
+      expect(JSON.parse(output)[0].workspaceSizeBytes).toBe('3072');
+    });
+
+    it('reports N/A in JSON output when no size was recorded', async () => {
+      const output = await runWithSizes([undefined, undefined], 'json');
+
+      expect(JSON.parse(output)[0].workspaceSizeBytes).toBe('N/A');
+    });
+  });
+
   describe('error handling', () => {
     it('exits with error on 404', async () => {
       const mockFetch = vi.fn().mockResolvedValue({

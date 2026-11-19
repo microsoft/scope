@@ -405,6 +405,12 @@ its budget without passing, downstream gates are recorded as `skipped`.
   grade what the agent *said* (Q&A / no-code-change deliverables) are gradeable.
 - Per-gate outcomes are persisted on the request as `gateSummaries:
   GateRunSummary[]`; each `ConversationTurn` is tagged with its `gate`.
+- Each iteration's workspace is archived (`.tar.gz`) and uploaded before judging;
+  `uploadWorkspaceSnapshot` returns `{ url, sizeBytes }` and the turn records
+  `snapshotUrl` plus `workspaceSizeBytes` (compressed archive size, issue #1564).
+  The size is optional: legacy and imported runs have none, and there is no backfill,
+  so the Portal (Turn timeline, Run detail "Workspace snapshots" total) and
+  `scope run get` show **unavailable**, never `0 B`, and flag partially measured runs.
 
 The orchestration lives in `runGatedLoop` (`packages/shared/src/judge/gated-loop.ts`),
 which wraps the per-gate `runMultiTurnLoop`. See the full
