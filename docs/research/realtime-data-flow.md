@@ -65,8 +65,10 @@ read lazily by clients (no SSE stream — fetched on demand by ID/iteration):
 
 Tool-call JSONL was introduced (#812) to keep unbounded per-iteration tool-call
 lists out of the `RequestDocument` (CosmosDB document size is capped at 2 MB).
-The turn carries only `toolCallsUrl` + `toolCallCount`; legacy turns with an
-inline `toolCalls[]` array remain readable for backwards compatibility.
+The turn carries `toolCallsUrl` + `toolCallCount`. The Portal Tool Calls tab
+reads only these server-extracted JSONL blobs; it no longer downloads HARs or
+uses legacy inline `toolCalls[]` for that tab. Other HAR-backed views still
+use `useHarData` for conversation and network details.
 
 ## React Query Polling
 

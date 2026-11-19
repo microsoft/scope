@@ -1688,7 +1688,7 @@ export function RunDetail() {
         {/* Tool Calls tab — HAR captures & tool calls summary */}
         {hasHarData && (
           <TabsContent value="tool-calls" className="mt-4 space-y-4">
-            <ToolCallsTab runId={run._id} turns={activeRun?.turns} harUrl={activeRun?.harUrl} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
+            <ToolCallsTab runId={run._id} turns={activeRun?.turns} attemptRunId={isViewingHistorical ? activeRun?._id : undefined} />
           </TabsContent>
         )}
       </Tabs>
@@ -1811,7 +1811,7 @@ function VideoIterationTabs({ runId, turns, setupVideoUrls, attemptRunId }: { ru
 }
 
 // ---------------------------------------------------------------------------
-// Tool Calls tab — extracts tool calls from HAR client-side
+// Tool Calls tab — reads server-extracted per-iteration tool calls
 // ---------------------------------------------------------------------------
 
 import type { ConversationTurn } from "@/types";
@@ -1830,8 +1830,8 @@ function ExpandableCell({ children, className = "" }: { children: React.ReactNod
   );
 }
 
-function ToolCallsTab({ runId, turns, harUrl, attemptRunId }: { runId: string; turns?: ConversationTurn[]; harUrl?: string; attemptRunId?: string }) {
-  const { allToolCalls, isLoading } = useAllTurnsToolCalls(runId, turns, harUrl, attemptRunId);
+function ToolCallsTab({ runId, turns, attemptRunId }: { runId: string; turns?: ConversationTurn[]; attemptRunId?: string }) {
+  const { allToolCalls, isLoading } = useAllTurnsToolCalls(runId, turns, attemptRunId);
 
   // Group by tool name for summary
   const byName = new Map<string, number>();
