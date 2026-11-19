@@ -37,7 +37,40 @@ import { PromptClient } from "../task-prompts/prompt-client.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CodebaseClient } from "../codebases/codebase-client.js";
+import { ResourceClient } from "../resources/resource-client.js";
+import type { ResourceConfig } from "../types/resource.js";
 import { seedCodebaseToWorkspace } from "../codebases/codebase-seeder.js";
+
+/**
+ * Pair each resource binding with its resolved config, preserving submission
+ * order and per-binding parameters.
+ *
+ * Driven by the bindings rather than by the resolver's output so the run gets
+ * exactly one config per binding. Configs are looked up by revisionId, so a
+ * resolver that reorders or dedupes cannot pair a resource with another's
+ * parameters — and binding the same revision twice with different parameters
+ * yields two independent configs instead of both silently receiving the first
+ * binding's parameters.
+ *
+ * @throws if the resolver did not return a config for some binding.
+ */
+export function pairBindingsWithConfigs(
+  bindings: ReadonlyArray<{ ref: string; revisionId: string; params?: Record<string, string> }>,
+  resolved: ReadonlyArray<ResourceConfig>,
+): ResourceConfig[] {
+  const configByRevisionId = new Map(resolved.map((config) => [config.revisionId, config]));
+  return bindings.map((binding) => {
+    const config = configByRevisionId.get(binding.revisionId);
+    if (!config) {
+      throw new Error(
+        `Resource '${binding.ref}' (revision ${binding.revisionId}) was not returned by the resolver`
+      );
+    }
+    return Object.keys(binding.params ?? {}).length > 0
+      ? { ...config, params: binding.params }
+      : config;
+  });
+}
 
 /**
  * Queue processor for coding agent workers.
@@ -435,7 +468,27 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
       await log("info", `Resolved extensions: ${extensionConfigs.map(e => e.version ? `${e.id}@${e.version}` : e.id).join(", ")}`);
     }
 
-    await this.processMultiTurn(requestDoc, message, heartbeat, log, startedAt, mcpServerConfigs, skillConfigs, extensionConfigs);
+    // Resolve resource revisions to configs via API. Resolved here rather than
+    // inside the worker so a failure to find a resource fails the run before any
+    // setup work happens.
+    let resourceConfigs: ResourceConfig[] | undefined;
+    if (requestDoc.resources && requestDoc.resources.length > 0) {
+      const apiBaseUrl = (this.config as QueueProcessorConfig).apiBaseUrl;
+      if (!apiBaseUrl) {
+        throw new Error("Resources requested but SCOPE_MT_API_URL is not configured");
+      }
+      const bindings = requestDoc.resources;
+      const resourceClient = new ResourceClient(apiBaseUrl);
+      await log("info", `Resolving ${bindings.length} resource(s)`, { resources: bindings.map(b => b.ref) });
+      const resolved = await resourceClient.resolveResources(
+        requestDoc.projectId,
+        bindings.map(b => b.revisionId)
+      );
+      resourceConfigs = pairBindingsWithConfigs(bindings, resolved);
+      await log("info", `Resolved resources: ${resourceConfigs.map(r => r.ref).join(", ")}`);
+    }
+
+    await this.processMultiTurn(requestDoc, message, heartbeat, log, startedAt, mcpServerConfigs, skillConfigs, extensionConfigs, resourceConfigs);
   }
 
   /**
@@ -617,6 +670,33 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
   }
 
   /**
+   * Record lifecycle observations (resource outcomes, MCP registration) on the
+   * request document.
+   *
+   * Best-effort: failing to record observability must not change the run's
+   * outcome, which is the thing the run actually exists to report. Safe to call
+   * more than once — the second call simply overwrites with the same or fresher
+   * values.
+   */
+  private async persistRunObservations(
+    requestId: string,
+    log: (level: "info" | "warn" | "error" | "debug", message: string, data?: Record<string, unknown>) => Promise<void> | void,
+  ): Promise<void> {
+    if (!this.processor.getRunObservations) return;
+    try {
+      const obs = this.processor.getRunObservations();
+      const fields: Record<string, unknown> = { "run.updatedAt": new Date(), updatedAt: new Date() };
+      if (obs.resources && obs.resources.length > 0) fields["run.resources"] = obs.resources;
+      if (obs.mcpRegistered !== undefined) fields["run.mcpRegistered"] = obs.mcpRegistered;
+      if (Object.keys(fields).length > 2) {
+        await withRetry(() => this.collection.updateOne({ _id: requestId }, { $set: fields } as any));
+      }
+    } catch (err) {
+      await log("warn", `Failed to record run observations: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
    * Multi-turn processing with judge loop.
    */
   private async processMultiTurn(
@@ -627,7 +707,8 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
     startedAt: Date,
     mcpServerConfigs?: McpServerConfig[],
     skillConfigs?: SkillConfig[],
-    extensionConfigs?: ExtensionConfig[]
+    extensionConfigs?: ExtensionConfig[],
+    resourceConfigs?: ResourceConfig[]
   ): Promise<void> {
     const requestId = requestDoc._id;
     // Resolve the runId for blob paths. New requests always have run._id;
@@ -685,93 +766,93 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
 
     const maxIterations = requestMaxIterations;
 
-    // Setup: create workspace, extract skills, upload setup videos
-    if (this.processor.setup) {
-      const setupResult = await this.processor.setup(log, { model: requestDoc.model, projectId: requestDoc.projectId, mcpServerConfigs, skillConfigs, extensionConfigs });
-
-      if (setupResult?.videoFilePaths && setupResult.videoFilePaths.length > 0) {
-        try {
-          const setupVideoUrls: string[] = [];
-          for (let i = 0; i < setupResult.videoFilePaths.length; i++) {
-            const videoBlobName = `${requestId}/runs/${runId}/setup/video-${i}.webm`;
-            const videoUrl = await blobStorage.uploadFile(
-              setupResult.videoFilePaths[i],
-              videoBlobName,
-              "video/webm"
-            );
-            setupVideoUrls.push(videoUrl);
-          }
-          await log("info", "Setup video files uploaded", { videoCount: setupResult.videoFilePaths.length });
-          if (setupVideoUrls.length > 0) {
-            await withRetry(() => this.collection.updateOne(
-              { _id: requestId },
-              { $set: { "run.setupVideoUrls": setupVideoUrls, "run.updatedAt": new Date(), updatedAt: new Date() } }
-            ));
-          }
-        } catch (uploadError) {
-          const msg = uploadError instanceof Error ? uploadError.message : String(uploadError);
-          await log("warn", `Failed to upload setup video files: ${msg}`);
-        }
-      }
-    }
-
-    // Seed the workspace from a selected codebase revision (after setup so
-    // workspacePath is resolved, BEFORE skills so skills overlay the project).
-    // Seeding is a hard prerequisite — a failure here fails the run rather than
-    // silently starting the agent from an empty workspace.
-    if (requestDoc.codebaseRevisionId) {
-      const apiBaseUrl = process.env.SCOPE_MT_API_URL;
-      if (!apiBaseUrl) {
-        throw new Error("Codebase revision requested but SCOPE_MT_API_URL is not configured");
-      }
-      const codebaseWorkspacePath =
-        this.processor.workspacePath || process.env.WORKSPACE_PATH || "/workspace";
-      const codebaseClient = new CodebaseClient(apiBaseUrl);
-      await seedCodebaseToWorkspace({
-        revisionId: requestDoc.codebaseRevisionId,
-        codebaseClient,
-        workspacePath: codebaseWorkspacePath,
-        log: (msg) => log("info", msg),
-      });
-    }
-
-    // Extract skills to the workspace (after setup so workspacePath is resolved)
-    if (skillConfigs) {
-      await this.extractSkills(requestDoc, skillConfigs, log);
-    }
-
-    // Resolve workspace path after setup
-    const workspacePath = this.processor.workspacePath || process.env.WORKSPACE_PATH || "/workspace";
-
-    // Write AGENTS.md into the workspace once before the run (constant for the
-    // whole run). Throws → run is marked failed (fail loudly, never no-op).
-    await this.writeAgentsMd(requestDoc, workspacePath, log);
-
-    // Resolve each gate's prompt text. The Select gate uses the already-resolved
-    // scenario task; other gates resolve their typed prompt entity by id via the
-    // API. See docs/design/gates.md §4.4/§4.5.
-    const apiBaseUrl = (this.config as QueueProcessorConfig).apiBaseUrl;
-    const resolvedGates: ResolvedGate[] = [];
-    for (const gc of gateConfigs) {
-      let promptText: string;
-      if (gc.gate === "select") {
-        promptText = requestDoc.scenario.task;
-      } else {
-        if (!gc.promptId) {
-          throw new Error(`Gate '${gc.gate}' is missing a resolved promptId.`);
-        }
-        promptText = await this.resolveGatePromptText(gc.promptId, apiBaseUrl, log);
-      }
-      resolvedGates.push({
-        gate: gc.gate,
-        promptText,
-        criteria: gc.criteria,
-        maxIterations: gc.maxIterations ?? maxIterations,
-      });
-    }
-
     let result;
     try {
+      // Setup: create workspace, extract skills, upload setup videos
+      if (this.processor.setup) {
+        const setupResult = await this.processor.setup(log, { model: requestDoc.model, projectId: requestDoc.projectId, mcpServerConfigs, skillConfigs, extensionConfigs, resourceConfigs });
+
+        if (setupResult?.videoFilePaths && setupResult.videoFilePaths.length > 0) {
+          try {
+            const setupVideoUrls: string[] = [];
+            for (let i = 0; i < setupResult.videoFilePaths.length; i++) {
+              const videoBlobName = `${requestId}/runs/${runId}/setup/video-${i}.webm`;
+              const videoUrl = await blobStorage.uploadFile(
+                setupResult.videoFilePaths[i],
+                videoBlobName,
+                "video/webm"
+              );
+              setupVideoUrls.push(videoUrl);
+            }
+            await log("info", "Setup video files uploaded", { videoCount: setupResult.videoFilePaths.length });
+            if (setupVideoUrls.length > 0) {
+              await withRetry(() => this.collection.updateOne(
+                { _id: requestId },
+                { $set: { "run.setupVideoUrls": setupVideoUrls, "run.updatedAt": new Date(), updatedAt: new Date() } }
+              ));
+            }
+          } catch (uploadError) {
+            const msg = uploadError instanceof Error ? uploadError.message : String(uploadError);
+            await log("warn", `Failed to upload setup video files: ${msg}`);
+          }
+        }
+      }
+
+      // Seed the workspace from a selected codebase revision (after setup so
+      // workspacePath is resolved, BEFORE skills so skills overlay the project).
+      // Seeding is a hard prerequisite — a failure here fails the run rather than
+      // silently starting the agent from an empty workspace.
+      if (requestDoc.codebaseRevisionId) {
+        const apiBaseUrl = process.env.SCOPE_MT_API_URL;
+        if (!apiBaseUrl) {
+          throw new Error("Codebase revision requested but SCOPE_MT_API_URL is not configured");
+        }
+        const codebaseWorkspacePath =
+          this.processor.workspacePath || process.env.WORKSPACE_PATH || "/workspace";
+        const codebaseClient = new CodebaseClient(apiBaseUrl);
+        await seedCodebaseToWorkspace({
+          revisionId: requestDoc.codebaseRevisionId,
+          codebaseClient,
+          workspacePath: codebaseWorkspacePath,
+          log: (msg) => log("info", msg),
+        });
+      }
+
+      // Extract skills to the workspace (after setup so workspacePath is resolved)
+      if (skillConfigs) {
+        await this.extractSkills(requestDoc, skillConfigs, log);
+      }
+
+      // Resolve workspace path after setup
+      const workspacePath = this.processor.workspacePath || process.env.WORKSPACE_PATH || "/workspace";
+
+      // Write AGENTS.md into the workspace once before the run (constant for the
+      // whole run). Throws → run is marked failed (fail loudly, never no-op).
+      await this.writeAgentsMd(requestDoc, workspacePath, log);
+
+      // Resolve each gate's prompt text. The Select gate uses the already-resolved
+      // scenario task; other gates resolve their typed prompt entity by id via the
+      // API. See docs/design/gates.md §4.4/§4.5.
+      const apiBaseUrl = (this.config as QueueProcessorConfig).apiBaseUrl;
+      const resolvedGates: ResolvedGate[] = [];
+      for (const gc of gateConfigs) {
+        let promptText: string;
+        if (gc.gate === "select") {
+          promptText = requestDoc.scenario.task;
+        } else {
+          if (!gc.promptId) {
+            throw new Error(`Gate '${gc.gate}' is missing a resolved promptId.`);
+          }
+          promptText = await this.resolveGatePromptText(gc.promptId, apiBaseUrl, log);
+        }
+        resolvedGates.push({
+          gate: gc.gate,
+          promptText,
+          criteria: gc.criteria,
+          maxIterations: gc.maxIterations ?? maxIterations,
+        });
+      }
+
       result = await runGatedLoop({
         processor: this.processor,
         gates: resolvedGates,
@@ -811,10 +892,16 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
         },
       });
     } finally {
-      // Lifecycle: always call teardown() if setup() exists, even on error
+      // Lifecycle: teardown covers everything from setup onward, not just the
+      // agent loop. Resource provisioning happens inside setup(), so a failure in
+      // MCP registration, codebase seeding, skill extraction, or gate-prompt
+      // resolution would otherwise leave provisioned resources running. teardown()
+      // is idempotent, so the widened boundary is safe.
       if (this.processor.teardown) {
         await this.processor.teardown(log);
       }
+      // Persist lifecycle observations AFTER teardown so teardownRan is accurate.
+      await this.persistRunObservations(requestId, log);
       // Unsubscribe from cancel notifications — normal completion path
       unsubCancel();
     }

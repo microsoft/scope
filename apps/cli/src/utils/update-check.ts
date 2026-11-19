@@ -70,7 +70,7 @@ export function checkForUpdates(currentVersion: string): () => Promise<void> {
   };
 }
 
-export const RELEASES_REPO = "growth-ecosystems/scope-doc";
+export const RELEASES_REPO = "microsoft/scope";
 
 export const RELEASES_URL =
   process.env.SCOPE_RELEASES_URL ||
@@ -79,14 +79,14 @@ export const RELEASES_URL =
 /**
  * Fetch the latest released CLI version.
  * Only considers releases with a `cli/v*` tag prefix.
- * Uses `gh release list` (handles EMU auth), falls back to REST API.
+ * Uses `gh release list`, falling back to the public REST API.
  * Returns the version string (without prefix) or undefined on failure.
  * Timeout defaults to 5000ms but can be overridden (background check uses 2000ms).
  */
 export async function fetchLatestVersion(timeoutMs = 5000): Promise<string | undefined> {
   // Skip gh CLI when a custom SCOPE_RELEASES_URL is set (e.g. in tests)
   if (!process.env.SCOPE_RELEASES_URL) {
-    // Prefer gh CLI — it handles EMU/private repo auth natively
+    // Prefer gh CLI when available; its configured token also avoids anonymous rate limits.
     try {
       const tag = execSync(
         `gh release list --repo ${RELEASES_REPO} --json tagName -q '[.[].tagName | select(startswith("cli/v"))][0]'`,
@@ -100,7 +100,7 @@ export async function fetchLatestVersion(timeoutMs = 5000): Promise<string | und
     }
   }
 
-  // Fallback: direct API call (works when GH_TOKEN is set)
+  // Public releases can be read anonymously; a GitHub token is optional.
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 

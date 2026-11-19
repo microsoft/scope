@@ -93,8 +93,7 @@ describe("resolveAgentTarget", () => {
     });
   });
 
-  it("treats omitted capability flags as unsupported in strict mode", () => {
-    expect(
+  it("treats omitted capability flags as unsupported in strict mode", () => {    expect(
       resolveAgentTarget(
         agent(),
         undefined,
@@ -105,6 +104,26 @@ describe("resolveAgentTarget", () => {
       errorCode: "agent_capability_unsupported",
       unsupportedCapabilities: ["supportsSkills", "supportsExtensions"],
     });
+  });
+
+  it("rejects a resource-backed run on a worker that does not provision resources", () => {
+    // Resources are only provisioned by workers that opt in. Without this check a
+    // run's declared database or simulator is silently never stood up, and the
+    // benchmark reports a result for an environment that never existed.
+    expect(
+      resolveAgentTarget(agent(), undefined, { resources: true }, true),
+    ).toMatchObject({
+      errorCode: "agent_capability_unsupported",
+      unsupportedCapabilities: ["supportsResources"],
+    });
+  });
+
+  it("routes a resource-backed run to a worker advertising supportsResources", () => {
+    const resourceAgent = agent();
+    resourceAgent.capabilities = { ...resourceAgent.capabilities, supportsResources: true };
+    expect(
+      resolveAgentTarget(resourceAgent, undefined, { resources: true }, true),
+    ).toMatchObject({ agentVersion: "v1", queueName: "synthetic-custom-queue" });
   });
 
   it("keeps capability enforcement disabled during rollout when strict mode is off", () => {

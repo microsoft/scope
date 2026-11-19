@@ -122,6 +122,12 @@ Used when the user doesn't know which repo contains the skill they want.
 3. User selects a result from skills.sh
 4. API imports it the same way as Path 1 — registers the skill and resolves content from GitHub
 
+When selecting skills for a profile, the Portal keeps the current search term
+and result list open after each selection so related skills can be added in one
+pass. The result list is rendered in a fixed portal so scrollable forms cannot
+clip it; it stays within the available viewport space and opens above the
+search field when there is not enough room below it.
+
 The skill's `origin` is set to `"skills-sh"` to indicate it was discovered through that registry.
 
 ### Key distinction

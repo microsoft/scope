@@ -1,0 +1,37 @@
+# Portal application.
+/apps/portal/ @manekinekko
+
+# Core API and orchestration.
+/apps/api/ @cedricvidal @jduffney
+/apps/scheduler/ @cedricvidal @jduffney
+
+# CLI.
+/apps/cli/ @cedricvidal @manekinekko
+
+# Evaluation and agent workers.
+/apps/judge/ @cedricvidal @jduffney
+/apps/workers/ @cedricvidal @jduffney
+/packages/llm-eval/ @cedricvidal @jduffney
+
+# AI gateway.
+/apps/gateway/ @cedricvidal
+
+# Authentication and credentials.
+/apps/token-manager/ @cedricvidal @manekinekko @jduffney
+/apps/key-updaters/ @cedricvidal @manekinekko @jduffney
+/packages/github-auth/ @cedricvidal @manekinekko @jduffney
+
+# Shared platform and data.
+/packages/shared/ @cedricvidal @jduffney
+/packages/db-migrations/ @cedricvidal
+/packages/telemetry/ @cedricvidal @jduffney
+
+# Documentation and configuration.
+/website/ @manekinekko
+/docs/ @cedricvidal @manekinekko
+/config/ @cedricvidal @manekinekko
+
+# CI and infrastructure.
+/.github/ @cedricvidal @jduffney @manekinekko
+/infra/ @cedricvidal
+/scripts/ @cedricvidal @manekinekko

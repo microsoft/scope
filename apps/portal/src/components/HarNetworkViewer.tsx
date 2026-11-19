@@ -329,7 +329,7 @@ function DetailPanel({ entry, onClose }: { entry: HarEntry; onClose: () => void 
   const responseBody = decodeBody(entry.response.content);
 
   return (
-    <div className="w-1/2 flex flex-col max-h-[600px]">
+    <div className="w-1/2 flex flex-col self-start sticky top-12 max-h-[calc(100vh-3rem)] border-b">
       {/* Panel header */}
       <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
         <div className="flex items-center gap-2">

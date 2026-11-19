@@ -1,0 +1,15 @@
+version: 3
+
+files:
+  - pattern: workflows/*.yml
+  - pattern: workflows/*.yaml
+
+rules:
+  # gh-aw owns generated lockfile annotations. Preserve its major-version
+  # comments while the Vitest invariant still enforces a full SHA and comment.
+  - ignore: true
+    conditions:
+      - expr: ActionName == "github/gh-aw-actions/setup"
+      - expr: ActionName == "actions/github-script" && VersionComment == "v8"
+      - expr: ActionName == "actions/upload-artifact" && VersionComment == "v7"
+      - expr: ActionName == "actions/download-artifact" && VersionComment == "v8"

@@ -9,6 +9,7 @@ import type { OutputFormat, DisplayField } from "../utils/types.js";
 import { withOutputOption, withProjectOption, getDefaultApiUrl } from "../utils/shared.js";
 import { requireProjectId } from "../utils/config.js";
 import { apiFetch } from "../utils/api-client.js";
+import { buildResourceBindingSpecs, collectRepeatable, formatResourceBindings } from "../utils/resources.js";
 
 export function registerProfileCommands(program: Command): void {
 // ─── Profile commands ──────────────────────────────────────────────────────────
@@ -92,6 +93,7 @@ profile
           if (profile.version.agentVersion) console.log(`  ${label('Agent:')}   ${value(profile.version.agentVersion)}`);
           if (profile.version.mcpServers?.length) console.log(`  ${label('MCP:')}     ${profile.version.mcpServers.join(', ')}`);
           if (profile.version.skillRevisions?.length) console.log(`  ${label('Skills:')}  ${profile.version.skillRevisions.join(', ')}`);
+          if (profile.version.resources?.length) console.log(`  ${label('Resources:')} ${formatResourceBindings(profile.version.resources)}`);
           if (profile.version.extensions?.length) console.log(`  ${label('Exts:')}    ${profile.version.extensions.join(', ')}`);
         }
       } else {
@@ -120,6 +122,8 @@ profile
   .option("--agent-version <version>", "Agent version")
   .option("--mcp-servers <ids...>", "MCP server IDs")
   .option("--skills <refs...>", "Skill revision references")
+  .option("--resources <specs...>", "Resource specs to preset (slug, slug@rN, or revision id)")
+  .option("--resource-param <slug>:<KEY>=<VALUE>", "Resource parameter preset (repeatable); matches a --resources entry by slug", collectRepeatable, [])
   .option("--extensions <ids...>", "Extension IDs (publisher.name or publisher.name@version)")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
   .option("--project <id>", "Project ID for scoped operations (overrides SCOPE_PROJECT and the saved selection)")
@@ -135,6 +139,8 @@ profile
       if (options.agentVersion) body.agentVersion = options.agentVersion;
       if (options.mcpServers) body.mcpServers = options.mcpServers;
       if (options.skills) body.skillRevisions = options.skills;
+      const resources = buildResourceBindingSpecs(options.resources, options.resourceParam);
+      if (resources) body.resources = resources;
       if (options.extensions) body.extensions = options.extensions;
 
       const response = await apiFetch(options.url, `/profiles`, {
@@ -254,6 +260,7 @@ version
         if (ver.agentVersion) console.log(`  ${label('Agent:')}   ${value(ver.agentVersion)}`);
         if (ver.mcpServers?.length) console.log(`  ${label('MCP:')}     ${ver.mcpServers.join(', ')}`);
         if (ver.skillRevisions?.length) console.log(`  ${label('Skills:')}  ${ver.skillRevisions.join(', ')}`);
+        if (ver.resources?.length) console.log(`  ${label('Resources:')} ${formatResourceBindings(ver.resources)}`);
         if (ver.extensions?.length) console.log(`  ${label('Exts:')}    ${ver.extensions.join(', ')}`);
         console.log(`  ${label('Created:')} ${dimTimestamp(new Date(ver.createdAt).toLocaleString())}`);
       } else {
@@ -264,6 +271,7 @@ version
           { key: 'agentVersion', label: 'Agent Version', formatter: (v: any) => v.agentVersion || '' },
           { key: 'mcpServers', label: 'MCP Servers', formatter: (v: any) => (v.mcpServers || []).join(', ') },
           { key: 'skillRevisions', label: 'Skills', formatter: (v: any) => (v.skillRevisions || []).join(', ') },
+          { key: 'resources', label: 'Resources', formatter: (v: any) => formatResourceBindings(v.resources) },
           { key: 'extensions', label: 'Extensions', formatter: (v: any) => (v.extensions || []).join(', ') },
           { key: 'createdAt', label: 'Created' },
         ];
@@ -284,6 +292,8 @@ version
   .option("--agent-version <version>", "Agent version")
   .option("--mcp-servers <ids...>", "MCP server IDs")
   .option("--skills <refs...>", "Skill revision references")
+  .option("--resources <specs...>", "Resource specs to preset (slug, slug@rN, or revision id)")
+  .option("--resource-param <slug>:<KEY>=<VALUE>", "Resource parameter preset (repeatable); matches a --resources entry by slug", collectRepeatable, [])
   .option("--extensions <ids...>", "Extension IDs (publisher.name or publisher.name@version)")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
   .action(async (options) => {
@@ -295,6 +305,8 @@ version
       if (options.agentVersion) body.agentVersion = options.agentVersion;
       if (options.mcpServers) body.mcpServers = options.mcpServers;
       if (options.skills) body.skillRevisions = options.skills;
+      const resources = buildResourceBindingSpecs(options.resources, options.resourceParam);
+      if (resources) body.resources = resources;
       if (options.extensions) body.extensions = options.extensions;
 
       const response = await apiFetch(options.url, `/profiles/${options.id}`, {

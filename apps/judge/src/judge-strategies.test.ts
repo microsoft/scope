@@ -470,6 +470,9 @@ class TestableBundledStrategy extends BundledStrategy {
   publicBuildSystemPrompt(hasToolOutputs: boolean, hasAgentResponse?: boolean) {
     return (this as any).buildSystemPrompt(undefined, hasToolOutputs, hasAgentResponse);
   }
+  publicParseJsonResponse(response: string, criteria: { id: string; prompt: string }[]) {
+    return (this as any).parseJsonResponse(response, criteria);
+  }
   publicBuildUserPrompt(
     criteria: { id: string; prompt: string }[] = [
       { id: "c1", prompt: "does the code work" },
@@ -479,6 +482,31 @@ class TestableBundledStrategy extends BundledStrategy {
     return (this as any).buildUserPrompt(criteria, history);
   }
 }
+
+describe("BundledStrategy JSON parsing (issue #167)", () => {
+  const criteria = [{ id: "c1", prompt: "criterion one" }];
+
+  it("parses fenced JSON with nested objects", () => {
+    const response = '```json\n{"results":[{"criterion":"c1","passed":true,"feedback":"details"}],"meta":{"tokens":1}}\n```';
+    const result = new TestableBundledStrategy("test-model").publicParseJsonResponse(response, criteria);
+    expect(result.allPassed).toBe(true);
+    expect(result.results[0].evaluated).toBe(true);
+  });
+
+  it("ignores braces inside JSON strings", () => {
+    const response = '{"results":[{"criterion":"c1","passed":true,"feedback":"mongoose } config { is present"}]} trailing text';
+    const result = new TestableBundledStrategy("test-model").publicParseJsonResponse(response, criteria);
+    expect(result.allPassed).toBe(true);
+    expect(result.results[0].feedback).toContain("mongoose } config {");
+  });
+
+  it("treats truncated JSON as unevaluated", () => {
+    const response = '```json\n{"results":[{"criterion":"c1","passed":false,"feedback":"truncated';
+    const result = new TestableBundledStrategy("test-model").publicParseJsonResponse(response, criteria);
+    expect(result.allPassed).toBe(false);
+    expect(result.results[0].evaluated).toBe(false);
+  });
+});
 
 describe("judge tool-outputs guidance (issue #1125)", () => {
   // The headless judge cannot run commands; it must decide from the codebase

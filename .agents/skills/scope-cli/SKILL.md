@@ -174,6 +174,20 @@ In order to get the full updated reference, run `pnpm cli --help` or `pnpm cli <
 | Create from file | `pnpm cli task-prompt create -f <path>` |
 | Extract features | `pnpm cli task-prompt extract-features -i <uuid>` |
 
+### Provider Secrets
+
+Secret values are never printed; prefer the `*-stdin` flags.
+
+| Action | Command |
+|--------|---------|
+| List keys (metadata only) | `pnpm cli secret list` |
+| Get key metadata | `pnpm cli secret get <key-id>` |
+| Store a key | `printf '%s' "$KEY" \| pnpm cli secret create --type anthropic-api-key --value-stdin` |
+| Validate without storing | `printf '%s' "$KEY" \| pnpm cli secret preview --type anthropic-api-key --value-stdin` |
+| Revalidate | `pnpm cli secret validate <key-id>` |
+| Enable / disable | `pnpm cli secret update <key-id> --disable` |
+| Delete | `pnpm cli secret delete <key-id>` |
+
 ---
 
 ## Output Formats

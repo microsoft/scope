@@ -166,6 +166,10 @@ export function ProfileDetail() {
                       parts.push(short.join(", "));
                       descParts.push(`Skills: ${displayVersion.skillRevisions.join(", ")}`);
                     }
+                    if (displayVersion.resources?.length) {
+                      parts.push(displayVersion.resources.map((resource) => resource.ref).join(", "));
+                      descParts.push(`Resources: ${displayVersion.resources.map((resource) => resource.ref).join(", ")}`);
+                    }
                     if (displayVersion.extensions?.length) {
                       const short = displayVersion.extensions.map((e) => e.split("/").pop() ?? e);
                       parts.push(short.join(", "));
@@ -367,6 +371,33 @@ export function ProfileDetail() {
                             </Badge>
                           );
                         })}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {displayVersion.resources && displayVersion.resources.length > 0 && (
+                  <>
+                    <Separator />
+                    <div>
+                      <FieldLabel>Resources</FieldLabel>
+                      <div className="mt-1 space-y-2">
+                        {displayVersion.resources.map((resource) => (
+                          <div key={resource.ref} className="rounded-md border p-2">
+                            <div className="font-mono text-xs">{resource.ref}</div>
+                            {resource.params && Object.keys(resource.params).length > 0 ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {Object.entries(resource.params).map(([name, value]) => (
+                                  <Badge key={name} variant="outline" className="font-mono text-xs">
+                                    {name}={value}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-1 text-xs text-muted-foreground">No parameter presets.</p>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </>

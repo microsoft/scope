@@ -7,13 +7,12 @@ import {
   GATES,
   isGateId,
   isPromptType,
-  orderGates,
   PROMPT_TYPES,
-  validateGateConfigs,
   type GateConfig,
   type GateId,
   type PromptType,
-} from "shared";
+} from "shared/types";
+import { orderGates, validateGateConfigs } from "shared/gates";
 
 export { GATES };
 export type { GateConfig, GateId, PromptType };

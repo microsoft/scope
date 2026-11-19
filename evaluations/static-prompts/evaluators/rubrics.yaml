@@ -1,0 +1,452 @@
+version: 1
+
+defaults:
+  policyVersion: aggregate-pass-rate-floors-80-v1
+  azureMaxAttempts: 3
+  azureRetryBaseSeconds: 1
+
+graders:
+  criteria_quality:
+    type: score
+    range: [1, 5]
+    scorePassThreshold: 3
+    prompt: |
+      Score the authored criterion from 1 to 5. A strong criterion faithfully
+      expresses the requested behavior, is actionable and objectively
+      evaluable, chooses an appropriate gate and evidence source, and does not
+      invent requirements. Use the expected behavior and evidence context as
+      the rubric. Do not reward matching wording.
+
+  task_prompt_quality:
+    type: score
+    range: [1, 5]
+    scorePassThreshold: 3
+    prompt: |
+      Score the generated benchmark task from 1 to 5 for completeness, clarity,
+      feasible scope, technology consistency, self-containment, and suitability
+      for evaluating a coding agent. Penalize hidden grading instructions,
+      underspecified success conditions, and requirements unsupported by the
+      request.
+
+  variation_quality:
+    type: score
+    range: [1, 5]
+    scorePassThreshold: 3
+    prompt: |
+      Score the task variation from 1 to 5. It must preserve the source task's
+      core intent and difficulty, follow the requested variation guidance,
+      remain self-contained, and be materially different without becoming a
+      different task.
+
+  feature_definition_quality:
+    type: score
+    range: [1, 5]
+    scorePassThreshold: 3
+    prompt: |
+      Score the prompt-feature definition from 1 to 5. Its detector must
+      describe an objective and reusable characteristic, match the requested
+      concept, and avoid being so broad that most prompts match or so narrow
+      that only the example matches.
+
+  suggested_feature_novelty:
+    type: score
+    range: [1, 5]
+    scorePassThreshold: 3
+    prompt: |
+      Score suggested new prompt features from 1 to 5 for novelty,
+      distinctness, usefulness, and non-duplication relative to the supplied
+      feature catalog. Suggestions should describe reusable characteristics,
+      not restate the task.
+
+  feedback_quality:
+    type: score
+    range: [1, 5]
+    scorePassThreshold: 3
+    prompt: |
+      Score the developer feedback from 1 to 5. It should directly address the
+      immediate root failure, be concise and actionable, respect the requested
+      persona style, avoid unrelated work, and avoid revealing downstream or
+      hidden requirements.
+
+  report_quality:
+    type: score
+    range: [1, 5]
+    scorePassThreshold: 3
+    prompt: |
+      Score the run report from 1 to 5 for factual consistency with the
+      evidence, trajectory and regression analysis, evidence-backed findings,
+      actionable recommendations, and appropriate uncertainty. Penalize
+      fabricated identifiers, unsupported certainty, and operational narration
+      about insight-management tools.
+
+  criteria_evidence_source:
+    type: label
+    excludeGroundTruth: true
+    labels: [tool_history, codebase, both, unclear]
+    passingLabels: [tool_history, codebase, both, unclear]
+    prompt: |
+      Classify the primary evidence needed to evaluate the criterion:
+      tool_history when runtime actions or command results are decisive,
+      codebase when repository state is decisive, both when each is necessary,
+      or unclear when the criterion cannot determine a primary source.
+      Return only the best label.
+
+  dependency_direction:
+    type: label
+    labels: [valid, invalid, unnecessary]
+    passingLabels: [valid]
+    prompt: |
+      Judge the proposed criterion dependency direction. Label valid only when
+      the proposed parent is a genuine prerequisite for the child and the
+      direction is correct. Label unnecessary when related but not required,
+      and invalid when unrelated, reversed, or incompatible.
+      Grade the candidate-only suggestion task in the query, not the criterion
+      as a request to implement code. An empty suggestion list is valid only
+      when none of the supplied candidates is a genuine prerequisite in the
+      requested direction; otherwise it is invalid. Check every suggested edge.
+
+  judge_verdict:
+    type: label
+    labels: [correct, incorrect, unsupported]
+    passingLabels: [correct]
+    prompt: |
+      Compare the judge verdict with the criterion and available evidence.
+      Label correct when the verdict and rationale follow from available
+      evidence, incorrect when evidence supports a different verdict, and
+      unsupported when the verdict relies on missing or invented evidence.
+
+  descendant_leakage:
+    type: label
+    labels: [clean, leaked]
+    passingLabels: [clean]
+    prompt: |
+      Determine whether the feedback exposes descendant criteria, hidden future
+      requirements, grading terminology, or evaluation process details that
+      are not needed to fix the immediate root failure. Label clean or leaked.
+
+  report_simulation_interpretation:
+    type: label
+    labels: [correct, mischaracterized]
+    passingLabels: [correct]
+    prompt: |
+      Determine whether the report correctly explains simulated or hidden
+      criteria and iterative discovery. Label mischaracterized if it presents
+      hidden information as known to the agent, mistakes simulation for actual
+      execution, or draws conclusions unsupported by the run evidence.
+
+families:
+  criteria-authoring:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.prompt, output.criterion, output.criteria]
+      - check: non_empty
+        metric: non_empty_prompt
+        paths: [output.prompt, output.criterion.prompt, response]
+      - check: snake_case_identifier
+        metric: valid_identifier
+        paths: [output.id, output.suggestedId, output.criterion.id, output.criteria]
+      - check: references_candidates
+        metric: candidate_references
+        referencePaths: [output.dependencies, output.dependsOn, output.criterion.dependencies, output.criterion.dependsOn]
+        candidatePaths: [input.candidates, input.availableCriteria, input.existingCriteria]
+    evaluators:
+      - relevance
+      - coherence
+      - criteria_quality
+      - name: criteria_evidence_source
+        expectedLabelKey: criteria_evidence_source
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      non_empty_prompt: {minPassRate: 0.8}
+      valid_identifier: {minPassRate: 0.8}
+      candidate_references: {minPassRate: 0.8}
+      relevance: {minPassRate: 0.67, minMeanScore: 3.0}
+      coherence: {minPassRate: 0.67, minMeanScore: 3.0}
+      criteria_quality: {minPassRate: 0.67, minMeanScore: 3.0}
+      criteria_evidence_source: {minPassRate: 0.67}
+
+  parent-dependency-suggestion:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.suggestions, output.dependencies, output.parents, output]
+        allowEmpty: true
+      - check: references_candidates
+        metric: candidate_references
+        referencePaths: [output.suggestions, output.dependencies, output.parents, output]
+        candidatePaths: [input.candidates, input.availableCriteria]
+    evaluators:
+      - relevance
+      - dependency_direction
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      candidate_references: {minPassRate: 0.8}
+      relevance: {minPassRate: 0.67, minMeanScore: 3.0}
+      dependency_direction: {minPassRate: 0.67}
+
+  child-dependency-suggestion:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.suggestions, output.dependencies, output.children, output]
+        allowEmpty: true
+      - check: references_candidates
+        metric: candidate_references
+        referencePaths: [output.suggestions, output.dependencies, output.children, output]
+        candidatePaths: [input.candidates, input.availableCriteria]
+    evaluators:
+      - relevance
+      - dependency_direction
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      candidate_references: {minPassRate: 0.8}
+      relevance: {minPassRate: 0.67, minMeanScore: 3.0}
+      dependency_direction: {minPassRate: 0.67}
+
+  task-prompt-generation:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.prompt, output.taskPrompt, output]
+      - check: non_empty
+        metric: non_empty_prompt
+        paths: [output.prompt, output.taskPrompt, response]
+      - check: no_existing_duplicate
+        paths: [output.prompt, output.taskPrompt, response]
+        existingPaths: [input.existingPrompts, input.existing_prompts]
+      - check: sample_diversity
+        metric: sample_diversity
+        minUniqueRatio: 0.67
+        maxPairSimilarity: 0.95
+    evaluators:
+      - relevance
+      - coherence
+      - fluency
+      - name: intent_resolution
+        blocking: false
+      - task_prompt_quality
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      non_empty_prompt: {minPassRate: 0.8}
+      no_existing_duplicate: {minPassRate: 0.8}
+      sample_diversity: {minPassRate: 0.67}
+      relevance: {minPassRate: 0.67, minMeanScore: 3.0}
+      coherence: {minPassRate: 0.67, minMeanScore: 3.0}
+      fluency: {minPassRate: 0.67, minMeanScore: 3.0}
+      intent_resolution: {minPassRate: 0.67, minMeanScore: 3.0, blocking: false}
+      task_prompt_quality: {minPassRate: 0.67, minMeanScore: 3.0}
+
+  task-prompt-variation:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.prompt, output.taskPrompt, output.variation, output]
+      - check: non_empty
+        metric: non_empty_prompt
+        paths: [output.prompt, output.taskPrompt, output.variation, response]
+      - check: no_existing_duplicate
+        paths: [output.prompt, output.taskPrompt, output.variation, response]
+        existingPaths: [input.existingPrompts, input.existing_prompts, input.sourcePrompt]
+      - check: sample_diversity
+        metric: sample_diversity
+        minUniqueRatio: 0.67
+        maxPairSimilarity: 0.95
+    evaluators:
+      - relevance
+      - coherence
+      - fluency
+      - name: intent_resolution
+        blocking: false
+      - variation_quality
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      non_empty_prompt: {minPassRate: 0.8}
+      no_existing_duplicate: {minPassRate: 0.8}
+      sample_diversity: {minPassRate: 0.67}
+      relevance: {minPassRate: 0.67, minMeanScore: 3.0}
+      coherence: {minPassRate: 0.67, minMeanScore: 3.0}
+      fluency: {minPassRate: 0.67, minMeanScore: 3.0}
+      intent_resolution: {minPassRate: 0.67, minMeanScore: 3.0, blocking: false}
+      variation_quality: {minPassRate: 0.67, minMeanScore: 3.0}
+
+  prompt-feature-authoring:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.suggestedId, output.prompt, output]
+      - check: non_empty
+        metric: non_empty_definition
+        paths: [output.prompt, response]
+      - check: snake_case_identifier
+        metric: valid_identifier
+        paths: [output.suggestedId]
+      - check: references_candidates
+        metric: candidate_references
+        referencePaths: [output.suggestedParents, output.suggestedChildren]
+        candidatePaths: [input.candidates, input.availableFeatures, input.existingFeatures]
+    evaluators:
+      - relevance
+      - coherence
+      - feature_definition_quality
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      non_empty_definition: {minPassRate: 0.8}
+      valid_identifier: {minPassRate: 0.8}
+      candidate_references: {minPassRate: 0.8}
+      relevance: {minPassRate: 0.67, minMeanScore: 3.0}
+      coherence: {minPassRate: 0.67, minMeanScore: 3.0}
+      feature_definition_quality: {minPassRate: 0.67, minMeanScore: 3.0}
+
+  prompt-feature-extraction:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.results]
+      - check: feature_result_coverage
+        metric: feature_result_coverage
+        actualPaths: [output.results]
+        expectedPaths: [input.features]
+      - check: references_candidates
+        metric: candidate_references
+        referencePaths: [output.results]
+        candidatePaths: [input.features, input.availableFeatures]
+      - check: label_metrics
+        predictedPaths: [output.results]
+        expectedPaths: [expected.results]
+        detectedOnly: true
+        thresholds:
+          feature_precision: 1.0
+          feature_recall: 1.0
+          feature_f1: 1.0
+          feature_exact_match: 1.0
+    evaluators:
+      - name: suggested_feature_novelty
+        requiredFields: [output.suggestedFeatures]
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      feature_result_coverage: {minPassRate: 0.8}
+      candidate_references: {minPassRate: 0.8}
+      feature_precision: {minPassRate: 0.8, minMeanScore: 1.0}
+      feature_recall: {minPassRate: 0.8, minMeanScore: 1.0}
+      feature_f1: {minPassRate: 0.8, minMeanScore: 1.0}
+      feature_exact_match: {minPassRate: 0.8, minMeanScore: 1.0}
+      suggested_feature_novelty: {minPassRate: 0.67, minMeanScore: 3.0}
+
+  judge-instructions:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.results, output.verdicts, output.evaluation, output]
+      - check: criterion_coverage
+        metric: criterion_coverage
+        actualPaths: [output.results, output.verdicts]
+        expectedPaths: [expected.results, expected.criterionIds, input.criteria]
+    evaluators:
+      - groundedness
+      - name: task_adherence
+        scorePassThreshold: 1
+      - name: tool_call_accuracy
+        requiredFields: [query_messages, response_messages, tool_definitions, tool_calls]
+      - judge_verdict
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      criterion_coverage: {minPassRate: 0.8}
+      groundedness: {minPassRate: 0.67, minMeanScore: 3.0}
+      task_adherence: {minPassRate: 0.67}
+      tool_call_accuracy: {minPassRate: 0.67, minMeanScore: 3.0}
+      judge_verdict: {minPassRate: 0.67}
+
+  developer-feedback:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.feedback, output.text, output.message, output]
+      - check: non_empty
+        metric: non_empty_feedback
+        paths: [output.feedback, output.text, output.message, response]
+      - check: forbidden_terms
+        metric: forbidden_language
+        paths: [output.feedback, output.text, output.message, response]
+        terms: [judge, judges, criterion, criteria, evaluation, evaluator, score, grading]
+      - check: no_questions
+        metric: no_questions
+        paths: [output.feedback, output.text, output.message, response]
+      - check: descendant_leakage
+        metric: descendant_leakage_check
+        paths: [output.feedback, output.text, output.message, response]
+        descendantPaths: [expected.descendantRequirements, input.descendantPrompts]
+    evaluators:
+      - relevance
+      - coherence
+      - fluency
+      - groundedness
+      - name: intent_resolution
+        blocking: false
+      - name: task_adherence
+        scorePassThreshold: 1
+      - feedback_quality
+      - descendant_leakage
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      non_empty_feedback: {minPassRate: 0.8}
+      forbidden_language: {minPassRate: 0.8}
+      no_questions: {minPassRate: 0.8}
+      descendant_leakage_check: {minPassRate: 0.8}
+      relevance: {minPassRate: 0.67, minMeanScore: 3.0}
+      coherence: {minPassRate: 0.67, minMeanScore: 3.0}
+      fluency: {minPassRate: 0.67, minMeanScore: 3.0}
+      groundedness: {minPassRate: 0.67, minMeanScore: 3.0}
+      intent_resolution: {minPassRate: 0.67, minMeanScore: 3.0, blocking: false}
+      task_adherence: {minPassRate: 0.67}
+      feedback_quality: {minPassRate: 0.67, minMeanScore: 3.0}
+      descendant_leakage: {minPassRate: 0.67}
+
+  run-report:
+    deterministic:
+      - check: generation_success
+      - check: output_schema
+        requiredAny: [output.markdown, output.report, output.content, output]
+      - check: non_empty
+        metric: non_empty_report
+        paths: [output.markdown, output.report, output.content, response]
+      - check: markdown
+        metric: valid_markdown
+        paths: [output.markdown, output.report, output.content, response]
+      - check: no_fabricated_references
+        metric: no_fabricated_references
+        paths: [output.markdown, output.report, output.content, response]
+    evaluators:
+      - relevance
+      - coherence
+      - fluency
+      - groundedness
+      - name: task_adherence
+        scorePassThreshold: 1
+      - name: tool_call_accuracy
+        requiredFields: [query_messages, response_messages, tool_definitions, tool_calls]
+      - report_quality
+      - report_simulation_interpretation
+    thresholds:
+      generation_success: {minPassRate: 0.8}
+      output_schema: {minPassRate: 0.8}
+      non_empty_report: {minPassRate: 0.8}
+      valid_markdown: {minPassRate: 0.8}
+      no_fabricated_references: {minPassRate: 0.8}
+      relevance: {minPassRate: 0.67, minMeanScore: 3.0}
+      coherence: {minPassRate: 0.67, minMeanScore: 3.0}
+      fluency: {minPassRate: 0.67, minMeanScore: 3.0}
+      groundedness: {minPassRate: 0.67, minMeanScore: 3.0}
+      task_adherence: {minPassRate: 0.67}
+      tool_call_accuracy: {minPassRate: 0.67, minMeanScore: 3.0}
+      report_quality: {minPassRate: 0.67, minMeanScore: 3.0}
+      report_simulation_interpretation: {minPassRate: 0.67}

@@ -3,7 +3,7 @@
 
 import { describe, it, expect, afterEach, afterAll } from "vitest";
 import { createServer, type Server } from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve, join } from "node:path";
@@ -45,9 +45,14 @@ function stopServers(): void {
 
 /** Run a command against the bundle with controlled env */
 async function runBundle(args: string[], tempDir: string) {
-  return execFileAsync("node", [BUNDLE_PATH, ...args], {
+  const isolatedBundle = join(tempDir, "scope.mjs");
+  copyFileSync(BUNDLE_PATH, isolatedBundle);
+  return execFileAsync(process.execPath, ["--no-global-search-paths", isolatedBundle, ...args], {
+    cwd: tempDir,
     env: {
       ...process.env,
+      NODE_PATH: "",
+      NODE_OPTIONS: "",
       SCOPE_NO_UPDATE_CHECK: "",
       SCOPE_RELEASES_URL: `http://127.0.0.1:${releasePort}`,
       SCOPE_API_URL: `http://127.0.0.1:${apiPort}`,
@@ -107,9 +112,14 @@ describe("update-check (via bundle)", () => {
     await startServers();
     const tempDir = mkdtempSync(join(tmpdir(), "scope-uc-"));
     try {
-      const { stderr } = await execFileAsync("node", [BUNDLE_PATH, "run", "list"], {
+      const isolatedBundle = join(tempDir, "scope.mjs");
+      copyFileSync(BUNDLE_PATH, isolatedBundle);
+      const { stderr } = await execFileAsync(process.execPath, ["--no-global-search-paths", isolatedBundle, "run", "list"], {
+        cwd: tempDir,
         env: {
           ...process.env,
+          NODE_PATH: "",
+          NODE_OPTIONS: "",
           SCOPE_NO_UPDATE_CHECK: "1",
           SCOPE_RELEASES_URL: `http://127.0.0.1:${releasePort}`,
           SCOPE_API_URL: `http://127.0.0.1:${apiPort}`,

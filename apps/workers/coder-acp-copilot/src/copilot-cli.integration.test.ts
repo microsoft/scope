@@ -17,11 +17,19 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import Docker from "dockerode";
-import { loadVersions, isDockerAvailable, imageExists, buildImage } from "./docker-test-helpers.js";
+import {
+  loadVersions,
+  isDockerAvailable,
+  imageExists,
+  buildImage,
+  runTestWorker,
+  type TestResult,
+} from "test-utils";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 const IMAGE_TAG = "coder-acp-copilot-integration-test";
+const WORKING_DIR = "/app/apps/workers/coder-acp-copilot";
 
 // ---------------------------------------------------------------------------
 // Env-var configuration
@@ -33,77 +41,6 @@ const hasCredentials = !!GITHUB_TOKEN;
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-interface PromptResult {
-  success: boolean;
-  response?: string;
-  stopReason?: string;
-  error?: string;
-  confirmedModel?: string;
-}
-
-interface ToolCheck {
-  tool: string;
-  available: boolean;
-  path?: string;
-  version?: string;
-}
-
-interface TestResult {
-  prompts: PromptResult[];
-  toolChecks?: ToolCheck[];
-  lastStep?: string;
-  logs?: string[];
-}
-
-/**
- * Run test-worker.ts inside the Docker image and return parsed results.
- */
-async function runTestWorker(
-  docker: Docker,
-  env: string[],
-): Promise<{ result: TestResult; exitCode: number }> {
-  const container = await docker.createContainer({
-    Image: IMAGE_TAG,
-    Cmd: ["npx", "tsx", "src/test-worker.ts"],
-    Env: env,
-    WorkingDir: "/app/apps/workers/coder-acp-copilot",
-    HostConfig: {},
-  });
-
-  // Attach to stream container output in real-time
-  const stream = await container.attach({
-    stream: true,
-    stdout: true,
-    stderr: true,
-  });
-
-  stream.on("data", (chunk: Buffer) => {
-    const text = chunk.toString("utf-8").replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, "");
-    if (text.trim()) {
-      process.stderr.write(`[container] ${text}`);
-      if (!text.endsWith("\n")) process.stderr.write("\n");
-    }
-  });
-
-  await container.start();
-  const { StatusCode } = await container.wait();
-
-  // Grab full logs for parsing TEST_RESULT
-  const logBuffer = await container.logs({ stdout: true, stderr: true });
-  await container.remove().catch(() => {});
-
-  const raw = logBuffer.toString("utf-8");
-  const stdout = raw.replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, "");
-
-  const match = stdout.match(/TEST_RESULT:(\{.*\})/);
-  if (!match) {
-    throw new Error(`No TEST_RESULT found in container output:\n${stdout.substring(0, 2000)}`);
-  }
-  const result: TestResult = JSON.parse(match[1]);
-
-  return { result, exitCode: StatusCode };
-}
 
 /** Write to stderr so Vitest never swallows it */
 function log(msg: string): void {
@@ -126,11 +63,12 @@ describe("coder-acp-copilot integration", async () => {
 
   const docker = new Docker();
   let workerResult: { result: TestResult; exitCode: number } | undefined;
+  let modelSelectionResult: { result: TestResult; exitCode: number } | undefined;
 
   beforeAll(async () => {
     if (!dockerAvailable) return;
 
-    const versions = loadVersions();
+    const versions = loadVersions(resolve(__dirname, "..", "versions.env"));
 
     if (await imageExists(docker, IMAGE_TAG)) {
       log("Docker image already exists (pre-built by CI), skipping build");
@@ -152,12 +90,29 @@ describe("coder-acp-copilot integration", async () => {
       env.push(
         `GITHUB_TOKEN=${GITHUB_TOKEN}`,
         "TEST_PROMPT=Generate a Hello World REST API in Python using Flask.",
-        "TEST_MODEL=claude-opus-4.6",
       );
     }
-    workerResult = await runTestWorker(docker, env);
+    workerResult = await runTestWorker(docker, { image: IMAGE_TAG, workingDir: WORKING_DIR, env });
     log(`exit=${workerResult.exitCode} lastStep=${workerResult.result.lastStep}`);
-  }, 600_000); // 10 min for Docker build
+
+    // Keep the real coding prompt on the session default. Exercise model
+    // switching in a separate short session so server-side model ordering
+    // cannot make the coding assertion flaky.
+    if (hasCredentials) {
+      modelSelectionResult = await runTestWorker(docker, {
+        image: IMAGE_TAG,
+        workingDir: WORKING_DIR,
+        env: [
+          `GITHUB_TOKEN=${GITHUB_TOKEN}`,
+          "TEST_PROMPT=Reply with OK.",
+          "TEST_SELECT_NON_DEFAULT_MODEL=true",
+        ],
+      });
+      log(
+        `model selection exit=${modelSelectionResult.exitCode} lastStep=${modelSelectionResult.result.lastStep}`
+      );
+    }
+  }, 900_000); // 15 min for Docker build plus two authenticated sessions
 
   afterAll(async () => {
     // Image kept for faster re-runs. Use `docker system prune` to clean up.
@@ -208,36 +163,49 @@ describe("coder-acp-copilot integration", async () => {
   );
 
   // -----------------------------------------------------------------------
-  // Model selection test: ACP set_model actually changes the active model
+  // Model selection test: ACP changes to an advertised non-default model
   // -----------------------------------------------------------------------
 
   it.skipIf(!canRun)(
-    "honours the requested model via ACP set_model",
+    "selects an advertised non-default model via ACP",
     { timeout: 300_000 },
     async () => {
-      const { result } = workerResult!;
+      const { result } = modelSelectionResult!;
       const first = result.prompts[0];
 
+      expect(
+        first.error,
+        `Model selection probe failed: ${first?.error}`
+      ).toBeUndefined();
+      expect(first.success).toBe(true);
       log(`confirmedModel=${first.confirmedModel}`);
 
-      // KNOWN LIMITATION: model selection depends on server-side capability
-      // advertisement. The ACP newSession response must include either a `models`
-      // field or a `configOptions` entry with category "model". If the server
-      // stops advertising these (which can change independently of CLI version),
-      // selectModel() returns undefined and we can only verify the graceful
-      // fallback path rather than asserting a confirmed model.
       if (first.confirmedModel === undefined) {
-        // Server did not advertise model selection — verify logs show the warning
-        const hasWarning = result.logs?.some((l) =>
-          l.includes("does not advertise model selection capability")
+        const selectionUnavailable = result.logs?.some(
+          (line) =>
+            line.includes("does not advertise model selection capability") ||
+            line.includes(
+              "model selector did not choose a model from the advertised model options"
+            )
         );
+        const selectionFailed = result.logs?.some(
+          (line) =>
+            line.includes("session/set_model failed") ||
+            line.includes("session/set_config_option failed for model")
+        );
+
         expect(
-          hasWarning,
-          "selectModel() returned undefined but expected a capability warning in logs",
+          selectionFailed,
+          "Dynamic model selection reached an ACP selection method but failed",
+        ).toBe(false);
+        expect(
+          selectionUnavailable,
+          "Expected an explicit warning when no alternate advertised model can be selected",
         ).toBe(true);
-        log("SKIPPED (server did not advertise model selection capability)");
+        log("SKIPPED (server did not advertise an alternate selectable model)");
       } else {
-        expect(first.confirmedModel).toBe("claude-opus-4.6");
+        expect(first.initialModel, "Expected the session's initial model").toBeTruthy();
+        expect(first.confirmedModel).not.toBe(first.initialModel);
       }
     },
   );

@@ -29,10 +29,21 @@ packages/
   model-scanning/               # Shared model scanning logic
   version-checking/             # Version comparison utilities
   llm-eval/                     # LLM-graded eval harness (grader, sampling, rate-limit retry)
+  test-utils/                   # ACP worker integration test helpers (Docker runner, in-container harness)
 config/                         # Benchmark definitions (YAML)
 ```
 
 For package architecture and data models, see [docs/architecture/app-design.md](docs/architecture/app-design.md).
+
+## Cross-client domain ownership
+
+The API owns domain validation, orchestration, fan-out, defaulting, and
+resolution rules shared by Portal, CLI, and direct API consumers. Portal and CLI
+are thin clients: they collect user intent and may provide early validation, but
+must not duplicate or materialize API-owned business logic. When one user action
+expands into multiple domain objects, each object is derived independently by
+the API from the shared intent so client or sibling state cannot leak between
+them.
 
 ## Key Components
 
@@ -162,6 +173,16 @@ Built on `mongo-migrate-ts`. Migrations are TypeScript files with `up()` and `do
 - Run: `pnpm migrate:up`, `pnpm migrate:down`, `pnpm migrate:status`
 - Framework docs: [docs/architecture/db-migrations.md](docs/architecture/db-migrations.md)
 
+## Code Readability
+
+- Write for humans: descriptive names, small focused functions, simple control flow, minimal abstraction.
+- Separate logical steps with blank lines; avoid dense one-liners and unrelated statements packed together.
+- Give every non-trivial function and logical code block a short comment explaining what it does; add intent, assumptions, invariants, or surprising reasons where useful.
+- Apply the same rule to tests: comment non-trivial fixture setup, user-flow phases, and invariant assertions. A descriptive test name does not replace intent comments inside a multi-step test; avoid generic `Arrange` / `Act` / `Assert` labels and comments that merely repeat the next line.
+- Document function parameters, types, and their fields/properties with concise JSDoc/TSDoc explaining meaning, constraints, units, optionality, and defaults where relevant.
+- Do not narrate trivial or self-evident code. Document public contracts and failure behavior when names and types are insufficient.
+- Follow local conventions and formatters; review readability as well as correctness.
+
 ## Development
 
 ```bash
@@ -173,6 +194,15 @@ pnpm dev:portal                   # Portal only (native)
 pnpm dev:<worker-name>            # Individual worker (native)
 pnpm open:portal                  # Open portal in browser
 ```
+
+Before a large clean Docker or Podman rebuild, inspect the container runtime
+storage and any runtime VM filesystem as described in
+[`CONTRIBUTING.md`](CONTRIBUTING.md#prepare-container-storage-for-a-clean-rebuild),
+then report the available space and Scope-specific resources. Never
+automatically run broad prune commands or delete unrelated images, containers,
+build cache, or volumes. Any cleanup must target verified Scope resources and
+requires explicit user approval; warn that named volumes may contain local
+database or authentication data.
 
 ### Shared Dev Infrastructure (CosmosDB)
 
@@ -193,6 +223,27 @@ pnpm test:integration             # Integration tests (requires .env + Docker)
 ```
 
 > **Portal Storybook stories run under Vitest**: `apps/portal/src/components/ui/stories.play.test.tsx` composes the `ui/*` stories and executes their `play` (interaction) functions inside the regular Vitest suite (no `@storybook/addon-vitest` required). It binds a Testing Library `canvas` to the rendered container, so story `play` functions must keep depending only on `canvas` plus values imported directly from `storybook/test` (`userEvent`, `screen`, `expect`). When you add a new `ui/*` story with a `play` function, register its module in that harness so it's covered.
+
+### Static prompt evaluations
+
+Read [docs/architecture/prompt-evaluations.md](docs/architecture/prompt-evaluations.md)
+before changing any AI-facing instruction surface.
+
+- Whenever hardcoded system/user prompt text, prompt-building logic, output
+  instructions, or AI-facing tool descriptions are added or modified, update
+  the corresponding production target adapter, curated cases, deterministic
+  checks, composition contract, and/or rubric.
+- Register every new runtime static prompt family in the documented inventory,
+  committed evaluation manifest, and JSONL adapter registry.
+- Run the smallest relevant explicit prompt-evaluation command before treating
+  a prompt change as complete. These suites are developer-invoked and are not
+  part of normal `pnpm test` or CI.
+- A change to user-authored/configurable prompt content does not by itself
+  create a static prompt family.
+- Whenever a user-controlled text field that reaches an AI is added or its
+  insertion point, trusted wrapper, role, tools, or security boundary changes,
+  preserve its benign composition contract. Cloud red-team profiles and
+  execution are maintained in a separate follow-up contribution.
 
 ## Contributing (Pull Requests)
 
@@ -231,6 +282,7 @@ not open the PR against the fork unless the user explicitly asks you to.
 |----------|-------------|
 | [docs/architecture/overview.md](docs/architecture/overview.md) | System architecture, component interactions, data flow |
 | [docs/architecture/app-design.md](docs/architecture/app-design.md) | Data models, API design, package dependency graph |
+| [docs/architecture/prompt-evaluations.md](docs/architecture/prompt-evaluations.md) | Static prompt quality, datasets, commands, and maintenance rules |
 | [docs/architecture/data-organization-projects.md](docs/architecture/data-organization-projects.md) | Projects (a single container) to isolate/group data within a cluster; composes with data-tags and auth-rbac |
 | [docs/architecture/auth-rbac.md](docs/architecture/auth-rbac.md) | Explicit-login IdP auth, Redis user-access cache, Portal handshake; deferred RBAC/internal-token roadmap |
 | [docs/architecture/vscode-web-worker.md](docs/architecture/vscode-web-worker.md) | XState chat machine, GitHub auth flow, ARIA snapshots |

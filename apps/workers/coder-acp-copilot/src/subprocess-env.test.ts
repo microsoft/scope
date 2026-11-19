@@ -2,7 +2,40 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect } from "vitest";
-import { buildSubprocessEnv } from "./index.js";
+import { buildSubprocessEnv, assertNoPublishChannelCollision } from "./index.js";
+
+describe("assertNoPublishChannelCollision", () => {
+  it("accepts keys published to exactly one channel", () => {
+    expect(() =>
+      assertNoPublishChannelCollision({ PUBLIC_URL: "http://visible" }, { SECRET_TOKEN: "ghp_x" }),
+    ).not.toThrow();
+  });
+
+  it("accepts empty channels", () => {
+    expect(() => assertNoPublishChannelCollision({}, {})).not.toThrow();
+  });
+
+  it("rejects a key published to both channels", () => {
+    // Silently resolving this would discard the public value and withhold the key
+    // from the agent entirely, while MCP interpolation quietly used the concealed
+    // value — a security-sensitive ambiguity that must fail loudly.
+    expect(() =>
+      assertNoPublishChannelCollision(
+        { API_URL: "http://public", OTHER: "x" },
+        { API_URL: "http://concealed" },
+      ),
+    ).toThrow(/API_URL/);
+  });
+
+  it("reports every colliding key", () => {
+    expect(() =>
+      assertNoPublishChannelCollision(
+        { B_KEY: "1", A_KEY: "2" },
+        { B_KEY: "3", A_KEY: "4" },
+      ),
+    ).toThrow(/A_KEY, B_KEY/);
+  });
+});
 
 describe("buildSubprocessEnv", () => {
   const token = "gho_test_token_1234567890";
@@ -56,6 +89,34 @@ describe("buildSubprocessEnv", () => {
       expect(noProxy).toContain("github.com");
       expect(noProxy).toContain("api.github.com");
       expect(env.no_proxy).toBe(env.NO_PROXY);
+    });
+  });
+
+  describe("concealed resource values", () => {
+    const resourceEnv = { PUBLIC_URL: "http://visible", SECRET_URL: "http://hidden", SECRET_TOKEN: "ghp_x" };
+
+    it("passes resource values through when nothing is concealed", () => {
+      const env = buildSubprocessEnv(token, false, undefined, undefined, undefined, undefined, resourceEnv);
+      expect(env.PUBLIC_URL).toBe("http://visible");
+      expect(env.SECRET_URL).toBe("http://hidden");
+    });
+
+    it("omits concealed names from the agent's environment", () => {
+      const env = buildSubprocessEnv(token, false, undefined, undefined, undefined, undefined, resourceEnv, [
+        "SECRET_URL",
+        "SECRET_TOKEN",
+      ]);
+      expect(env).not.toHaveProperty("SECRET_URL");
+      expect(env).not.toHaveProperty("SECRET_TOKEN");
+      expect(env.PUBLIC_URL).toBe("http://visible");
+    });
+
+    it("keeps the fixed keys intact while concealing", () => {
+      const env = buildSubprocessEnv(token, false, undefined, undefined, undefined, undefined, resourceEnv, [
+        "SECRET_URL",
+      ]);
+      expect(env.GITHUB_TOKEN).toBe(token);
+      expect(env.COPILOT_AUTO_UPDATE).toBe("false");
     });
   });
 

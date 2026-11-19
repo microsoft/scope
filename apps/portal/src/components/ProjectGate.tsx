@@ -76,10 +76,15 @@ export function ProjectFirstRunView({
                   onClick={() => onSelect(projectId(project))}
                 >
                   <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="flex flex-col">
-                    <span className="font-medium">{project.name}</span>
+                  {/* min-w-0 lets this column shrink below its content width. A flex
+                      item defaults to min-width:auto, so without it a long description
+                      pushes the row wider than the card instead of wrapping. */}
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium">{project.name}</span>
                     {project.description && (
-                      <span className="text-xs text-muted-foreground">{project.description}</span>
+                      <span className="line-clamp-2 text-xs text-muted-foreground">
+                        {project.description}
+                      </span>
                     )}
                   </span>
                 </Button>

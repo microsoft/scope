@@ -18,11 +18,19 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import Docker from "dockerode";
-import { loadVersions, isDockerAvailable, imageExists, buildImage } from "./docker-test-helpers.js";
+import {
+  loadVersions,
+  isDockerAvailable,
+  imageExists,
+  buildImage,
+  runTestWorker,
+  type TestResult,
+} from "test-utils";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 const IMAGE_TAG = "coder-acp-claude-code-integration-test";
+const WORKING_DIR = "/app/apps/workers/coder-acp-claude-code";
 
 // ---------------------------------------------------------------------------
 // Env-var configuration
@@ -35,76 +43,6 @@ const hasCredentials = !!(ANTHROPIC_API_KEY || CLAUDE_CODE_OAUTH_TOKEN);
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-interface PromptResult {
-  success: boolean;
-  response?: string;
-  stopReason?: string;
-  error?: string;
-}
-
-interface ToolCheck {
-  tool: string;
-  available: boolean;
-  path?: string;
-  version?: string;
-}
-
-interface TestResult {
-  prompts: PromptResult[];
-  toolChecks?: ToolCheck[];
-  lastStep?: string;
-  logs?: string[];
-}
-
-/**
- * Run test-worker.ts inside the Docker image and return parsed results.
- */
-async function runTestWorker(
-  docker: Docker,
-  env: string[],
-): Promise<{ result: TestResult; exitCode: number }> {
-  const container = await docker.createContainer({
-    Image: IMAGE_TAG,
-    Cmd: ["npx", "tsx", "src/test-worker.ts"],
-    Env: env,
-    WorkingDir: "/app/apps/workers/coder-acp-claude-code",
-    HostConfig: {},
-  });
-
-  // Attach to stream container output in real-time
-  const stream = await container.attach({
-    stream: true,
-    stdout: true,
-    stderr: true,
-  });
-
-  stream.on("data", (chunk: Buffer) => {
-    const text = chunk.toString("utf-8").replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, "");
-    if (text.trim()) {
-      process.stderr.write(`[container] ${text}`);
-      if (!text.endsWith("\n")) process.stderr.write("\n");
-    }
-  });
-
-  await container.start();
-  const { StatusCode } = await container.wait();
-
-  // Grab full logs for parsing TEST_RESULT
-  const logBuffer = await container.logs({ stdout: true, stderr: true });
-  await container.remove().catch(() => {});
-
-  const raw = logBuffer.toString("utf-8");
-  const stdout = raw.replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, "");
-
-  const match = stdout.match(/TEST_RESULT:(\{.*\})/);
-  if (!match) {
-    throw new Error(`No TEST_RESULT found in container output:\n${stdout.substring(0, 2000)}`);
-  }
-  const result: TestResult = JSON.parse(match[1]);
-
-  return { result, exitCode: StatusCode };
-}
 
 /** Write to stderr so Vitest never swallows it */
 function log(msg: string): void {
@@ -131,7 +69,7 @@ describe("coder-acp-claude-code integration", async () => {
   beforeAll(async () => {
     if (!dockerAvailable) return;
 
-    const versions = loadVersions();
+    const versions = loadVersions(resolve(__dirname, "..", "versions.env"));
 
     if (await imageExists(docker, IMAGE_TAG)) {
       log("Docker image already exists (pre-built by CI), skipping build");
@@ -143,6 +81,7 @@ describe("coder-acp-claude-code integration", async () => {
         dockerfile: "apps/workers/coder-acp-claude-code/Dockerfile",
         target: "dev",
         buildargs: versions,
+        streamOutput: true,
       });
       log("Docker build complete");
     }
@@ -159,7 +98,7 @@ describe("coder-acp-claude-code integration", async () => {
         "TEST_PROMPT_2=Add a /health endpoint to the Flask app that returns 200 OK.",
       );
     }
-    workerResult = await runTestWorker(docker, env);
+    workerResult = await runTestWorker(docker, { image: IMAGE_TAG, workingDir: WORKING_DIR, env });
     log(`exit=${workerResult.exitCode} lastStep=${workerResult.result.lastStep}`);
   }, 600_000); // 10 min for Docker build
 

@@ -28,6 +28,11 @@ swap the agent, the model, or the surrounding tools.
   their parents passing — use it for multi-step evaluation, or just
   leave dependencies off and every criterion becomes a root.
 - **Watch runs in real time** as logs stream from the worker.
+- **Inspect the evidence.** Review generated files, workspace snapshots,
+  criteria results, captured agent activity, reports, and insights.
+- **Evaluate changes.** Reuse tasks, profiles, and versioned starting codebases
+  to compare surfaces such as CLIs, MCP servers, skills, and documentation,
+  as well as models, context, tasks, and operating systems.
 - **Compare across heterogeneous tasks** using prompt features —
   characteristics Scope detects on your task prompt (e.g. "asks for
   an API", "asks for TypeScript") so you can ask questions like *"how
@@ -35,6 +40,31 @@ swap the agent, the model, or the surrounding tools.
   tagging every run.
 - **Automate everything** through the REST API or the `scope` CLI —
   submit runs, manage profiles and criteria, fetch results.
+
+## How it works
+
+1. **Define** a task, its evaluation criteria, and the agent configuration.
+2. **Submit** a request through the Portal or CLI. The API stores the request
+   in MongoDB. The scheduler claims pending runs and dispatches them to the
+   appropriate storage queue.
+3. **Execute and evaluate.** The worker runs the agent and asks the Judge to
+   evaluate its output. Runs can include multiple feedback iterations.
+4. **Inspect and compare.** Review logs, snapshots, and criteria results.
+   Post-processing and report workers produce additional analysis when enabled.
+
+| Service | Role in a run |
+| --- | --- |
+| MongoDB | Stores evaluation configuration, run records, worker status updates, and the Judge's criteria results. |
+| Storage Queues | Deliver work from the scheduler to coding-agent workers. |
+| Redis | Relays worker logs and live events to the API for Portal and CLI clients. |
+| Blob Storage | Holds larger artifacts, including workspace snapshots written by workers. |
+
+Local development uses MongoDB, Redis, Azurite (the Azure Storage emulator),
+and Lowkey Vault. See
+[Local development](/getting-started/local-development/) to run the stack, or
+the
+[system architecture](https://github.com/microsoft/scope/blob/main/docs/architecture/system-architecture.md)
+for service details and production deployment considerations.
 
 ## When Scope is the right tool
 
@@ -53,16 +83,37 @@ It is **not** a hosted IDE or an agent runtime you embed in your own
 products — it's a measurement platform that drives existing agents
 against tasks you control.
 
+## Part of Developer Agent Experience
+
+Scope is the measurement tool of the
+[Developer Agent Experience (DevAX)](https://aka.ms/agent-experience)
+practice. DevAX covers the rest of the loop: deciding what to measure,
+designing evals that hold up, and testing fixes before you ship them.
+Start with its playbook if you're new to evaluating agent experience.
+
 ## Who it's for
 
 Scope is for teams that need to measure and compare AI coding
 agents:
 
+- **Product managers** evaluating how coding agents use their software and
+  respond to feedback.
 - **Engineers** designing task prompts and criteria to characterize the
   agentic experience.
 - **Researchers** comparing agent trajectories across diverse tasks.
 - **Pipelines and tooling** that submit runs programmatically via the
   REST API.
+
+## Interpreting results
+
+A working result is only part of the agentic experience. Use repeatable
+evaluations to understand both successes and failures, including the steps an
+agent took and how it responded to feedback.
+
+Results describe the tasks and configurations you tested, not a universal
+agent ranking. The automated Judge can make mistakes; important conclusions
+need human review. See [Support and security](/resources/support/) for
+responsible-use guidance.
 
 ## Where to next
 
@@ -70,3 +121,6 @@ agents:
   the vocabulary.
 - Ready to submit your first run? Jump to
   [Access](/getting-started/access/).
+- Want to run Scope locally? Follow
+  [Local development](/getting-started/local-development/).
+- Interested in improving Scope? Read [Contributing](/resources/contributing/).

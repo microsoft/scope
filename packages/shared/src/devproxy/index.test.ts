@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createProxyClient } from "./index.js";
 
 describe("createProxyClient (devproxy backend)", () => {
@@ -84,5 +84,70 @@ describe("createProxyClient (gateway backend)", () => {
     const client = createProxyClient();
     expect(client.backend).toBe("gateway");
     expect(client.apiUrl).toBe("http://localhost:18000");
+  });
+});
+
+describe("gateway startRecording plugin assembly", () => {
+  let originalEnv: NodeJS.ProcessEnv;
+  let startSessionSpy: ReturnType<typeof vi.fn<typeof fetch>>;
+
+  beforeEach(() => {
+    originalEnv = { ...process.env };
+    process.env.PROXY_BACKEND = "gateway";
+    delete process.env.DEV_PROXY_API_URL;
+    delete process.env.TOKEN_MANAGER_URL;
+    delete process.env.GATEWAY_TOKEN_PLUGIN_ENABLED;
+    delete process.env.GATEWAY_CAPI_HMAC_ENABLED;
+
+    // Mock fetch to intercept startSession calls
+    startSessionSpy = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ id: "test-session-id" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(startSessionSpy);
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.restoreAllMocks();
+  });
+
+  function getPluginsFromCall(): Record<string, unknown> {
+    const body = JSON.parse(startSessionSpy.mock.calls[0][1]?.body as string);
+    return body.plugins;
+  }
+
+  it("does not include capi_hmac by default", async () => {
+    const client = createProxyClient();
+    await client.startRecording();
+    const plugins = getPluginsFromCall();
+    expect(plugins.capi_hmac).toBeUndefined();
+  });
+
+  it("opts the session in when GATEWAY_CAPI_HMAC_ENABLED=true", async () => {
+    process.env.GATEWAY_CAPI_HMAC_ENABLED = "true";
+    const client = createProxyClient();
+    await client.startRecording();
+    const plugins = getPluginsFromCall();
+    expect(plugins.capi_hmac).toEqual({ enabled: true });
+  });
+
+  it("never sends HMAC credentials in session settings", async () => {
+    process.env.GATEWAY_CAPI_HMAC_ENABLED = "true";
+    process.env.CAPI_HMAC_SECRET = "super-secret";
+    const client = createProxyClient();
+    await client.startRecording();
+    const body = startSessionSpy.mock.calls[0][1]?.body as string;
+    expect(body).not.toContain("super-secret");
+  });
+
+  it.each(["false", "1", ""])("does not opt in when GATEWAY_CAPI_HMAC_ENABLED=%j", async (value) => {
+    process.env.GATEWAY_CAPI_HMAC_ENABLED = value;
+    const client = createProxyClient();
+    await client.startRecording();
+    const plugins = getPluginsFromCall();
+    expect(plugins.capi_hmac).toBeUndefined();
   });
 });

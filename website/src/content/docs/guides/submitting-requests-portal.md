@@ -20,6 +20,8 @@ You submit a **request**. A request bundles:
 2. A **criteria set** — how to judge the result.
 3. A **profile** (or inline runtime configuration) — which agent,
    model, and tools to use.
+4. An optional **codebase** — the versioned project snapshot to seed
+   into the agent's workspace.
 
 When Scope picks up your request, it creates a **run** (one
 execution attempt). A retry creates a new run on the same request.
@@ -78,7 +80,16 @@ If you don't pick a profile, set the fields manually:
 After you've configured a request inline, you can save the setup as a
 profile to capture it for re-use.
 
-## 4. Submit
+## 4. Add a codebase (optional)
+
+Select **Add codebase** when the agent should start from an existing
+project. Pick a bare Git codebase to resolve its default branch at
+submission time, or select a specific revision to pin the starting
+workspace.
+
+See [Managing codebases](/guides/managing-codebases/).
+
+## 5. Submit
 
 Click **Submit**. The Portal navigates to the request detail page.
 The request is assigned a unique ID and queued; a run is created when
@@ -113,8 +124,9 @@ This is useful for sampling variability of an agent on the same prompt.
 ## Tips
 
 - **Reproducibility** — always pick a profile when running for the
-  record. Inline configurations work for exploration but make later
-  comparisons harder.
+  record and pin a codebase revision when the task uses an existing
+  project. Inline configurations and moving Git branches work for
+  exploration but make later comparisons harder.
 - **Reuse task prompts and criteria.** They're the building blocks the
   rest of Scope (prompt features, reports, MDP analyses) is keyed
   on.
@@ -126,3 +138,5 @@ This is useful for sampling variability of an agent on the same prompt.
 - Automate this workflow with the [REST API](/guides/submitting-requests-api/)
   or the [CLI](/guides/submitting-requests-cli/).
 - Save your favorite setup as a [profile](/guides/defining-profiles/).
+- Seed an existing project with a
+  [codebase](/guides/managing-codebases/).

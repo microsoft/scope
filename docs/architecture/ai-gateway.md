@@ -267,6 +267,7 @@ sequenceDiagram
 - **Blob retry**: `BlobWriter` retries append operations up to 20× with exponential backoff, with a per-operation timeout controlled by `plugins.har.appendTimeoutSecs` (default 120 s). If the timeout fires, the session is marked hard-failed and subsequent proxied requests receive a 502.
 - **Rotation safety**: On `POST /api/v1/sessions/{id}/rotate`, plugins prepare iteration `N+1` before the iteration CAS is applied. For HAR blob storage this means creating the append blob first, preventing a state where iteration advances but the target blob is missing.
 - **Sensitive header redaction**: When `redactCredentials` is `true` (default), headers like `authorization`, `x-github-token`, `x-api-key`, `cookie`, and `set-cookie` are redacted at write time. Secrets never reach storage.
+- **Per-session opt-out**: Sessions created with `"plugins": {"har": {"enabled": false}}` record nothing: no local file or append blob is created, rotation is a no-op, and `GET .../har` returns 404. Recording is on by default (`enabled` omitted or `true`). Used for non-agent callers such as the Copilot model scanner.
 - **On-the-fly HAR assembly**: `GET /api/v1/sessions/{id}/har` reads the JSONL source (local file or blob download) and wraps entries in a HAR 1.2 envelope. No separate `.har` file is stored.
 - **Idempotent reads**: The JSONL source can be read multiple times (safe for retries). It is deleted on session cleanup (`DELETE /api/v1/sessions/{id}` or idle reap).
 
@@ -465,8 +466,17 @@ gateway:
   healthcheck:
     test: ["CMD", "wget", "-q", "--spider", "http://localhost:18000/health"]
     interval: 5s
-    retries: 10
+    retries: 12
 ```
+
+The development override compiles the gateway under `cargo watch`, persists
+`/build/target` in the `gateway_target` named volume, removes the production CPU
+quota so compilation may use all CPUs assigned to the container runtime or
+Podman VM, and raises the memory limit to 2 GiB. Its health check has a
+600-second first-start grace period so a cold Cargo build cannot cause Compose
+to abandon dependent workers. The Copilot worker waits for the gateway to
+become healthy; until the worker connects to `queue-coder-acp-copilot`,
+submitted runs remain pending.
 
 Workers connect via `HTTP_PROXY=http://<sessionId>@gateway:18000` (session ID embedded as userinfo) and `DEV_PROXY_API_URL=http://gateway:18000`.
 
@@ -500,7 +510,7 @@ env:
 | Phase | Plugin | Status | Purpose |
 |-------|--------|--------|---------|
 | 1.b | Copilot Token Refresh | ✅ Shipped (#724) | Auto-mint and refresh Copilot session tokens |
-| 1.c | CAPI HMAC Signing | Planned | Sign requests with HMAC for Copilot API |
+| 1.c | CAPI HMAC Signing | Optional, not in default binary | Sign Copilot API requests with integration HMAC auth. Sessions opt in with `{"capi_hmac":{"enabled":true}}`, which workers and the Copilot model scanner send when `GATEWAY_CAPI_HMAC_ENABLED=true`. Set the flag only with a gateway build that registers and configures the plugin; otherwise the setting is ignored and requests fail with 401/403. |
 | 2.b | Rate Limiting | Planned | Budget-aware rate limiting for Claude Code (#659) |
 | 3 | Metrics | Planned | Prometheus `/metrics` — request counts, latency, bytes, error rates |
 

@@ -1577,6 +1577,37 @@ describe("API Endpoints", () => {
   // ===================================================================
 
   describe("POST /api/v1/requests?worker=... (profile)", () => {
+    const resourceRevision = {
+      _id: "rev-github-simulator-1",
+      resourceId: "res-github-simulator",
+      projectId: TEST_PROJECT_ID,
+      slug: "github-simulator",
+      revisionNumber: 1,
+      ref: "github-simulator@r1",
+      setup: { sh: "echo SIMULATOR_URL=http://sim >> $SCOPE_SETUP_ENV" },
+      exports: ["SIMULATOR_URL"],
+      parameters: [
+        { name: "REPO", required: true },
+        { name: "AS", required: false },
+      ],
+      contentSha256: "sha",
+      createdAt: new Date(),
+    };
+
+    function mockGithubSimulatorResource() {
+      (mocks.resourceStore.getBySlug as any).mockResolvedValue({
+        _id: "res-github-simulator",
+        projectId: TEST_PROJECT_ID,
+        slug: "github-simulator",
+        name: "GitHub Simulator",
+        revisionCounter: 1,
+        latestRevisionId: resourceRevision._id,
+        latestRevisionNumber: 1,
+        createdAt: new Date(),
+      });
+      (mocks.resourceRevisionStore.getLatest as any).mockResolvedValue(resourceRevision);
+    }
+
     it("applies profile fields server-side, ignoring client-omitted fields", async () => {
       (mocks.profileCollection.findOne as any).mockResolvedValue({
         _id: "profile-1",
@@ -1707,6 +1738,111 @@ describe("API Endpoints", () => {
       // Validation query must be scoped to the request's project.
       const filter = findSpy.mock.calls[0][0];
       expect(filter).toHaveProperty("projectId", TEST_PROJECT_ID);
+    });
+
+    it("returns 400 when a run resource param uses an unknown key", async () => {
+      mockGithubSimulatorResource();
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          model: "gpt-4o",
+          resources: [{ ref: "github-simulator", params: { REPO: "octo/api", REPOS: "typo/value" } }],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('unknown parameter "REPOS"');
+      expect(mocks.collection.insertOne).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when a required resource param is missing", async () => {
+      mockGithubSimulatorResource();
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          model: "gpt-4o",
+          resources: ["github-simulator"],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('missing required parameter "REPO"');
+      expect(mocks.collection.insertOne).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 with the parameter when a run overrides a profile-pinned resource param", async () => {
+      mockGithubSimulatorResource();
+      (mocks.profileCollection.findOne as any).mockResolvedValue({
+        _id: "profile-1",
+        name: "My Profile",
+        latestVersion: 1,
+      });
+      (mocks.profileVersionCollection.findOne as any).mockResolvedValue({
+        _id: "pv-1",
+        profileId: "profile-1",
+        version: 1,
+        workerType: "coder-acp-copilot",
+        model: "gpt-4o",
+        mcpServers: [],
+        skillRevisions: [],
+        resources: [{ ref: "github-simulator", params: { REPO: "pinned/repo" } }],
+        extensions: [],
+      });
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "profile-1",
+          resources: [{ ref: "github-simulator", params: { REPO: "run/repo" } }],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("controls these fields");
+      expect(res.body.conflicts).toEqual(
+        expect.arrayContaining([expect.stringContaining("resources.github-simulator@r1.REPO")])
+      );
+      expect(mocks.collection.insertOne).not.toHaveBeenCalled();
+    });
+
+    it("accepts a run filling a profile-unset resource param", async () => {
+      mockGithubSimulatorResource();
+      (mocks.profileCollection.findOne as any).mockResolvedValue({
+        _id: "profile-1",
+        name: "My Profile",
+        latestVersion: 1,
+      });
+      (mocks.profileVersionCollection.findOne as any).mockResolvedValue({
+        _id: "pv-1",
+        profileId: "profile-1",
+        version: 1,
+        workerType: "coder-acp-copilot",
+        model: "gpt-4o",
+        mcpServers: [],
+        skillRevisions: [],
+        resources: [{ ref: "github-simulator", params: { AS: "pinned/ns" } }],
+        extensions: [],
+      });
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?worker=coder-acp-copilot&projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "profile-1",
+          resources: [{ ref: "github-simulator", params: { REPO: "run/repo" } }],
+        });
+
+      expect(res.status).toBe(201);
+      const doc = (mocks.collection.insertOne as any).mock.calls[0][0];
+      expect(doc.resources).toEqual([
+        {
+          ref: "github-simulator@r1",
+          revisionId: "rev-github-simulator-1",
+          params: { REPO: "run/repo", AS: "pinned/ns" },
+        },
+      ]);
     });
   });
 
@@ -2094,6 +2230,171 @@ describe("API Endpoints", () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("missing a prompt");
       expect(mocks.collection.insertMany).not.toHaveBeenCalled();
+    });
+
+    it("rejects shared resources in variation mode before resolving profiles", async () => {
+      // Model a required profile-owned binding so a request-level copy is
+      // unambiguously invalid during comparative fan-out.
+      const resourceRevision = {
+        _id: "resource-revision-1",
+        resourceId: "resource-1",
+        projectId: TEST_PROJECT_ID,
+        slug: "github-simulator",
+        revisionNumber: 1,
+        ref: "github-simulator@r1",
+        setup: { sh: "echo ready" },
+        exports: [],
+        parameters: [{ name: "REPO", required: true }],
+        contentSha256: "sha",
+        createdAt: new Date(),
+      };
+      (mocks.resourceStore.getBySlug as any).mockResolvedValue({
+        _id: "resource-1",
+        projectId: TEST_PROJECT_ID,
+        slug: "github-simulator",
+        latestRevisionId: resourceRevision._id,
+      });
+      (mocks.resourceRevisionStore.getLatest as any).mockResolvedValue(resourceRevision);
+      (mocks.profileVersionCollection.findOne as any).mockImplementation(
+        async (q: { profileId: string }) => ({
+          _id: `pv-${q.profileId}`,
+          profileId: q.profileId,
+          version: 1,
+          workerType: "coder-acp-copilot",
+          model: q.profileId === "base-profile" ? "m1" : "m2",
+          mcpServers: [],
+          skillRevisions: [],
+          extensions: [],
+          resources: [{
+            ref: "github-simulator",
+            params: { REPO: "microsoft/scope" },
+          }],
+        }),
+      );
+
+      // Validation must reject the ambiguous shared override before any
+      // profile-specific request is materialized.
+      const res = await request(testServer())
+        .post(`/api/v1/requests?projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "base-profile",
+          profileVariations: ["var-profile"],
+          resources: [{
+            ref: "github-simulator",
+            params: { REPO: "microsoft/scope" },
+          }],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("resources");
+      expect(mocks.collection.insertMany).not.toHaveBeenCalled();
+    });
+
+    // Every profile-managed request field follows the same no-shared-overrides
+    // contract in variation mode.
+    it.each([
+      ["model", "m1"],
+      ["reasoningEffort", "high"],
+      ["agentVersion", "v1"],
+      ["mcpServers", ["server-a"]],
+      ["skills", ["skill-a"]],
+      ["extensions", ["publisher.extension"]],
+    ])("rejects shared %s in variation mode", async (field, value) => {
+      const res = await request(testServer())
+        .post(`/api/v1/requests?projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "base-profile",
+          profileVariations: ["var-profile"],
+          [field]: value,
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain(field);
+      expect(mocks.collection.insertMany).not.toHaveBeenCalled();
+    });
+
+    it("rejects a shared worker query in variation mode", async () => {
+      const res = await request(testServer())
+        .post(`/api/v1/requests?projectId=${TEST_PROJECT_ID}&worker=coder-acp-copilot`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "base-profile",
+          profileVariations: ["var-profile"],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("worker");
+      expect(mocks.collection.insertMany).not.toHaveBeenCalled();
+    });
+
+    it("resolves each variation profile's resources without leaking base values", async () => {
+      // Give each profile a distinct required value so cross-profile leakage is
+      // directly observable in the persisted request documents.
+      const resourceRevision = {
+        _id: "resource-revision-1",
+        resourceId: "resource-1",
+        projectId: TEST_PROJECT_ID,
+        slug: "github-simulator",
+        revisionNumber: 1,
+        ref: "github-simulator@r1",
+        setup: { sh: "echo ready" },
+        exports: [],
+        parameters: [{ name: "REPO", required: true }],
+        contentSha256: "sha",
+        createdAt: new Date(),
+      };
+      (mocks.resourceStore.getBySlug as any).mockResolvedValue({
+        _id: "resource-1",
+        projectId: TEST_PROJECT_ID,
+        slug: "github-simulator",
+        latestRevisionId: resourceRevision._id,
+      });
+      (mocks.resourceRevisionStore.getLatest as any).mockResolvedValue(resourceRevision);
+      (mocks.profileVersionCollection.findOne as any).mockImplementation(
+        async (q: { profileId: string }) => ({
+          _id: `pv-${q.profileId}`,
+          ref: `${q.profileId}@1`,
+          profileId: q.profileId,
+          version: 1,
+          workerType: "coder-acp-copilot",
+          model: q.profileId === "base-profile" ? "m1" : "m2",
+          mcpServers: [],
+          skillRevisions: [],
+          extensions: [],
+          resources: [{
+            ref: "github-simulator",
+            params: {
+              REPO: q.profileId === "base-profile"
+                ? "baseline/repository"
+                : "comparison/repository",
+            },
+          }],
+        }),
+      );
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "base-profile",
+          profileVariations: ["var-profile"],
+        });
+
+      expect(res.status).toBe(201);
+      const docs = (mocks.collection.insertMany as any).mock.calls[0][0];
+      expect(docs).toHaveLength(2);
+
+      // Both requests share the comparative submission, but each must retain
+      // only the resource value resolved from its own profile.
+      expect(docs.map((doc: { profileId: string; resources: Array<{ params: Record<string, string> }> }) => ({
+        profileId: doc.profileId,
+        repo: doc.resources[0].params.REPO,
+      }))).toEqual([
+        { profileId: "base-profile", repo: "baseline/repository" },
+        { profileId: "var-profile", repo: "comparison/repository" },
+      ]);
     });
   });
 

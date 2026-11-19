@@ -1,0 +1,230 @@
+---
+title: Managing codebases
+description: Seed Scope runs from immutable GitHub repository or archive snapshots.
+---
+
+A **codebase** is a reusable starting workspace for a run. Use one when
+the agent should modify an existing project instead of starting from an
+empty directory.
+
+Scope separates the codebase's mutable identity from its immutable
+**revisions**:
+
+- The codebase stores its name, slug, description, source type, and
+  Git settings.
+- Each revision is a numbered snapshot such as `my-service@r3`.
+- A request resolves its codebase selection to one exact revision ID
+  before it is queued.
+
+This keeps a run reproducible even when the Git branch moves or a newer
+archive is uploaded later.
+
+## Choose a source type
+
+| Source type | Use it for | How revisions are created |
+| --- | --- | --- |
+| Git repository | A repository hosted on GitHub | Scope resolves a branch, tag, or commit and snapshots the exact commit. |
+| Uploaded archive | Source supplied as `.tar.gz`, `.tgz`, `.tar`, or `.zip` | Each upload becomes an immutable normalized snapshot. |
+
+Git sources use `owner/repo` format. Uploaded archives are limited to
+1 MB by the current ingress configuration.
+
+## Create a codebase
+
+### From the Portal
+
+1. Open **Codebases** and select **Create Codebase**.
+2. Choose **Git repository** or **Uploaded archive**.
+3. Enter a name. You can keep the generated slug or edit it.
+4. For Git, enter the GitHub repository and optionally a default
+   branch. For an archive, select the archive file.
+5. Select **Create codebase**.
+
+Scope immediately tries to create the first revision:
+
+- A Git codebase resolves its default branch. If GitHub resolution
+  fails, the codebase still exists and you can select **Resolve
+  latest** later.
+- An archive codebase and its first revision are created together.
+  If the archive cannot be processed, Scope rolls the codebase back.
+
+### From the CLI
+
+Create a Git codebase:
+
+```bash
+scope codebase create \
+  --name "Inventory service" \
+  --source-type git \
+  --source contoso/inventory \
+  --default-branch main
+```
+
+Create an archive codebase:
+
+```bash
+scope codebase create \
+  --name "Inventory fixture" \
+  --source-type archive \
+  --archive ./inventory-fixture.tar.gz
+```
+
+Codebase creation and listing use the active project. Use the CLI's
+`--project` option when you need to target a different project.
+
+### From the REST API
+
+Create a Git codebase:
+
+```http
+POST /api/v1/codebases?projectId=your-project-id
+Content-Type: application/json
+
+{
+  "name": "Inventory service",
+  "sourceType": "git",
+  "source": "contoso/inventory",
+  "defaultBranch": "main"
+}
+```
+
+Archive creation uses `multipart/form-data` with the metadata fields
+and a file field named `archive`. See the
+[Codebases API reference](/reference/api/) for the generated request
+schema.
+
+## Create and inspect revisions
+
+Revisions are immutable and numbered sequentially. Open a codebase in
+the Portal to inspect its commit or archive provenance, file count,
+size, content hash, and revision ID. You can also download the
+normalized `.tar.gz` snapshot.
+
+### Git revisions
+
+Select **Resolve latest** to snapshot the default branch, or **Resolve
+ref…** to resolve a branch, tag, or commit SHA.
+
+CLI equivalents:
+
+```bash
+scope codebase resolve your-codebase-id
+scope codebase resolve your-codebase-id --ref release/2026-10
+scope codebase revisions your-codebase-id
+```
+
+API equivalent:
+
+```http
+POST /api/v1/codebases/your-codebase-id/revisions
+Content-Type: application/json
+
+{ "requestedRef": "release/2026-10" }
+```
+
+If the resolved commit is unchanged from the latest revision, Scope
+reuses that revision instead of creating a duplicate.
+
+### Archive revisions
+
+In the Portal, select **Upload new revision**. From the CLI:
+
+```bash
+scope codebase upload your-codebase-id ./inventory-fixture-v2.zip
+```
+
+If the uploaded content is identical to the latest revision, Scope
+reuses the existing revision.
+
+## Select a codebase for a run
+
+You can select codebases in three forms:
+
+| Value | Behavior |
+| --- | --- |
+| `inventory-service` | Use the latest archive revision, or resolve the Git codebase's default branch at submission time. |
+| `inventory-service@r3` | Pin revision 3. |
+| Revision UUID | Pin the exact revision by its internal ID. |
+
+### Portal
+
+On **New Run**, select **Add codebase**, then choose the codebase or a
+specific revision. Scope stores the resolved revision ID on the
+request before queueing it.
+
+### CLI
+
+Use `--codebase` with `scope run submit`:
+
+```bash
+scope run submit \
+  -m "Add input validation to the inventory API." \
+  -w coder-acp-copilot \
+  -c validates_request_body \
+  --codebase inventory-service@r3
+```
+
+### REST API
+
+Pass a slug, numbered ref, or revision ID in `codebase`:
+
+```http
+POST /api/v1/requests?projectId=your-project-id
+Content-Type: application/json
+
+{
+  "scenario": {
+    "task": "Add input validation to the inventory API.",
+    "criteria": ["validates_request_body"]
+  },
+  "workerType": "coder-acp-copilot",
+  "codebase": "inventory-service@r3"
+}
+```
+
+You can also pass an already resolved revision UUID as
+`codebaseRevisionId`.
+
+## What the worker receives
+
+Before the agent starts, Scope downloads the selected revision and
+extracts it into the workspace root. Skills and `AGENTS.md` content
+are applied after the codebase, so they can add instructions alongside
+the seeded project.
+
+Codebase seeding is required when a revision is attached. If Scope
+cannot fetch or extract it, the run fails rather than silently starting
+from an empty workspace.
+
+Downloaded run archives include the exact starting snapshot as
+`codebase.tar.gz`, and `run.yaml` records its revision and provenance.
+
+## Delete a codebase
+
+Deleting a codebase is a soft delete. It disappears from lists and can
+no longer be selected for new requests, but its revisions remain
+available to historical and in-flight runs.
+
+From the CLI:
+
+```bash
+scope codebase delete your-codebase-id
+```
+
+## Reproducibility tips
+
+- Use a numbered ref such as `inventory-service@r3` in CI and published
+  benchmarks.
+- Use a bare Git slug when you intentionally want the branch's current
+  commit at submission time.
+- Review the resolved commit SHA or content hash on the codebase detail
+  page before comparing runs.
+- Keep task prompts independent of repository setup. Select the
+  codebase on the request instead of telling the agent to clone it.
+
+## See also
+
+- [Submitting requests (Portal)](/guides/submitting-requests-portal/)
+- [Submitting requests (CLI)](/guides/submitting-requests-cli/)
+- [Submitting requests (REST API)](/guides/submitting-requests-api/)
+- [Provisioning resources](/guides/provisioning-resources/)

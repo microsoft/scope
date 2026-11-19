@@ -1,40 +1,31 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect } from "vitest";
-import { applyApiPortFallback } from "./shared.js";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { getDefaultApiUrl, normalizeUrl } from "./shared.js";
 
-describe("applyApiPortFallback", () => {
-  it("sets SCOPE_API_URL from SCOPE_API_PORT when SCOPE_API_URL is unset", () => {
-    const env: NodeJS.ProcessEnv = { SCOPE_API_PORT: "5108" };
-    applyApiPortFallback(env);
-    expect(env.SCOPE_API_URL).toBe("http://localhost:5108");
+afterEach(() => vi.unstubAllEnvs());
+
+describe("getDefaultApiUrl", () => {
+  it("reads the explicitly configured URL", () => {
+    vi.stubEnv("SCOPE_API_URL", " https://api.example.com ");
+    expect(getDefaultApiUrl()).toBe("https://api.example.com");
   });
 
-  it("does not override an already-set SCOPE_API_URL", () => {
-    const env: NodeJS.ProcessEnv = {
-      SCOPE_API_URL: "https://api.example.com",
-      SCOPE_API_PORT: "5108",
-    };
-    applyApiPortFallback(env);
-    expect(env.SCOPE_API_URL).toBe("https://api.example.com");
+  it.each([undefined, "", "  "])("has no fallback when SCOPE_API_URL is %j", (url) => {
+    vi.stubEnv("SCOPE_API_URL", url);
+    vi.stubEnv("SCOPE_DEFAULT_API_URL", "https://legacy.example.com");
+    vi.stubEnv("SCOPE_API_PORT", "5108");
+    expect(getDefaultApiUrl()).toBeUndefined();
+  });
+});
+
+describe("normalizeUrl", () => {
+  it.each([undefined, "", "  "])("rejects missing URL %j with configuration guidance", (url) => {
+    expect(() => normalizeUrl(url)).toThrow("No API URL configured. Set SCOPE_API_URL or pass -u/--url");
   });
 
-  it("is a no-op when SCOPE_API_PORT is unset", () => {
-    const env: NodeJS.ProcessEnv = {};
-    applyApiPortFallback(env);
-    expect(env.SCOPE_API_URL).toBeUndefined();
-  });
-
-  it("trims whitespace around a numeric SCOPE_API_PORT", () => {
-    const env: NodeJS.ProcessEnv = { SCOPE_API_PORT: "  3200  " };
-    applyApiPortFallback(env);
-    expect(env.SCOPE_API_URL).toBe("http://localhost:3200");
-  });
-
-  it("ignores non-numeric SCOPE_API_PORT values rather than producing an unreachable URL", () => {
-    const env: NodeJS.ProcessEnv = { SCOPE_API_PORT: "not-a-port" };
-    applyApiPortFallback(env);
-    expect(env.SCOPE_API_URL).toBeUndefined();
+  it("trims whitespace and trailing slashes from an explicit URL", () => {
+    expect(normalizeUrl(" https://api.example.com/// ")).toBe("https://api.example.com");
   });
 });

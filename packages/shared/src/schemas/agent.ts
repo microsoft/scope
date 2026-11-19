@@ -12,6 +12,7 @@ export const AgentCapabilitiesSchema = z
     supportsMcpServers: z.boolean().optional(),
     supportsSkills: z.boolean().optional(),
     supportsExtensions: z.boolean().optional(),
+    supportsResources: z.boolean().optional(),
   })
   .openapi("AgentCapabilities");
 

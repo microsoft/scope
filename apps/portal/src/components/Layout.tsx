@@ -7,26 +7,10 @@ import { cn } from "@/lib/utils";
 import {
   Activity,
   Plus,
-  List,
-  FlaskConical,
-  BarChart3,
-  Tags,
-  FileText,
-  KeyRound,
-  Bot,
-  Server,
-  Lightbulb,
-  Cpu,
-  MessageSquareText,
   Settings,
   Menu,
-  BookOpen,
-  FolderGit2,
-  FolderKanban,
   GitBranch,
   Plug,
-  Puzzle,
-  SlidersHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -49,6 +33,7 @@ import { UserMenu } from "./UserMenu";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useFeatureFlags } from "@/contexts/FeatureFlagContext";
 import { useProjectContext } from "@/contexts/ProjectContext";
+import { navigationIcons } from "./navigation-icons";
 
 interface NavItem {
   to: string;
@@ -74,12 +59,12 @@ interface NavGroup {
 
 /**
  * Sidebar nav grouped by domain noun:
- *   Activity  - what happened (runs and their outputs)
- *   Library   - content you author (tasks, criteria, profiles, ...)
- *   Resources - project-scoped integrations you wire up (MCP, extensions)
- *   Platform  - global infra shared across projects (agents, models, secrets)
+ *   Activity     - what happened (runs and their outputs)
+ *   Library      - content you author (tasks, criteria, profiles, ...)
+ *   Integrations - project-scoped things you wire up (resources, MCP, extensions)
+ *   Platform     - global infra shared across projects (agents, models, secrets)
  *
- * Activity, Library and Resources are `scoped`: their pages live behind a
+ * Activity, Library and Integrations are `scoped`: their pages live behind a
  * ProjectGate, so the sidebar hides them until a project is selected. Platform
  * is global - it lives at the tenant level and is shared by every project, so
  * it stays visible without a selection and is pinned last.
@@ -93,10 +78,10 @@ const navGroups: NavGroup[] = [
     label: "Activity",
     scoped: true,
     items: [
-      { to: "/runs", label: "Runs", icon: List },
-      { to: "/statistics", label: "Statistics", icon: BarChart3 },
-      { to: "/reports", label: "Reports", icon: FileText },
-      { to: "/insights", label: "Insights", icon: Lightbulb },
+      { to: "/runs", label: "Runs", icon: navigationIcons.runs },
+      { to: "/statistics", label: "Statistics", icon: navigationIcons.statistics },
+      { to: "/reports", label: "Reports", icon: navigationIcons.reports },
+      { to: "/insights", label: "Insights", icon: navigationIcons.insights },
     ],
   },
   {
@@ -104,21 +89,22 @@ const navGroups: NavGroup[] = [
     label: "Library",
     scoped: true,
     items: [
-      { to: "/task-prompts", label: "Prompts", icon: MessageSquareText },
-      { to: "/criteria", label: "Criteria", icon: FlaskConical },
-      { to: "/prompt-features", label: "Features", icon: Tags },
-      { to: "/profiles", label: "Profiles", icon: SlidersHorizontal, featureKey: "profiles" },
-      { to: "/skills", label: "Skills", icon: BookOpen, featureKey: "skills" },
-      { to: "/codebases", label: "Codebases", icon: FolderGit2 },
+      { to: "/task-prompts", label: "Prompts", icon: navigationIcons.prompts },
+      { to: "/criteria", label: "Criteria", icon: navigationIcons.criteria },
+      { to: "/prompt-features", label: "Features", icon: navigationIcons.features },
+      { to: "/profiles", label: "Profiles", icon: navigationIcons.profiles, featureKey: "profiles" },
+      { to: "/skills", label: "Skills", icon: navigationIcons.skills, featureKey: "skills" },
+      { to: "/codebases", label: "Codebases", icon: navigationIcons.codebases },
     ],
   },
   {
     id: "resources",
-    label: "Resources",
+    label: "Integrations",
     scoped: true,
     items: [
-      { to: "/mcp-servers", label: "MCP", icon: Server, featureKey: "mcp" },
-      { to: "/extensions", label: "Extensions", icon: Puzzle, featureKey: "extensions" },
+      { to: "/resources", label: "Resources", icon: navigationIcons.resources },
+      { to: "/mcp-servers", label: "MCP", icon: navigationIcons.mcp, featureKey: "mcp" },
+      { to: "/extensions", label: "Extensions", icon: navigationIcons.extensions, featureKey: "extensions" },
     ],
   },
   {
@@ -127,9 +113,9 @@ const navGroups: NavGroup[] = [
     id: "platform",
     label: "Platform",
     items: [
-      { to: "/agents", label: "Agents", icon: Bot, featureKey: "agents" },
-      { to: "/models", label: "Models", icon: Cpu, featureKey: "models" },
-      { to: "/secrets", label: "Secrets", icon: KeyRound, featureKey: "tokens" },
+      { to: "/agents", label: "Agents", icon: navigationIcons.agents, featureKey: "agents" },
+      { to: "/models", label: "Models", icon: navigationIcons.models, featureKey: "models" },
+      { to: "/secrets", label: "Secrets", icon: navigationIcons.secrets, featureKey: "tokens" },
     ],
   },
 ];
@@ -158,11 +144,13 @@ const FULL_BLEED_ROUTE_PATTERNS = [
   "/task-prompts",
   "/criteria",
   "/insights",
+  "/resources",
   "/mcp-servers",
   "/skills",
   "/extensions",
   "/profiles",
   "/secrets/keys",
+  "/secrets/keys/:id/preview",
   "/secrets/accounts",
   "/reports",
   "/reports/templates",
@@ -390,7 +378,7 @@ export function Layout() {
               <SidebarIconLink
                 to="/projects"
                 label="Projects"
-                icon={FolderKanban}
+                icon={navigationIcons.projects}
                 active={location.pathname.startsWith("/projects")}
                 expanded={sidebarExpanded}
               />

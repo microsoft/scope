@@ -17,6 +17,9 @@ flowchart LR
     workers --> shared
     workers --> judge
     cli --> shared
+    prompt_evals["static-prompt-evals"] --> api
+    prompt_evals --> judge
+    prompt_evals --> workers
 ```
 
 | Package | Responsibility |
@@ -27,6 +30,8 @@ flowchart LR
 | `judge` | Evaluation engine — executes criteria against agent output |
 | `shared` | Types, database models, queue/blob/redis clients, config loaders, codebase/skill stores and clients |
 | `workers/*` | Coding agent adapters — each implements the same interface for a different agent |
+| `test-utils` | Shared ACP worker integration-test harness and Docker helpers |
+| `static-prompt-evals` | Mixed TypeScript/Python developer tooling for static prompt quality and user-controlled prompt red teaming |
 
 ## Data Model
 
@@ -65,10 +70,12 @@ erDiagram
     RUN }o--|| PERSONA : uses
     RUN }o--|| WORKER_TYPE : targets
     RUN }o--|| CODEBASE_REVISION : seeds
+    RUN }o--o{ RESOURCE_REVISION : provisions
     ITERATION ||--o{ CRITERION_RESULT : evaluated_by
     CRITERION ||--o{ CRITERION_RESULT : produces
     CRITERION }o--o{ CRITERION : depends_on
     CODEBASE ||--o{ CODEBASE_REVISION : has
+    RESOURCE ||--o{ RESOURCE_REVISION : has
 ```
 
 - **Run** — A single benchmark execution: one scenario + one persona + one worker
@@ -77,6 +84,9 @@ erDiagram
 - **CriterionResult** — Pass/fail result of evaluating a criterion against a specific iteration
 - **Codebase** — Mutable first-class project entity in `codebases`, with a unique slug, source type (`git` or `archive`), optional GitHub source/default branch, revision counter, latest revision pointer, and soft-delete metadata.
 - **CodebaseRevision** — Immutable snapshot in `codebase-revisions`. Every Git resolution or archive upload creates a fresh UUID revision with the next per-codebase `revisionNumber` and canonical `{slug}@r{N}` ref.
+- **Resource** — Mutable project-scoped lifecycle identity in `resources` with a unique slug, revision counter, latest revision pointer, and soft-delete metadata.
+- **ResourceRevision** — Immutable lifecycle snapshot in `resource-revisions` containing normalized setup/teardown scripts, exported names, parameter declarations, `contentSha256`, and canonical `{slug}@r{N}` ref. Revisions deduplicate against the latest revision only. See [resources](resources.md).
+- **ProfileVersion.resources** — Immutable resource binding specs (`{ref, params}`) stored with a profile version. Submit resolves them to pinned request `resources[]` and merges profile preset parameters with run-supplied values using profile-wins precedence.
 
 ### Typed prompts, AGENTS.md, and size-based storage
 
@@ -128,8 +138,8 @@ pass any `projectId`).
 
 | Class | Collections | How `projectId` is set |
 |-------|-------------|------------------------|
-| **Root** (no parent) | `requests`, `profiles`, `criteria`, `prompt-features`, `mcp-servers`, `report-templates`, `skills`, `extensions`, `codebases` | From the `?projectId=` query param at create time |
-| **Child** (references a parent) | `runs` (history), `profile-versions`, `codebase-revisions`, `reports`, `insights` | Copied from the parent doc's `projectId` |
+| **Root** (no parent) | `requests`, `profiles`, `criteria`, `prompt-features`, `mcp-servers`, `report-templates`, `skills`, `extensions`, `codebases`, `resources` | From the `?projectId=` query param at create time |
+| **Child** (references a parent) | `runs` (history), `profile-versions`, `codebase-revisions`, `resource-revisions`, `reports`, `insights` | Copied from the parent doc's `projectId` |
 | **Special** (deterministic key → per-project copies) | `task-prompts`, `skill-revisions` | From the run's `projectId`; see below |
 | **Unscoped** | `projects`, `agents`, `models`, tokens/accounts, feature-flags | n/a — never filtered by project |
 
@@ -212,7 +222,7 @@ mechanism — see [Per-project catalog isolation (migration 026)](#per-project-c
 Entities the pipeline **creates** are persisted with the run's `projectId` (derived from the
 request doc, never a query param): reports (report-generator / trigger endpoint), insights
 (judge / agent-authored via `sourceReportId`), demoted retry attempts (`insertHistoricalRun`),
-codebase-revisions, and profile-versions. The DoD asserts these land in the right project.
+codebase-revisions, resource-revisions, and profile-versions. The DoD asserts these land in the right project.
 
 ### Migration & rollout (migrate-then-enforce)
 
@@ -335,6 +345,39 @@ flowchart TD
     I --> J
 ```
 
+## Prompt Evaluation Architecture
+
+The application has two independent prompt-evaluation tracks:
+
+1. **Static prompt quality** covers ten Scope-owned runtime prompt families.
+   TypeScript adapters invoke production prompt builders, parsers, judge/report
+   sessions, and tools; Python runs deterministic checks and Azure AI Evaluation
+   SDK graders over generated JSONL.
+2. **User-controlled prompt red teaming** covers eight instruction-surface
+   categories. A reviewed profile selects a production composition adapter and
+   replaces only the untrusted field with a cloud-generated attack.
+
+This separation prevents ordinary quality scores from being interpreted as
+security results. User-authored task/gate prompts, `AGENTS.md`, criterion
+prompts, prompt-feature definitions, persona instructions, and report-template
+content are red-team inputs, not additional static prompt families.
+
+The red-team target is the actual composed request. Adapters preserve system
+and user roles, ordering, delimiters, mode-specific wrapper logic, and
+AI-facing tool descriptions/schemas. Benign contract fixtures compare every
+adapter with runtime composition. Task/gate prompts are ACP text requests;
+`AGENTS.md` is written to the workspace before the first turn; criterion and
+feature definitions are inserted into their real judge/extraction user
+messages; persona text occupies the feedback system-instruction position; and
+report templates preserve default, append, and override system-prompt modes.
+
+The package commits curated inputs and provenance, schemas, rubrics, profiles,
+attack configuration, and threshold policy. Per-run responses, SDK/cloud
+output, manifests, summaries, and findings stay in the ignored
+`evaluations/static-prompts/results/` tree. See
+[Prompt Evaluations](prompt-evaluations.md) for the full inventory, workflow,
+artifact contract, cloud canary limitation, commands, and completion criteria.
+
 ## Gates — multi-phase evaluation pipeline
 
 Runs execute through a hard-coded, ordered sequence of **gates**: `Select → Build
@@ -424,8 +467,13 @@ Profile fan-out mode is also supported for comparative runs:
 
 1. User selects a base `profileId` (optionally pinned via `profileId@version`) and a `profileVariations[]` array of profile spec strings to compare against (e.g. `["def456", "ghi789@2"]`)
 2. API parses each spec, validates every variation upfront, then expands one submit call into multiple requests under one shared `submissionId`
-3. Each expanded request resolves configuration from its variation profile; unpinned specs resolve to `latestVersion`
+3. The base is the first comparison member, not an inheritance source. The API starts from the same shared run intent for every member and resolves worker, model, reasoning effort, agent version, MCP servers, skills, extensions, and resources independently from that member's profile; unpinned specs resolve to `latestVersion`
 4. Expanded requests persist `profileId` and `profileVersionId` on each `RequestDocument` for indexing and traceability
+
+Request-level profile-managed fields are rejected in fan-out mode. Portal and
+CLI submit only shared intent (scenario, gates, codebase, count, priority, and
+AGENTS.md); they do not materialize baseline profile values into the request.
+This keeps API, CLI, and Portal submissions behaviorally identical.
 
 ## Runs List Query API
 
@@ -566,6 +614,20 @@ Workers publish log events to Redis Pub/Sub channels keyed by run ID. The API su
 
 The Portal desktop shell uses a persistent left navigation sidebar. It defaults to the compact icon rail, and users can expand it to show navigation labels; the choice is stored in `localStorage` under `scope:layout:sidebar-expanded`. Mobile navigation remains a sheet-based menu with labels always visible.
 
+`components/navigation-icons.ts` owns the shared section icons used by `Layout`
+and the compact `ListLayout` header's **Open filters** trigger. `ListLayout`
+resolves its section from the existing `railStorageKey`; report templates share
+the Reports icon, while keys and accounts share Secrets. Missing or unregistered
+storage keys retain the generic sliders icon. Desktop rail toggles, persisted
+collapse state, navigation routes, feature flags, and project gating are unchanged.
+When adding a list section, register its storage key here to keep its header and
+sidebar icons aligned.
+
+The Keys list and its nested `/secrets/keys/:id/preview` route use the same
+full-bleed shell. Opening or closing the preview keeps the tabs and filter rail
+aligned with the navigation. Key registration and full-detail routes retain the
+standard page padding.
+
 ### Project scoping (selected project, no default)
 
 The Portal mirrors the API's fail-fast model: it holds a **selected project** (never a default) and injects it as `?projectId=` on every scoped request.
@@ -585,6 +647,20 @@ and asks users to review and edit generated output. The footer links to the
 public data collection and privacy document so users can understand what Scope
 handles and why. `components/Layout.tsx` renders this footer on both standard
 and full-bleed routes so the disclosures remain visible throughout the Portal.
+
+The same footer displays Portal commit, branch, and build-time metadata injected
+by Vite. Metadata behavior differs by environment:
+
+| Environment | Git metadata behavior |
+|-------------|-----------------------|
+| Native development | Git lookup is enabled by default. Valid explicit `GIT_COMMIT` / `GIT_BRANCH` values take precedence, otherwise Vite reads the source repository once at startup. |
+| Docker Compose development | `PORTAL_GIT_INFO_ENABLED=false` disables lookup in the minimal Git-free container. The footer uses `commit=development` and omits the branch. |
+| Integration and production | Lookup remains enabled for the one-time immutable bundle build. Explicit Docker/ACR build metadata takes precedence; unavailable values fall back to `development` and an empty branch. |
+
+All paths validate values before embedding them in client code. `BUILD_TIME` is
+independent of Git extraction: an explicit valid timestamp wins, otherwise Vite
+uses the current startup/build time. The deployed nginx runtime never invokes
+Git because metadata is already embedded in the immutable bundle.
 
 ### Hover-preview + navigate badges
 

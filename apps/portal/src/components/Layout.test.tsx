@@ -4,7 +4,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthContext } from "@/contexts/AuthContext";
@@ -50,6 +50,18 @@ function renderLayout(
                 <Route element={<Layout />}>
                   <Route path="/" element={<div>Home page</div>} />
                   <Route path="/runs" element={<div>Runs page</div>} />
+                  <Route path="/secrets/keys" element={
+                    <div>
+                      <Link to="/secrets/keys/demo-key/preview">Preview key</Link>
+                      <Outlet />
+                    </div>
+                  }>
+                    <Route path=":id/preview" element={
+                      <Link to="/secrets/keys">Close preview</Link>
+                    } />
+                  </Route>
+                  <Route path="/secrets/keys/new" element={<div>Register key</div>} />
+                  <Route path="/secrets/keys/:id" element={<div>Key details</div>} />
                 </Route>
               </Routes>
             </MemoryRouter>
@@ -66,6 +78,69 @@ afterEach(() => {
 });
 
 describe("Layout", () => {
+  it.each(["0", "1"])("preserves section icons with sidebar expanded=%s", (expanded) => {
+    localStorage.setItem("scope:layout:sidebar-expanded", expanded);
+    renderLayout();
+
+    const sidebar = within(screen.getByLabelText("Primary navigation"));
+    const sections = [
+      ["Projects", "folder-kanban"],
+      ["Runs", "list"],
+      ["Statistics", "chart-column"],
+      ["Reports", "file-text"],
+      ["Insights", "lightbulb"],
+      ["Prompts", "message-square-text"],
+      ["Criteria", "flask-conical"],
+      ["Features", "tags"],
+      ["Profiles", "sliders-horizontal"],
+      ["Skills", "book-open"],
+      ["Codebases", "folder-git2"],
+      ["Resources", "boxes"],
+      ["MCP", "server"],
+      ["Extensions", "puzzle"],
+      ["Agents", "bot"],
+      ["Models", "cpu"],
+      ["Secrets", "key-round"],
+    ];
+    for (const [label, icon] of sections) {
+      expect(
+        sidebar.getByRole("link", { name: label }).querySelector(`.lucide-${icon}`),
+        label,
+      ).toBeTruthy();
+    }
+  });
+
+  it("keeps the full-bleed shell when opening and closing a key preview", () => {
+    renderLayout("/secrets/keys");
+
+    const listClasses = screen.getByRole("main").className;
+    expect(listClasses).not.toContain("px-6");
+
+    fireEvent.click(screen.getByRole("link", { name: "Preview key" }));
+    expect(screen.getByRole("link", { name: "Close preview" })).toBeTruthy();
+    expect(screen.getByRole("main").className).toBe(listClasses);
+
+    fireEvent.click(screen.getByRole("link", { name: "Close preview" }));
+    expect(screen.getByRole("main").className).toBe(listClasses);
+  });
+
+  it("uses the full-bleed shell on a directly opened key preview", () => {
+    renderLayout("/secrets/keys/demo-key/preview");
+
+    expect(screen.getByRole("link", { name: "Close preview" })).toBeTruthy();
+    expect(screen.getByRole("main").className).not.toContain("px-6");
+  });
+
+  it.each(["/secrets/keys/new", "/secrets/keys/demo-key"])(
+    "preserves page padding for %s",
+    (path) => {
+      renderLayout(path);
+
+      expect(screen.getByRole("main").className).toContain("px-6");
+      expect(screen.getByRole("main").className).toContain("py-6");
+    },
+  );
+
   it("shows the disclosure footer on full-bleed routes", () => {
     renderLayout("/runs");
 
@@ -126,6 +201,10 @@ describe("Layout", () => {
     expect(within(sidebar).getByText("Activity")).toBeTruthy();
     expect(within(sidebar).getByRole("link", { name: "Runs" })).toBeTruthy();
     expect(within(sidebar).getByRole("link", { name: "MCP" })).toBeTruthy();
+    // The Integrations group holds Resources alongside MCP and Extensions; the
+    // group and its Resources item deliberately no longer share a label.
+    expect(within(sidebar).getByText("Integrations")).toBeTruthy();
+    expect(within(sidebar).getByRole("link", { name: "Resources" })).toBeTruthy();
     // Global group is present too.
     expect(within(sidebar).getByText("Platform")).toBeTruthy();
   });
@@ -145,9 +224,10 @@ describe("Layout", () => {
     // Scoped groups and their items are hidden.
     expect(within(sidebar).queryByText("Activity")).toBeNull();
     expect(within(sidebar).queryByText("Library")).toBeNull();
-    expect(within(sidebar).queryByText("Resources")).toBeNull();
+    expect(within(sidebar).queryByText("Integrations")).toBeNull();
     expect(within(sidebar).queryByRole("link", { name: "Runs" })).toBeNull();
     expect(within(sidebar).queryByRole("link", { name: "Prompts" })).toBeNull();
+    expect(within(sidebar).queryByRole("link", { name: "Resources" })).toBeNull();
     expect(within(sidebar).queryByRole("link", { name: "MCP" })).toBeNull();
     // The New Run CTA is scoped too, so it's gone until a project is picked.
     expect(within(sidebar).queryByRole("link", { name: "New Run" })).toBeNull();

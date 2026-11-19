@@ -5,12 +5,58 @@ The sophisticated criteria system can be configured via environment variables in
 ## CLI Configuration
 
 ### SCOPE_API_URL
-**Default:** `http://localhost:3100`
+**Default:** None
 **Type:** URL string
 
-Base URL of the Scope API used by all CLI commands. Override this to point the CLI at a remote or Docker-hosted API instance.
+Base URL of the Scope API used by CLI API operations. Set this explicitly or pass
+`-u/--url` to a command (`--api-url` for MCP server create/update). Both bundled
+and source-mode CLIs fail before making an API request when no URL is configured.
+Help, version, and CLI updates do not require a Scope API URL. The CLI no longer
+derives a localhost URL from `SCOPE_API_PORT` or uses `SCOPE_DEFAULT_API_URL`.
 
 ## Docker Development
+
+### NPM_CONFIG_REGISTRY
+**Default:** host npm registry for `pnpm docker:*`; otherwise `https://registry.npmjs.org/`
+**Type:** HTTP(S) URL
+
+Registry used for ordinary npm and pnpm package installation in Docker image
+builds. `scripts/dev-compose.sh` reads the host setting with
+`npm config get registry`, so a private package proxy remains a one-command
+workflow:
+
+```bash
+NPM_CONFIG_REGISTRY=https://packages.example.test/npm/ pnpm docker:dev:copilot
+```
+
+Trailing slashes are normalized during the pinned pnpm bootstrap. Registry URLs
+may point at authenticated/private package services, but credentials must be
+provided through the environment's standard npm authentication mechanism rather
+than embedded in the URL or build args. Credential-bearing URLs are rejected,
+and bootstrap diagnostics report only the endpoint origin.
+
+This setting is deliberately **not** copied to `COREPACK_NPM_REGISTRY`: package
+proxies that serve npm packuments are not necessarily compatible with
+Corepack's per-version metadata protocol.
+
+### COREPACK_NPM_REGISTRY
+**Default:** unset (Corepack's public default)
+**Type:** optional HTTP(S) URL
+
+Corepack-compatible metadata endpoint used only to bootstrap the pinned pnpm
+version in Docker images. Set it explicitly only when the endpoint supports
+Corepack metadata:
+
+```bash
+COREPACK_NPM_REGISTRY=https://corepack.example.test/ \
+  NPM_CONFIG_REGISTRY=https://packages.example.test/npm/ \
+  pnpm docker:dev:copilot
+```
+
+If Corepack fails, the pinned npm fallback uses `NPM_CONFIG_REGISTRY` and clears
+the Corepack override, keeping the two paths in separate failure domains. Normal
+`pnpm install` keeps pnpm's built-in package-fetch retries; Scope does not wrap
+it in an outer retry loop.
 
 ### API_DEBUG_PORT
 **Default:** `9200`
@@ -178,6 +224,103 @@ The API discovers supported token-limit and sampling parameters from structured
 inference errors at runtime. Learned compatibility is cached in each API
 process by endpoint and deployment name. It is relearned after a process
 restart or when Azure rejects a previously accepted request shape.
+
+## Prompt Evaluation Configuration
+
+These variables are consumed only by the developer-run tooling in
+`evaluations/static-prompts`. They do not enable the suite in normal tests or
+CI. See [Prompt Evaluations](docs/architecture/prompt-evaluations.md) for the
+quality commands and artifact policy. Cloud red teaming is a separate follow-up.
+
+Run `az login` before cloud evaluation. The Python tooling uses Azure Identity;
+the quality graders also accept an explicit Azure OpenAI API key when required.
+Do not commit credentials, endpoints, tenant/subscription IDs, or a populated
+environment file.
+
+### PROMPT_EVAL_MODEL
+**Default:** resolved inference credential model, then `LLM_MODEL`, then `gpt-4.1`
+**Type:** string
+**Used by:** Static prompt TypeScript generation adapters
+
+Model/deployment used to generate production-path responses for the quality
+track. This setting is independent from the Azure-assisted evaluator deployment
+so generator and grader identities are explicit in result metadata.
+
+Generation uses the existing inference credential chain described in
+[LLM Configuration](#llm-configuration-portal-ai-features), including
+`AZURE_AI_INFERENCE_ENDPOINT` and `AZURE_AI_INFERENCE_API_KEY` when configured.
+
+### SCOPE_EVAL_AZURE_OPENAI_ENDPOINT
+**Required:** AI-assisted quality evaluation
+**Fallback:** `AZURE_OPENAI_ENDPOINT`
+**Type:** URL string
+**Used by:** Azure AI Evaluation SDK quality graders
+
+Azure OpenAI resource endpoint used by built-in and configurable quality
+graders. This is the model resource endpoint, not the Foundry project endpoint.
+
+### SCOPE_EVAL_AZURE_OPENAI_DEPLOYMENT
+**Required:** AI-assisted quality evaluation
+**Fallback:** `AZURE_OPENAI_DEPLOYMENT`
+**Type:** string
+**Used by:** Azure AI Evaluation SDK quality graders
+
+Deployment used to grade generated quality rows. Keep it distinct from
+`PROMPT_EVAL_MODEL` when evaluating one model's output with another.
+
+### SCOPE_EVAL_AZURE_OPENAI_API_KEY
+**Default:** unset
+**Fallback:** `AZURE_OPENAI_API_KEY`
+**Type:** string
+**Used by:** Azure AI Evaluation SDK quality graders
+
+Optional API key for the quality grader endpoint. When neither key variable is
+set, the runner uses `DefaultAzureCredential`; `az login` is the recommended
+local authentication path.
+
+### SCOPE_EVAL_AZURE_OPENAI_API_VERSION
+**Default:** SDK default
+**Fallback:** `AZURE_OPENAI_API_VERSION`
+**Type:** string
+**Used by:** Azure AI Evaluation SDK quality graders
+
+Optional Azure OpenAI API version override.
+
+### SCOPE_EVAL_AZURE_AI_PROJECT_ENDPOINT
+**Default:** unset
+**Fallback:** `AZURE_AI_PROJECT_ENDPOINT`
+**Type:** URL string
+**Used by:** Azure AI Evaluation SDK quality runs
+
+Optional Foundry project endpoint for publishing a quality evaluation portal
+view. Local JSON/JSONL artifacts remain the source of truth.
+
+### AZURE_AI_PROJECT_ENDPOINT
+**Default:** unset
+**Type:** URL string
+**Used by:** Azure AI Evaluation SDK quality runs
+
+Fallback for `SCOPE_EVAL_AZURE_AI_PROJECT_ENDPOINT` in quality runs.
+
+Use the project endpoint for the intended Foundry project, not an inference
+`/models` endpoint.
+
+### Quality runner diagnostic overrides
+
+`SCOPE_EVAL_GENERATOR_COMMAND` overrides the production JSONL generator command
+using `{dataset}`, `{output}`, `{samples}`, and `{smoke}` placeholders.
+`SCOPE_EVAL_GENERATOR_TIMEOUT_SECONDS` changes its 1,800-second timeout.
+`SCOPE_EVAL_GENERATED_ROWS` copies an existing JSONL file instead of invoking
+generation. These are test/debugging controls; normal baseline runs should use
+the declared package generator.
+
+### Harvester bearer token
+
+The dataset harvester accepts the **name** of an environment variable through
+its token option rather than reading a fixed secret name. This supports
+protected integration environments without establishing a repository-wide
+credential variable. Never pass the token value on the command line and never
+write it to curated rows, provenance, logs, or results.
 
 ## Prompt Storage Configuration
 
@@ -687,10 +830,41 @@ Base URL of the Scope API. The report-generator worker calls this to fetch run d
 Timeout for the Copilot SDK session used by the report-generator worker. If the LLM takes longer than this to generate a report, the session will be terminated and the report marked as failed.
 
 ### GIT_COMMIT
-**Default:** `development`
+**Default:** Portal Git lookup, then `development`; service-specific defaults may differ
 **Type:** string
 
-Git commit hash embedded in reporter metadata. Automatically set during CI/CD builds. Used to track which version of the report-generator produced a given report.
+Git commit hash embedded in build metadata. For Portal builds, a valid explicit
+value takes precedence over the one-time Git lookup. If neither produces a
+valid hash, the Portal embeds `development`. The report generator also uses
+this value to track which version produced a report.
+
+### GIT_BRANCH
+**Default:** Portal Git lookup, then an empty branch
+**Type:** string
+
+Git branch embedded in Portal build metadata. A valid explicit value takes
+precedence over the one-time Git lookup. Invalid, secret-like, or unavailable
+values fall through to Git and then an empty branch.
+
+### BUILD_TIME
+**Default:** current Portal build/start time when not supplied
+**Type:** ISO-8601 timestamp
+
+Build timestamp embedded in service metadata. Portal builds accept it
+explicitly when available; invalid values are replaced with the current Vite
+build/start timestamp.
+
+### PORTAL_GIT_INFO_ENABLED
+**Default:** enabled
+**Type:** boolean string
+
+Controls Portal Git metadata extraction. Only the exact value `false` disables
+Git lookup; unset or any other value preserves the default. The Docker Compose
+development overlay sets this to `false` because its minimal Portal container
+does not contain a Git repository. Disabled development uses
+`commit=development`, an empty branch, and the normal explicit/current
+`BUILD_TIME` behavior. Integration and production builds leave lookup enabled;
+valid `GIT_COMMIT` and `GIT_BRANCH` build inputs still take precedence.
 
 ## Scheduler Configuration
 

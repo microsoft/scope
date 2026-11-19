@@ -25,6 +25,8 @@ const SENSITIVE_HEADERS: &[&str] = &[
     "x-api-key",
     "cookie",
     "set-cookie",
+    "request-hmac",
+    "copilot-session-token",
 ];
 
 /// Convert an HttpExchange into a HarEntry, optionally redacting sensitive headers.

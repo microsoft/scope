@@ -29,6 +29,31 @@ export interface ReportQueueProcessorConfig extends BaseQueueProcessorConfig {
   sessionTimeoutMs?: number;
 }
 
+export interface ResolvedReportPrompts {
+  userPrompt: string;
+  systemPrompt: string;
+}
+
+export function resolveReportPrompts(
+  template: Pick<ReportTemplateDocument, "userPrompt" | "systemPrompt">,
+  requestId: string,
+): ResolvedReportPrompts {
+  const userPrompt = template.userPrompt.replace(
+    /\{\{requestId\}\}|\{requestId\}/g,
+    requestId,
+  );
+  if (!template.systemPrompt) {
+    return { userPrompt, systemPrompt: REPORT_SYSTEM_PROMPT };
+  }
+  if (template.systemPrompt.mode === "override") {
+    return { userPrompt, systemPrompt: template.systemPrompt.content };
+  }
+  return {
+    userPrompt,
+    systemPrompt: `${REPORT_SYSTEM_PROMPT}\n\n${template.systemPrompt.content}`,
+  };
+}
+
 /**
  * Queue processor for LLM-generated run reports.
  *
@@ -126,20 +151,10 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
 
       await log("info", `Reporter: ${reporter.agentId}@${reporter.agentVersion}, model: ${reporter.model}`);
 
-      const resolvedUserPrompt = template.userPrompt.replace(/\{\{requestId\}\}|\{requestId\}/g, requestId);
-
-      // Resolve system prompt
-      let resolvedSystemPrompt: string;
-      if (template.systemPrompt) {
-        if (template.systemPrompt.mode === "override") {
-          resolvedSystemPrompt = template.systemPrompt.content;
-        } else {
-          // mode === "append"
-          resolvedSystemPrompt = REPORT_SYSTEM_PROMPT + "\n\n" + template.systemPrompt.content;
-        }
-      } else {
-        resolvedSystemPrompt = REPORT_SYSTEM_PROMPT;
-      }
+      const {
+        userPrompt: resolvedUserPrompt,
+        systemPrompt: resolvedSystemPrompt,
+      } = resolveReportPrompts(template, requestId);
 
       // --- Run Copilot SDK session ---
       const resolvedTimeoutMs = template.timeoutMs ?? this.reportConfig.sessionTimeoutMs ?? 5 * 60 * 1000;

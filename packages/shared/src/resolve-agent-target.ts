@@ -11,6 +11,7 @@ export interface AgentTargetRequirements {
   mcpServers?: boolean;
   skills?: boolean;
   extensions?: boolean;
+  resources?: boolean;
 }
 
 export type AgentTargetErrorCode =
@@ -43,6 +44,7 @@ const REQUIREMENT_CAPABILITIES: ReadonlyArray<{
   { requirement: "mcpServers", capability: "supportsMcpServers" },
   { requirement: "skills", capability: "supportsSkills" },
   { requirement: "extensions", capability: "supportsExtensions" },
+  { requirement: "resources", capability: "supportsResources" },
 ];
 
 export function requiredAgentCapabilities(

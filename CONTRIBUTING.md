@@ -56,6 +56,12 @@ pnpm install                      # Install all workspace dependencies
 CI installs with `pnpm install --frozen-lockfile`; commit an updated `pnpm-lock.yaml` when you change
 dependencies.
 
+The workspace intentionally skips the optional `ssh2` and `cpu-features` native
+install scripts. Scope uses `ssh2` only transitively through Docker test tooling,
+and its supported JavaScript implementation preserves that behavior without a
+Python/compiler toolchain. Keep required dependency build scripts allowlisted in
+`pnpm-workspace.yaml`; do not replace this narrow policy with `--ignore-scripts`.
+
 ## Local development
 
 Local authentication requires your browser to trust a development certificate.
@@ -86,6 +92,123 @@ pnpm dev:portal                   # Portal only (native)
 pnpm dev:coder-acp-copilot        # A single worker natively (pnpm dev:<service-name>)
 pnpm open:portal                  # Open the portal in your browser
 ```
+
+The first Docker start compiles the Rust AI gateway inside its development
+container and can take several minutes. During development, the gateway may use
+all CPUs assigned to Docker or the Podman VM, while its memory remains limited
+to 2 GiB. Keep the Compose command running until the `coder-acp-copilot` logs
+show that it connected to MongoDB and ensured `queue-coder-acp-copilot`; runs
+submitted before that worker is ready remain pending. Later starts reuse the
+gateway's named Cargo target volume and are faster.
+
+### Prepare container storage for a clean rebuild
+
+Before a large clean Docker or Podman rebuild, inspect the container runtime's
+storage rather than relying only on host free space. Docker Desktop and Podman
+Machine commonly keep images, writable layers, build cache, and named volumes
+inside a VM or separate filesystem. That storage can fill independently while
+the host still appears to have ample capacity.
+
+A first clean Copilot-stack build needs substantial temporary and persistent
+runtime space because it pulls base images, installs dependencies, and compiles
+the Rust gateway before caches can be reused. Treat this as planning guidance,
+not a fixed minimum: usage varies with the platform, CPU architecture, enabled
+profiles, existing layers, and cache state. Confirm the runtime has comfortable
+headroom before starting instead of relying on a universal threshold.
+
+These commands identify the selected Docker daemon and inspect its object usage:
+
+```bash
+docker context show
+docker context inspect "$(docker context show)" \
+  --format 'Endpoint={{.Endpoints.docker.Host}}'
+docker info \
+  --format 'Name={{.Name}} OperatingSystem={{.OperatingSystem}} DockerRootDir={{.DockerRootDir}}'
+docker system df
+docker system df -v
+```
+
+`docker system df` reports Docker object usage, not the filesystem's total
+capacity or free space. Check the filesystem containing `DockerRootDir` on the
+actual daemon host:
+
+- For a native local Linux daemon, run
+  `docker_root="$(docker info --format '{{.DockerRootDir}}')" && df -h "$docker_root"`.
+- For an SSH, TCP, or other remote context, use the approved access path to
+  that daemon host and run `df -h` there. Running `df` on the CLI host does not
+  measure the remote daemon's storage.
+- For Docker Desktop, inspect **Settings > Resources > Advanced > Disk usage
+  limit** and **Disk image location**, then confirm the filesystem containing
+  that image has headroom. See Docker's
+  [Resources settings](https://docs.docker.com/desktop/settings-and-maintenance/settings/#resources).
+
+When Docker commands target a Podman socket, also inspect Podman directly.
+On macOS or Windows, check both the configured machine size and free space
+inside the running VM. Do not select the first listed machine: compare the
+active Docker context endpoint and Podman connection URI with the running
+machines, then set the verified machine name explicitly:
+
+```bash
+docker context inspect "$(docker context show)" \
+  --format 'Endpoint={{.Endpoints.docker.Host}}'
+podman system connection list
+podman machine list
+podman system df
+podman system df -v
+machine_name="<verified-running-machine>"
+test -n "$machine_name"
+podman machine ssh "$machine_name" \
+  df -h / /var /var/lib/containers
+```
+
+After `scripts/worktree-env.sh` or a `pnpm docker:*` command has generated
+`.env`, use the Compose project label to distinguish this worktree's resources
+from unrelated projects:
+
+```bash
+scope_project="$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env | tail -n 1)"
+test -n "$scope_project"
+docker ps -a --filter "label=com.docker.compose.project=$scope_project"
+docker compose images
+docker volume ls --filter "label=com.docker.compose.project=$scope_project"
+```
+
+`docker system df -v` also shows Docker build-cache usage, but cache records are
+not always attributable to one Compose project. `podman system df -v` reports
+images, containers, and volumes, including shared image-layer usage; it does not
+provide a separate Docker BuildKit-style build-cache section. Do not assume
+that all reclaimable or shared storage belongs to Scope.
+
+If storage is low, use this decision sequence:
+
+1. Inspect runtime and, when applicable, VM filesystem usage.
+2. Identify stopped containers, images, runtime-reported build-cache records,
+   and volumes that belong to this exact Scope worktree.
+3. Prefer removing only verified Scope resources. Ask the user before cleanup,
+   and do not recommend broad `system prune`, `volume prune`, wildcard removal,
+   or deletion of unrelated runtime resources.
+4. Re-run the inspection commands and retry the build only after confirming
+   adequate free space.
+
+The following are **destructive examples** for resources whose exact IDs or
+names have already been verified and whose removal the user approved:
+
+```bash
+docker container rm "$SCOPE_STOPPED_CONTAINER_ID"
+docker image rm --no-prune "$SCOPE_IMAGE_ID"
+docker volume rm "$SCOPE_VOLUME_NAME"
+
+# Native Podman equivalents
+podman rm "$SCOPE_STOPPED_CONTAINER_ID"
+podman rmi --no-prune "$SCOPE_IMAGE_ID"
+podman volume rm "$SCOPE_VOLUME_NAME"
+```
+
+Do not run these with unset variables, `--all`, `--force`, or glob-expanded
+names. Named volumes can contain local MongoDB, Azurite, authentication, gateway
+build, or worker workspace data; inspect and confirm their contents and impact
+before deleting them. If a Scope-specific build-cache record cannot be
+identified confidently, leave it in place rather than pruning shared cache.
 
 ### Debug the Docker development API
 
@@ -118,6 +241,64 @@ pnpm test                         # Unit tests
 pnpm test:coverage                # Unit tests with a coverage report
 pnpm test:integration             # Integration tests (requires a .env file + Docker)
 ```
+
+[CI's](./.github/workflows/ci.yml) worker integration, queue recovery and Windows build jobs
+require `github.repository == 'microsoft/scope'`: they do not execute in fork
+repositories. A fork PR into upstream still runs the ACP workers' tool checks and
+the disposable MongoDB/Redis/Azurite queue tests. Worker credentials are withheld
+from fork-head code, so the existing live-auth tests skip when credentials are
+absent. Docker Hub login is optional and restricted to trusted code; public images
+can be pulled anonymously. LLM evals require trusted PR heads.
+The OSS CI workflow does not publish container images or request OIDC;
+its ACP test images are built and loaded locally. Public CI requires no Azure/ACR
+setup. PR test reporting and video
+uploads remain enabled, with missing video directories treated as no recordings.
+
+Changes to the CI workflow select the integration checks through a dedicated
+path filter. Run the focused workflow
+regressions with `pnpm exec vitest run scripts/ci-workflow.test.ts` and the real
+queue tests with `pnpm test:integration:queue` (Docker required).
+The ACP matrix covers the existing Copilot and Claude workers; the removed VS Code
+workers have no Dockerfiles or integration suites in this repository.
+Live-model credentials remain necessary for live-auth tests; passing public
+tool checks does not validate live-model access.
+
+All external GitHub Actions and reusable workflows must use an immutable,
+full-length commit SHA followed by the corresponding release version:
+
+```yaml
+- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+```
+
+When updating an action, update the SHA and version comment together. The
+dedicated **Pin GitHub Actions** check validates both through
+[pinact](https://github.com/suzuki-shunsuke/pinact), while
+`scripts/ci-workflow.test.ts` independently rejects mutable references and
+missing comments. If pinact is installed locally, run the same validation with:
+
+```bash
+pinact run --check --verify-comment
+```
+
+Windows validation uses GitHub's `windows-2022` runner and its Windows Docker
+engine. `scripts/build-windows-worker.ps1` builds `Dockerfile.base` from public
+`servercore:ltsc2022`, builds pinned Copilot dependencies against that local image,
+then builds and smoke-tests the worker against the local dependencies image.
+No internal registry, prebuilt private image, secrets or image publication is
+required. Changes to the Windows worker, Linux Copilot dependency, shared packages,
+telemetry, workspace/build context, or CI select this check; failures block
+CI Summary. Run the same script locally on Windows Server 2022 with Docker.
+The PowerShell orchestration tests require `pwsh` (included on GitHub's Ubuntu
+runners); they mock Docker and do not replace the hosted Windows image build.
+
+The OSS repository does not depend on internal `scope-core` automation. The
+internal infrastructure status report and cloud image publishers are removed;
+Windows build validation is local, while CLI release publication is retained in
+this repository using its own `GITHUB_TOKEN`. Public Pages is unchanged. The
+manual CLI release workflow runs only on upstream `main`, builds and tests the
+exact bundle before publishing it to `microsoft/scope`, and needs no FLUX token.
+See [CLI distribution](./docs/architecture/cli-distribution.md) for versioning,
+installation and update behavior.
 
 ## Build, lint, and typecheck
 
@@ -161,8 +342,10 @@ MongoDB is CosmosDB-compatible — avoid MongoDB features that CosmosDB's MongoD
   (`.agents/skills/rust-best-practices/SKILL.md`).
 - **Databases**: keep MongoDB usage CosmosDB-compatible (see migrations above).
 - **Documentation is not optional**: if you add or change a component, API, data model, pattern, or
-  deployment behavior, update the relevant doc in [`docs/`](./docs/) (or add one and link it from the
-  README) as the last step before opening your PR.
+  deployment behavior, update the relevant technical doc in [`docs/`](./docs/) and user-facing
+  guide in [`website/src/content/docs/`](./website/src/content/docs/) as appropriate. Add new
+  website pages to the sidebar in [`website/astro.config.mjs`](./website/astro.config.mjs)
+  as the last step before opening your PR.
 
 ## Submitting a pull request
 
@@ -209,16 +392,15 @@ coordinate the review and follow it through to merge or closure. Confirm that th
 Scope's direction before asking the contributor for substantial revisions. Discuss larger
 features or architectural changes in an issue first.
 
-Reviewer routing is the team's responsibility, not the contributor's. Until automated routing is
-configured, the team designates a triage maintainer to check incoming PRs each business day, assign
-a maintainer as the PR owner, and request reviewers familiar with the affected area.
+Reviewer routing is the team's responsibility, not the contributor's. The repository's
+[`CODEOWNERS`](./.github/CODEOWNERS) file now routes review requests by area. The team should still
+designate a triage maintainer to check incoming PRs each business day, assign a maintainer as the PR
+owner, and request additional reviewers familiar with the affected area when needed.
 
-**Team follow-up:** add a `CODEOWNERS` file with a catch-all maintainers team and area owners for
-high-risk paths, including `.github/workflows/`, `packages/db-migrations/`, `packages/github-auth/`,
-`apps/token-manager/`, auth/RBAC and project-scoping code, and `packages/shared/`. Configure team
-review assignment to distribute requests, and branch protection to require code-owner review and
-dismiss stale approvals. These mechanisms are not configured by this policy change; until they
-are, the PR owner coordinates reviews and the merging maintainer checks the approval requirements.
+Keep the [`CODEOWNERS`](./.github/CODEOWNERS) file current as maintainers and area ownership evolve.
+Team review assignment and branch protection still need to be configured to distribute requests,
+require code-owner review, and dismiss stale approvals. Until those settings are enabled, the PR
+owner coordinates reviews and the merging maintainer checks the approval requirements.
 
 ### 2. Check readiness
 
@@ -269,8 +451,10 @@ unblock a PR.
 
 ### 6. Close the loop
 
-Thank the contributor and link any follow-up work. The PR owner checks the post-merge result and
-coordinates a fix or revert if needed.
+Thank the contributor and link any follow-up work. Once merged, the author appears in the
+"Thank you" section of the [Contribute page](https://microsoft.github.io/scope/community/contribute/#thank-you)
+and on the landing page after the merge-triggered contribution-data workflow completes. The PR
+owner checks the post-merge result and coordinates a fix or revert if needed.
 
 If a contribution is not a fit, explain why and close it promptly. When a PR is waiting on the
 contributor after a clear request for information or changes, send a reminder after **two weeks
@@ -295,8 +479,9 @@ Automations depend on these exact names:
 | --- | --- |
 | Worker version checker and upgrade workflow | `type: worker-update` |
 | Test Improver issues, PRs, and monthly-summary searches | `type: automation`, `topic: testing` |
-| Daily repository status reports | `agentic-workflows` |
 | Dependabot | `type: dependencies`, plus `language: javascript` or `language: rust` |
+| Pull Request Labeler | Area, topic, language, and type labels from `.github/labeler.yml` |
+| Community Contribution Labeler | `community-contribution` |
 
 Use `area: reporting` for Scope's benchmark reporting component, not daily repository activity.
 Worker upgrade routing uses `type: worker-update`, not the broader `area: worker`.
@@ -318,14 +503,13 @@ Repository configuration does not create or backfill this label automatically.
 ### Updating label-dependent configuration
 
 Update both the label filters and label writes in `.github/workflows/check-worker-versions.yml`,
-the agentic workflow `.md` frontmatter, and any label searches in their prompts.
+`.github/labeler.yml`, the agentic workflow `.md` frontmatter, and any label searches in their prompts.
 Regenerate the corresponding `.lock.yml` files with `gh aw compile`; do not edit generated YAML
 by hand. Use each file's recorded compiler version to avoid unrelated runtime upgrades:
 
 | Workflow | Compiler |
 | --- | --- |
 | `daily-test-improver` | `v0.57.1` |
-| `daily-repo-status` | `v0.60.0` |
 | `worker-version-upgrade` | `v0.63.0` |
 
 The daily schedules are explicit cron expressions preserving their existing UTC execution times.
@@ -337,6 +521,15 @@ website package, and the Rust gateway. Each entry has `open-pull-requests-limit:
 version-update PRs disabled; the required schedule does not enable those PRs. These labels also
 apply to security-update PRs when security updates are enabled in repository settings. This file
 does not enable security updates or change live labels.
+
+`.github/workflows/labeler.yml` runs on the unprivileged `pull_request` event and skips fork PRs.
+Do not switch it to `pull_request_target` just to label fork PRs; that would violate the fork-PR
+security boundary above. `.github/workflows/community-contribution-labeler.yml` labels issues
+directly and follows completed PR labeler runs, using GitHub metadata only to apply
+`community-contribution` to human authors whose association is `NONE`, `FIRST_TIMER`,
+`FIRST_TIME_CONTRIBUTOR`, or `CONTRIBUTOR`. It requires `issues: write` for issue labels and
+`pull-requests: write` for pull request labels, but it must not check out pull request code,
+download artifacts, or receive repository secrets.
 
 ## Third-party notices
 
@@ -381,6 +574,9 @@ installed dependencies.
 
 - Start with the [system architecture](./docs/architecture/system-architecture.md) and the
   [app design](./docs/architecture/app-design.md) docs for the big picture.
-- The [README](./README.md) introduces the platform, provides a local quick start, and links the full documentation index.
+- The [official documentation website](https://microsoft.github.io/scope/) includes
+  [local setup](https://microsoft.github.io/scope/getting-started/local-development/),
+  the [development guide](https://microsoft.github.io/scope/resources/development/), and
+  [contribution guidance](https://microsoft.github.io/scope/resources/contributing/).
 - Browse [open issues](https://github.com/microsoft/scope/issues) for bugs and
   proposed improvements. Discuss larger changes in an issue before starting work.

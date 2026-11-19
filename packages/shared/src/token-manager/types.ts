@@ -8,10 +8,27 @@
  * (workers, judge, API proxy).
  */
 /**
+ * Every credential kind the Token Manager accepts (key format).
+ * Single source of truth for `KeyType` and for type validation.
+ */
+export const KEY_TYPES = [
+  "github-pat-classic",
+  "github-pat-fine-grained",
+  "github-oauth",
+  "github-oauth-cookie-state",
+  "anthropic-api-key",
+  "anthropic-oauth",
+  "azure-ai-foundry",
+] as const;
+
+/**
  * The kind of credential stored (key format).
  */
-export type KeyType =
-  "github-pat-classic" | "github-pat-fine-grained" | "github-oauth" | "github-oauth-cookie-state" | "anthropic-api-key" | "anthropic-oauth" | "azure-ai-foundry";
+export type KeyType = (typeof KEY_TYPES)[number];
+
+export function isKeyType(value: unknown): value is KeyType {
+  return typeof value === "string" && (KEY_TYPES as readonly string[]).includes(value);
+}
 
 /**
  * What a key can do — derived from (type + detected scopes/permissions).

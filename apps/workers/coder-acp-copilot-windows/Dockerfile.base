@@ -14,11 +14,12 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; \
 ARG NODE_VERSION=22.22.3
 RUN Invoke-WebRequest -Uri "https://nodejs.org/dist/v${env:NODE_VERSION}/node-v${env:NODE_VERSION}-x64.msi" \
     -OutFile C:\node.msi; \
-    Start-Process msiexec.exe -ArgumentList '/i', 'C:\node.msi', '/quiet', '/norestart' -Wait; \
+    $installer = Start-Process msiexec.exe -ArgumentList '/i', 'C:\node.msi', '/quiet', '/norestart' -Wait -PassThru; \
+    if ($installer.ExitCode -notin @(0, 3010)) { throw "Node installer failed: $($installer.ExitCode)" }; \
     Remove-Item C:\node.msi
 
 # Install git via Chocolatey
-RUN choco install -y git
+RUN choco install -y git; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Install pnpm as a standalone executable
 RUN New-Item -ItemType Directory -Force -Path C:\tools | Out-Null; \

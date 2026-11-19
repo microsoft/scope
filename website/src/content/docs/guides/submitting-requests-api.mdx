@@ -96,6 +96,28 @@ profile's *latest version* and stamps both `profileId` and
 `profileVersionId` on the request. To pin a specific version, pass
 `profileVersionId` directly.
 
+To seed the workspace from a registered codebase, add `codebase`.
+It accepts a bare slug, a numbered ref such as `inventory-service@r3`,
+or a revision UUID:
+
+```http
+POST /api/v1/requests?projectId=your-project-id
+Content-Type: application/json
+
+{
+  "scenario": {
+    "task": "Add input validation to the inventory API.",
+    "criteria": ["validates_request_body"]
+  },
+  "profileId": "p-550e8400-e29b-41d4-a716-446655440001",
+  "codebase": "inventory-service@r3"
+}
+```
+
+A bare Git slug resolves its default branch at submission time. A
+numbered ref or revision UUID pins the exact starting snapshot. See
+[Managing codebases](/guides/managing-codebases/).
+
 The response includes the new request's ID and initial state:
 
 ```json
@@ -168,6 +190,7 @@ Each of these has its own CRUD endpoint group under `/api/v1/`:
 - `/api/v1/task-prompts` — see [Managing task prompts](/guides/managing-task-prompts/).
 - `/api/v1/criteria` — see [Defining evaluation criteria](/guides/defining-criteria/).
 - `/api/v1/profiles` — see [Defining profiles](/guides/defining-profiles/).
+- `/api/v1/codebases` — see [Managing codebases](/guides/managing-codebases/).
 - `/api/v1/prompt-features` — see [Working with prompt features](/guides/prompt-features/).
 
 A consolidated reference is at [REST API](/reference/rest-api/).
@@ -210,5 +233,7 @@ idempotency on top by caching the returned `id` if you need it.
 - Reference page: [REST API](/reference/rest-api/).
 - Define a [profile](/guides/defining-profiles/) to use in your
   programmatic submissions.
+- Register a [codebase](/guides/managing-codebases/) when runs should
+  start from an existing project.
 - Or use the [CLI](/guides/submitting-requests-cli/) for an
   interactive terminal workflow with log streaming.
