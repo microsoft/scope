@@ -436,6 +436,37 @@ describe("logging sink", () => {
     expect(preview.endsWith("…")).toBe(true);
     expect(preview.length).toBeLessThan(long.length);
   });
+
+  it("returns capped streamed responses before the caller consumes their body", async () => {
+    const entries: ApiLogEntry[] = [];
+    setApiLogSink({ record: (entry) => entries.push(entry) });
+    const payload = "a".repeat(64 * 1024 + 1);
+    let source: ReadableStreamDefaultController<Uint8Array>;
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        source = controller;
+        controller.enqueue(new TextEncoder().encode(payload));
+      },
+    }), { headers: { "content-type": "text/plain" } });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    const pending = apiFetch("http://localhost:3100", "/criteria");
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const returnedBeforeRead = await Promise.race([
+      pending.then(() => true),
+      new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), 500); }),
+    ]);
+    clearTimeout(timer);
+
+    // Reading the original also releases the old implementation's pending tee
+    // cancellation, keeping this regression test clean even when it fails.
+    source!.close();
+    expect(await response.text()).toBe(payload);
+    await pending;
+    expect(returnedBeforeRead).toBe(true);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].responseBody).toHaveLength(2049);
+  });
 });
 
 describe("readApiError", () => {
