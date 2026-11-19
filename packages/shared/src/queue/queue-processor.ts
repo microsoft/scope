@@ -19,6 +19,7 @@ import type { SkillConfig } from "../types/skill.js";
 import type { ExtensionConfig } from "../types/extension.js";
 import { BaseQueueProcessor } from "./base-queue-processor.js";
 import { cancelExit } from "./cancel-exit.js";
+import { ownedRunFilter, RunOwnershipLostError } from "./run-ownership.js";
 import type { VisibilityHeartbeat } from "./visibility-heartbeat.js";
 import { HEARTBEAT_VISIBILITY_SECONDS } from "./visibility-heartbeat.js";
 import { BlobStorage } from "../storage/blob-storage.js";
@@ -670,16 +671,47 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
   }
 
   /**
+   * Apply a mid-run update to the attempt this worker claimed (issue #803).
+   * The write is filtered on {@link ownedRunFilter}, so it is a no-op once the
+   * run was cancelled, reaped, failed by a redelivery, or retried.
+   *
+   * @param requestId - Request document `_id`.
+   * @param runId - The attempt this worker claimed.
+   * @param update - Mongo update document.
+   * @param operation - Short description used in the ownership-lost error.
+   * @throws RunOwnershipLostError when the write matched no document.
+   */
+  private async updateOwnedRun(
+    requestId: string,
+    runId: string,
+    update: Record<string, unknown>,
+    operation: string,
+  ): Promise<void> {
+    const result = await withRetry(() => this.collection.updateOne(
+      ownedRunFilter(requestId, runId, this.instanceId) as any,
+      update as any,
+    ));
+
+    // Only an explicit zero is a lost claim; acknowledged writes always report matchedCount.
+    if (result?.matchedCount === 0) {
+      throw new RunOwnershipLostError(requestId, runId, operation);
+    }
+  }
+
+  /**
    * Record lifecycle observations (resource outcomes, MCP registration) on the
    * request document.
    *
    * Best-effort: failing to record observability must not change the run's
    * outcome, which is the thing the run actually exists to report. Safe to call
    * more than once — the second call simply overwrites with the same or fresher
-   * values.
+   * values. Filtered on run ownership, so a worker that lost the run never
+   * overwrites the new owner's observations (issue #803); that case is ignored
+   * rather than thrown because this runs in a `finally`.
    */
   private async persistRunObservations(
     requestId: string,
+    runId: string,
     log: (level: "info" | "warn" | "error" | "debug", message: string, data?: Record<string, unknown>) => Promise<void> | void,
   ): Promise<void> {
     if (!this.processor.getRunObservations) return;
@@ -689,7 +721,10 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
       if (obs.resources && obs.resources.length > 0) fields["run.resources"] = obs.resources;
       if (obs.mcpRegistered !== undefined) fields["run.mcpRegistered"] = obs.mcpRegistered;
       if (Object.keys(fields).length > 2) {
-        await withRetry(() => this.collection.updateOne({ _id: requestId }, { $set: fields } as any));
+        await withRetry(() => this.collection.updateOne(
+          ownedRunFilter(requestId, runId, this.instanceId) as any,
+          { $set: fields } as any,
+        ));
       }
     } catch (err) {
       await log("warn", `Failed to record run observations: ${err instanceof Error ? err.message : String(err)}`);
@@ -786,12 +821,16 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
             }
             await log("info", "Setup video files uploaded", { videoCount: setupResult.videoFilePaths.length });
             if (setupVideoUrls.length > 0) {
-              await withRetry(() => this.collection.updateOne(
-                { _id: requestId },
-                { $set: { "run.setupVideoUrls": setupVideoUrls, "run.updatedAt": new Date(), updatedAt: new Date() } }
-              ));
+              await this.updateOwnedRun(
+                requestId,
+                runId,
+                { $set: { "run.setupVideoUrls": setupVideoUrls, "run.updatedAt": new Date(), updatedAt: new Date() } },
+                "setup video URLs",
+              );
             }
           } catch (uploadError) {
+            // A lost claim must stop the run, not be downgraded to an upload warning.
+            if (uploadError instanceof RunOwnershipLostError) throw uploadError;
             const msg = uploadError instanceof Error ? uploadError.message : String(uploadError);
             await log("warn", `Failed to upload setup video files: ${msg}`);
           }
@@ -871,24 +910,29 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
         extensionConfigs,
         onTurnComplete: async (turn: ConversationTurn) => {
           // Persist each turn incrementally to MongoDB (retry on CosmosDB 429).
-          // Push to run.turns (run-retry-attempts shape).
-          await withRetry(() => this.collection.updateOne(
-            { _id: requestId },
+          // Push to run.turns (run-retry-attempts shape). Ownership-filtered:
+          // a lost claim throws and stops the loop before more agent/judge work.
+          await this.updateOwnedRun(
+            requestId,
+            runId,
             {
               $push: { "run.turns": turn },
               $set: { "run.updatedAt": new Date(), updatedAt: new Date() },
-            } as any
-          ));
+            },
+            `iteration ${turn.iteration}`,
+          );
         },
         onGateComplete: async (summary: GateRunSummary) => {
           // Persist per-gate summaries incrementally for cheap querying / UI.
-          await withRetry(() => this.collection.updateOne(
-            { _id: requestId },
+          await this.updateOwnedRun(
+            requestId,
+            runId,
             {
               $push: { gateSummaries: summary },
               $set: { "run.updatedAt": new Date(), updatedAt: new Date() },
-            } as any
-          ));
+            },
+            `${summary.gate} gate summary`,
+          );
         },
       });
     } finally {
@@ -901,7 +945,7 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
         await this.processor.teardown(log);
       }
       // Persist lifecycle observations AFTER teardown so teardownRan is accurate.
-      await this.persistRunObservations(requestId, log);
+      await this.persistRunObservations(requestId, runId, log);
       // Unsubscribe from cancel notifications — normal completion path
       unsubCancel();
     }

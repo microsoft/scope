@@ -3,6 +3,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BaseQueueProcessor } from "./base-queue-processor.js";
+import { RunOwnershipLostError } from "./run-ownership.js";
 import type { VisibilityHeartbeat } from "./visibility-heartbeat.js";
 import type { BaseQueueProcessorConfig, LogEvent } from "../types/types.js";
 import type { DequeuedMessageItem } from "@azure/storage-queue";
@@ -312,10 +313,10 @@ describe("BaseQueueProcessor.safeDeferMessage", () => {
  * clobbered.
  */
 describe("BaseQueueProcessor error-path failure write", () => {
-  function setup(payloadObj: Record<string, unknown>, updateResult: any) {
+  function setup(payloadObj: Record<string, unknown>, updateResult: any, thrown: Error = new Error("handler boom")) {
     class P extends BaseQueueProcessor<{ _id: string }> {
       protected async handleRequest(): Promise<void> {
-        throw new Error("handler boom");
+        throw thrown;
       }
       protected override async cleanup(): Promise<void> {}
     }
@@ -330,8 +331,9 @@ describe("BaseQueueProcessor error-path failure write", () => {
         .mockResolvedValue({ _id: "doc-1", run: { _id: "run-1", status: "processing" } }),
       updateOne,
     };
+    const publish = vi.fn().mockResolvedValue(undefined);
     (proc as any).logPublisher = {
-      publish: vi.fn().mockResolvedValue(undefined),
+      publish,
       evictRun: vi.fn(),
     };
     (proc as any).heartbeatStore = {
@@ -346,8 +348,31 @@ describe("BaseQueueProcessor error-path failure write", () => {
       popReceipt: "receipt-0",
       messageText: Buffer.from(JSON.stringify(payloadObj)).toString("base64"),
     } as any;
-    return { proc, updateOne, onRunTerminal, msg };
+    return { proc, updateOne, onRunTerminal, msg, publish, deleteMessage };
   }
+
+  it("skips the failure write and final log line when ownership was lost (#803)", async () => {
+    const { proc, updateOne, onRunTerminal, msg, publish, deleteMessage } = setup(
+      { requestId: "doc-1", runId: "run-1" },
+      { matchedCount: 1 },
+      new RunOwnershipLostError("doc-1", "run-1", "iteration 2"),
+    );
+    await (proc as any).processMessage(msg);
+
+    // The new owner (or cancel/reaper) already set the state — never touch it.
+    expect(updateOne).not.toHaveBeenCalled();
+    expect(onRunTerminal).not.toHaveBeenCalled();
+
+    // A warning (not a `final` failure line) is logged for forensics.
+    expect(publish).toHaveBeenCalledTimes(1);
+    const [requestId, runId, level, message, data] = publish.mock.calls[0];
+    expect([requestId, runId, level]).toEqual(["doc-1", "run-1", "warn"]);
+    expect(message).toMatch(/Lost ownership of run run-1/);
+    expect(data).toBeUndefined();
+
+    // The message is still removed from the queue.
+    expect(deleteMessage).toHaveBeenCalledTimes(1);
+  });
 
   it("gates the failure write on the exact owned processing run", async () => {
     const { proc, updateOne, onRunTerminal, msg } = setup(
