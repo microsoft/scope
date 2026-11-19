@@ -40,6 +40,11 @@ Dev Proxy captures tool calls from the **Copilot API response body**. It never s
 
 Step 1 is crash recovery — under normal operation step 7 cleans up. Both are needed.
 
+The Scope API includes masked `env` or `headers` only for servers with stored
+secrets. At step 3, the queue processor skips Token Manager resolution when both
+fields are absent; a secret-less server has no Token Manager record. Resolution
+failures for servers with secret metadata still produce a warning.
+
 **Project-scoped resolution.** Steps 2–3 both carry the **run's `projectId`**
 (`requestDoc.projectId`, threaded through `queue-processor.ts` to
 `McpServerClient.resolveServers(projectId, slugs)` and `McpSecretClient.resolveSecrets(projectId,

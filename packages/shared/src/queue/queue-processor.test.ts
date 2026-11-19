@@ -469,6 +469,84 @@ describe("CodingAgentQueueProcessor.handleRequest redelivery handling", () => {
   });
 });
 
+describe("CodingAgentQueueProcessor MCP secret hydration", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function dispatchMcpServer(
+    server: Record<string, unknown>,
+    resolveResponse?: { ok: boolean; status: number; statusText: string; body?: unknown },
+  ) {
+    const qp = new CodingAgentQueueProcessor(
+      { ...testConfig, apiBaseUrl: "http://api:80", tokenManagerUrl: "http://tokens:3003" },
+      stubProcessor,
+    );
+    (qp as any).collection = { updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }) };
+    (qp as any).heartbeatStore = new InMemoryHeartbeatStore();
+    (qp as any).processMultiTurn = vi.fn().mockResolvedValue(undefined);
+
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url.startsWith("http://api:80")) {
+        return { ok: true, json: async () => server };
+      }
+      if (!resolveResponse) throw new Error("Unexpected Token Manager request");
+      return { ...resolveResponse, json: async () => resolveResponse.body };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const requestDoc = {
+      _id: "request-1",
+      projectId: "project-1",
+      workerType: "test-worker",
+      agentVersion: "test-1.0.0",
+      mcpServers: ["time"],
+      run: { _id: "run-1", status: "queued", attemptNumber: 1 },
+    } as any;
+    const log = vi.fn().mockResolvedValue(undefined);
+    const heartbeat = { popReceipt: "receipt-1" } as VisibilityHeartbeat;
+    const message = { messageId: "message-1", popReceipt: "receipt-1" } as any;
+
+    await (qp as any).handleRequest(requestDoc, message, heartbeat, log, { runId: "run-1" });
+    return { fetchMock, log, processMultiTurn: (qp as any).processMultiTurn };
+  }
+
+  it("skips Token Manager and does not warn for a server without secrets", async () => {
+    const result = await dispatchMcpServer({
+      _id: "time", slug: "time", name: "Time", type: "stdio", command: "uvx",
+    });
+
+    expect(result.fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.log).not.toHaveBeenCalledWith("warn", expect.stringContaining("Failed to hydrate"), expect.anything());
+    expect(result.processMultiTurn.mock.calls[0][5]).toEqual([
+      { slug: "time", name: "Time", type: "stdio", command: "uvx" },
+    ]);
+  });
+
+  it("hydrates a server with masked secret metadata", async () => {
+    const result = await dispatchMcpServer(
+      { _id: "time", slug: "time", name: "Time", type: "stdio", command: "uvx", env: { API_KEY: "<secret>" } },
+      { ok: true, status: 200, statusText: "OK", body: { env: { API_KEY: "real-secret" } } },
+    );
+
+    expect(result.fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.processMultiTurn.mock.calls[0][5][0].env).toEqual({ API_KEY: "real-secret" });
+  });
+
+  it("still warns when resolution fails for a server with secrets", async () => {
+    const result = await dispatchMcpServer(
+      { _id: "time", slug: "time", name: "Time", type: "stdio", command: "uvx", env: { API_KEY: "<secret>" } },
+      { ok: false, status: 503, statusText: "Service Unavailable" },
+    );
+
+    expect(result.log).toHaveBeenCalledWith(
+      "warn",
+      "Failed to hydrate secrets for MCP server 'Time' (time)",
+      expect.objectContaining({ error: expect.stringContaining("503") }),
+    );
+  });
+});
+
 describe("CodingAgentQueueProcessor pre-processing failures", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

@@ -415,6 +415,10 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
         const hydratedNames: string[] = [];
         mcpServerConfigs = await Promise.all(
           mcpServerConfigs.map(async (config) => {
+            // The API includes masked env/headers only when the server has stored secrets.
+            // Secret-less servers have no Token Manager record to resolve.
+            if (!config.env && !config.headers) return config;
+
             try {
               const resolved = await secretClient.resolveSecrets(requestDoc.projectId, config.slug);
               if ('env' in resolved && resolved.env && Object.keys(resolved.env).length > 0) {
