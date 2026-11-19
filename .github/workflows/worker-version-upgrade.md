@@ -1,14 +1,19 @@
 ---
 description: |
-  Automatically assigns Copilot coding agent to version update issues created
-  by the check-worker-versions workflow. Copilot reads the issue body, updates
-  the versions.env file, runs integration tests, and opens a PR.
+  Applies version update issues created by the check-worker-versions workflow.
+  The workflow updates the versions.env file, runs targeted integration tests,
+  and opens a guarded draft PR.
 
 on:
   issues:
     types: [opened, edited]
     names: ["type: worker-update"]
   workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Worker update issue number
+        required: true
+        type: string
   # Workaround: gh-aw compiler bug — `names:` is commented out in the lock file
   # and no label condition is injected. Use on.steps to enforce label filtering.
   steps:
@@ -22,6 +27,9 @@ on:
 
 if: github.event_name == 'workflow_dispatch' || needs.pre_activation.outputs.label_check_result == 'success'
 
+concurrency:
+  job-discriminator: ${{ github.event.issue.number || inputs.issue_number || github.run_id }}
+
 permissions:
   contents: read
   issues: read
@@ -29,20 +37,25 @@ permissions:
 network: defaults
 
 safe-outputs:
-  assign-to-agent:
-    name: copilot
-    target: "triggering"
-    github-token: ${{ secrets.GH_AW_AGENT_TOKEN }}
+  create-pull-request:
+    draft: true
+    base-branch: main
+    github-token-for-extra-empty-commit: none
+    allowed-files:
+      - apps/workers/coder-acp-copilot/versions.env
+      - apps/workers/coder-acp-copilot/src/acp-client.ts
+      - apps/workers/coder-acp-claude-code/versions.env
+      - apps/workers/coder-acp-claude-code/src/acp-client.ts
 ---
 
 # Worker Version Upgrade
 
 When a version update issue is created by the check-worker-versions workflow,
-apply the update and open a pull request.
+apply the requested update and open a draft pull request.
 
 ## Context
 
-Analyze the triggering issue: "${{ steps.sanitized.outputs.text }}"
+Analyze issue #${{ github.event.issue.number || inputs.issue_number }}: "${{ steps.sanitized.outputs.text }}"
 
 The issue was created by an automated version checker. It contains a structured
 body with:
@@ -67,9 +80,16 @@ body with:
    `npx vitest run --config vitest.integration.config.ts --passWithNoTests apps/workers/<worker-name>/`
    Derive `<worker-name>` from the `versions.env` path parsed in step 1.
 
-5. **If tests fail** — Read the error output, identify the root cause, and
-   attempt to fix it. Common issues include API changes in new versions that
-   require code updates in the worker source files listed below.
+5. **Handle test failures** — Read the error output, identify the root cause,
+   and attempt to fix it. Only edit the worker's allowed source file listed
+   below. If the hosted agent environment cannot provide Docker or another
+   required integration-test dependency, continue with a draft PR and clearly
+   state which test could not run and why.
+
+6. **Create the draft PR** — Call `create_pull_request` from the `safeoutputs`
+   MCP server exactly once. Use a concise version-update title. Include the
+   changed version, test result, and `Fixes #${{ github.event.issue.number || inputs.issue_number }}`
+   in the body.
 
 ## Workers and their version files
 
@@ -80,13 +100,13 @@ body with:
 
 ## Allowed source files for test fixes
 
-If integration tests fail after a version update, only edit files in these paths:
+If integration tests fail after a version update, only edit the matching file:
 
 - **coder-acp-copilot**: `apps/workers/coder-acp-copilot/src/acp-client.ts`
 - **coder-acp-claude-code**: `apps/workers/coder-acp-claude-code/src/acp-client.ts`
 
 ## Constraints
 
-- Only modify the `versions.env` file and the allowed source files listed above
+- Only modify the matching `versions.env` file and allowed source file
 - Do not modify Dockerfiles, docker-compose files, or build scripts
 - The `versions.env` file is the single source of truth for version pinning
