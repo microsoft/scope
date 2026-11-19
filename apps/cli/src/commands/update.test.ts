@@ -119,19 +119,12 @@ describe("update command", () => {
     );
   });
 
-  it("proceeds with update when version check fails", async () => {
+  it("does not bypass release selection when no stable version is found", async () => {
     mockedFetchLatestVersion.mockResolvedValue(undefined);
 
-    await program.parseAsync(["node", "scope", "update"]);
-
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      expect.stringContaining("gh release list --repo microsoft/scope"),
-      expect.anything(),
-    );
-    expect(mockedExecSync).toHaveBeenCalledWith(
-      expect.stringContaining('gh release download "cli/v0.3.0" --repo microsoft/scope'),
-      expect.anything(),
-    );
+    await expect(program.parseAsync(["node", "scope", "update"])).rejects.toThrow("process.exit");
+    expect(mockedExecSync).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith("Could not determine the latest CLI release tag.");
   });
 
   it("rejects update in dev mode", async () => {
