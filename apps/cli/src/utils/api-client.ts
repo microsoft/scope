@@ -31,6 +31,9 @@
 import ky, { type KyInstance, type BeforeRequestHook } from "ky";
 import { normalizeUrl } from "./shared.js";
 
+/** Identify CLI traffic separately from Portal and other API clients in request analytics. */
+export const CLI_USER_AGENT = `scope-cli/${process.env.SCOPE_CLI_VERSION ?? "0.1.0-dev"}`;
+
 /** Init accepted by {@link apiFetch}. Adds a couple of client-only knobs to `RequestInit`. */
 export interface ApiFetchInit extends RequestInit {
   /** Redact entire request/response log bodies when registering or validating credentials. */
@@ -478,6 +481,7 @@ export async function apiFetch(baseUrl: string | undefined, path: string, init?:
   const url = `${normalizeUrl(baseUrl)}${withProjectId(resolveApiPath(path), init?.projectId)}`;
 
   const headers = new Headers(init?.headers);
+  if (!headers.has("user-agent")) headers.set("user-agent", CLI_USER_AGENT);
   if (init?.skipAuth) headers.set(SKIP_AUTH_HEADER, "1");
 
   // Strip our client-only fields before handing the init to ky.
