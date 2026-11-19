@@ -13,7 +13,16 @@ The portal uses **two mechanisms** for real-time updates:
 GET /api/v1/requests/:id/logs?fromStart=true
 ```
 
-Defined in `apps/api/src/index.ts`. Accepts an optional `fromStart=true` query param to replay existing logs from MongoDB before switching to live streaming.
+Defined in `apps/api/src/routes/requests/logs.ts`. Accepts an optional `fromStart=true` query param to replay existing logs from Blob Storage before switching to live streaming.
+
+The Portal uses SSE only while a request attempt or report is active. Once it is
+terminal, it fetches the stored events as JSON from
+`GET /api/v1/requests/:id/logs/events`,
+`GET /api/v1/requests/:id/runs/:runId/logs/events` (historical attempt), or
+`GET /api/v1/reports/:id/logs/events`. These endpoints return the same ordered
+`LogEvent[]` as SSE replay without holding a stream open. If an active stream
+finishes while the page is open, its events remain visible until the JSON read
+completes. The SSE endpoints remain available to other clients for replay.
 
 ### Server-Side Flow
 
@@ -60,7 +69,7 @@ read lazily by clients (no SSE stream — fetched on demand by ID/iteration):
 
 | Artifact | Container | Path | Producer | Consumer |
 |----------|-----------|------|----------|----------|
-| Log events | `logs` | `{requestId}/runs/{runId}/run.jsonl` | `BlobStorage.appendLogEvent` (workers) | SSE replay + `GET /api/v1/requests/:id/logs` |
+| Log events | `logs` | `{requestId}/runs/{runId}/run.jsonl` | `BlobStorage.appendLogEvent` (workers) | Active SSE replay; terminal JSON log-events endpoints |
 | Per-iteration tool calls | `snapshots` | `{requestId}/runs/{runId}/iteration-{n}/tool-calls.jsonl` | `BlobStorage.writeToolCalls` (`multi-turn-loop`) | `GET /api/v1/requests/:id/tool-calls?iteration=N`, consumed by `useAllTurnsToolCalls` |
 
 Tool-call JSONL was introduced (#812) to keep unbounded per-iteration tool-call
