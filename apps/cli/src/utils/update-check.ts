@@ -6,22 +6,25 @@
  * Starts the check in the background and returns a flush function
  * that should be awaited after the command completes to print the notification.
  * Suppressed by SCOPE_NO_UPDATE_CHECK=1 environment variable.
- * Checks at most once per hour (cooldown stored in ~/.config/scope/update-check.json).
+ * Checks at most once per hour (cooldown stored in update-check.json in the CLI config dir).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import semver from "semver";
+import { environmentConfigDir } from "./environments.js";
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-const CONFIG_DIR = join(homedir(), ".config", "scope");
-const STATE_FILE = join(CONFIG_DIR, "update-check.json");
+
+function stateFile(): string {
+  return join(environmentConfigDir(), "update-check.json");
+}
 
 function shouldCheck(): boolean {
   try {
-    if (!existsSync(STATE_FILE)) return true;
-    const state = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    const file = stateFile();
+    if (!existsSync(file)) return true;
+    const state = JSON.parse(readFileSync(file, "utf-8"));
     const lastCheck = state.lastCheck ?? 0;
     return Date.now() - lastCheck >= UPDATE_CHECK_INTERVAL_MS;
   } catch {
@@ -31,10 +34,11 @@ function shouldCheck(): boolean {
 
 function recordCheck(): void {
   try {
-    if (!existsSync(CONFIG_DIR)) {
-      mkdirSync(CONFIG_DIR, { recursive: true });
+    const dir = environmentConfigDir();
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
     }
-    writeFileSync(STATE_FILE, JSON.stringify({ lastCheck: Date.now() }) + "\n");
+    writeFileSync(stateFile(), JSON.stringify({ lastCheck: Date.now() }) + "\n");
   } catch {
     // Best-effort — don't fail if we can't write state
   }

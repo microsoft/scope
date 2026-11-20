@@ -2,13 +2,19 @@
 // Licensed under the MIT License.
 
 /**
- * Persisted CLI configuration stored at `~/.config/scope/config.json`.
+ * Persisted CLI configuration stored at `config.json` in the CLI config dir
+ * (`$XDG_CONFIG_HOME/scope`, `~/.config/scope`, or `%LOCALAPPDATA%\scope`).
+ * A pre-existing `~/.config/scope/config.json` is still read until the first write.
  *
  * Today this holds only the **selected project** — the project whose data
  * scoped commands (`run list`, entity lists, root creates) operate on. The
  * Scope API requires an explicit `?projectId=` on every scoped call and never
  * falls back to a default, so the CLI must resolve a concrete project id before
  * issuing those requests.
+ *
+ * Named actions instead use their pinned environment's SCOPE_PROJECT and
+ * persist changes to that environment's .env; they never read the legacy
+ * config or ambient SCOPE_PROJECT. Explicit --project overrides either mode.
  *
  * Resolution precedence (highest first), see {@link resolveProjectId}:
  *  1. an explicit `--project <id>` flag,
@@ -23,13 +29,20 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { getCliName } from "./shared.js";
+import { currentEnvironment } from "./connection.js";
+import { EnvironmentStore, environmentConfigDir } from "./environments.js";
 
-/** Directory holding all CLI state (shared with the update checker). */
-const CONFIG_DIR = join(homedir(), ".config", "scope");
-/** Path to the persisted CLI config document. */
-const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+/** Path to the persisted CLI config document in the shared CLI config dir. */
+function configFile(): string {
+  return join(environmentConfigDir(), "config.json");
+}
 
-/** Shape of `~/.config/scope/config.json`. Intentionally open for forward-compat. */
+/** Pre-XDG/Windows location, read only when the current file does not exist yet. */
+function legacyConfigFile(): string {
+  return join(homedir(), ".config", "scope", "config.json");
+}
+
+/** Shape of `<config dir>/config.json`. Intentionally open for forward-compat. */
 export interface ScopeConfig {
   /** Id of the project scoped commands operate on, when one has been selected. */
   selectedProjectId?: string;
@@ -38,8 +51,10 @@ export interface ScopeConfig {
 /** Read the persisted config, tolerating a missing or malformed file. */
 export function readConfig(): ScopeConfig {
   try {
-    if (!existsSync(CONFIG_FILE)) return {};
-    const parsed: unknown = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
+    const current = configFile();
+    const file = existsSync(current) ? current : legacyConfigFile();
+    if (!existsSync(file)) return {};
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf-8"));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as ScopeConfig;
     }
@@ -50,14 +65,17 @@ export function readConfig(): ScopeConfig {
   }
 }
 
-/** Persist the config, creating `~/.config/scope/` on first write. */
+/** Persist the config, creating the CLI config dir on first write. */
 export function writeConfig(config: ScopeConfig): void {
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_FILE, `${JSON.stringify(config, null, 2)}\n`);
+  const dir = environmentConfigDir();
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(configFile(), `${JSON.stringify(config, null, 2)}\n`);
 }
 
 /** The persisted selected project id, or `undefined` if none has been chosen. */
 export function getSelectedProjectId(): string | undefined {
+  const environment = currentEnvironment();
+  if (environment) return environment.project;
   const id = readConfig().selectedProjectId;
   return typeof id === "string" && id.trim() ? id.trim() : undefined;
 }
@@ -67,6 +85,11 @@ export function getSelectedProjectId(): string | undefined {
  * the selection so the next resolution falls through to flag/env or `undefined`.
  */
 export function setSelectedProjectId(id: string | undefined): void {
+  const environment = currentEnvironment();
+  if (environment) {
+    new EnvironmentStore().set(environment.name, "SCOPE_PROJECT", id);
+    return;
+  }
   const config = readConfig();
   const trimmed = id?.trim();
   if (trimmed) config.selectedProjectId = trimmed;
@@ -82,6 +105,8 @@ export function setSelectedProjectId(id: string | undefined): void {
 export function resolveProjectId(flag?: string): string | undefined {
   const fromFlag = flag?.trim();
   if (fromFlag) return fromFlag;
+  const environment = currentEnvironment();
+  if (environment) return environment.project;
   const fromEnv = process.env.SCOPE_PROJECT?.trim();
   if (fromEnv) return fromEnv;
   return getSelectedProjectId();
@@ -95,6 +120,12 @@ export function requireProjectId(flag?: string): string {
   const id = resolveProjectId(flag);
   if (!id) {
     const cli = getCliName();
+    const environment = currentEnvironment();
+    if (environment) {
+      throw new Error(
+        `No project selected in environment "${environment.name}". Pass --project <id> or run \`${cli} --env ${environment.name} project use <id>\`.`,
+      );
+    }
     throw new Error(
       `No project selected. Pass --project <id>, set SCOPE_PROJECT, or run \`${cli} project use <id>\`.`,
     );
