@@ -390,7 +390,13 @@ export function RunDetail() {
   const generateReport = useMutation({
     mutationFn: () => api.triggerReports(id!),
     onSuccess: (data) => {
-      toast.success(`${data.triggered} report(s) queued`);
+      if (data.triggered === 0) {
+        toast.warning("No reports queued", {
+          description: "No active report template trigger matched this run. Review report template triggers and try again.",
+        });
+      } else {
+        toast.success(`${data.triggered} report(s) queued`);
+      }
       refetchReports();
     },
     onError: (err) => {
