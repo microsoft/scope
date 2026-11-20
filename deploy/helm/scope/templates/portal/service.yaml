@@ -1,0 +1,17 @@
+{{- if .Values.portal.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "scope.componentName" (dict "component" "portal" "context" .) }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "scope.labels" . | nindent 4 }}
+    app.kubernetes.io/component: portal
+spec:
+  selector:
+    {{- include "scope.selectorLabels" (dict "component" "portal" "context" .) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.portal.port }}
+      targetPort: http
+{{- end -}}

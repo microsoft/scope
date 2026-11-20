@@ -1,0 +1,17 @@
+{{- if .Values.judge.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "scope.componentName" (dict "component" "judge" "context" .) }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "scope.labels" . | nindent 4 }}
+    app.kubernetes.io/component: judge
+spec:
+  selector:
+    {{- include "scope.selectorLabels" (dict "component" "judge" "context" .) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.judge.port }}
+      targetPort: http
+{{- end -}}
