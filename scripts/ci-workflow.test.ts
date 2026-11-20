@@ -352,13 +352,13 @@ describe("Website contribution data workflow", () => {
     expect(publish.if).toBe("github.repository == 'microsoft/scope'");
   });
 
-  it("collects paginated human default-branch contributors deterministically", () => {
+  it("aggregates paginated default-branch commits by human GitHub author deterministically", () => {
     expect(collect).toContain("gh api --paginate");
-    expect(collect).toContain('"repos/${REPO}/contributors?per_page=100&anon=0"');
-    expect(collect).toContain('.type == "User"');
-    expect(collect).toContain('endswith("[bot]")');
-    expect(collect).toContain("group_by(.login | ascii_downcase)");
-    expect(collect).toContain("commits: $commits");
+    expect(collect).toContain('"repos/${REPO}/commits?sha=${DEFAULT_BRANCH}&per_page=100"');
+    expect(collect).toContain('.author.type == "User"');
+    expect(collect).toContain('.author.login | endswith("[bot]")');
+    expect(collect).toContain("group_by(.author.login | ascii_downcase)");
+    expect(collect).toContain("commits: length");
     expect(collect).not.toContain("prs:");
     expect(collect).toContain("sort_by(.login | ascii_downcase)");
   });

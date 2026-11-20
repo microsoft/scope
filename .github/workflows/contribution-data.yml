@@ -22,6 +22,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       DATA_BRANCH: website-data
     steps:
       - name: Collect contributors
@@ -30,21 +31,19 @@ jobs:
           gh api --paginate \
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
-            "repos/${REPO}/contributors?per_page=100&anon=0" \
+            "repos/${REPO}/commits?sha=${DEFAULT_BRANCH}&per_page=100" \
             --jq '.[]' |
             jq -cS -s '
               map(select(
-                .login != null
-                and .type == "User"
-                and (.login | endswith("[bot]") | not)
-                and (.contributions | type == "number" and . > 0 and floor == .)
+                .author != null
+                and .author.type == "User"
+                and (.author.login | endswith("[bot]") | not)
               ))
-              | group_by(.login | ascii_downcase)
+              | group_by(.author.login | ascii_downcase)
               | map(
-                  (map(.contributions) | add) as $commits
                   | {
-                      commits: $commits,
-                      login: .[0].login
+                      commits: length,
+                      login: .[0].author.login
                     }
                 )
               | sort_by(.login | ascii_downcase)

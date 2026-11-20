@@ -225,11 +225,13 @@ page (a card grid) thank everyone with commits attributed on the
 repository's default branch (`main`), community and Microsoft alike:
 
 - The publisher writes `contributors.jsonl` to `website-data`. It
-  uses GitHub's repository contributors endpoint and counts commits
-  attributed on the default branch for user accounts, excluding bots
-  (`[bot]` suffix) and anonymous entries. The repository `.mailmap`
-  canonicalizes verified historical commit identities when an imported
-  author email is not associated with the corresponding GitHub account.
+  paginates GitHub's repository commits endpoint for the default branch,
+  groups commits by their associated GitHub user account, and excludes bots
+  (`[bot]` suffix) and anonymous entries. This avoids the delayed statistics
+  cache used by the aggregate contributors endpoint. The repository
+  `.mailmap` canonicalizes verified historical commit identities when an
+  imported author email is not associated with the corresponding GitHub
+  account.
 - [`.github/workflows/contribution-data.yml`](../.github/workflows/contribution-data.yml)
   runs after pushes to `main` and on demand. It updates the orphan data
   branch only when the deterministic file changes.
