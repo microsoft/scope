@@ -13,6 +13,8 @@ import { StatusBadge, OutcomeBadge } from "@/components/StatusBadge";
 import { TaskPromptBadge } from "@/components/TaskPromptBadge";
 import { AgentBadge, agentDisplayName, useAgentCatalog } from "@/components/AgentBadge";
 import { GATE_METADATA } from "@/lib/gates";
+import { CliCommand } from "@/components/CliCommand";
+import { buildRunGet } from "@/lib/cli/buildCommand";
 import { formatDate, formatId, formatDuration, truncate } from "@/lib/utils";
 
 export function RunPreviewPanel() {
@@ -79,6 +81,7 @@ export function RunPreviewPanel() {
       onClose={closePanel}
       headerActions={
         <div className="flex justify-end gap-2">
+          <CliCommand command={buildRunGet(run._id)} align="end" />
           <Link to={`/runs/${run._id}`}>
             <Button variant="outline" size="sm" className="gap-1.5">
               <ExternalLink className="h-3.5 w-3.5" />
