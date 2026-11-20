@@ -40,6 +40,13 @@ pnpm install --frozen-lockfile
 
 If you cloned a fork, run the remaining commands from that checkout instead.
 
+:::tip[Not sure which command to run?]
+Run `pnpm start` (or `pnpm scope`) from the repository root. It asks what you
+want to do, checks the prerequisites, shows the exact `pnpm` command, and runs
+it after you confirm. Use `pnpm start --list` to see every contributor command
+grouped by topic.
+:::
+
 ## 2. Configure and start the stack
 
 Authenticate with an account that has an active Copilot entitlement:

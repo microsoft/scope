@@ -51,6 +51,7 @@ Scope is a pnpm workspaces monorepo (TypeScript, with a Rust component for the A
 
 ```bash
 pnpm install                      # Install all workspace dependencies
+pnpm start                        # Interactive guide to the commands below (alias: pnpm scope)
 ```
 
 CI installs with `pnpm install --frozen-lockfile`; commit an updated `pnpm-lock.yaml` when you change
@@ -61,6 +62,37 @@ install scripts. Scope uses `ssh2` only transitively through Docker test tooling
 and its supported JavaScript implementation preserves that behavior without a
 Python/compiler toolchain. Keep required dependency build scripts allowlisted in
 `pnpm-workspace.yaml`; do not replace this narrow policy with `--ignore-scripts`.
+
+### Interactive contributor guide
+
+Not sure which command to run? `pnpm start` (or its alias `pnpm scope`) asks a few
+questions, such as what you want to do and which worker you need, then:
+
+1. checks the prerequisites for that task (such as the Docker daemon, mkcert,
+   `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, Rust, built workspace packages or the
+   generated `.env`), and explains how to fix anything missing;
+2. shows the exact `pnpm` command or commands, with a warning when they delete
+   data, spend provider credits or are experimental;
+3. runs them only after you confirm. Destructive commands default to **No**.
+
+```bash
+pnpm start                        # Guided menu; after a run, it offers to repeat your last choice
+pnpm start --list                 # Print every command, grouped by topic
+pnpm start --dry-run              # Answer the questions and see the commands without running them
+```
+
+If `GITHUB_TOKEN` is missing but the GitHub CLI is signed in, the guide offers to
+pass `gh auth token` to that one command; the token is never printed or saved.
+The last choice is stored per worktree in `.dev-state/guide/last.json`. On a fresh
+clone, `pnpm start` offers to run `pnpm install --frozen-lockfile` first. In
+non-interactive shells (CI, pipes), it prints the `--list` output instead of
+prompting. The guide only runs existing root scripts; you can always run them
+directly.
+
+When you add, rename or remove a contributor-facing root script, update its
+recipe in [`scripts/guide/catalog.ts`](./scripts/guide/catalog.ts) (and the menu
+in [`scripts/guide/tree.ts`](./scripts/guide/tree.ts) if it belongs in the guided
+flow). Scripts without a recipe still appear under "Other scripts".
 
 ## Local development
 
