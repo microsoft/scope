@@ -689,7 +689,22 @@ Both follow the same rules:
 - **`TaskPromptBadge` is type-agnostic.** Gate prompts (`select`/`build`/`test`/`run`/`deploy`),
   `agents.md`, and legacy untyped prompts all render the same hover + the same
   `/task-prompts/:id` navigation; only the human label differs (via `promptTypeLabel`). It also
-  renders content plainly (no link/tooltip) when no `taskPromptId` is available.
+  renders content plainly when no `taskPromptId` is available, unless the caller
+  supplies `fallbackText`. The Runs list supplies the inline task for legacy runs:
+  a portaled Radix tooltip shows the full text on hover or keyboard focus, uses
+  the same 200 ms hover delay as existing metadata tooltips, wraps long values,
+  and scrolls if needed. This fallback has no detail link and never fetches
+  prompt metadata or content. Runs with a task-prompt reference keep their
+  existing linked preview, even when fallback text is supplied.
+  When the fallback preview overflows, Arrow Up/Down, Page Up/Down, Home/End,
+  and Space/Shift+Space scroll it while keyboard focus stays on the trigger.
+  Escape dismisses the tooltip; Tab moves to the next control and dismisses it.
+  Clicks inside the fallback preview stop propagation so they do not navigate
+  the enclosing row; clicking the trigger keeps the row's normal behavior.
+  The `LegacyRunWithOverflowingTask` Storybook interaction checks real overflow,
+  scrolling to the final visible line, and keyboard dismissal in a browser.
+  The Runs list's truncated numeric filter labels also use Radix tooltips
+  instead of native `title` attributes, inheriting the page's 200 ms hover delay.
 - **Detected-features list + explicit navigate button.** `TaskPromptBadge`'s preview lists only
   the prompt's **detected** features by id (it never shows undetected features or an `x/y` count)
   and ends with an obvious button-styled **Open details** `Link` (not plain text). Because the

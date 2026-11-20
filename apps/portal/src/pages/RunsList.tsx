@@ -407,7 +407,17 @@ function NumericComparatorRow({
 }) {
   return (
     <div className="flex min-w-0 items-center gap-1.5">
-      <span className="w-12 shrink-0 truncate text-xs font-medium text-muted-foreground" title={label}>{label}</span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            tabIndex={0}
+            className="w-12 shrink-0 truncate text-xs font-medium text-muted-foreground"
+          >
+            {label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs">{label}</TooltipContent>
+      </Tooltip>
       <Select value={op} onValueChange={(v) => onChange({ op: v as IterationOp, value })}>
         <SelectTrigger
           aria-label={`${ariaLabel} comparator`}
@@ -1361,7 +1371,11 @@ export function RunsList() {
       hidden: columnVisibility.isHidden("task"),
       cell: (r) =>
         r.scenario?.task ? (
-          <TaskPromptBadge taskPromptId={r.taskPromptId} className="block truncate">
+          <TaskPromptBadge
+            taskPromptId={r.taskPromptId}
+            fallbackText={r.scenario.task}
+            className="block truncate"
+          >
             <span className="text-sm cursor-pointer hover:underline">
               {truncate(r.scenario.task, 60)}
             </span>
