@@ -1093,11 +1093,22 @@ usually left unset. Every selected key must contain a non-empty string `issuer`;
 missing, malformed, ambiguous, or mismatched key issuer metadata rejects the
 token.
 
-> **entra-local compatibility prerequisite.** At the time this validation was
-> introduced, the external `cmaneu/entra-local` JWKS omitted the `issuer`
-> extension. Auth-enabled local development therefore requires an emulator
-> version that publishes the configured per-tenant issuer on every signing key.
-> This Scope change does not modify the external emulator.
+> **entra-local compatibility.** The 0.1.1 image at digest
+> `sha256:70584ef110914d100409cb3d63a63548ccdde10ca780f9751755f1482dec5d7e`
+> was probed with verified TLS and publishes the configured external issuer on
+> every JWK. Earlier warnings about missing metadata do not establish that this
+> image is incompatible. The [devcontainer](docs/architecture/devcontainer.md)
+> records the evidence, including a working browser sign-in through the Codespaces
+> forward in Kind mode.
+> Do not remove key-issuer checks to accommodate an incompatible emulator.
+
+> **Experimental dev-edge inputs.** Only the devcontainer commands (`pnpm dev:up`,
+> `pnpm dev:spike`) consume `PUBLIC_ORIGIN`,
+> `EDGE_PORT` (Codespaces HTTP, 8080), `EDGE_TLS_PORT` (local HTTPS, 8443), and
+> `SPIKE_ENTRA_PORT` (private loopback TLS, 18443). Codespaces origins are resolved
+> from `CODESPACE_NAME` and `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN` at runtime.
+> `pnpm dev:up` resolves process environment > `.env.local` > generated `.env` >
+> defaults; `pnpm dev:spike` reads only the process environment.
 
 > **Local dev TLS.** Compose trusts the emulator's mkcert CA through a read-only
 > public-CA mount and `NODE_EXTRA_CA_CERTS`; the certificate covers the internal

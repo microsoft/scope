@@ -22,6 +22,15 @@ and architecture references. Read
 [CONTRIBUTING.md](https://github.com/microsoft/scope/blob/main/CONTRIBUTING.md)
 for coding conventions, testing requirements, and the pull request process.
 
+Several ways to run Scope locally are available: Docker Compose (recommended),
+native processes, and an experimental devcontainer with native and Kind modes.
+The devcontainer requires a privileged, disposable environment; its Kind mode has
+been tested in GitHub Codespaces, including browser sign-in. See
+[Choose how to run Scope](https://github.com/microsoft/scope/blob/main/CONTRIBUTING.md#choose-how-to-run-scope)
+for a comparison and the
+[devcontainer documentation](https://github.com/microsoft/scope/blob/main/docs/architecture/devcontainer.md)
+for details.
+
 ## Pull requests
 
 Open pull requests against `microsoft/scope` on `main`, including when working

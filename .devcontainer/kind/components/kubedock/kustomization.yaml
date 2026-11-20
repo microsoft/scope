@@ -1,0 +1,64 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - rbac.yaml
+patches:
+  - target:
+      kind: Deployment
+      name: coder-acp-copilot|coder-acp-claude-code
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: kubedock-socket
+          emptyDir: {}
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: kubernetes-identity
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: https://kubernetes.default.svc.cluster.local
+                  expirationSeconds: 600
+                  path: token
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        fieldPath: metadata.namespace
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: kubedock-socket
+          mountPath: /var/run/kubedock
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: DOCKER_HOST
+          value: unix:///var/run/kubedock/kubedock.sock
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: KUBEDOCK_ENABLED
+          value: "true"
+      - op: add
+        path: /spec/template/spec/containers/-
+        value:
+          name: kubedock
+          image: joyrex2001/kubedock:0.17.0@sha256:750ec7dd09b10cc4720d2e03e2f856cff6020369aa03b0d6f258c1e6a5129985
+          args: ["server", "--unix-socket", "/var/run/kubedock/kubedock.sock", "--port-forward", "--namespace", "scope-dev-tasks", "--service-account", "kubedock-task", "--disable-dind", "--request-cpu", "100m,1", "--request-memory", "64Mi,512Mi", "--active-deadline-seconds", "3600"]
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          volumeMounts:
+            - name: kubedock-socket
+              mountPath: /var/run/kubedock
+            - name: kubernetes-identity
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true

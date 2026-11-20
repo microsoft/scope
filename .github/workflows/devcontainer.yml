@@ -1,0 +1,55 @@
+name: Devcontainer Contracts
+
+on:
+  pull_request:
+    paths:
+      - .devcontainer/**
+      - .vscode/launch.json
+      - scripts/dev/**
+      - package.json
+      - pnpm-lock.yaml
+      - .dockerignore
+      - .github/workflows/devcontainer.yml
+  push:
+    branches: [main]
+    paths:
+      - .devcontainer/**
+      - scripts/dev/**
+      - .github/workflows/devcontainer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devcontainer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22.22.0'
+      - name: Install locked dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.29.1 --activate
+          pnpm install --frozen-lockfile
+      - name: Test configuration and lifecycle contracts
+        run: pnpm exec vitest run scripts/dev
+      - name: Typecheck development tooling
+        run: pnpm exec tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler --typeRoots packages/shared/node_modules/@types --types node --esModuleInterop --skipLibCheck --strict scripts/dev/*.ts
+      - name: Validate shell and native infrastructure
+        env:
+          DEV_CERT_DIR: /tmp/scope-public-validation-certificates
+        run: |
+          bash -n .devcontainer/install-tools.sh
+          docker compose --file .devcontainer/native.compose.yaml config --quiet
+      - name: Check committed manifest generation
+        run: |
+          pnpm exec tsx scripts/dev/kind.ts .devcontainer/kind/base --defaults
+          git diff --exit-code -- .devcontainer/kind/base
