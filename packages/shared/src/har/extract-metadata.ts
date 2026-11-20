@@ -32,10 +32,20 @@ export async function extractHarMetadata(
     toolNames: toolCalls.map((tc) => tc.name),
   });
   const tokenUsage = extractTokenUsage(har) ?? undefined;
+  const aiCallCount = extractAiCallCount(har);
+
   if (tokenUsage) {
     await log("info", `Token usage: ${tokenUsage.promptTokens} prompt, ${tokenUsage.completionTokens} completion, ${tokenUsage.totalTokens} total`);
+  } else if (aiCallCount > 0) {
+    // The model was called but no response, frame or telemetry event reported
+    // usage, so this turn will have no `tokenUsage`. Surface it instead of
+    // dropping it silently, so the gap can be diagnosed (#472).
+    await log("warn", `No token usage found in HAR despite ${aiCallCount} AI call(s); this turn will have no tokenUsage`, {
+      aiCallCount,
+      harEntryCount: har.log.entries.length,
+      harFilePath,
+    });
   }
-  const aiCallCount = extractAiCallCount(har);
   await log("info", `AI call count: ${aiCallCount}`);
   return { harFilePath, tokenUsage, aiCallCount };
 }
