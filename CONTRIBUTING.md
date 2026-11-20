@@ -516,6 +516,18 @@ The daily schedules are explicit cron expressions preserving their existing UTC 
 Review changes to `.github/aw/actions-lock.json` and generated workflow permissions, triggers,
 action pins, and handler configuration before merging.
 
+To test the worker-version-upgrade gate locally, put [`act`](https://github.com/nektos/act)
+on your `PATH` (tested with v0.2.82) and run from the repository root:
+
+```bash
+SCOPE_TEST_WORKFLOW_ACT=1 pnpm exec vitest run scripts/worker-version-upgrade.test.ts
+```
+
+The opt-in test feeds synthetic issue and dispatch events into a temporary workflow
+that copies the generated job conditions. It stubs membership and asserts which
+jobs ran or skipped. It uses no Docker containers or GitHub/Copilot credentials,
+and does not test the hosted membership lookup, agent, or write operations.
+
 `.github/dependabot.yml` specifies namespaced labels for the root pnpm workspace, the separate
 website package, and the Rust gateway. Each entry has `open-pull-requests-limit: 0` to keep
 version-update PRs disabled; the required schedule does not enable those PRs. These labels also
