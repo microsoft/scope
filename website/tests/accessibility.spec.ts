@@ -5,7 +5,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 const PUBLISHED_DATA_URLS = new Set([
-	'https://raw.githubusercontent.com/microsoft/scope/website-data/contributors.jsonl',
+	'https://api.github.com/repos/microsoft/scope/contributors?anon=0&per_page=100',
 ]);
 
 const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;

@@ -85,8 +85,8 @@ class ScopeContributors extends HTMLElement {
 			// Development fallback only; production builds omit the sample.
 			if (import.meta.env.DEV) {
 				console.info('[contributors] Live list unavailable; using the dev sample.', error);
-				const { default: text } = await import('../data/contributors.sample.jsonl?raw');
-				result = parseContributors(text);
+				const { default: text } = await import('../data/contributors.sample.json?raw');
+				result = parseContributors(JSON.parse(text));
 				sample = true;
 			} else {
 				console.warn('[contributors] Could not load the live list.', error);
@@ -94,7 +94,7 @@ class ScopeContributors extends HTMLElement {
 				return;
 			}
 		}
-		if (result.skipped.length) console.warn(`[contributors] Skipped invalid lines: ${result.skipped.join(', ')}`);
+		if (result.skipped.length) console.warn(`[contributors] Skipped invalid entries: ${result.skipped.join(', ')}`);
 		this.querySelectorAll<HTMLElement>('[data-sample-tag]').forEach((tag) => { tag.hidden = !sample; });
 		await this.render(result.contributors);
 	}
@@ -252,7 +252,7 @@ class ScopeContributors extends HTMLElement {
 		}, { signal, passive: true });
 	}
 
-	// Logins come from published data, so every value is set as text or attribute.
+	// Logins come from GitHub data, so every value is set as text or attribute.
 	private avatar(contributor: Contributor): HTMLLIElement {
 		const item = this.item();
 		const link = this.link(item, 'thanks-avatar', prsUrl(contributor.login));

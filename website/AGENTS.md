@@ -224,21 +224,15 @@ The landing page (an avatar wall) and the **Community → Contributors**
 page (a card grid) thank everyone with commits attributed on the
 repository's default branch (`main`), community and Microsoft alike:
 
-- The publisher writes `contributors.jsonl` to `website-data`. It
-  paginates GitHub's repository commits endpoint for the default branch,
-  groups commits by their associated GitHub user account, and excludes bots
-  (`[bot]` suffix) and anonymous entries. This avoids the delayed statistics
-  cache used by the aggregate contributors endpoint. The repository
-  `.mailmap` canonicalizes verified historical commit identities when an
-  imported author email is not associated with the corresponding GitHub
-  account.
-- [`.github/workflows/contribution-data.yml`](../.github/workflows/contribution-data.yml)
-  runs after pushes to `main` and on demand. It updates the orphan data
-  branch only when the deterministic file changes.
-- One line per person, `{"commits":N,"login":"…"}`, with sorted keys and
-  sorted by lowercase login. Legacy `prs`-only records are rejected rather
-  than relabeled as commits. No avatar URLs or timestamps are published;
-  avatars come from
+- The browser calls GitHub's repository contributors endpoint directly,
+  follows its pagination links, and uses `contributions` as the number of
+  commits attributed on the default branch. It excludes bots and anonymous
+  entries. GitHub may cache these statistics for a few hours.
+- No token is shipped to the browser. The public endpoint's unauthenticated
+  rate limit applies; an error keeps the fallback link to GitHub's contributor
+  graph visible. In local development only, a failed request uses
+  [`contributors.sample.json`](src/data/contributors.sample.json).
+- No avatar URLs or timestamps are stored; avatars come from
   `https://github.com/<login>.png`, and a failed image shows the login's
   initial.
 - The browser sorts by default-branch commits, then login. The wall shows up to
@@ -254,10 +248,8 @@ repository's default branch (`main`), community and Microsoft alike:
   states. Check 0, 1, a few, and more contributors than fit the width,
   on desktop and mobile, when changing the layout.
 - Set `PUBLIC_CONTRIBUTORS_URL` to point at another file
-  ([`contributors.ts`](src/scripts/contributors.ts)). In
-  `pnpm run dev` a failed fetch falls back to
-  [`contributors.sample.jsonl`](src/data/contributors.sample.jsonl),
-  which lists real contributors only.
+  ([`contributors.ts`](src/scripts/contributors.ts)) that returns GitHub's
+  contributor-array shape.
 - Logins are user data: render them with `textContent` or attributes
   only.
 ### Style

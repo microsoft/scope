@@ -4,7 +4,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const PUBLISHED_DATA_URLS = new Set([
-	'https://raw.githubusercontent.com/microsoft/scope/website-data/contributors.jsonl',
+	'https://api.github.com/repos/microsoft/scope/contributors?anon=0&per_page=100',
 ]);
 
 interface AnalyticsTestState {
