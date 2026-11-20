@@ -5,6 +5,13 @@ files:
   - pattern: workflows/*.yaml
 
 rules:
+  # dtolnay publishes toolchain-specific commits without matching Git tags,
+  # so pinact cannot verify the toolchain version as an action release tag.
+  # The Vitest invariant still requires a full SHA and explanatory comment.
+  - ignore: true
+    conditions:
+      - expr: ActionName == "dtolnay/rust-toolchain"
+
   # gh-aw owns generated lockfile annotations. Preserve its major-version
   # comments while the Vitest invariant still enforces a full SHA and comment.
   - ignore: true
