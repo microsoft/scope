@@ -4,6 +4,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { serializeOpenAPIDocument } from "./openapi/serialize.js";
 
 // Stub checkMigrations before index.ts can import it
 vi.mock("db-migrations/check-migrations", () => ({
@@ -61,6 +62,8 @@ describe("OpenAPI spec snapshot", () => {
       new URL("../../../website/src/openapi/scope-openapi.json", import.meta.url),
     );
     const websiteSpec = await readFile(websiteSpecPath, "utf8");
-    expect(websiteSpec).toBe(JSON.stringify(doc));
+    const serialized = serializeOpenAPIDocument(doc);
+    expect(websiteSpec).toBe(serialized);
+    expect(serializeOpenAPIDocument(generateOpenAPIDocument())).toBe(serialized);
   }, 30_000); // index.ts pulls in the entire route surface; 5s default is too tight under full-suite load.
 });
