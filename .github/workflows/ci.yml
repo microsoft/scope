@@ -605,7 +605,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@ee868d7805ade43a1b47dd054727ab76c9108b4f # 1.94.1
+        uses: dtolnay/rust-toolchain@ee868d7805ade43a1b47dd054727ab76c9108b4f # toolchain: 1.94.1
         with:
           toolchain: 1.94.1
           components: rustfmt, clippy
@@ -703,7 +703,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@ee868d7805ade43a1b47dd054727ab76c9108b4f # 1.94.1
+        uses: dtolnay/rust-toolchain@ee868d7805ade43a1b47dd054727ab76c9108b4f # toolchain: 1.94.1
         with:
           toolchain: 1.94.1
 
