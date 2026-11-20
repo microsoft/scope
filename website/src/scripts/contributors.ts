@@ -26,15 +26,13 @@ export interface ContributorsResult {
 // GitHub logins: alphanumerics and single hyphens, up to 39 characters.
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 
-/** Normalizes current and legacy published records into the browser model. */
+/** Validates a published record before it enters the browser model. */
 function parseContributor(value: unknown): Contributor | undefined {
 	if (typeof value !== 'object' || value === null) return undefined;
 	const record = value as Record<string, unknown>;
-	const { login } = record;
-	const commits = Object.hasOwn(record, 'commits') ? record.commits : record.prs;
+	const { commits, login } = record;
 	if (typeof login !== 'string' || !LOGIN.test(login)) return undefined;
 	if (typeof commits !== 'number' || !Number.isSafeInteger(commits) || commits <= 0) return undefined;
-	if (Object.hasOwn(record, 'commits') && Object.hasOwn(record, 'prs') && record.prs !== commits) return undefined;
 	return { login, commits };
 }
 

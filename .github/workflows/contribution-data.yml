@@ -44,9 +44,7 @@ jobs:
                   (map(.contributions) | add) as $commits
                   | {
                       commits: $commits,
-                      login: .[0].login,
-                      # Compatibility alias for the currently deployed reader.
-                      prs: $commits
+                      login: .[0].login
                     }
                 )
               | sort_by(.login | ascii_downcase)

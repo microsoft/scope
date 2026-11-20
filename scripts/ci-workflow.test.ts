@@ -359,7 +359,7 @@ describe("Website contribution data workflow", () => {
     expect(collect).toContain('endswith("[bot]")');
     expect(collect).toContain("group_by(.login | ascii_downcase)");
     expect(collect).toContain("commits: $commits");
-    expect(collect).toContain("prs: $commits");
+    expect(collect).not.toContain("prs:");
     expect(collect).toContain("sort_by(.login | ascii_downcase)");
   });
 

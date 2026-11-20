@@ -227,15 +227,16 @@ repository's default branch (`main`), community and Microsoft alike:
 - The publisher writes `contributors.jsonl` to `website-data`. It
   uses GitHub's repository contributors endpoint and counts commits
   attributed on the default branch for user accounts, excluding bots
-  (`[bot]` suffix) and anonymous entries.
+  (`[bot]` suffix) and anonymous entries. The repository `.mailmap`
+  canonicalizes verified historical commit identities when an imported
+  author email is not associated with the corresponding GitHub account.
 - [`.github/workflows/contribution-data.yml`](../.github/workflows/contribution-data.yml)
   runs after pushes to `main` and on demand. It updates the orphan data
   branch only when the deterministic file changes.
-- One line per person, `{"commits":N,"login":"…","prs":N}`, with sorted
-  keys and sorted by lowercase login. `prs` is a temporary compatibility
-  alias for the previously deployed reader and must equal `commits`; the
-  browser also accepts legacy lines containing only `prs`. No avatar URLs
-  or timestamps are published; avatars come from
+- One line per person, `{"commits":N,"login":"…"}`, with sorted keys and
+  sorted by lowercase login. Legacy `prs`-only records are rejected rather
+  than relabeled as commits. No avatar URLs or timestamps are published;
+  avatars come from
   `https://github.com/<login>.png`, and a failed image shows the login's
   initial.
 - The browser sorts by default-branch commits, then login. The wall shows up to
