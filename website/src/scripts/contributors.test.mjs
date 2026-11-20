@@ -8,24 +8,24 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
 	avatarUrl,
+	commitsLabel,
 	contributorsLabel,
 	firstPage,
 	parseContributors,
-	prsLabel,
 	prsUrl,
 	showAllLabel,
 	sortForDisplay,
 	tipShift,
-	totalPrs,
+	totalCommits,
 	visible,
 } from './contributors.ts';
 
 const line = (value) => JSON.stringify(value);
 
 test('parses JSON Lines and ignores blank lines', () => {
-	const text = [line({ login: 'ada', prs: 2 }), '', line({ login: 'grace-h', prs: 1 }), ''].join('\n');
+	const text = [line({ commits: 2, login: 'ada', prs: 2 }), '', line({ commits: 1, login: 'grace-h', prs: 1 }), ''].join('\n');
 	assert.deepEqual(parseContributors(text), {
-		contributors: [{ login: 'ada', prs: 2 }, { login: 'grace-h', prs: 1 }],
+		contributors: [{ login: 'ada', commits: 2 }, { login: 'grace-h', commits: 1 }],
 		skipped: [],
 	});
 });
@@ -34,29 +34,37 @@ test('treats an empty file as no contributors', () => {
 	assert.deepEqual(parseContributors(''), { contributors: [], skipped: [] });
 });
 
-test('skips invalid logins, counts and duplicates without dropping the rest', () => {
-	const text = [
-		'{not json',
-		line({ login: 'dependabot[bot]', prs: 9 }),
-		line({ login: '-leading', prs: 1 }),
-		line({ login: 'double--hyphen', prs: 1 }),
-		line({ login: '../evil', prs: 1 }),
-		line({ login: 'zero', prs: 0 }),
-		line({ login: 'fraction', prs: 1.5 }),
-		line({ login: 'Kept', prs: 3 }),
-		line({ login: 'kept', prs: 1 }),
-	].join('\r\n');
-	const { contributors, skipped } = parseContributors(text);
-	assert.deepEqual(contributors, [{ login: 'Kept', prs: 3 }]);
-	assert.deepEqual(skipped, [1, 2, 3, 4, 5, 6, 7, 9]);
+test('accepts the legacy PR field as a commit count during rollout', () => {
+	assert.deepEqual(parseContributors(line({ login: 'ada', prs: 2 })), {
+		contributors: [{ login: 'ada', commits: 2 }],
+		skipped: [],
+	});
 });
 
-test('sorts by merged PRs, then login case-insensitively', () => {
+test('skips invalid logins, counts, aliases and duplicates without dropping the rest', () => {
+	const text = [
+		'{not json',
+		line({ commits: 9, login: 'dependabot[bot]', prs: 9 }),
+		line({ commits: 1, login: '-leading', prs: 1 }),
+		line({ commits: 1, login: 'double--hyphen', prs: 1 }),
+		line({ commits: 1, login: '../evil', prs: 1 }),
+		line({ commits: 0, login: 'zero', prs: 0 }),
+		line({ commits: 1.5, login: 'fraction', prs: 1.5 }),
+		line({ commits: 3, login: 'mismatch', prs: 2 }),
+		line({ commits: 3, login: 'Kept', prs: 3 }),
+		line({ commits: 1, login: 'kept', prs: 1 }),
+	].join('\r\n');
+	const { contributors, skipped } = parseContributors(text);
+	assert.deepEqual(contributors, [{ login: 'Kept', commits: 3 }]);
+	assert.deepEqual(skipped, [1, 2, 3, 4, 5, 6, 7, 8, 10]);
+});
+
+test('sorts by commits, then login case-insensitively', () => {
 	const sorted = sortForDisplay([
-		{ login: 'zed', prs: 1 },
-		{ login: 'Bea', prs: 1 },
-		{ login: 'max', prs: 4 },
-		{ login: 'alex', prs: 1 },
+		{ login: 'zed', commits: 1 },
+		{ login: 'Bea', commits: 1 },
+		{ login: 'max', commits: 4 },
+		{ login: 'alex', commits: 1 },
 	]);
 	assert.deepEqual(sorted.map((c) => c.login), ['max', 'alex', 'Bea', 'zed']);
 });
@@ -69,13 +77,13 @@ test('builds avatar and merged PR URLs', () => {
 	assert.equal(url.searchParams.get('q'), 'is:pr is:merged author:grace-h');
 });
 
-test('pluralizes labels and totals PRs', () => {
-	assert.equal(prsLabel(1), '1 merged PR');
-	assert.equal(prsLabel(3), '3 merged PRs');
+test('pluralizes labels and totals commits', () => {
+	assert.equal(commitsLabel(1), '1 commit');
+	assert.equal(commitsLabel(3), '3 commits');
 	assert.equal(contributorsLabel(1), 'contributor');
 	assert.equal(contributorsLabel(2), 'contributors');
-	assert.equal(totalPrs([{ login: 'a', prs: 2 }, { login: 'b', prs: 3 }]), 5);
-	assert.equal(totalPrs([]), 0);
+	assert.equal(totalCommits([{ login: 'a', commits: 2 }, { login: 'b', commits: 3 }]), 5);
+	assert.equal(totalCommits([]), 0);
 });
 
 test('keeps a slot for the overflow bubble', () => {
@@ -134,6 +142,8 @@ test('the dev sample file is valid and sorted like the published file', () => {
 	const logins = contributors.map((c) => c.login.toLowerCase());
 	assert.deepEqual(logins, [...logins].sort());
 	for (const raw of text.trim().split('\n')) {
-		assert.deepEqual(Object.keys(JSON.parse(raw)), ['login', 'prs'], 'keys are sorted and nothing else is published');
+		const value = JSON.parse(raw);
+		assert.deepEqual(Object.keys(value), ['commits', 'login', 'prs'], 'keys are sorted and nothing else is published');
+		assert.equal(value.prs, value.commits, 'the compatibility alias matches the commit count');
 	}
 });

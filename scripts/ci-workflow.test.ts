@@ -48,6 +48,15 @@ const communityContributionWorkflow = parse(communityContributionWorkflowSource)
   permissions: Record<string, string>;
   jobs: Record<string, Job>;
 };
+const contributionDataWorkflowSource = readFileSync(".github/workflows/contribution-data.yml", "utf8");
+const contributionDataWorkflow = parse(contributionDataWorkflowSource) as {
+  on: {
+    push: { branches: string[] };
+    workflow_dispatch: null;
+  };
+  permissions: Record<string, string>;
+  jobs: Record<string, Job>;
+};
 const actionPinningWorkflow = parse(readFileSync(".github/workflows/pin-actions.yml", "utf8")) as {
   on: {
     push: { paths: string[] };
@@ -327,6 +336,37 @@ describe("Community contribution labeler workflow", () => {
     expect(communityContributionWorkflowSource).not.toMatch(
       /pull_request_target|actions\/checkout|actions\/download-artifact|secrets\./,
     );
+  });
+});
+
+describe("Website contribution data workflow", () => {
+  const publish = contributionDataWorkflow.jobs.publish;
+  const collect = publish.steps.find((candidate) => candidate.name === "Collect contributors")?.run ?? "";
+
+  it("publishes commit contributors after default-branch changes and on demand", () => {
+    expect(contributionDataWorkflow.on).toEqual({
+      push: { branches: ["main"] },
+      workflow_dispatch: null,
+    });
+    expect(contributionDataWorkflow.permissions).toEqual({ contents: "write" });
+    expect(publish.if).toBe("github.repository == 'microsoft/scope'");
+  });
+
+  it("collects paginated human commit contributors deterministically", () => {
+    expect(collect).toContain("gh api --paginate");
+    expect(collect).toContain('"repos/${REPO}/contributors?per_page=100&anon=0"');
+    expect(collect).toContain('.type == "User"');
+    expect(collect).toContain('endswith("[bot]")');
+    expect(collect).toContain("group_by(.login | ascii_downcase)");
+    expect(collect).toContain("commits: $commits");
+    expect(collect).toContain("prs: $commits");
+    expect(collect).toContain("sort_by(.login | ascii_downcase)");
+  });
+
+  it("keeps every embedded shell step syntactically valid", () => {
+    for (const command of publish.steps.filter((candidate) => candidate.run)) {
+      expect(spawnSync("bash", ["-n"], { input: command.run }).status, command.name).toBe(0);
+    }
   });
 });
 

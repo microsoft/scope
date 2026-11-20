@@ -4,16 +4,16 @@
 import {
 	CONTRIBUTORS_DATA_URL,
 	avatarUrl,
+	commitsLabel,
 	contributorsLabel,
 	fetchContributors,
 	firstPage,
 	parseContributors,
-	prsLabel,
 	prsUrl,
 	showAllLabel,
 	sortForDisplay,
 	tipShift,
-	totalPrs,
+	totalCommits,
 	visible,
 	type Contributor,
 	type ContributorsResult,
@@ -28,7 +28,7 @@ const LIFT_SCALE = 1.14;
 const MAX_STAGGER_STEPS = 24;
 
 /**
- * Thanks contributors: authors of merged pull requests, bots aside. Renders
+ * Thanks commit contributors, bots aside. Renders
  * an avatar wall (landing) or a card grid (Contribute page). Without
  * JavaScript a link to the GitHub contributors graph stays visible. Motion
  * is skipped entirely when the visitor prefers reduced motion.
@@ -119,10 +119,10 @@ class ScopeContributors extends HTMLElement {
 		this.updateShowAll(grid ? hidden : 0);
 
 		const people = this.contributors.length;
-		const prs = totalPrs(this.contributors);
+		const commits = totalCommits(this.contributors);
 		this.querySelectorAll('[data-count-label]').forEach((label) => { label.textContent = contributorsLabel(people); });
-		this.querySelectorAll('[data-prs]').forEach((element) => { element.textContent = prsLabel(prs); });
-		this.querySelectorAll('[data-count-text]').forEach((text) => { text.textContent = `${people} ${contributorsLabel(people)}, ${prsLabel(prs)}`; });
+		this.querySelectorAll('[data-commits]').forEach((element) => { element.textContent = commitsLabel(commits); });
+		this.querySelectorAll('[data-count-text]').forEach((text) => { text.textContent = `${people} ${contributorsLabel(people)}, ${commitsLabel(commits)}`; });
 		this.loaded = true;
 		this.setState(people ? 'ready' : 'empty');
 		this.reveal();
@@ -259,7 +259,7 @@ class ScopeContributors extends HTMLElement {
 		link.append(this.image(contributor, 56));
 		const tip = this.span(link, 'thanks-tip');
 		this.span(tip, 'thanks-tip__login', `@${contributor.login}`);
-		this.span(tip, 'thanks-tip__prs', prsLabel(contributor.prs));
+		this.span(tip, 'thanks-tip__commits', commitsLabel(contributor.commits));
 		this.span(link, 'sr-only', ' (opens in a new tab)');
 		return item;
 	}
@@ -270,7 +270,7 @@ class ScopeContributors extends HTMLElement {
 		link.append(this.image(contributor, 96));
 		const body = this.span(link, 'thanks-card__body');
 		this.span(body, 'thanks-card__login', `@${contributor.login}`).title = `@${contributor.login}`;
-		this.span(body, 'thanks-card__prs', prsLabel(contributor.prs));
+		this.span(body, 'thanks-card__commits', commitsLabel(contributor.commits));
 		this.span(link, 'contrib-card__arrow thanks-card__arrow', '↗').setAttribute('aria-hidden', 'true');
 		this.span(link, 'sr-only', ' (opens in a new tab)');
 		return item;

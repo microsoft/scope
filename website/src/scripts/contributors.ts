@@ -11,9 +11,10 @@ export const CONTRIBUTORS_DATA_URL = `https://raw.githubusercontent.com/${REPOSI
 export const CONTRIBUTORS_GRAPH_URL = `https://github.com/${REPOSITORY}/graphs/contributors`;
 
 export interface Contributor {
+	/** GitHub account login. */
 	login: string;
-	/** Number of merged pull requests. */
-	prs: number;
+	/** Number of commits attributed by GitHub's repository contributors API. */
+	commits: number;
 }
 
 export interface ContributorsResult {
@@ -25,10 +26,16 @@ export interface ContributorsResult {
 // GitHub logins: alphanumerics and single hyphens, up to 39 characters.
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 
-function isContributor(value: unknown): value is Contributor {
-	if (typeof value !== 'object' || value === null) return false;
-	const { login, prs } = value as Record<string, unknown>;
-	return typeof login === 'string' && LOGIN.test(login) && Number.isSafeInteger(prs) && (prs as number) > 0;
+/** Normalizes current and legacy published records into the browser model. */
+function parseContributor(value: unknown): Contributor | undefined {
+	if (typeof value !== 'object' || value === null) return undefined;
+	const record = value as Record<string, unknown>;
+	const { login } = record;
+	const commits = Object.hasOwn(record, 'commits') ? record.commits : record.prs;
+	if (typeof login !== 'string' || !LOGIN.test(login)) return undefined;
+	if (typeof commits !== 'number' || !Number.isSafeInteger(commits) || commits <= 0) return undefined;
+	if (Object.hasOwn(record, 'commits') && Object.hasOwn(record, 'prs') && record.prs !== commits) return undefined;
+	return { login, commits };
 }
 
 /**
@@ -48,19 +55,20 @@ export function parseContributors(text: string): ContributorsResult {
 			skipped.push(index + 1);
 			return;
 		}
-		if (!isContributor(value) || seen.has(value.login.toLowerCase())) {
+		const contributor = parseContributor(value);
+		if (!contributor || seen.has(contributor.login.toLowerCase())) {
 			skipped.push(index + 1);
 			return;
 		}
-		seen.add(value.login.toLowerCase());
-		contributors.push({ login: value.login, prs: value.prs });
+		seen.add(contributor.login.toLowerCase());
+		contributors.push(contributor);
 	});
 	return { contributors, skipped };
 }
 
-/** Display order: most merged PRs first, then by login. */
+/** Display order: most commits first, then by login. */
 export function sortForDisplay(contributors: readonly Contributor[]): Contributor[] {
-	return [...contributors].sort((a, b) => b.prs - a.prs || a.login.localeCompare(b.login, 'en', { sensitivity: 'base' }));
+	return [...contributors].sort((a, b) => b.commits - a.commits || a.login.localeCompare(b.login, 'en', { sensitivity: 'base' }));
 }
 
 export function avatarUrl(login: string, size = 96): string {
@@ -73,16 +81,16 @@ export function prsUrl(login: string): string {
 	return `https://github.com/${REPOSITORY}/pulls?q=${encodeURIComponent(query)}`;
 }
 
-export function prsLabel(count: number): string {
-	return count === 1 ? '1 merged PR' : `${count} merged PRs`;
+export function commitsLabel(count: number): string {
+	return count === 1 ? '1 commit' : `${count} commits`;
 }
 
 export function contributorsLabel(count: number): string {
 	return count === 1 ? 'contributor' : 'contributors';
 }
 
-export function totalPrs(contributors: readonly Contributor[]): number {
-	return contributors.reduce((sum, contributor) => sum + contributor.prs, 0);
+export function totalCommits(contributors: readonly Contributor[]): number {
+	return contributors.reduce((sum, contributor) => sum + contributor.commits, 0);
 }
 
 /** Splits the list into what fits under `limit` and how many are left over. */

@@ -1,4 +1,4 @@
-# Publishes merged pull request contributors to the orphan `website-data`
+# Publishes commit contributors to the orphan `website-data`
 # branch. The docs site fetches the deterministic JSONL at runtime.
 name: Publish website contribution data
 
@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: read
 
 concurrency:
   group: website-contribution-data
@@ -28,27 +27,28 @@ jobs:
       - name: Collect contributors
         run: |
           set -euo pipefail
-          gh api graphql --paginate \
-            -F owner="${REPO%/*}" \
-            -F name="${REPO#*/}" \
-            -f query='
-              query($owner: String!, $name: String!, $endCursor: String) {
-                repository(owner: $owner, name: $name) {
-                  pullRequests(states: MERGED, first: 100, after: $endCursor) {
-                    pageInfo { hasNextPage endCursor }
-                    nodes { author { __typename login } }
-                  }
-                }
-              }' \
-            --jq '.data.repository.pullRequests.nodes[]' |
+          gh api --paginate \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${REPO}/contributors?per_page=100&anon=0" \
+            --jq '.[]' |
             jq -cS -s '
               map(select(
-                .author != null
-                and .author.__typename == "User"
-                and (.author.login | endswith("[bot]") | not)
+                .login != null
+                and .type == "User"
+                and (.login | endswith("[bot]") | not)
+                and (.contributions | type == "number" and . > 0 and floor == .)
               ))
-              | group_by(.author.login)
-              | map({login: .[0].author.login, prs: length})
+              | group_by(.login | ascii_downcase)
+              | map(
+                  (map(.contributions) | add) as $commits
+                  | {
+                      commits: $commits,
+                      login: .[0].login,
+                      # Compatibility alias for the currently deployed reader.
+                      prs: $commits
+                    }
+                )
               | sort_by(.login | ascii_downcase)
               | .[]' > contributors.jsonl
 
