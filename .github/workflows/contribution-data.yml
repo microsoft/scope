@@ -1,4 +1,4 @@
-# Publishes commit contributors to the orphan `website-data`
+# Publishes default-branch commit contributors to the orphan `website-data`
 # branch. The docs site fetches the deterministic JSONL at runtime.
 name: Publish website contribution data
 

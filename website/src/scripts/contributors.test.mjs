@@ -78,8 +78,8 @@ test('builds avatar and merged PR URLs', () => {
 });
 
 test('pluralizes labels and totals commits', () => {
-	assert.equal(commitsLabel(1), '1 commit');
-	assert.equal(commitsLabel(3), '3 commits');
+	assert.equal(commitsLabel(1), '1 commit on main');
+	assert.equal(commitsLabel(3), '3 commits on main');
 	assert.equal(contributorsLabel(1), 'contributor');
 	assert.equal(contributorsLabel(2), 'contributors');
 	assert.equal(totalCommits([{ login: 'a', commits: 2 }, { login: 'b', commits: 3 }]), 5);

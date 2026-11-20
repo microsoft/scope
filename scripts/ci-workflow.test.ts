@@ -343,7 +343,7 @@ describe("Website contribution data workflow", () => {
   const publish = contributionDataWorkflow.jobs.publish;
   const collect = publish.steps.find((candidate) => candidate.name === "Collect contributors")?.run ?? "";
 
-  it("publishes commit contributors after default-branch changes and on demand", () => {
+  it("publishes default-branch commit contributors after changes and on demand", () => {
     expect(contributionDataWorkflow.on).toEqual({
       push: { branches: ["main"] },
       workflow_dispatch: null,
@@ -352,7 +352,7 @@ describe("Website contribution data workflow", () => {
     expect(publish.if).toBe("github.repository == 'microsoft/scope'");
   });
 
-  it("collects paginated human commit contributors deterministically", () => {
+  it("collects paginated human default-branch contributors deterministically", () => {
     expect(collect).toContain("gh api --paginate");
     expect(collect).toContain('"repos/${REPO}/contributors?per_page=100&anon=0"');
     expect(collect).toContain('.type == "User"');

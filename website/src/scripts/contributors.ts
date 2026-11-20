@@ -13,7 +13,7 @@ export const CONTRIBUTORS_GRAPH_URL = `https://github.com/${REPOSITORY}/graphs/c
 export interface Contributor {
 	/** GitHub account login. */
 	login: string;
-	/** Number of commits attributed by GitHub's repository contributors API. */
+	/** Number of commits attributed on the repository's default branch. */
 	commits: number;
 }
 
@@ -82,7 +82,7 @@ export function prsUrl(login: string): string {
 }
 
 export function commitsLabel(count: number): string {
-	return count === 1 ? '1 commit' : `${count} commits`;
+	return count === 1 ? '1 commit on main' : `${count} commits on main`;
 }
 
 export function contributorsLabel(count: number): string {

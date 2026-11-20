@@ -28,7 +28,7 @@ const LIFT_SCALE = 1.14;
 const MAX_STAGGER_STEPS = 24;
 
 /**
- * Thanks commit contributors, bots aside. Renders
+ * Thanks default-branch commit contributors, bots aside. Renders
  * an avatar wall (landing) or a card grid (Contribute page). Without
  * JavaScript a link to the GitHub contributors graph stays visible. Motion
  * is skipped entirely when the visitor prefers reduced motion.

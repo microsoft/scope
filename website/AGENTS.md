@@ -221,12 +221,13 @@ player or its scripts.
 ### Contributors
 
 The landing page (an avatar wall) and the **Community → Contributors**
-page (a card grid) thank every commit contributor, community and
-Microsoft alike:
+page (a card grid) thank everyone with commits attributed on the
+repository's default branch (`main`), community and Microsoft alike:
 
 - The publisher writes `contributors.jsonl` to `website-data`. It
-  uses GitHub's repository contributors endpoint and counts commits for
-  user accounts, excluding bots (`[bot]` suffix) and anonymous entries.
+  uses GitHub's repository contributors endpoint and counts commits
+  attributed on the default branch for user accounts, excluding bots
+  (`[bot]` suffix) and anonymous entries.
 - [`.github/workflows/contribution-data.yml`](../.github/workflows/contribution-data.yml)
   runs after pushes to `main` and on demand. It updates the orphan data
   branch only when the deterministic file changes.
@@ -237,7 +238,7 @@ Microsoft alike:
   or timestamps are published; avatars come from
   `https://github.com/<login>.png`, and a failed image shows the login's
   initial.
-- The browser sorts by commits, then login. The wall shows up to
+- The browser sorts by default-branch commits, then login. The wall shows up to
   `limit` items; the last slot becomes a "+N" bubble that links to
   the full grid. The grid shows `limit` cards (30 on the Contributors
   page) and a "Show all N contributors" button, unless only one card
