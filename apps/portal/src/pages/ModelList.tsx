@@ -21,6 +21,7 @@ import {
   useListUrlState,
   type DataTableColumn,
 } from "@/components/list-layout";
+import { buildModelProviderFilterOptions } from "./model-provider-filter-options";
 
 const FILTER_KEYS = ["provider", "agent", "status"] as const;
 
@@ -36,33 +37,11 @@ export function ModelList() {
     queryKey: ["models"],
     queryFn: () => api.listModels(),
   });
-  const { data: agents = [] } = useQuery({
-    queryKey: ["agents", "include-deleted"],
-    queryFn: () => api.listAgents({ includeDeleted: true }),
-    staleTime: 60_000,
-  });
-  const agentById = useMemo(
-    () => new Map(agents.map((agent) => [agent._id, agent])),
-    [agents],
-  );
 
-  const providerOptions = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const m of models) map.set(m.provider, (map.get(m.provider) ?? 0) + 1);
-    return [...map.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([value, count]) => ({
-        value,
-        label: (
-          <AgentBadge
-            agentId={value}
-            agent={agentById.get(value)}
-            triggerLink={false}
-          />
-        ),
-        count,
-      }));
-  }, [models, agentById]);
+  const providerOptions = useMemo(
+    () => buildModelProviderFilterOptions(models),
+    [models],
+  );
 
   const agentOptions = useMemo(() => {
     const map = new Map<string, number>();
