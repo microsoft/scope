@@ -1,0 +1,46 @@
+{
+  "$schema": "../../.github/extensions/arch-diagram/diagram.schema.json",
+  "title": "Scope Architecture",
+  "layout": "layered",
+  "groups": [
+    { "id": "grp_clients", "label": "Clients", "color": "#58a6ff" },
+    { "id": "grp_workers", "label": "Coder Workers", "color": "#7ee787" },
+    { "id": "grp_storage", "label": "Storage", "color": "#8b949e" }
+  ],
+  "nodes": [
+    { "id": "portal", "label": "Portal", "group": "grp_clients", "color": "#58a6ff" },
+    { "id": "cli", "label": "CLI", "group": "grp_clients", "color": "#58a6ff" },
+    { "id": "api", "label": "API", "color": "#79c0ff" },
+    { "id": "scheduler", "label": "Scheduler", "color": "#79c0ff" },
+    { "id": "copilot_worker", "label": "Copilot Worker", "group": "grp_workers", "color": "#7ee787" },
+    { "id": "copilot_win_worker", "label": "Copilot Windows Worker", "group": "grp_workers", "color": "#7ee787" },
+    { "id": "claude_worker", "label": "Claude Code Worker", "group": "grp_workers", "color": "#7ee787" },
+    { "id": "vscode_worker", "label": "VS Code Web Worker", "group": "grp_workers", "color": "#7ee787" },
+    { "id": "judge", "label": "Judge", "color": "#ffa657" },
+    { "id": "post_proc", "label": "Post Processors", "color": "#ffa657" },
+    { "id": "report_agent", "label": "Reporting Agent", "color": "#ff7b72" },
+    { "id": "token_manager", "label": "Token Manager", "color": "#d2a8ff" },
+    { "id": "gateway", "label": "Gateway (TLS Proxy)", "color": "#d2a8ff" },
+    { "id": "mongodb", "label": "MongoDB", "group": "grp_storage", "color": "#8b949e" },
+    { "id": "blob", "label": "Blob Storage", "group": "grp_storage", "color": "#8b949e" },
+    { "id": "redis", "label": "Redis", "group": "grp_storage", "color": "#8b949e" }
+  ],
+  "edges": [
+    { "id": "e1", "source": "grp_clients", "target": "api", "label": "REST (sync)", "type": "sync" },
+    { "id": "e2", "source": "scheduler", "target": "grp_workers", "label": "Queue (async)", "type": "async" },
+    { "id": "e3", "source": "scheduler", "target": "post_proc", "label": "Queue (async, backfill)", "type": "async" },
+    { "id": "e3b", "source": "grp_workers", "target": "post_proc", "label": "Queue (async, on completion)", "type": "async" },
+    { "id": "e4", "source": "api", "target": "scheduler", "label": "MongoDB poll (async, submit run)", "type": "async" },
+    { "id": "e7", "source": "grp_workers", "target": "judge", "label": "REST (sync)", "type": "sync" },
+    { "id": "e8", "source": "grp_workers", "target": "token_manager", "label": "REST (sync)", "type": "sync" },
+    { "id": "e9", "source": "grp_workers", "target": "gateway", "label": "HTTP (via proxy)", "type": "sync" },
+    { "id": "e11", "source": "post_proc", "target": "api", "label": "REST (sync, trigger)", "type": "sync" },
+    { "id": "e11b", "source": "api", "target": "report_agent", "label": "Queue (async)", "type": "async" },
+    { "id": "e12", "source": "api", "target": "mongodb", "label": "Mongoose (sync)", "type": "storage" },
+    { "id": "e13", "source": "judge", "target": "mongodb", "label": "Mongoose (sync)", "type": "storage" },
+    { "id": "e14", "source": "grp_workers", "target": "blob", "label": "Azure SDK (async)", "type": "storage" },
+    { "id": "e15", "source": "scheduler", "target": "mongodb", "label": "Mongoose (sync)", "type": "storage" },
+    { "id": "e16", "source": "api", "target": "redis", "label": "Redis (pub/sub)", "type": "storage" },
+    { "id": "e17", "source": "report_agent", "target": "mongodb", "label": "Mongoose (sync)", "type": "storage" }
+  ]
+}
