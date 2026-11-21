@@ -17,15 +17,96 @@ export interface HarEntry {
     postData?: { text?: string };
   };
   response: {
+    status?: number;
+    headers?: { name: string; value: string }[];
     content: {
       text?: string;
       encoding?: string;
+      mimeType?: string;
     };
   };
+  /** Chrome extension: resource type hint (e.g. "websocket"). */
+  _resourceType?: string;
+  /** Chrome extension: WebSocket messages recorded during the connection. */
+  _webSocketMessages?: unknown[];
 }
 
 export interface HarFile {
   log: { entries: HarEntry[] };
+}
+
+// ---------------------------------------------------------------------------
+// Request classification: AI-call detection + transport (HTTP/SSE/WebSocket)
+// ---------------------------------------------------------------------------
+
+/**
+ * URL patterns that identify AI completion endpoints.
+ *
+ * Keep in sync with `AI_COMPLETION_URL_PATTERNS` in
+ * `packages/shared/src/har/har-parser.ts` (the source of truth). Matches the
+ * path suffix so it works across providers:
+ * - GitHub Copilot:        https://api.githubcopilot.com/chat/completions
+ * - GitHub Models:         https://models.inference.ai.azure.com/chat/completions
+ * - Anthropic:             https://api.anthropic.com/v1/messages
+ * - OpenAI Responses API:  https://api.enterprise.githubcopilot.com/responses
+ */
+export const AI_COMPLETION_URL_PATTERNS: ReadonlyArray<RegExp> = [
+  /\/chat\/completions(\?|$)/,
+  /\/v1\/messages(\?|$)/,
+  /\/responses(\?|$)/,
+];
+
+/**
+ * Whether a HAR entry is a successful AI completion call.
+ *
+ * Mirrors the counting logic in the shared parser:
+ * - POST with 2xx: standard REST/SSE completions
+ * - GET with 101: WebSocket upgrade (Responses API over WebSocket transport)
+ *
+ * Excludes 429 retries and transient 5xx so the flag reflects real AI calls.
+ */
+export function isAiCompletionEntry(entry: HarEntry): boolean {
+  const url = entry.request?.url ?? "";
+  if (!AI_COMPLETION_URL_PATTERNS.some((p) => p.test(url))) return false;
+  const method = (entry.request?.method ?? "").toUpperCase();
+  const status = entry.response?.status ?? 0;
+  if (method === "POST" && status >= 200 && status < 300) return true;
+  if (method === "GET" && status === 101) return true;
+  return false;
+}
+
+/** Transport / protocol used by a HAR entry. */
+export type Transport = "http" | "sse" | "websocket";
+
+/** Read a header value case-insensitively. */
+function headerValue(headers: { name: string; value: string }[] | undefined, name: string): string {
+  if (!headers) return "";
+  const lower = name.toLowerCase();
+  const found = headers.find((h) => h.name.toLowerCase() === lower);
+  return found?.value ?? "";
+}
+
+/**
+ * Classify the transport of a HAR entry as HTTP, SSE, or WebSocket.
+ *
+ * - WebSocket: gateway sets `_resourceType: "websocket"` and/or
+ *   `_webSocketMessages`; also detected via a `101` upgrade with
+ *   `Upgrade: websocket`.
+ * - SSE: response content-type includes `text/event-stream`.
+ * - HTTP: everything else.
+ */
+export function detectTransport(entry: HarEntry): Transport {
+  if (entry._resourceType === "websocket") return "websocket";
+  if (Array.isArray(entry._webSocketMessages)) return "websocket";
+  const status = entry.response?.status ?? 0;
+  const upgrade = headerValue(entry.response?.headers, "upgrade");
+  if (status === 101 && upgrade.toLowerCase().includes("websocket")) return "websocket";
+
+  const contentType =
+    entry.response?.content?.mimeType || headerValue(entry.response?.headers, "content-type");
+  if (contentType.toLowerCase().includes("text/event-stream")) return "sse";
+
+  return "http";
 }
 
 export interface ToolCall {
