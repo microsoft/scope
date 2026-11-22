@@ -73,7 +73,8 @@ run
   .option("-s, --scenario <path>", "Path to scenario YAML file (provides task + criteria)")
   .option("-p, --persona <path>", "Path to persona YAML file (provides judge personality)")
   .option("-t, --traits <path>", "Path to traits.yaml (default: config/traits.yaml next to persona)")
-  .option("-m, --message <message>", "Message/task to process (overrides scenario task)")
+  .option("-m, --task <task>", "Task to process (overrides scenario task)")
+  .addOption(new Option("--message <message>", "Deprecated alias for --task.").hideHelp())
   .option("-w, --worker <worker>", "Registered worker ID (see `scope agent list`)")
   .option("-c, --criteria <criteria...>", "Evaluation criteria (overrides scenario criteria)")
   .option("--max-iterations <number>", "Max judge iterations for multi-turn mode", parseInt)
@@ -105,7 +106,7 @@ run
 
     try {
       // Resolve scenario + persona YAML if provided
-      let message = options.message;
+      let message = options.task ?? options.message;
       let criteria = options.criteria;
       let personaInstructions: string | undefined;
       let personaObj: Record<string, unknown> | undefined;
@@ -126,7 +127,7 @@ run
       }
 
       if (!message) {
-        console.error(errorText("Error: --message or --scenario is required"));
+        console.error(errorText("Error: --task or --scenario is required"));
         process.exit(1);
       }
 
