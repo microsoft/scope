@@ -99,6 +99,13 @@ Registration payload varies by transport:
 ```
 
 Tool names are namespaced: `{server-name}__{tool-name}` (e.g. `filesystem__read_text_file`).
+For stdio servers, a stored `version` pins the executable package argument during
+registration (`npx -y @scope/server@1.2.3` or `uvx server@1.2.3`). The server slug,
+and therefore the names exposed to coding agents, stay unchanged. The gateway
+is purged and re-registered for each run, so the current pin takes effect then.
+Use `scope mcp server create --pkg-version <version>` or
+`scope mcp server update --id <slug> --pkg-version <version>` to set the pin;
+`scope mcp server get` displays it.
 
 ---
 
