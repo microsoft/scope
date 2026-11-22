@@ -70,6 +70,11 @@ guidance. `SCOPE_DEFAULT_API_URL` is no longer injected or read, and
 must also configure `SCOPE_API_URL` explicitly. Help, version, and CLI updates
 remain available without API configuration.
 
+CLI HTTP requests identify themselves with `User-Agent: scope-cli/<version>` so
+request analytics can distinguish them from Portal traffic. This includes Scope
+API calls, log streams, and the GitHub release update check. The bundled CLI uses
+its injected package version; source-mode development uses `0.1.0-dev`.
+
 ### esbuild plugins
 
 | Plugin | Purpose |

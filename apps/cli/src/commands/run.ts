@@ -17,7 +17,7 @@ import type { OutputFormat, DisplayField } from "../utils/types.js";
 import { runGetAction } from "../run-get-action.js";
 import { normalizeUrl, printFollowUpCommands, withOutputOption, withProjectOption, getDefaultApiUrl } from "../utils/shared.js";
 import { requireProjectId } from "../utils/config.js";
-import { apiFetch, getApiBasePath } from "../utils/api-client.js";
+import { apiFetch, CLI_USER_AGENT, getApiBasePath } from "../utils/api-client.js";
 import { parseGatesOption } from "../utils/gates.js";
 import { buildResourceBindingSpecs, collectRepeatable } from "../utils/resources.js";
 
@@ -306,7 +306,9 @@ run
       // Stream logs
       console.log(`\n${banner('--- Streaming logs ---')}\n`);
 
-      const eventSource = new EventSource(`${normalizeUrl(url)}${getApiBasePath()}/requests/${result.id}/logs`);
+      const eventSource = new EventSource(`${normalizeUrl(url)}${getApiBasePath()}/requests/${result.id}/logs`, {
+        headers: { "User-Agent": CLI_USER_AGENT },
+      });
 
       eventSource.onmessage = (event) => {
         try {
@@ -455,7 +457,7 @@ run
       ? `${normalizeUrl(options.url)}${getApiBasePath()}/requests/${id}/logs?fromStart=true`
       : `${normalizeUrl(options.url)}${getApiBasePath()}/requests/${id}/logs`;
 
-    const eventSource = new EventSource(url);
+    const eventSource = new EventSource(url, { headers: { "User-Agent": CLI_USER_AGENT } });
 
     eventSource.onmessage = (event) => {
       try {

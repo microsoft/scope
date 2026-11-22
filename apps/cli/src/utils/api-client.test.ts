@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
+  CLI_USER_AGENT,
   apiFetch,
   DEFAULT_API_BASE_PATH,
   getApiBasePath,
@@ -60,6 +61,18 @@ describe("apiFetch URL handling", () => {
 
     expect(mock).toHaveBeenCalledTimes(1);
     expect(reqOf(mock).url).toBe("http://localhost:3100/api/v1/criteria");
+    expect(reqOf(mock).headers.get("user-agent")).toBe(CLI_USER_AGENT);
+  });
+
+  it("preserves a caller-supplied User-Agent", async () => {
+    const mock = vi.fn().mockResolvedValue(okJson());
+    vi.stubGlobal("fetch", mock);
+
+    await apiFetch("http://localhost:3100", "/criteria", {
+      headers: { "User-Agent": "scope-test-client/1" },
+    });
+
+    expect(reqOf(mock).headers.get("user-agent")).toBe("scope-test-client/1");
   });
 
   it("preserves query strings and adds a leading slash when missing", async () => {
