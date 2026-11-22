@@ -300,9 +300,15 @@ describe("BaseQueueProcessor.safeDeferMessage", () => {
   it("swallows updateMessage failures (never throws)", async () => {
     const updateMessage = vi.fn().mockRejectedValue(new Error("stale receipt"));
     const proc = makeProc(updateMessage);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await expect(
       (proc as any).safeDeferMessage("msg-1", "pop-1", 120),
     ).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("stale receipt"),
+      { event: "defer_failed", messageId: "msg-1", queueName: testConfig.queueName },
+    );
+    warn.mockRestore();
   });
 });
 
