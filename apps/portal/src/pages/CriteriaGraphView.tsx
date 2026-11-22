@@ -111,6 +111,18 @@ export function layoutGraph(graph: CriteriaGraphData) {
   return { nodeMap, positions, nodeWidths, NODE_MIN_W, NODE_H, totalW, totalH, minX, edges, cycleEdges, cycleNodes, cycleGroups };
 }
 
+/** Keep criteria with no visible dependency edge out of the graph layout. */
+export function separateIndependentCriteria(graph: CriteriaGraphData) {
+  const connectedIds = new Set(graph.edges.flatMap((edge) => [edge.source, edge.target]));
+  return {
+    linkedGraph: {
+      nodes: graph.nodes.filter((node) => connectedIds.has(node.id)),
+      edges: graph.edges,
+    },
+    independentNodes: graph.nodes.filter((node) => !connectedIds.has(node.id)),
+  };
+}
+
 export interface EdgeRenderSpec {
   /** Straight edges keep the exact `<line>` geometry used for acyclic DAGs. */
   straight: boolean;
@@ -211,8 +223,15 @@ export function CriteriaGraphView() {
     return { nodes, edges };
   }, [graph, selectedGates]);
 
-  // Compute layout
-  const layout = useMemo(() => (filteredGraph ? layoutGraph(filteredGraph) : null), [filteredGraph]);
+  // Split after gate filtering so a criterion with no visible edge is listed separately.
+  const separated = useMemo(
+    () => (filteredGraph ? separateIndependentCriteria(filteredGraph) : null),
+    [filteredGraph],
+  );
+  const layout = useMemo(
+    () => (separated?.linkedGraph.nodes.length ? layoutGraph(separated.linkedGraph) : null),
+    [separated],
+  );
 
   if (isLoading) {
     return (
@@ -261,8 +280,8 @@ export function CriteriaGraphView() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Criteria Graph</h1>
         <p className="text-muted-foreground">
-          Dependency DAG — {filteredGraph!.nodes.length}
-          {selectedGates.length > 0 ? ` of ${graph.nodes.length}` : ""} criteria, {filteredGraph!.edges.length} edges
+          Dependency DAG — {separated!.linkedGraph.nodes.length} connected criteria, {filteredGraph!.edges.length} edges
+          {separated!.independentNodes.length > 0 && ` · ${separated!.independentNodes.length} independent`}
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -280,7 +299,25 @@ export function CriteriaGraphView() {
     </div>
   );
 
-  if (!layout || filteredGraph!.nodes.length === 0) {
+  const independentList = separated!.independentNodes.length > 0 && (
+    <Card>
+      <CardContent className="p-4">
+        <h2 className="mb-3 text-sm font-semibold">
+          Independent criteria ({separated!.independentNodes.length})
+        </h2>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {separated!.independentNodes.map((node) => (
+            <Link key={node.id} to={`/criteria/${node.id}`} className="min-w-0 rounded-md border p-3 hover:bg-accent">
+              <span className="block truncate font-mono text-sm font-medium">{node.id}</span>
+              <span className="block truncate text-xs text-muted-foreground" title={node.prompt}>{node.prompt}</span>
+            </Link>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  if (filteredGraph!.nodes.length === 0) {
     return (
       <div className="space-y-6">
         {header}
@@ -290,6 +327,10 @@ export function CriteriaGraphView() {
         </div>
       </div>
     );
+  }
+
+  if (!layout) {
+    return <div className="space-y-6">{header}{gateFilterBar}{independentList}</div>;
   }
 
   const { nodeMap, positions, nodeWidths, NODE_MIN_W, NODE_H, totalW, totalH, minX, edges, cycleEdges, cycleNodes, cycleGroups } = layout;
@@ -513,6 +554,8 @@ export function CriteriaGraphView() {
           </div>
         </CardContent>
       </Card>
+
+      {independentList}
 
       {/* Legend */}
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
