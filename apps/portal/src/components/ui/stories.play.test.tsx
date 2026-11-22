@@ -24,11 +24,12 @@ import * as tabs from "./tabs.stories";
 import * as textarea from "./textarea.stories";
 import * as tooltip from "./tooltip.stories";
 import * as sonner from "./sonner.stories";
+import * as runsIterationFilter from "../../pages/RunsList.stories";
 
 const modules: Record<string, Record<string, unknown>> = {
   alert, alertDialog, checkbox, dialog, dropdownMenu, label, popover, scrollArea,
   select, separator, sheet, skeleton, switch: sw, table, tabs, textarea,
-  tooltip, sonner,
+  tooltip, sonner, runsIterationFilter,
 };
 
 afterEach(() => cleanup());

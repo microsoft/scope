@@ -383,7 +383,7 @@ function GroupByToggle({
 }
 
 // Sidebar filter widget: pick a comparator (≥ / ≤ / =) and a numeric value.
-// Clearing the input clears both the value and the op from the URL. Used for
+// The op is retained without a value so users can choose it before typing. Used for
 // the Turns and Max iterations filters; mirrors the API contract that accepts
 // `{turns, turnsOp}` / `{maxIterations, maxIterationsOp}` with op ∈ eq|gte|lte.
 const NUMERIC_OPS: ReadonlyArray<{ value: IterationOp; label: string; aria: string }> = [
@@ -392,7 +392,7 @@ const NUMERIC_OPS: ReadonlyArray<{ value: IterationOp; label: string; aria: stri
   { value: "eq", label: "=", aria: "equal to" },
 ];
 
-function NumericComparatorRow({
+export function NumericComparatorRow({
   label,
   ariaLabel,
   op,
@@ -1981,7 +1981,7 @@ export function RunsList() {
                 onChange={({ op, value }) => {
                   state.setFilters({
                     turns: value || null,
-                    turnsOp: value ? op : null,
+                    turnsOp: op,
                   });
                 }}
               />
@@ -1993,7 +1993,7 @@ export function RunsList() {
                 onChange={({ op, value }) => {
                   state.setFilters({
                     maxIter: value || null,
-                    maxIterOp: value ? op : null,
+                    maxIterOp: op,
                   });
                 }}
               />
