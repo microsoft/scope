@@ -5,10 +5,9 @@
  * Portal authentication configuration (Microsoft Entra ID via MSAL).
  *
  * Per the auth spec ([docs/architecture/auth-rbac.md](../../../../../docs/architecture/auth-rbac.md)
- * §8, subtask 10) the Portal's IdP config is **build-time** configuration, not
- * fetched from the API. It is read from `VITE_AUTH_*` environment variables so
- * retargeting the IdP (local `entra-local` emulator vs. production Entra ID) is
- * a config change, mirroring the CLI.
+ * §8, subtask 10) the Portal's IdP config is public configuration, not
+ * fetched from the API. Container runtime settings override `VITE_AUTH_*`
+ * build settings, allowing the same image to use each environment's IdP.
  *
  * In `dev` builds the values default to the deterministic seed directory shipped
  * by [entra-local](https://github.com/cmaneu/entra-local) (tag `v0.0.3`) so
@@ -18,7 +17,7 @@
  * MSAL requires an https authority. Under Docker the compose stack injects
  * `VITE_AUTH_AUTHORITY` / `VITE_AUTH_KNOWN_AUTHORITIES` with the per-worktree
  * host port, overriding these defaults. Production builds **must** supply the
- * `VITE_AUTH_*` values (baked into the bundle at build time); when they are
+ * client ID, authority, and API scopes at runtime or build time; when they are
  * missing the config is reported as not configured so the app can surface a
  * clear error instead of silently pointing at `localhost`.
  *
@@ -64,7 +63,7 @@ export interface PortalAuthConfig {
   enabled: boolean;
   /**
    * `true` when a usable configuration was resolved. In production this requires
-   * the `VITE_AUTH_*` env vars to be present at build time.
+   * client ID, authority, and API scopes from runtime or build-time settings.
    */
   isConfigured: boolean;
 }
@@ -162,19 +161,22 @@ function resolveConfig(): PortalAuthConfig {
   const runtime =
     typeof window !== "undefined" ? window.__SCOPE_CONFIG__ : undefined;
   const enabled = resolveAuthEnabled(runtime, env, isDev);
+  const hasRuntimeAuth = runtime?.authClientId !== undefined ||
+    runtime?.authAuthority !== undefined || runtime?.authScopes !== undefined;
 
-  const clientId =
-    (env.VITE_AUTH_CLIENT_ID as string | undefined) ??
-    (isDev ? ENTRA_LOCAL_DEFAULTS.clientId : "");
-  const authority =
-    (env.VITE_AUTH_AUTHORITY as string | undefined) ??
-    (isDev ? ENTRA_LOCAL_DEFAULTS.authority : "");
+  // A partial runtime override must not pair a different tenant with a baked-in client.
+  const clientId = hasRuntimeAuth ? (runtime?.authClientId ?? "") :
+    ((env.VITE_AUTH_CLIENT_ID as string | undefined) ??
+      (isDev ? ENTRA_LOCAL_DEFAULTS.clientId : ""));
+  const authority = hasRuntimeAuth ? (runtime?.authAuthority ?? "") :
+    ((env.VITE_AUTH_AUTHORITY as string | undefined) ??
+      (isDev ? ENTRA_LOCAL_DEFAULTS.authority : ""));
   const knownAuthorities =
     envList(env.VITE_AUTH_KNOWN_AUTHORITIES as string | undefined) ??
     (isDev ? ENTRA_LOCAL_DEFAULTS.knownAuthorities : []);
-  const scopes =
-    envList(env.VITE_AUTH_SCOPES as string | undefined) ??
-    (isDev ? ENTRA_LOCAL_DEFAULTS.scopes : []);
+  const scopes = hasRuntimeAuth ? (envList(runtime?.authScopes) ?? []) :
+    (envList(env.VITE_AUTH_SCOPES as string | undefined) ??
+      (isDev ? ENTRA_LOCAL_DEFAULTS.scopes : []));
   const protocolMode =
     (env.VITE_AUTH_PROTOCOL_MODE as ProtocolMode | undefined) ||
     (isDev ? ENTRA_LOCAL_DEFAULTS.protocolMode : "AAD");
@@ -201,7 +203,7 @@ function resolveConfig(): PortalAuthConfig {
     protocolMode,
     cacheLocation,
     enabled,
-    isConfigured: Boolean(clientId && authority),
+    isConfigured: Boolean(clientId && authority && scopes.length),
   };
 }
 

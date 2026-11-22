@@ -34,6 +34,12 @@ interface ScopeRuntimeConfig {
    * instead. When present it takes precedence. Auth is ON by default.
    */
   authEnabled?: boolean;
+  /** Public OAuth client ID supplied by SCOPE_AUTH_CLIENT_ID at container start. */
+  authClientId?: string;
+  /** Entra authority supplied by SCOPE_AUTH_AUTHORITY at container start. */
+  authAuthority?: string;
+  /** Comma-separated API scopes supplied by SCOPE_AUTH_SCOPES at container start. */
+  authScopes?: string;
 }
 
 interface Window {

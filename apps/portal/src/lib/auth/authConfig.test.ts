@@ -32,9 +32,9 @@ describe("resolveAuthEnabled", () => {
       vi.resetModules();
     });
 
-    async function config(overrides: Record<string, string> = {}) {
+    async function config(overrides: Record<string, string> = {}, runtimeConfig?: ScopeRuntimeConfig) {
       vi.resetModules();
-      vi.stubGlobal("window", { location: { origin: "https://scope.example.com" } });
+      vi.stubGlobal("window", { location: { origin: "https://scope.example.com" }, __SCOPE_CONFIG__: runtimeConfig });
       vi.stubEnv("DEV", false);
       for (const [key, value] of Object.entries({
         VITE_AUTH_CLIENT_ID: "portal-client",
@@ -91,6 +91,44 @@ describe("resolveAuthEnabled", () => {
         expect((await config({ [key]: "" })).isConfigured).toBe(false);
       },
     );
+
+    it("prefers runtime client settings and parses scopes like build settings", async () => {
+      expect(await config({}, {
+        authEnabled: true,
+        authClientId: "runtime-client",
+        authAuthority: "https://login.microsoftonline.com/runtime-tenant",
+        authScopes: "api://runtime/read, api://runtime/write",
+      })).toMatchObject({
+        clientId: "runtime-client",
+        authority: "https://login.microsoftonline.com/runtime-tenant",
+        scopes: ["api://runtime/read", "api://runtime/write"],
+        isConfigured: true,
+      });
+    });
+
+    it("keeps build settings when runtime values are absent", async () => {
+      expect(await config({}, { authEnabled: true })).toMatchObject({
+        clientId: "portal-client",
+        authority: "https://login.microsoftonline.com/test-tenant",
+        scopes: ["api://api-client/access_as_user"],
+        isConfigured: true,
+      });
+    });
+
+    it("treats explicit empty runtime settings as incomplete", async () => {
+      expect((await config({}, { authClientId: "", authScopes: "" })).isConfigured).toBe(false);
+    });
+
+    it("does not mix a partial runtime override with the baked-in client", async () => {
+      const resolved = await config({}, { authAuthority: "https://login.microsoftonline.com/other-tenant" });
+      expect(resolved.clientId).toBe("");
+      expect(resolved.scopes).toEqual([]);
+      expect(resolved.isConfigured).toBe(false);
+    });
+
+    it("keeps authentication disabled when runtime switch is off", async () => {
+      expect((await config({}, { authEnabled: false, authClientId: "runtime-client" })).enabled).toBe(false);
+    });
   });
 
   it("runtime authEnabled governs integration/production (built bundle)", () => {
