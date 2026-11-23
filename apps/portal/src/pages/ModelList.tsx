@@ -36,15 +36,6 @@ export function ModelList() {
     queryKey: ["models"],
     queryFn: () => api.listModels(),
   });
-  const { data: agents = [] } = useQuery({
-    queryKey: ["agents", "include-deleted"],
-    queryFn: () => api.listAgents({ includeDeleted: true }),
-    staleTime: 60_000,
-  });
-  const agentById = useMemo(
-    () => new Map(agents.map((agent) => [agent._id, agent])),
-    [agents],
-  );
 
   const providerOptions = useMemo(() => {
     const map = new Map<string, number>();
@@ -53,16 +44,10 @@ export function ModelList() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([value, count]) => ({
         value,
-        label: (
-          <AgentBadge
-            agentId={value}
-            agent={agentById.get(value)}
-            triggerLink={false}
-          />
-        ),
+        label: value,
         count,
       }));
-  }, [models, agentById]);
+  }, [models]);
 
   const agentOptions = useMemo(() => {
     const map = new Map<string, number>();
