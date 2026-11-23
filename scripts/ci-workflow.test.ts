@@ -118,7 +118,7 @@ describe("GitHub Action pinning", () => {
   it.each([
     `uses: actions/checkout@${sha} # v4.4.0`,
     `uses: "actions/checkout@${sha}" # v4.4.0`,
-    `uses: dtolnay/rust-toolchain@${sha} # 1.94.1`,
+    `uses: dtolnay/rust-toolchain@${sha} # toolchain: 1.94.1`,
     "uses: ./path/to/local-action",
     "uses: docker://alpine:3.22",
   ])("accepts immutable, local or container reference: %s", (line) => {

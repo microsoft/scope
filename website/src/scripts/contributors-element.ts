@@ -4,16 +4,16 @@
 import {
 	CONTRIBUTORS_DATA_URL,
 	avatarUrl,
+	commitsLabel,
 	contributorsLabel,
 	fetchContributors,
 	firstPage,
 	parseContributors,
-	prsLabel,
 	prsUrl,
 	showAllLabel,
 	sortForDisplay,
 	tipShift,
-	totalPrs,
+	totalCommits,
 	visible,
 	type Contributor,
 	type ContributorsResult,
@@ -28,7 +28,7 @@ const LIFT_SCALE = 1.14;
 const MAX_STAGGER_STEPS = 24;
 
 /**
- * Thanks contributors: authors of merged pull requests, bots aside. Renders
+ * Thanks default-branch commit contributors, bots aside. Renders
  * an avatar wall (landing) or a card grid (Contribute page). Without
  * JavaScript a link to the GitHub contributors graph stays visible. Motion
  * is skipped entirely when the visitor prefers reduced motion.
@@ -85,8 +85,8 @@ class ScopeContributors extends HTMLElement {
 			// Development fallback only; production builds omit the sample.
 			if (import.meta.env.DEV) {
 				console.info('[contributors] Live list unavailable; using the dev sample.', error);
-				const { default: text } = await import('../data/contributors.sample.jsonl?raw');
-				result = parseContributors(text);
+				const { default: text } = await import('../data/contributors.sample.json?raw');
+				result = parseContributors(JSON.parse(text));
 				sample = true;
 			} else {
 				console.warn('[contributors] Could not load the live list.', error);
@@ -94,7 +94,7 @@ class ScopeContributors extends HTMLElement {
 				return;
 			}
 		}
-		if (result.skipped.length) console.warn(`[contributors] Skipped invalid lines: ${result.skipped.join(', ')}`);
+		if (result.skipped.length) console.warn(`[contributors] Skipped invalid entries: ${result.skipped.join(', ')}`);
 		this.querySelectorAll<HTMLElement>('[data-sample-tag]').forEach((tag) => { tag.hidden = !sample; });
 		await this.render(result.contributors);
 	}
@@ -119,10 +119,10 @@ class ScopeContributors extends HTMLElement {
 		this.updateShowAll(grid ? hidden : 0);
 
 		const people = this.contributors.length;
-		const prs = totalPrs(this.contributors);
+		const commits = totalCommits(this.contributors);
 		this.querySelectorAll('[data-count-label]').forEach((label) => { label.textContent = contributorsLabel(people); });
-		this.querySelectorAll('[data-prs]').forEach((element) => { element.textContent = prsLabel(prs); });
-		this.querySelectorAll('[data-count-text]').forEach((text) => { text.textContent = `${people} ${contributorsLabel(people)}, ${prsLabel(prs)}`; });
+		this.querySelectorAll('[data-commits]').forEach((element) => { element.textContent = commitsLabel(commits); });
+		this.querySelectorAll('[data-count-text]').forEach((text) => { text.textContent = `${people} ${contributorsLabel(people)}, ${commitsLabel(commits)}`; });
 		this.loaded = true;
 		this.setState(people ? 'ready' : 'empty');
 		this.reveal();
@@ -252,14 +252,14 @@ class ScopeContributors extends HTMLElement {
 		}, { signal, passive: true });
 	}
 
-	// Logins come from published data, so every value is set as text or attribute.
+	// Logins come from GitHub data, so every value is set as text or attribute.
 	private avatar(contributor: Contributor): HTMLLIElement {
 		const item = this.item();
 		const link = this.link(item, 'thanks-avatar', prsUrl(contributor.login));
 		link.append(this.image(contributor, 56));
 		const tip = this.span(link, 'thanks-tip');
 		this.span(tip, 'thanks-tip__login', `@${contributor.login}`);
-		this.span(tip, 'thanks-tip__prs', prsLabel(contributor.prs));
+		this.span(tip, 'thanks-tip__commits', commitsLabel(contributor.commits));
 		this.span(link, 'sr-only', ' (opens in a new tab)');
 		return item;
 	}
@@ -270,7 +270,7 @@ class ScopeContributors extends HTMLElement {
 		link.append(this.image(contributor, 96));
 		const body = this.span(link, 'thanks-card__body');
 		this.span(body, 'thanks-card__login', `@${contributor.login}`).title = `@${contributor.login}`;
-		this.span(body, 'thanks-card__prs', prsLabel(contributor.prs));
+		this.span(body, 'thanks-card__commits', commitsLabel(contributor.commits));
 		this.span(link, 'contrib-card__arrow thanks-card__arrow', '↗').setAttribute('aria-hidden', 'true');
 		this.span(link, 'sr-only', ' (opens in a new tab)');
 		return item;
