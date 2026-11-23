@@ -3,9 +3,23 @@
 
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderComponent, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { AuthContext } from "@/contexts/AuthContext";
+import { signedInAuth } from "@/contexts/authFixtures";
+import { ProjectProvider } from "@/contexts/ProjectContext";
 import { LogViewer } from "./LogViewer";
 import type { LogEvent } from "@/types";
+
+function render(ui: ReactNode) {
+  return renderComponent(ui, {
+    wrapper: ({ children }) => (
+      <AuthContext.Provider value={signedInAuth}>
+        <ProjectProvider>{children}</ProjectProvider>
+      </AuthContext.Provider>
+    ),
+  });
+}
 
 class ResizeObserverMock {
   observe = vi.fn();

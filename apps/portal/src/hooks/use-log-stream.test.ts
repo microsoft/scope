@@ -1,178 +1,212 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// @vitest-environment happy-dom
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetApiClient, setApiTokenProvider, setApiSessionSignal } from "@/lib/api-client";
+import { useLogStream } from "./use-log-stream";
 
-type CleanupFn = (() => void) | void;
-
-class HookRuntime {
-  stateSlots: unknown[] = [];
-  refSlots: Array<{ current: unknown }> = [];
-  effectSlots: Array<{ deps?: unknown[]; cleanup?: CleanupFn }> = [];
-  stateIndex = 0;
-  refIndex = 0;
-  effectIndex = 0;
-
-  beginRender() {
-    this.stateIndex = 0;
-    this.refIndex = 0;
-    this.effectIndex = 0;
-  }
-
-  unmount() {
-    for (const effect of this.effectSlots) effect.cleanup?.();
-    this.effectSlots = [];
-  }
-}
-
-const runtime = new HookRuntime();
-
-vi.mock("react", () => ({
-  useState<T>(initialValue: T | (() => T)) {
-    const index = runtime.stateIndex++;
-    if (runtime.stateSlots[index] === undefined) {
-      runtime.stateSlots[index] =
-        typeof initialValue === "function" ? (initialValue as () => T)() : initialValue;
-    }
-    const setState = (value: T | ((prev: T) => T)) => {
-      const prev = runtime.stateSlots[index] as T;
-      runtime.stateSlots[index] = typeof value === "function" ? (value as (prev: T) => T)(prev) : value;
-    };
-    return [runtime.stateSlots[index] as T, setState] as const;
-  },
-  useRef<T>(initialValue: T) {
-    const index = runtime.refIndex++;
-    if (!runtime.refSlots[index]) runtime.refSlots[index] = { current: initialValue };
-    return runtime.refSlots[index] as { current: T };
-  },
-  useEffect(effect: () => CleanupFn, deps?: unknown[]) {
-    const index = runtime.effectIndex++;
-    const current = runtime.effectSlots[index];
-    const changed = !current?.deps
-      || !deps
-      || current.deps.length !== deps.length
-      || deps.some((dep, i) => dep !== current.deps?.[i]);
-    if (!changed) return;
-
-    current?.cleanup?.();
-    runtime.effectSlots[index] = {
-      deps,
-      cleanup: effect(),
-    };
-  },
-  useCallback<T extends (...args: never[]) => unknown>(fn: T) {
-    return fn;
+const scope = vi.hoisted(() => ({
+  projectId: "project-a",
+  auth: {
+    isReady: true,
+    user: { id: "alice" },
+    account: { homeAccountId: "alice", localAccountId: "alice", tenantId: "tenant", environment: "local" },
   },
 }));
-
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => scope.auth }));
+vi.mock("@/contexts/ProjectContext", () => ({ useSelectedProjectId: () => scope.projectId }));
 vi.mock("@/lib/api", () => ({
-  api: {
-    logsUrl: (_id: string, _fromStart: boolean) => "/api/v1/runs/run-1/logs/stream",
-  },
+  api: { logsUrl: (id: string, fromStart: boolean) => `https://scope.test/api/v1/requests/${id}/logs?fromStart=${fromStart}` },
 }));
 
-class MockEventSource {
-  static instances: MockEventSource[] = [];
-  static CLOSED = 2;
+const log = { timestamp: "2026-05-01T00:00:00.000Z", level: "info", message: "first attempt" };
+const encoder = new TextEncoder();
+let fetchMock: ReturnType<typeof vi.fn>;
 
-  readonly close = vi.fn(() => {
-    this.readyState = MockEventSource.CLOSED;
-  });
-  onopen: ((event: Event) => void) | null = null;
-  onmessage: ((event: MessageEvent) => void) | null = null;
-  onerror: ((event: Event) => void) | null = null;
-  readyState = 1;
-  private listeners = new Map<string, Set<(event: MessageEvent) => void>>();
-
-  constructor(_url: string) {
-    MockEventSource.instances.push(this);
-  }
-
-  addEventListener(type: string, listener: (event: MessageEvent) => void) {
-    const entries = this.listeners.get(type) ?? new Set<(event: MessageEvent) => void>();
-    entries.add(listener);
-    this.listeners.set(type, entries);
-  }
-
-  emit(type: string, event: MessageEvent) {
-    for (const listener of this.listeners.get(type) ?? []) listener(event);
-  }
+function liveStream() {
+  let source!: ReadableStreamDefaultController<Uint8Array>;
+  const cancel = vi.fn();
+  const response = new Response(new ReadableStream<Uint8Array>({
+    start(controller) { source = controller; },
+    cancel,
+  }), { headers: { "Content-Type": "text/event-stream" } });
+  return {
+    response, cancel,
+    send: (data: string) => source.enqueue(encoder.encode(data)),
+    close: () => source.close(),
+    fail: () => source.error(new TypeError("connection reset")),
+  };
 }
 
-async function renderHook(attemptNumber: number) {
-  const { useLogStream } = await import("./use-log-stream.js");
-  const urlBuilder = stableUrlBuilder;
-  runtime.beginRender();
-  useLogStream({
-    id: "run-1",
-    enabled: true,
-    fromStart: true,
-    attemptNumber,
-    urlBuilder,
-  });
-  runtime.beginRender();
-  return useLogStream({
-    id: "run-1",
-    enabled: true,
-    fromStart: true,
-    attemptNumber,
-    urlBuilder,
-  });
-}
+beforeEach(() => {
+  resetApiClient();
+  scope.projectId = "project-a";
+  scope.auth.isReady = true;
+  scope.auth.user.id = "alice";
+  scope.auth.account.homeAccountId = "alice";
+  fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  setApiTokenProvider(() => "test-token");
+});
+afterEach(() => {
+  cleanup();
+  resetApiClient();
+  vi.unstubAllGlobals();
+});
 
-const stableUrlBuilder = () => "/api/v1/runs/run-1/logs/stream";
-
-describe("useLogStream", () => {
-  beforeEach(() => {
-    runtime.stateSlots = [];
-    runtime.refSlots = [];
-    runtime.effectSlots = [];
-    MockEventSource.instances = [];
-    vi.stubGlobal("EventSource", MockEventSource);
-    vi.resetModules();
-  });
-
-  afterEach(() => {
-    runtime.unmount();
-    vi.unstubAllGlobals();
-  });
-
-  it("creates a new EventSource when attemptNumber changes", async () => {
-    const initial = await renderHook(1);
-    expect(MockEventSource.instances).toHaveLength(1);
-    expect(initial.logs).toEqual([]);
-
-    const first = MockEventSource.instances[0];
-    const updated = await renderHook(2);
-
-    expect(first.close).toHaveBeenCalledTimes(1);
-    expect(MockEventSource.instances).toHaveLength(2);
-    expect(updated.logs).toEqual([]);
+describe("useLogStream authenticated fetch integration", () => {
+  it("uses bearer transport, preserves fromStart and handles live logs, clear and done", async () => {
+    const stream = liveStream();
+    fetchMock.mockResolvedValue(stream.response);
+    const { result } = renderHook(() => useLogStream({ id: "request", fromStart: false }));
+    await waitFor(() => expect(result.current.isConnected).toBe(true));
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.headers.get("Authorization")).toBe("Bearer test-token");
+    expect(request.url).toBe("https://scope.test/api/v1/requests/request/logs?fromStart=false&projectId=project-a");
+    expect(request.url).not.toContain("test-token");
+    await act(async () => stream.send(`data: ${JSON.stringify(log)}\n\n`));
+    await waitFor(() => expect(result.current.logs).toEqual([log]));
+    act(() => result.current.clear());
+    expect(result.current.logs).toEqual([]);
+    await act(async () => stream.send("event: done\ndata: {}\n\n"));
+    await waitFor(() => expect(result.current.isDone).toBe(true));
+    expect(result.current.isConnected).toBe(false);
+    expect(result.current.error).toBeNull();
+    await waitFor(() => expect(stream.cancel).toHaveBeenCalled());
   });
 
-  it("resets logs, done state, and error on reconnect", async () => {
-    await renderHook(1);
-    const first = MockEventSource.instances[0];
-    expect(first).toBeDefined();
+  it.each(["attempt", "id", "project", "account", "scope-user", "logout", "disabled"] as const)(
+    "clears and cancels the replaced %s stream, rejecting late queued logs",
+    async (change) => {
+      const first = liveStream();
+      const second = liveStream();
+      fetchMock.mockResolvedValueOnce(first.response).mockResolvedValueOnce(second.response);
+      const { result, rerender } = renderHook(
+        (props) => useLogStream(props),
+        { initialProps: { id: "request", attemptNumber: 1, enabled: true } },
+      );
+      await waitFor(() => expect(result.current.isConnected).toBe(true));
+      await act(async () => first.send(`data: ${JSON.stringify(log)}\n\n`));
+      await waitFor(() => expect(result.current.logs).toHaveLength(1));
+      const props = { id: "request", attemptNumber: 1, enabled: true };
+      if (change === "attempt") props.attemptNumber = 2;
+      if (change === "id") props.id = "other";
+      if (change === "project") scope.projectId = "project-b";
+      if (change === "account") scope.auth.account.homeAccountId = "bob";
+      if (change === "scope-user") scope.auth.user.id = "bob";
+      if (change === "logout") scope.auth.isReady = false;
+      if (change === "disabled") props.enabled = false;
+      act(() => {
+        first.send(`data: ${JSON.stringify({ ...log, message: "late" })}\n\n`);
+        rerender(props);
+      });
+      expect(result.current.logs).toEqual([]);
+      expect(result.current.isDone).toBe(false);
+      await waitFor(() => expect(first.cancel).toHaveBeenCalled());
+      if (change === "logout" || change === "disabled") {
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(result.current.isConnected).toBe(false);
+      } else {
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+        expect(result.current.error).toBeNull();
+      }
+    },
+  );
 
-    first.onmessage?.(new MessageEvent("message", {
-      data: JSON.stringify({
-        timestamp: "2026-05-01T00:00:00.000Z",
-        level: "info",
-        message: "first attempt",
-      }),
+  it("aborts a pending fetch on unmount", async () => {
+    fetchMock.mockImplementation((request: Request) => new Promise((_resolve, reject) => {
+      request.signal.addEventListener("abort", () => reject(request.signal.reason));
     }));
-    first.emit("done", new MessageEvent("done"));
-    first.emit("error", new MessageEvent("error", { data: JSON.stringify({ message: "boom" }) }));
+    const { unmount } = renderHook(() => useLogStream({ id: "request" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const request = fetchMock.mock.calls[0][0] as Request;
+    unmount();
+    expect(request.signal.aborted).toBe(true);
+  });
 
-    const beforeReconnect = await renderHook(1);
-    expect(beforeReconnect.logs).toHaveLength(1);
-    expect(beforeReconnect.isDone).toBe(true);
-    expect(beforeReconnect.error).toBe("boom");
+  it("does not open a stream before the Scope-user handshake is ready", () => {
+    scope.auth.isReady = false;
+    const { result } = renderHook(() => useLogStream({ id: "request" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.logs).toEqual([]);
+  });
 
-    const afterReconnect = await renderHook(2);
-    expect(afterReconnect.logs).toEqual([]);
-    expect(afterReconnect.isDone).toBe(false);
-    expect(afterReconnect.error).toBeNull();
+  it("does not fetch logs without a selected project", () => {
+    scope.projectId = "";
+    const { result } = renderHook(() => useLogStream({ id: "request" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.logs).toEqual([]);
+  });
+
+  it("binds a custom historical/report URL to the selected project without changing replay options", async () => {
+    const stream = liveStream();
+    fetchMock.mockResolvedValue(stream.response);
+    const urlBuilder = vi.fn((id: string, fromStart: boolean) =>
+      `https://scope.test/api/v1/reports/${id}/logs?fromStart=${fromStart}`);
+    const { result } = renderHook(() => useLogStream({ id: "report", fromStart: true, urlBuilder }));
+    await waitFor(() => expect(result.current.isConnected).toBe(true));
+    expect(urlBuilder).toHaveBeenCalledWith("report", true);
+    expect((fetchMock.mock.calls[0][0] as Request).url)
+      .toBe("https://scope.test/api/v1/reports/report/logs?fromStart=true&projectId=project-a");
+  });
+
+  it.each(["timeout", "error"] as const)("surfaces a named server %s without marking success or reconnecting", async (type) => {
+    const stream = liveStream();
+    fetchMock.mockResolvedValue(stream.response);
+    const { result } = renderHook(() => useLogStream({ id: "request" }));
+    await waitFor(() => expect(result.current.isConnected).toBe(true));
+    await act(async () => stream.send(`event: ${type}\ndata: {"message":"blob storage unavailable"}\n\n`));
+    await waitFor(() => expect(result.current.error).toBe(type === "timeout" ? "Stream timed out" : "blob storage unavailable"));
+    expect(result.current.isDone).toBe(false);
+    expect(result.current.isConnected).toBe(false);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("does not reconnect a closed authorization lease or duplicate received logs", async () => {
+    const stream = liveStream();
+    fetchMock.mockResolvedValue(stream.response);
+    const { result } = renderHook(() => useLogStream({ id: "request" }));
+    await waitFor(() => expect(result.current.isConnected).toBe(true));
+    await act(async () => stream.send(`data: ${JSON.stringify(log)}\n\n`));
+    await waitFor(() => expect(result.current.logs).toHaveLength(1));
+    await act(async () => stream.close());
+    await waitFor(() => expect(result.current.error).toMatch(/disconnected.*Reload/));
+    expect(result.current.isConnected).toBe(false);
+    expect(result.current.isDone).toBe(false);
+    expect(result.current.logs).toEqual([log]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces network failure after connection without a replay loop", async () => {
+    const stream = liveStream();
+    fetchMock.mockResolvedValue(stream.response);
+    const { result } = renderHook(() => useLogStream({ id: "request" }));
+    await waitFor(() => expect(result.current.isConnected).toBe(true));
+    await act(async () => stream.fail());
+    await waitFor(() => expect(result.current.error).toContain("connection reset"));
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("session cancellation closes an established fetch body", async () => {
+    const session = new AbortController();
+    setApiSessionSignal(session.signal);
+    const stream = liveStream();
+    fetchMock.mockImplementation((request: Request) => {
+      // A real fetch cancels its body when its request signal aborts.
+      request.signal.addEventListener("abort", () => stream.close());
+      return stream.response;
+    });
+    const { result, rerender } = renderHook(() => useLogStream({ id: "request" }));
+    await waitFor(() => expect(result.current.isConnected).toBe(true));
+    act(() => {
+      session.abort();
+      scope.auth.isReady = false;
+      rerender();
+    });
+    expect(result.current.logs).toEqual([]);
+    expect(result.current.isConnected).toBe(false);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

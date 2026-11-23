@@ -12,15 +12,19 @@ import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/utils";
 import type { ConversationTurn } from "@/types";
 import { useState } from "react";
+import { ArtifactDownloadButton } from "@/components/ArtifactDownloadButton";
+import { VideoPlayer } from "@/components/VideoPlayer";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface TurnTimelineProps {
   turns: ConversationTurn[];
   runId: string;
-  /** If provided, uses per-run URLs for a specific historical attempt */
+  /** Pins artifacts to this attempt, including the currently selected attempt. */
   attemptRunId?: string;
 }
 
 export function TurnTimeline({ turns, runId, attemptRunId }: TurnTimelineProps) {
+  const [videoIteration, setVideoIteration] = useState<number>();
   const [expandedTurns, setExpandedTurns] = useState<Set<number>>(
     // Expand last turn by default
     new Set(turns.length > 0 ? [turns[turns.length - 1].iteration] : [])
@@ -89,46 +93,40 @@ export function TurnTimeline({ turns, runId, attemptRunId }: TurnTimelineProps) 
                     </span>
                   )}
                   {turn.snapshotUrl && (
-                    <Button
+                    <ArtifactDownloadButton
                       variant="ghost"
                       size="sm"
                       className="h-7 gap-1"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(attemptRunId ? api.runSnapshotUrl(runId, attemptRunId, turn.iteration) : api.snapshotUrl(runId, turn.iteration), "_blank");
-                      }}
+                      url={attemptRunId ? api.runSnapshotUrl(runId, attemptRunId, turn.iteration) : api.snapshotUrl(runId, turn.iteration)}
+                      filename={`${runId}-iteration-${turn.iteration}.tar.gz`}
                     >
                       <Download className="h-3 w-3" />
                       Snapshot
-                    </Button>
+                    </ArtifactDownloadButton>
                   )}
                   {turn.harUrl && (
-                    <Button
+                    <ArtifactDownloadButton
                       variant="ghost"
                       size="sm"
                       className="h-7 gap-1"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(attemptRunId ? api.runHarUrl(runId, attemptRunId, turn.iteration) : api.harUrl(runId, turn.iteration), "_blank");
-                      }}
+                      url={attemptRunId ? api.runHarUrl(runId, attemptRunId, turn.iteration) : api.harUrl(runId, turn.iteration)}
+                      filename={`${runId}-iteration-${turn.iteration}.har`}
                     >
                       <FileText className="h-3 w-3" />
                       HAR
-                    </Button>
+                    </ArtifactDownloadButton>
                   )}
                   {turn.atifUrl && (
-                    <Button
+                    <ArtifactDownloadButton
                       variant="ghost"
                       size="sm"
                       className="h-7 gap-1"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(api.atifUrl(runId, turn.iteration), "_blank");
-                      }}
+                      url={attemptRunId ? api.runAtifUrl(runId, attemptRunId, turn.iteration) : api.atifUrl(runId, turn.iteration)}
+                      filename={`${runId}-iteration-${turn.iteration}.atif.trajectory.json`}
                     >
                       <Download className="h-3 w-3" />
                       ATIF
-                    </Button>
+                    </ArtifactDownloadButton>
                   )}
                   {turn.videoUrls && turn.videoUrls.length > 0 && (
                     <Button
@@ -137,7 +135,7 @@ export function TurnTimeline({ turns, runId, attemptRunId }: TurnTimelineProps) 
                       className="h-7 gap-1"
                       onClick={(e) => {
                         e.stopPropagation();
-                        window.open(attemptRunId ? api.runVideoUrl(runId, attemptRunId, turn.iteration) : api.videoUrl(runId, turn.iteration), "_blank");
+                        setVideoIteration(turn.iteration);
                       }}
                     >
                       <Video className="h-3 w-3" />
@@ -212,6 +210,16 @@ export function TurnTimeline({ turns, runId, attemptRunId }: TurnTimelineProps) 
           </Card>
         );
       })}
+      <Dialog open={videoIteration !== undefined} onOpenChange={open => { if (!open) setVideoIteration(undefined); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Iteration {videoIteration} recordings</DialogTitle></DialogHeader>
+          {videoIteration !== undefined && turns.find(turn => turn.iteration === videoIteration)?.videoUrls?.map((_, index) => (
+            <VideoPlayer key={`${runId}-${attemptRunId}-${videoIteration}-${index}`}
+              src={attemptRunId ? api.runVideoUrl(runId, attemptRunId, videoIteration, index) : api.videoUrl(runId, videoIteration, index)}
+              label={`Video ${index + 1}`} />
+          ))}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
