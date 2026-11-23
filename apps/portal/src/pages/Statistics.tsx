@@ -86,15 +86,25 @@ function truncateTask(task: string, maxLength = 35): string {
     : task;
 }
 
-/** Build a `/runs` URL pre-filtered to a given task / worker pair. */
-function runsLinkFor(
+/**
+ * Build a `/runs` URL pre-filtered to a given task / worker pair.
+ *
+ * `extra` values may be `string | string[]`. Arrays are comma-joined to match
+ * the multi-value filter convention used by `useListUrlState` /
+ * `getFilterList` in the runs page (e.g. `outcome=failed,finished`).
+ */
+export function runsLinkFor(
   group: TaskWorkerGroup,
-  extra?: Record<string, string>,
+  extra?: Record<string, string | string[]>,
 ): string {
   const params = new URLSearchParams();
   params.set("worker", group.workerType);
   params.set("taskPromptId", group.taskPromptId);
-  for (const [k, v] of Object.entries(extra ?? {})) params.set(k, v);
+  for (const [k, v] of Object.entries(extra ?? {})) {
+    const joined = Array.isArray(v) ? v.join(",") : v;
+    if (joined === "") continue;
+    params.set(k, joined);
+  }
   return `/runs?${params.toString()}`;
 }
 
@@ -414,7 +424,7 @@ function InsightsRow({ insights }: { insights: DerivedInsights }) {
               </span>
             </div>
             <Link
-              to={runsLinkFor(needsAttention, { outcome: "failed" })}
+              to={runsLinkFor(needsAttention, { outcome: ["failed", "finished"] })}
               className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80"
             >
               View failed runs <ArrowRight className="h-3 w-3" />
