@@ -784,4 +784,7 @@ The static documentation site consumes the committed artifact at
 `website/src/openapi/scope-openapi.json`. Generate it from the API
 registry with `pnpm --filter api generate:openapi` rather than fetching
 the spec from a deployed environment. The API snapshot test verifies
-that the artifact remains current.
+that the artifact remains current. Generation recursively sorts object keys
+while preserving array order and writes two-space-indented JSON with LF line
+endings and a trailing newline. Unchanged definitions produce byte-identical
+output; schema edits produce localized line diffs after the formatting migration.
