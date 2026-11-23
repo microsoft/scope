@@ -785,3 +785,10 @@ The static documentation site consumes the committed artifact at
 registry with `pnpm --filter api generate:openapi` rather than fetching
 the spec from a deployed environment. The API snapshot test verifies
 that the artifact remains current.
+
+The generator and website-file comparison share a serializer that recursively
+orders object keys deterministically, preserves array order, and writes JSON
+with two-space indentation, LF line endings, and exactly one trailing newline.
+Unchanged API definitions produce byte-identical output; after the initial
+formatting migration, small schema edits produce localized line diffs without
+changing the parsed OpenAPI content.

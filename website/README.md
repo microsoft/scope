@@ -131,6 +131,11 @@ from the root pnpm workspace.
   in this same `microsoft/scope` checkout. Install the root workspace
   dependencies first; the generator updates
   [src/openapi/scope-openapi.json](src/openapi/scope-openapi.json).
+  Output uses deterministically ordered object keys, two-space indentation,
+  LF line endings, and exactly one trailing newline. Array order is preserved.
+  Repeated generation from unchanged API definitions produces byte-identical
+  output, and small schema changes produce localized line diffs. The API
+  snapshot test enforces the same serialization contract.
 
 - To list a new article or talk on the Community page, add one YAML
   file under `src/content/articles/` or `src/content/talks/`. See
