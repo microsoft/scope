@@ -71,7 +71,14 @@ export interface KeyDocument {
   lastAcquiredAt?: Date;
   createdAt: Date;
   updatedAt?: Date;
+  /** Changes only when the credential changes, independent of metadata edits. */
+  validationRevision?: string;
   deletedAt?: Date;
+  /**
+   * Azure AI Foundry deployment / model name. This non-secret field is
+   * projected from KeyVault only on the single-key detail response.
+   */
+  model?: string;
 }
 
 /**
@@ -116,12 +123,14 @@ export interface CreateKeyRequest {
 
 /**
  * Request body for PUT /api/v1/keys/:id.
- * Only metadata — secret value is immutable.
+ * Metadata plus the non-secret Azure AI Foundry model override.
  */
 export interface UpdateKeyRequest {
   enabled?: boolean;
   expiresAt?: string | null;
   comment?: string | null;
+  /** Azure AI Foundry deployment / model name; null clears the override. */
+  model?: string | null;
 }
 
 /**

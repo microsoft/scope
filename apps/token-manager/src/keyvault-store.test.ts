@@ -80,4 +80,19 @@ describe("KeyVaultSecretStore caching", () => {
     await store.getSecret("test-secret");
     expect(mockSecretClient.getSecret).toHaveBeenCalledTimes(2);
   });
+
+  it("bypasses a cached write when validation needs the stored credential", async () => {
+    const mockSecretClient = {
+      getSecret: vi.fn().mockResolvedValue({ value: "concurrent-value" }),
+      setSecret: vi.fn().mockResolvedValue({}),
+    };
+    const store = new KeyVaultSecretStore("https://fake-vault.vault.azure.net");
+    (store as any).client = mockSecretClient;
+    await store.setSecret("test-secret", "captured-value");
+    expect(await store.getSecret("test-secret", { bypassCache: true })).toBe("concurrent-value");
+    expect(mockSecretClient.getSecret).toHaveBeenCalledWith("test-secret");
+    expect(await store.getSecret("test-secret")).toBe("concurrent-value");
+    expect(mockSecretClient.getSecret).toHaveBeenCalledTimes(1);
+  });
+
 });
