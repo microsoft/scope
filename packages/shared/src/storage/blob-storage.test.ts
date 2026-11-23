@@ -17,8 +17,15 @@ const mockLogsContainerClient = {
   getAppendBlobClient: vi.fn(() => mockAppendBlobClient),
 };
 
+const mockBlockBlobClient = {
+  upload: vi.fn().mockResolvedValue(undefined),
+  uploadData: vi.fn().mockResolvedValue(undefined),
+  url: "https://test.blob.core.windows.net/snapshots/mock-blob",
+};
+
 const mockSnapshotsContainerClient = {
   createIfNotExists: vi.fn().mockResolvedValue(undefined),
+  getBlockBlobClient: vi.fn(() => mockBlockBlobClient),
 };
 
 const mockBlobServiceClient = {
@@ -262,5 +269,65 @@ describe("BlobStorage — log helpers", () => {
       expect(result).toHaveLength(1);
       expect(result[0].message).toBe("legacy");
     });
+  });
+});
+
+describe("BlobStorage — container-creation authorization retry", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function makeAuthzError(): Error & { statusCode: number; code: string } {
+    return Object.assign(
+      new Error(
+        "This request is not authorized to perform this operation using this permission.",
+      ),
+      { statusCode: 403, code: "AuthorizationPermissionMismatch" },
+    );
+  }
+
+  it("retries uploadJson on a transient AuthorizationPermissionMismatch and succeeds", async () => {
+    mockBlockBlobClient.uploadData
+      .mockRejectedValueOnce(makeAuthzError())
+      .mockResolvedValueOnce(undefined);
+
+    const storage = makeStorage();
+    const url = await storage.uploadJson("some/blob.json", { ok: true });
+
+    expect(mockBlockBlobClient.uploadData).toHaveBeenCalledTimes(2);
+    expect(url).toBe(mockBlockBlobClient.url);
+  });
+
+  it("does not retry uploadJson on an unrelated error", async () => {
+    const otherError = Object.assign(new Error("Boom"), { statusCode: 500 });
+    mockBlockBlobClient.uploadData.mockRejectedValueOnce(otherError);
+
+    const storage = makeStorage();
+    await expect(storage.uploadJson("some/blob.json", { ok: true })).rejects.toThrow("Boom");
+
+    expect(mockBlockBlobClient.uploadData).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up after repeated AuthorizationPermissionMismatch failures", async () => {
+    vi.useFakeTimers();
+    try {
+      mockBlockBlobClient.uploadData.mockRejectedValue(makeAuthzError());
+
+      const storage = makeStorage();
+      const pending = storage.uploadText("some/blob.txt", "hello");
+      // Attach the rejection assertion before advancing timers so the
+      // rejection handler is registered before fake timers resolve it.
+      const assertion = expect(pending).rejects.toThrow("not authorized to perform this operation");
+      // Lets the retry policy's backoff timers (up to 4 retries) fire without
+      // waiting for real wall-clock time.
+      await vi.runAllTimersAsync();
+      await assertion;
+
+      // maxRetries: 4 => up to 5 total attempts
+      expect(mockBlockBlobClient.uploadData.mock.calls.length).toBeLessThanOrEqual(5);
+      expect(mockBlockBlobClient.uploadData.mock.calls.length).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -427,8 +427,10 @@ criteria
   .argument("<path>", "Path to a .yaml file or a directory of .yaml files")
   .option("--dry-run", "Preview what would be imported without sending to API")
   .option("-u, --url <url>", "API base URL", getDefaultApiUrl())
+  .option("--project <id>", "Project ID for scoped operations (overrides SCOPE_PROJECT and the saved selection)")
   .action(async (inputPath: string, options) => {
     try {
+      const projectId = requireProjectId(options.project);
       const absPath = resolve(process.env.INIT_CWD || process.cwd(), inputPath);
       if (!existsSync(absPath)) {
         console.error(errorText(`Path not found: ${absPath}`));
@@ -512,6 +514,7 @@ criteria
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ criteria: allCriteria }),
+        projectId,
       });
 
       if (!response.ok) {

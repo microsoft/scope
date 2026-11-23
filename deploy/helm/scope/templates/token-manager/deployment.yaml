@@ -1,0 +1,66 @@
+{{- if .Values.tokenManager.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "scope.componentName" (dict "component" "token-manager" "context" .) }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "scope.labels" . | nindent 4 }}
+    app.kubernetes.io/component: token-manager
+spec:
+  replicas: {{ .Values.tokenManager.replicas }}
+  selector:
+    matchLabels:
+      {{- include "scope.selectorLabels" (dict "component" "token-manager" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "scope.selectorLabels" (dict "component" "token-manager" "context" .) | nindent 8 }}
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: {{ include "scope.serviceAccountName" . }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: token-manager
+          image: {{ include "scope.image" (dict "image" .Values.tokenManager.image "context" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.tokenManager.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "scope.componentName" (dict "component" "common-env" "context" .) }}
+            - secretRef:
+                name: {{ .Values.secrets.k8sSecretName }}
+          env:
+            - name: PORT
+              value: {{ .Values.tokenManager.port | quote }}
+            # How often token-manager re-validates registered keys against
+            # their upstream provider.
+            - name: VALIDATION_INTERVAL_MS
+              value: "300000"
+          volumeMounts:
+            - name: kv-secrets
+              mountPath: /mnt/secrets
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.tokenManager.resources | nindent 12 }}
+      volumes:
+        - name: kv-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "scope.componentName" (dict "component" "azure-kv" "context" .) }}
+{{- end -}}
