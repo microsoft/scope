@@ -142,6 +142,7 @@ Stop native mode or the auth spike first (`pnpm dev:down`); both use the edge po
 ```bash
 pnpm dev:up --mode=kind --services=api,portal --build   # first run: builds and loads images
 pnpm dev:up --mode=kind --services=api,portal           # later runs: reuse loaded images
+pnpm dev:logs --service=api                             # last 100 lines of any Deployment or Job (portal, mongodb, db-migrate…)
 pnpm dev:debug --mode=kind --service=api                # inspector on 127.0.0.1:9230
 pnpm dev:job --service=tests                            # run a suspended one-shot Job
 pnpm dev:smoke --mode=kind                              # credential-free up -> checks -> down
@@ -152,6 +153,11 @@ When `--build` is used, startup checks available disk space and warns if less
 than 10 GiB is free; the warning does not block the build. The devcontainer
 configuration forwards port `8080` automatically, so Codespaces users do not
 need to add a port mapping manually.
+
+In Kind mode, `pnpm dev:logs` reads the logs of the named Deployment or Job with
+`kubectl logs` instead of native log files. To follow logs live or inspect pods,
+point kubectl at the workspace kubeconfig (`dev:up` never writes the default one):
+`KUBECONFIG=.dev-state/runtime/kubeconfig kubectl -n scope-dev logs -f deployment/api`.
 
 The browser reaches the stack through one origin. The node maps NodePort 30080
 to loopback `EDGE_PORT`, and the in-cluster nginx edge routes by path.
