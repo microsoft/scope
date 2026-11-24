@@ -29,6 +29,10 @@ cluster whose VNet has the private endpoint, runs the tool there, and streams th
 archive back to your machine. The Azure control-plane calls (`az ...`) still run
 locally, since that API is public.
 
+The temporary pod is deleted after the operation. If it cannot become ready
+within the 180-second startup timeout, the helper also requests its deletion
+before reporting the startup failure, using the same context and namespace.
+
 The native / Docker runners still exist for the case where you run from a network
 that is already allowed to reach the account (e.g. a VNet-joined host).
 
