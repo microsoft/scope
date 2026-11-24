@@ -446,6 +446,11 @@ agent-version records may omit `queueName`; registry readers treat missing,
 blank, and whitespace-only values as unavailable rather than throwing. New
 registrations continue to require a non-empty queue.
 
+Model synchronization keeps each agent's default within its active model set.
+If all provider catalogs become empty, it clears `defaultModel` along with
+`supportedModels`; a later sync selects a default again when a model returns.
+A surviving model from another provider preserves the existing valid default.
+
 ### Run submission flow
 
 1. User submits via Portal or CLI with: **task**, **criteria** (required), **worker**, **model** (required), and optionally **agentVersion**, a **codebase** selection, and/or a per-gate **`gates`** configuration (see [Gates](#gates--multi-phase-evaluation-pipeline))
