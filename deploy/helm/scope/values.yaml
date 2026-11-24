@@ -19,6 +19,8 @@
 #   azure.storageAccountName              <- output storageAccountName
 #   azure.redisHostName                   <- output redisHostName
 #   azure.redisPort                       <- output redisPort
+#   global.namespace                     <- output workloadIdentityServiceAccountNamespace
+#     Must also match workerWorkloadIdentityServiceAccountNamespace when present.
 #   azure.workerWorkloadIdentityClientId  <- output workerWorkloadIdentityClientId
 #   azure.workerServiceAccountName        <- output workerWorkloadIdentityServiceAccountName
 #
@@ -251,16 +253,18 @@ workers:
       limits: { cpu: "1", memory: 1Gi }
     # MCPJungle sidecar (MCP-server aggregation) — mirrors docker-compose's
     # mcp-gateway-copilot service. Templated as a native sidecar
-    # (initContainer with restartPolicy: Always, GA since K8s 1.29) so
-    # kubelet holds the Pod at NotReady until the gateway's health check
-    # passes, instead of racing the worker's first task. Disable only if
+    # (initContainer with restartPolicy: Always, stable in K8s 1.33,
+    # enabled by default since 1.29). An in-container loopback startup
+    # probe gates the worker until the gateway listens. Disable only if
     # your scenarios never configure MCP servers.
     mcpGateway:
       enabled: true
       image:
         registry: ghcr.io
         repository: mcpjungle/mcpjungle
-        tag: latest-stdio
+        # Verified 0.4.7 stdio release: supports --host and curl exec probes.
+        tag: "0.4.7-stdio"
+        digest: sha256:4eae32ecba23e2970413a320ae1f0457f9f7dac1ee39c2b3f34f48753e918e33
       resources:
         requests: { cpu: 250m, memory: 256Mi }
         limits: { cpu: "500m", memory: 512Mi }
@@ -284,7 +288,8 @@ workers:
       image:
         registry: ghcr.io
         repository: mcpjungle/mcpjungle
-        tag: latest-stdio
+        tag: "0.4.7-stdio"
+        digest: sha256:4eae32ecba23e2970413a320ae1f0457f9f7dac1ee39c2b3f34f48753e918e33
       resources:
         requests: { cpu: 250m, memory: 256Mi }
         limits: { cpu: "500m", memory: 512Mi }

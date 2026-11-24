@@ -8,7 +8,9 @@ steps, see the [README](./README.md).
 Port-forward the Portal if it isn't already running (see README "Verify"):
 
 ```bash
-kubectl -n scope port-forward svc/scope-portal 5100:80
+# Use global.namespace from your values file (scope unless customized).
+NAMESPACE=scope
+kubectl -n "$NAMESPACE" port-forward svc/scope-portal 5100:80
 ```
 
 Then, at <http://localhost:5100>:
@@ -48,6 +50,35 @@ workers use this (they pull from ACR, not GHCR), as does `jobs.dbMigrate`
 (which needs a separate `:builder`-tagged image — see
 `templates/jobs/db-migrate.yaml`).
 
+`image.digest`, when set for a service image, takes precedence over its tag
+and `global.imageTag`. The MCP sidecars use this to pin the verified
+`0.4.7-stdio` multi-architecture image. To change their release, update the
+digest too; changing only `image.tag` leaves the pinned image unchanged.
+
+## Namespace and workload identity
+
+All chart resources use `global.namespace`. It must match both Bicep
+federated-identity subjects:
+
+- `workloadIdentityServiceAccountNamespace` for the backend identity.
+- `workerWorkloadIdentityServiceAccountNamespace` for the worker identity,
+  when provisioned.
+
+For example, to deploy into `scope-benchmarks`, provision **both** Bicep
+namespace parameters as `scope-benchmarks` and keep the generated
+`global.namespace: "scope-benchmarks"`. Use `--namespace scope-benchmarks`
+with Helm and `scripts/bootstrap-workers.sh`, and `-n scope-benchmarks`
+with `kubectl`. Always pass the same values file to worker bootstrap.
+Changing only Helm's release namespace does not change `global.namespace`
+or reconfigure Azure federation.
+
+The generator requires the backend namespace output. Worker identity
+outputs may all be absent for a backend-only deployment; if any are
+present, the client ID, service-account name, and namespace must all be
+present and their namespace must equal the backend's. Older deployments
+missing namespace outputs must be re-deployed with the updated Bicep
+outputs before generating values.
+
 ## Image registry strategy
 
 By default, the six core services (api, portal, judge, token-manager,
@@ -59,7 +90,8 @@ No registry build step is required for these.
 If you publish your own fork's images, override the registry:
 
 ```bash
-helm install scope deploy/helm/scope -n scope \
+NAMESPACE=scope # Must match global.namespace in my-values.yaml.
+helm install scope deploy/helm/scope -n "$NAMESPACE" \
   -f my-values.yaml \
   --set global.imageRegistry=ghcr.io/<your-fork-owner>
 ```

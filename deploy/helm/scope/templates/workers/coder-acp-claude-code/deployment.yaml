@@ -28,31 +28,34 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- if .Values.workers.coderAcpClaudeCode.mcpGateway.enabled }}
-      # Native sidecar (GA since K8s 1.29): kubelet starts this before the
-      # main container and holds the Pod at NotReady until its readiness
-      # probe passes, so the worker's first task never races an MCP-gateway
-      # that isn't listening yet. Mirrors compose's
-      # mcp-gateway-claude-code `depends_on: service_healthy`.
+      # Native sidecar (stable in K8s 1.33, enabled by default since 1.29).
+      # Its startup probe gates the queue consumer, not just Pod readiness.
+      # The unauthenticated registry must only listen on pod loopback.
       initContainers:
         - name: mcp-gateway
           restartPolicy: Always
           image: {{ include "scope.image" (dict "image" .Values.workers.coderAcpClaudeCode.mcpGateway.image "context" .) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
-          # Suppress MCPJungle's ASCII-art banner (written to stderr).
-          command: ["/bin/sh", "-c"]
-          args: ["/mcpjungle start 2>&1 | grep --line-buffered -v '[█═╗╚║╔╝]' >&2"]
+          command: ["/mcpjungle"]
+          args: ["start", "--host", "127.0.0.1", "--port", "8080"]
           env:
             - name: SESSION_IDLE_TIMEOUT_SEC
               value: "0"
           volumeMounts:
             - name: workspace
               mountPath: /workspace
+          startupProbe:
+            exec:
+              command: ["curl", "--fail", "--silent", "--show-error", "--max-time", "2", "http://127.0.0.1:8080/health"]
+            timeoutSeconds: 3
+            periodSeconds: 2
+            failureThreshold: 60
           readinessProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            initialDelaySeconds: 10
-            periodSeconds: 60
+            exec:
+              command: ["curl", "--fail", "--silent", "--show-error", "--max-time", "2", "http://127.0.0.1:8080/health"]
+            timeoutSeconds: 3
+            periodSeconds: 10
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.workers.coderAcpClaudeCode.mcpGateway.resources | nindent 12 }}
       {{- end }}
@@ -100,7 +103,7 @@ spec:
             # Same Pod, so the sidecar is reachable over loopback — no
             # Service object needed.
             - name: MCP_GATEWAY_URL
-              value: http://localhost:8080
+              value: http://127.0.0.1:8080
             {{- end }}
           {{- if .Values.workers.coderAcpClaudeCode.mcpGateway.enabled }}
           volumeMounts:

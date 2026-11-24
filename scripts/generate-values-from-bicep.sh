@@ -36,12 +36,11 @@
 #   -h, --help                Show this help.
 #
 # If the deployment also has worker-identity outputs
-# (workerWorkloadIdentityClientId/workerWorkloadIdentityServiceAccountName —
-# only present if you provisioned the ACP worker identity), those are
-# written too. Missing is not an error: older deployments, or ones that
-# never provisioned worker identity, just won't get the worker.* keys, and
-# the chart falls back to its defaults (empty client ID, required only once
-# you enable a worker — see WORKERS.md).
+# (workerWorkloadIdentityClientId/workerWorkloadIdentityServiceAccountName/
+# workerWorkloadIdentityServiceAccountNamespace), those are written too.
+# All three may be absent if no worker identity was provisioned, but a
+# partial set is an error. Both identities must be federated to the same
+# namespace: this chart deploys all resources into global.namespace.
 #
 # Requires: az (logged in, correct subscription active), jq.
 set -euo pipefail
@@ -113,6 +112,7 @@ KEY_VAULT_NAME="$(get_output keyVaultName)"
 KEY_VAULT_URI="$(get_output keyVaultUri)"
 WORKLOAD_IDENTITY_CLIENT_ID="$(get_output workloadIdentityClientId)"
 SERVICE_ACCOUNT_NAME="$(get_output workloadIdentityServiceAccountName)"
+SERVICE_ACCOUNT_NAMESPACE="$(get_output workloadIdentityServiceAccountNamespace)"
 STORAGE_ACCOUNT_NAME="$(get_output storageAccountName)"
 REDIS_HOST_NAME="$(get_output redisHostName)"
 REDIS_PORT="$(get_output redisPort)"
@@ -120,6 +120,7 @@ REDIS_PORT="$(get_output redisPort)"
 # identity. Not required below — see WORKERS.md.
 WORKER_WORKLOAD_IDENTITY_CLIENT_ID="$(get_output workerWorkloadIdentityClientId)"
 WORKER_SERVICE_ACCOUNT_NAME="$(get_output workerWorkloadIdentityServiceAccountName)"
+WORKER_SERVICE_ACCOUNT_NAMESPACE="$(get_output workerWorkloadIdentityServiceAccountNamespace)"
 
 for pair in \
   "tenantId:$TENANT_ID" \
@@ -127,6 +128,7 @@ for pair in \
   "keyVaultUri:$KEY_VAULT_URI" \
   "workloadIdentityClientId:$WORKLOAD_IDENTITY_CLIENT_ID" \
   "workloadIdentityServiceAccountName:$SERVICE_ACCOUNT_NAME" \
+  "workloadIdentityServiceAccountNamespace:$SERVICE_ACCOUNT_NAMESPACE" \
   "storageAccountName:$STORAGE_ACCOUNT_NAME" \
   "redisHostName:$REDIS_HOST_NAME" \
   "redisPort:$REDIS_PORT"
@@ -139,20 +141,38 @@ do
   fi
 done
 
-if [[ -z "$WORKER_WORKLOAD_IDENTITY_CLIENT_ID" || -z "$WORKER_SERVICE_ACCOUNT_NAME" ]]; then
+if [[ -n "$WORKER_WORKLOAD_IDENTITY_CLIENT_ID" || -n "$WORKER_SERVICE_ACCOUNT_NAME" || -n "$WORKER_SERVICE_ACCOUNT_NAMESPACE" ]]; then
+  for pair in \
+    "workerWorkloadIdentityClientId:$WORKER_WORKLOAD_IDENTITY_CLIENT_ID" \
+    "workerWorkloadIdentityServiceAccountName:$WORKER_SERVICE_ACCOUNT_NAME" \
+    "workerWorkloadIdentityServiceAccountNamespace:$WORKER_SERVICE_ACCOUNT_NAMESPACE"
+  do
+    key="${pair%%:*}"
+    val="${pair#*:}"
+    if [[ -z "$val" ]]; then
+      echo "ERROR: value for '$key' was empty in an incomplete worker identity. Re-provision with all worker-identity outputs before generating values." >&2
+      exit 1
+    fi
+  done
+  if [[ "$WORKER_SERVICE_ACCOUNT_NAMESPACE" != "$SERVICE_ACCOUNT_NAMESPACE" ]]; then
+    echo "ERROR: the chart uses a single namespace, but the backend identity is federated to '$SERVICE_ACCOUNT_NAMESPACE' and the worker identity to '$WORKER_SERVICE_ACCOUNT_NAMESPACE'. Re-provision both identities in the same namespace." >&2
+    exit 1
+  fi
+else
   echo "    Note: worker-identity outputs not found on this deployment — skipping worker.* values. Bring the ACP workers online only after re-provisioning with that identity (see WORKERS.md)."
 fi
 
 echo "==> Writing $VALUES_FILE"
 {
-  if [[ -n "$IMAGE_REGISTRY" ]]; then
-    cat <<EOF
+  cat <<EOF
 global:
-  imageRegistry: $IMAGE_REGISTRY
-
+  namespace: "$SERVICE_ACCOUNT_NAMESPACE"
 EOF
+  if [[ -n "$IMAGE_REGISTRY" ]]; then
+    echo "  imageRegistry: $IMAGE_REGISTRY"
   fi
   cat <<EOF
+
 azure:
   tenantId: $TENANT_ID
   keyVaultName: $KEY_VAULT_NAME

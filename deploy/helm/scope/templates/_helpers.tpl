@@ -47,14 +47,19 @@ GHCR) wins; otherwise falls back to `global.imageRegistry` (the default
 distribution point for the core app services, conventionally
 ghcr.io/<owner>/scope). Falls back to `global.imageTag` when `.image.tag`
 is unset, and to a bare (unregistered) name when no registry applies at all.
+An optional `.image.digest` takes precedence over tags.
 */}}
 {{- define "scope.image" -}}
 {{- $tag := .image.tag | default .context.Values.global.imageTag -}}
+{{- $version := printf ":%s" $tag -}}
+{{- if .image.digest -}}
+{{- $version = printf "@%s" .image.digest -}}
+{{- end -}}
 {{- $registry := .image.registry | default .context.Values.global.imageRegistry -}}
 {{- if $registry -}}
-{{- printf "%s/%s:%s" $registry .image.repository $tag -}}
+{{- printf "%s/%s%s" $registry .image.repository $version -}}
 {{- else -}}
-{{- printf "%s:%s" .image.repository $tag -}}
+{{- printf "%s%s" .image.repository $version -}}
 {{- end -}}
 {{- end -}}
 
