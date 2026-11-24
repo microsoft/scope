@@ -24,7 +24,9 @@ projects — so run it yourself, once.
 ## Steps
 
 ```bash
-kubectl -n scope port-forward svc/api 18080:80 &
+# Use the same global.namespace as the Helm release and worker bootstrap.
+NAMESPACE=scope
+kubectl -n "$NAMESPACE" port-forward svc/api 18080:80 &
 
 # Find the project to seed into: the "Initial Project" created by
 # db-migrate on first install, or one of your own.

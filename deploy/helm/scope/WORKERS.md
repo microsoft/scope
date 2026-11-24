@@ -9,7 +9,10 @@ templated yet (see
 the intended production pattern). Bring them online with one command:
 
 ```bash
-./scripts/bootstrap-workers.sh --acr <acrName>
+# Use global.namespace from the original install's values file.
+NAMESPACE=scope
+./scripts/bootstrap-workers.sh --acr <acrName> \
+  --namespace "$NAMESPACE" --values-file my-values.yaml
 ```
 
 This:
@@ -29,6 +32,12 @@ Run `./scripts/bootstrap-workers.sh --help` for all flags, including
 `--skip-build`, `--skip-copilot`, `--skip-claude-code`,
 `--skip-agent-registration`, and custom
 `--namespace`/`--release`/`--chart`/`--image-tag`.
+
+`--namespace` must match both the Helm release namespace and
+`global.namespace` in your values file. For a custom namespace, provision
+both backend and worker Bicep namespace parameters to that same value
+before generating values; the chart cannot deploy the identities into
+different namespaces.
 
 > Pass `--values-file <path>` so the upgrade re-merges your original values
 > override file against the chart's current defaults, instead of freezing a
@@ -123,8 +132,12 @@ need their own mount to receive it.
 
 `scripts/generate-values-from-bicep.sh` picks up the worker identity's
 outputs automatically if your Bicep deployment provisioned one; otherwise
-those two values stay blank and are only required once you set
-`workers.<name>.enabled: true`.
+worker identity defaults remain unchanged and a client ID is only required
+once you set `workers.<name>.enabled: true`. A provisioned worker identity
+must expose its client ID, service-account name, and namespace together.
+Its namespace must equal the backend identity's namespace, which the
+generator writes as `global.namespace`; missing or incompatible namespace
+outputs are errors, not a fallback to `scope`.
 
 **Known limitation**: full isolation needs worker code changes this chart
 can't make alone. `coder-acp-copilot`/`coder-acp-claude-code` are a single

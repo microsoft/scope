@@ -17,6 +17,8 @@ This README covers phases 2 and 3.
   Provider CSI driver + workload identity, Key Vault, Storage, Cosmos DB,
   Redis, ACR).
 - `helm` and `kubectl`, configured against the target cluster.
+- ACP workers require the Kubernetes `SidecarContainers` feature (enabled
+  by default since 1.29, stable since 1.33).
 
 ## Phase 2: Deploy the core app
 
@@ -28,11 +30,25 @@ This README covers phases 2 and 3.
 
 Otherwise, hand-author `my-values.yaml` — see [Configuration](./CONFIGURATION.md).
 
+The generated `global.namespace` comes from
+`workloadIdentityServiceAccountNamespace`. If worker identity outputs are
+present, their namespace must match: this chart uses a single namespace.
+Missing required namespace outputs or mismatched identities stop generation
+before the values file is written. Re-deploy the Bicep template with
+matching namespace parameters rather than guessing a namespace.
+
 **2. Install the chart:**
 
+Use the **same namespace** for `global.namespace`, the Helm release, and
+all later `kubectl`/worker-bootstrap commands. `--create-namespace` creates
+the Helm release namespace, not a different `global.namespace`.
+
 ```bash
+# Replace scope with global.namespace from my-values.yaml if customized.
+NAMESPACE=scope
+
 helm upgrade --install scope deploy/helm/scope \
-  --namespace scope --create-namespace \
+  --namespace "$NAMESPACE" --create-namespace \
   -f my-values.yaml \
   --wait --timeout 5m
 ```
@@ -46,7 +62,8 @@ Bicep doesn't provision — see
 ACP coding-agent workers are disabled by default:
 
 ```bash
-./scripts/bootstrap-workers.sh --acr <acrName>
+./scripts/bootstrap-workers.sh --acr <acrName> \
+  --namespace "$NAMESPACE" --values-file my-values.yaml
 ```
 
 Builds + pushes both worker images, enables their Deployments, and
@@ -57,16 +74,29 @@ API key they need yourself via the Portal's **Secrets** tab (or
 ## Verify
 
 ```bash
-kubectl get pods -n scope
+kubectl get pods -n "$NAMESPACE"
 
 # No ingress yet — reach services via port-forward.
-kubectl -n scope port-forward svc/api 18080:80 &
-kubectl -n scope port-forward svc/scope-portal 5100:80 &
+kubectl -n "$NAMESPACE" port-forward svc/api 18080:80 &
+kubectl -n "$NAMESPACE" port-forward svc/scope-portal 5100:80 &
 
 scope agent list --url http://localhost:18080   # or open http://localhost:5100
 ```
 
 Then try an end-to-end run — see [Run a sample scenario](./SAMPLE-SCENARIO.md).
+
+## Chart regression checks
+
+With Helm 3 and `jq` on `PATH`, run:
+
+```bash
+pnpm exec vitest run scripts/helm-scope.test.ts scripts/generate-values-from-bicep.test.ts
+```
+
+These render the actual chart and run the generator against mocked Azure
+outputs, including custom and mismatched namespaces. No cluster or Azure
+credentials are used. The rendering suite is explicitly skipped when
+Helm is not installed.
 
 ## Learn more
 
