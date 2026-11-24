@@ -57,8 +57,8 @@ export const StreamingLive: Story = {
   },
 };
 
-/** Completed run: stream finished, no auto-scroll affordances shown. */
-export const StreamComplete: Story = {
+/** Stored JSON events for a completed run; no SSE connection is needed. */
+export const CompletedRun: Story = {
   args: {
     runId: "demo-run",
     logs: sampleLogs,

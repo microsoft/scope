@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Run, RunState, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ResourceDocument, ResourceRevisionDocument, ResourceBindingSpec, CreateResourceBody, CreateResourceRevisionBody, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir } from "@/types";
+import type { Run, RunState, LogEvent, CriteriaDocument, CriteriaGraphData, GeneratePromptResponse, AnalysisResponse, PromptFeatureDocument, Report, BulkReportStatus, BulkReportSummary, ReportTemplate, ReportTrigger, ReportTemplateSystemPrompt, KeyDocument, KeyValidationResult, CreateKeyRequest, UpdateKeyRequest, CodingAgent, AgentVersion, McpServerDocument, CreateMcpServerRequest, UpdateMcpServerRequest, BulkResubmitOverrides, Insight, InsightWithReference, TaskPrompt, TaskPromptFeatureExtractionResult, Model, FeatureFlag, SkillDocument, SkillSearchResult, SkillDiscoveryResult, SkillRevisionDocument, CodebaseDocument, CodebaseRevisionDocument, CodebaseSourceType, ResourceDocument, ResourceRevisionDocument, ResourceBindingSpec, CreateResourceBody, CreateResourceRevisionBody, ExtensionDocument, ExtensionSearchResult, ExtensionVersionInfo, MdpResponse, AccountDocument, CreateAccountRequest, UpdateAccountRequest, ProfileWithVersion, ProfileVersionDocument, ProfileDocument, RunGroup, RunFacetsResponse, CursorPaginatedResponse, IterationOp, GateConfig, GateId, PromptType, RunSortField, RunSortDir } from "@/types";
 
 import type { Project, CreateProjectRequest, UpdateProjectRequest } from "@/types";
 import { qs } from "./url";
@@ -394,12 +394,19 @@ export const api = {
     return `${BASE}/requests/${id}/logs?fromStart=${fromStart}`;
   },
 
+  /** Fetch stored request logs as JSON for a terminal run. */
+  getLogEvents: (id: string): Promise<LogEvent[]> => request(`/requests/${id}/logs/events`),
+
   // ─── Per-run artifact URLs (for historical attempts) ─────────────────────
 
   /** SSE endpoint URL for log streaming of a specific attempt */
   runLogsUrl: (requestId: string, runId: string, fromStart = true): string => {
     return `${BASE}/requests/${requestId}/runs/${runId}/logs?fromStart=${fromStart}`;
   },
+
+  /** Fetch stored logs for a historical execution attempt. */
+  getRunLogEvents: (requestId: string, runId: string): Promise<LogEvent[]> =>
+    request(`/requests/${requestId}/runs/${runId}/logs/events`),
 
   /** HAR file download URL for a specific attempt */
   runHarUrl: (requestId: string, runId: string, iteration?: number): string => {
@@ -785,6 +792,9 @@ export const api = {
   reportLogsUrl: (id: string, fromStart = true): string => {
     return `${BASE}/reports/${id}/logs?fromStart=${fromStart}`;
   },
+
+  /** Fetch stored report logs as JSON for a terminal report. */
+  getReportLogEvents: (id: string): Promise<LogEvent[]> => request(`/reports/${id}/logs/events`),
 
   // ─── Report Templates ─────────────────────────────────────────────────────
 
