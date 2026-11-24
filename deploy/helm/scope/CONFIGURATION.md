@@ -48,6 +48,11 @@ workers use this (they pull from ACR, not GHCR), as does `jobs.dbMigrate`
 (which needs a separate `:builder`-tagged image — see
 `templates/jobs/db-migrate.yaml`).
 
+`image.digest`, when set for a service image, takes precedence over its tag
+and `global.imageTag`. The MCP sidecars use this to pin the verified
+`0.4.7-stdio` multi-architecture image. To change their release, update the
+digest too; changing only `image.tag` leaves the pinned image unchanged.
+
 ## Image registry strategy
 
 By default, the six core services (api, portal, judge, token-manager,

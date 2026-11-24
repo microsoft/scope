@@ -76,18 +76,37 @@ sidecar (`workers.<name>.mcpGateway`, enabled by default) that aggregates
 MCP servers for the worker, mirroring docker-compose's
 `mcp-gateway-copilot`/`mcp-gateway-claude-code` services:
 
+- Uses the **0.4.7 stdio image pinned by multi-architecture digest** in
+  `values.yaml`, retaining Node.js/`npx`, `uvx`, and remote HTTP/SSE MCP
+  support. That release's
+  [`start --host` flag](https://github.com/mcpjungle/MCPJungle/blob/974e2fabe4694d3b613d281e6e4e8d2fa3f6da74/cmd/start.go)
+  binds the listener to `127.0.0.1:8080`. Development-mode registration is
+  unauthenticated, so it must not listen on the Pod IP; omitting a Service
+  does not prevent other pods from reaching a Pod IP.
 - Templated as a **native sidecar** (`initContainers` entry with
-  `restartPolicy: Always`, GA since Kubernetes 1.29) rather than a regular
-  container, so kubelet starts it first and holds the Pod at `NotReady`
-  until its `/health` readiness probe passes — the worker's first task
-  never races a gateway that isn't listening yet.
+  `restartPolicy: Always`; stable since Kubernetes 1.33, enabled by default
+  since 1.29). Its **startup probe** gates the initial start of the worker
+  queue consumer until `/health` succeeds, retrying every two seconds for
+  up to approximately two minutes before restarting the sidecar.
+  A readiness probe alone only controls Pod readiness, not worker startup.
+  See the [Kubernetes lifecycle contract](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/#sidecar-containers-and-pod-lifecycle).
+- Both probes execute the image's `curl` inside the container against
+  `http://127.0.0.1:8080/health`, with a two-second request timeout.
+  Kubelet HTTP probes use the Pod IP and cannot reach this loopback-only
+  listener.
 - Shares an `emptyDir` volume mounted at `/workspace` with the worker
   container (compose's `copilot_workspace`/`claude_workspace` volumes).
-- The worker reaches it at `http://localhost:8080` (same Pod — no
+- The worker reaches it at `http://127.0.0.1:8080` (same Pod — no
   `Service` object needed).
 
 Set `workers.<name>.mcpGateway.enabled: false` only if your scenarios never
-configure MCP servers.
+configure MCP servers. If overriding the image, update its `digest` as
+well as its `tag` (`digest` takes precedence), and verify that the image
+supports the binding flags, `curl` probes, and your MCP transports.
+
+Loopback binding excludes other pods, not containers or benchmark code
+inside this worker Pod. It does not resolve the trusted-processor versus
+untrusted-executor limitation described below.
 
 ## Worker identity isolation
 
