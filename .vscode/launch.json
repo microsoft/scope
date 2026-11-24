@@ -2,6 +2,61 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Scope: Attach Native Node",
+      "type": "node",
+      "request": "attach",
+      "address": "127.0.0.1",
+      "port": "${input:scopeInspectorPort}",
+      "sourceMaps": true,
+      "restart": true,
+      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/**/node_modules/**"]
+    },
+    {
+      "name": "Scope: Attach Kind Node (Private Tunnel)",
+      "type": "node",
+      "request": "attach",
+      "address": "127.0.0.1",
+      "port": "${input:scopeInspectorPort}",
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": "/app",
+      "sourceMaps": true,
+      "restart": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Scope: Gateway (Native Rust)",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": { "args": ["build", "--locked", "--manifest-path", "${workspaceFolder}/apps/gateway/Cargo.toml"], "filter": { "name": "gateway", "kind": "bin" } },
+      "cwd": "${workspaceFolder}/apps/gateway",
+      "args": ["--port", "18000", "--api-port", "18897"]
+    },
+    {
+      "name": "Scope: Python (Workspace Environment)",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Scope: Portal (Desktop Chrome)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "${input:scopeBrowserOrigin}",
+      "webRoot": "${workspaceFolder}/apps/portal",
+      "sourceMaps": true
+    },
+    {
+      "name": "Scope: Portal (Desktop Edge)",
+      "type": "pwa-msedge",
+      "request": "launch",
+      "url": "${input:scopeBrowserOrigin}",
+      "webRoot": "${workspaceFolder}/apps/portal",
+      "sourceMaps": true
+    },
+    {
       "name": "Docker Dev Copilot",
       "type": "node",
       "request": "launch",
@@ -31,6 +86,19 @@
     }
   ],
   "inputs": [
+    {
+      "id": "scopeInspectorPort",
+      "type": "pickString",
+      "description": "Inspector started with pnpm dev:debug --service=<name>",
+      "options": ["9230", "9231", "9232", "9233", "9240", "9241", "9242", "9243", "9250", "9251", "9252", "9253", "9254", "9260", "9261", "9262", "9263"],
+      "default": "9230"
+    },
+    {
+      "id": "scopeBrowserOrigin",
+      "type": "promptString",
+      "description": "Current PUBLIC_ORIGIN reported by pnpm dev:doctor",
+      "default": "https://localhost:8443"
+    },
     {
       "id": "apiDebugPort",
       "type": "promptString",

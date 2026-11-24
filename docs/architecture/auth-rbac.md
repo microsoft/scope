@@ -68,6 +68,13 @@ must be resolved with stakeholders before or during implementation.
 
 ## Current implementation
 
+The experimental [devcontainer](devcontainer.md) verifies Entra Local 0.1.1's
+external discovery/JWK issuers through a private internal TLS endpoint and
+dev-edge. In Kind mode, a real browser sign-in through the owner-private
+Codespaces forward works; a local-browser sign-in has not been checked yet. The
+devcontainer does not change this authentication boundary: no synthetic
+principal or verification bypass is introduced.
+
 | Component | In this branch | Relevant files |
 |-----------|-------|----------------|
 | API | Verifies the IdP signature and claims before any access-cache lookup. `/users/me` owns explicit enrollment; subsequent middleware resolves existing active users. Public/anonymous rollout is unchanged. | [apps/api/src/index.ts](../../apps/api/src/index.ts), [auth/middleware.ts](../../apps/api/src/auth/middleware.ts), [routes/users.ts](../../apps/api/src/routes/users.ts) |

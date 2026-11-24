@@ -296,6 +296,7 @@ not open the PR against the fork unless the user explicitly asks you to.
 | [docs/architecture/post-processing.md](docs/architecture/post-processing.md) | Post-processing pipeline, ATIF generation, handler extensibility |
 | [docs/architecture/observability.md](docs/architecture/observability.md) | Application telemetry, Azure Monitor OTel distro, custom worker metrics |
 | [docs/architecture/kubedock.md](docs/architecture/kubedock.md) | Kubedock sidecar, container access for agents, Kustomize Component toggle |
+| [docs/architecture/devcontainer.md](docs/architecture/devcontainer.md) | Experimental DinD devcontainer: auth spike, Kind mode (`dev:up --mode=kind`), debugging, identities, evidence and remaining gates |
 | [docs/research/realtime-data-flow.md](docs/research/realtime-data-flow.md) | SSE + Change Streams, Redis pub/sub, polling patterns |
 | [docs/research/delta-storage.md](docs/research/delta-storage.md) | Space-efficient storage of iteration snapshots |
 | [docs/shared-dev-infra.md](docs/shared-dev-infra.md) | Shared dev infrastructure (CosmosDB) setup and worktree isolation |

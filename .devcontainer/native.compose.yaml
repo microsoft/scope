@@ -1,0 +1,79 @@
+services:
+  mongodb:
+    image: mongo:7.0.17
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports: ["127.0.0.1:${MONGODB_PORT:-27000}:27017"]
+    volumes: ["mongodb:/data/db"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ping:1}).ok || quit(1)"]
+      interval: 2s
+      timeout: 5s
+      retries: 45
+  mongo-init:
+    image: mongo:7.0.17
+    depends_on:
+      mongodb: { condition: service_healthy }
+    entrypoint: ["mongosh", "--host", "mongodb", "--quiet", "--eval"]
+    command:
+      - "try { rs.status() } catch (error) { if (error.code !== 94) throw error; rs.initiate({_id:'rs0',members:[{_id:0,host:'mongodb:27017'}]}) }"
+  redis:
+    image: redis:7.4.2-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["127.0.0.1:${REDIS_PORT:-6300}:6379"]
+    volumes: ["redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.29.0
+    command: ["azurite", "--loose", "--skipApiVersionCheck", "--blobHost", "0.0.0.0", "--queueHost", "0.0.0.0", "--tableHost", "0.0.0.0", "--location", "/data", "--silent"]
+    ports:
+      - "127.0.0.1:${AZURITE_BLOB_PORT:-10100}:10000"
+      - "127.0.0.1:${AZURITE_QUEUE_PORT:-10200}:10001"
+      - "127.0.0.1:${AZURITE_TABLE_PORT:-10300}:10002"
+    volumes: ["azurite:/data"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:10001',r=>process.exit(r.statusCode===400?0:1)).on('error',()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  lowkey-init:
+    image: nagyesta/lowkey-vault:7.2.0-ubi10-minimal
+    user: "0:0"
+    entrypoint: ["chown", "1000:1000", "/data"]
+    volumes: ["lowkey:/data"]
+  lowkey-vault:
+    image: nagyesta/lowkey-vault:7.2.0-ubi10-minimal
+    user: "1000:1000"
+    depends_on:
+      lowkey-init: { condition: service_completed_successfully }
+    ports:
+      - "127.0.0.1:${LOWKEY_VAULT_PORT:-18444}:8443"
+      - "127.0.0.1:${LOWKEY_IDENTITY_PORT:-18082}:8080"
+    environment:
+      SERVER_SSL_KEY_STORE: file:/certs/lowkey.p12
+      SERVER_SSL_KEY_STORE_PASSWORD: scope-local-development
+      SERVER_SSL_KEY_STORE_TYPE: PKCS12
+      LOWKEY_ARGS: "--server.port=8443 --spring.main.banner-mode=off --LOWKEY_VAULT_NAMES=- --LOWKEY_IMPORT_LOCATION=/data/export.json --LOWKEY_EXPORT_LOCATION=/data/export.json"
+      LOWKEY_SEED_URI: "https://localhost:${LOWKEY_VAULT_PORT:-18444}"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        [ -f /data/export.json ] || printf '%s\n' "{\"vaults\":[{\"attributes\":{\"baseUri\":\"$$LOWKEY_SEED_URI\",\"recoveryLevel\":\"Recoverable+Purgeable\",\"recoverableDays\":90,\"created\":0,\"deleted\":null},\"keys\":{},\"secrets\":{},\"certificates\":{}}]}" > /data/export.json;
+        exec java -jar /lowkey-vault.jar $$LOWKEY_ARGS
+    volumes:
+      - lowkey:/data
+      - ${DEV_CERT_DIR:?required}:/certs:ro
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--cacert", "/certs/lowkey-ca.pem", "https://localhost:8443/ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+volumes:
+  mongodb:
+  redis:
+  azurite:
+  lowkey:

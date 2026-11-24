@@ -29,6 +29,20 @@ const buildMetadata = resolvePortalBuildMetadata({
   readCommit: () => readGitValue(["rev-parse", "HEAD"]),
   readBranch: () => readGitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
 });
+const edgeOrigin = process.env.VITE_DEV_EDGE_ORIGIN
+  ? new URL(process.env.VITE_DEV_EDGE_ORIGIN)
+  : undefined;
+if (
+  edgeOrigin &&
+  (edgeOrigin.protocol !== "https:" ||
+    edgeOrigin.username ||
+    edgeOrigin.password ||
+    edgeOrigin.pathname !== "/" ||
+    edgeOrigin.search ||
+    edgeOrigin.hash)
+) {
+  throw new Error("VITE_DEV_EDGE_ORIGIN must be an exact HTTPS origin");
+}
 
 export default defineConfig({
   plugins: [react()],
@@ -44,6 +58,9 @@ export default defineConfig({
   },
   server: {
     port: 5100,
+    strictPort: edgeOrigin ? true : undefined,
+    allowedHosts: edgeOrigin ? [edgeOrigin.hostname] : undefined,
+    hmr: edgeOrigin ? { protocol: "wss", host: edgeOrigin.hostname, clientPort: Number(edgeOrigin.port || "443") } : undefined,
     proxy: {
       "/api": {
         target: process.env.VITE_API_PROXY_TARGET || "http://localhost:3100",

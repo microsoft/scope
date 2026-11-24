@@ -64,6 +64,49 @@ Python/compiler toolchain. Keep required dependency build scripts allowlisted in
 
 ## Local development
 
+### Choose how to run Scope
+
+| Option | Commands | Where it runs | Hot reload | Status |
+| --- | --- | --- | --- | --- |
+| **Docker Compose** | `pnpm docker:dev:copilot` or `pnpm docker:dev:all` | Docker on your machine | Yes (Compose watch, polling) | Recommended; see [Compose workflow](#compose-workflow) |
+| **Native processes** | `pnpm docker:up:infra`, then `pnpm dev:api`, `pnpm dev:portal`, `pnpm dev:<worker>` | Apps on your machine, databases in Docker | Yes | Supported; see [Compose workflow](#compose-workflow) |
+| **Devcontainer, native mode** | `pnpm dev:up --mode=native` | Inside the devcontainer | Yes | Experimental; not yet tested end to end |
+| **Devcontainer, Kind mode** | `pnpm dev:up --mode=kind --services=api,portal` | Kind cluster inside the devcontainer | No (rebuild with `--build`) | Experimental; tested in Codespaces, including browser sign-in |
+
+Which to pick:
+
+- **Day-to-day work and running real benchmarks:** Docker Compose. It is the only
+  option that runs workers, which spend provider credits.
+- **Working on a single service:** native processes, for the fastest reloads and
+  simplest debugging.
+- **Kubernetes or ServiceAccount work:** the devcontainer in Kind mode, preferably
+  in GitHub Codespaces until it has been tried on local Docker.
+
+### Devcontainer (experimental)
+
+The devcontainer bundles the toolchain and its own Docker daemon (Docker-in-Docker),
+so it needs only Docker and VS Code, but it must run as a **privileged container**.
+It is not a security sandbox: use a disposable environment without sensitive
+mounts or credentials.
+
+- Native mode runs the databases in the devcontainer's Docker and the API and
+  Portal as processes behind one HTTPS address.
+- Kind mode runs the whole stack in a Kubernetes cluster with one ServiceAccount
+  per workload. The first start builds a large tools image (about 6.5 GB); later
+  starts take about five minutes. Workers are rendered but never started, and
+  only the API and Portal have been verified.
+- In Codespaces, forward port 8080 as a **private** port, open the printed
+  `https://<codespace>-8080.app.github.dev` URL, and sign in with
+  `alice@entralocal.dev` / `Password1!`.
+- Docker Desktop, WSL2, macOS and local-browser sign-in have not been validated.
+  On WSL2, keep the repository on the Linux filesystem, not under `/mnt/c`.
+
+See [devcontainer.md](./docs/architecture/devcontainer.md) for the commands,
+debugging, identities, evidence and remaining work. Never transfer a development
+CA private key to the browser host.
+
+### Compose workflow
+
 Local authentication requires your browser to trust a development certificate.
 The Portal development scripts run `mkcert -install` to add a local certificate
 authority to the OS/browser trust store and generate the emulator's `localhost`
