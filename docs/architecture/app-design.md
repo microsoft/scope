@@ -88,6 +88,12 @@ erDiagram
 - **ResourceRevision** — Immutable lifecycle snapshot in `resource-revisions` containing normalized setup/teardown scripts, exported names, parameter declarations, `contentSha256`, and canonical `{slug}@r{N}` ref. Revisions deduplicate against the latest revision only. See [resources](resources.md).
 - **ProfileVersion.resources** — Immutable resource binding specs (`{ref, params}`) stored with a profile version. Submit resolves them to pinned request `resources[]` and merges profile preset parameters with run-supplied values using profile-wins precedence.
 
+Downloaded run archives retain the importable `run.yaml` schema: the archive
+folder and top-level `_id` identify the stable request, `run._id` identifies
+the execution attempt (which changes on retry), and `submissionId` groups
+requests submitted together. Every exported request folder includes a
+`run.yaml` header explaining these IDs; YAML comments preserve import compatibility.
+
 ### Typed prompts, AGENTS.md, and size-based storage
 
 Task prompts live in a single `task-prompts` collection that is now **typed** and
