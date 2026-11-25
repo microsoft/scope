@@ -117,6 +117,12 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
         throw new Error(`Report ${reportId} has no templateId — reports without a template are no longer supported`);
       }
 
+      // Report templates are project-scoped; without a projectId the lookup
+      // would query a project literally named "undefined" (issue #1303).
+      if (!doc.projectId) {
+        throw new Error(`Report ${reportId} has no projectId — cannot resolve its project-scoped template`);
+      }
+
       const template = await this.fetchReportTemplate(doc.templateId, doc.projectId);
       if (!template) {
         throw new Error(`Report template '${doc.templateId}' not found for report ${reportId}`);

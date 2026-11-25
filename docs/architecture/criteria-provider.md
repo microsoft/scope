@@ -233,3 +233,11 @@ threads the run's `projectId` into `getCriteriaProvider(projectId)` /
 fails **400** rather than falling back to a global `findOne({ id })`. `POST /generate-prompt`
 (criteria and prompt-features) is intentionally left with an *optional* `projectId` — it generates
 rather than acting on a single stored entity — and is called out as such in the OpenAPI schema.
+
+The judge **fails closed** on a missing scope. When criteria come from the REST API
+(`CRITERIA_API_URL` is set), `POST /api/v1/evaluate` rejects a request without `projectId` with
+**400**, and `evaluateWorkspace` throws before consulting any provider — an unscoped lookup would
+otherwise silently resolve the legacy/global criteria and produce a wrong evaluation. The
+single-tenant filesystem provider (local dev) ignores `projectId`, so it stays optional there.
+The coder queue processor and the report-generator likewise fail a work item that has no
+`projectId` instead of querying a project literally named `"undefined"` (issue #1303).
