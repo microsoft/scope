@@ -42,6 +42,46 @@ const sampleHar = {
 
 const harHandler = http.get("*/api/v1/requests/:id/har", () => HttpResponse.json(sampleHar));
 
+// A HAR mixing plain HTTP calls with one WebSocket connection recorded the way
+// the gateway writes it: a 101 upgrade entry carrying `_webSocketMessages`.
+const wsStart = base / 1000;
+const webSocketHar = {
+  log: {
+    entries: [
+      sampleHar.log.entries[0],
+      {
+        startedDateTime: new Date(base + 500).toISOString(),
+        time: 4200,
+        request: {
+          method: "GET",
+          url: "wss://realtime.example.com/v1/socket",
+          headers: [
+            { name: "upgrade", value: "websocket" },
+            { name: "connection", value: "Upgrade" },
+          ],
+        },
+        response: {
+          status: 101,
+          statusText: "Switching Protocols",
+          headers: [{ name: "upgrade", value: "websocket" }],
+          content: { size: 0, mimeType: "" },
+        },
+        _webSocketMessages: [
+          { type: "send", time: wsStart + 0.5, opcode: 1, data: JSON.stringify({ op: "subscribe", channel: "runs" }) },
+          { type: "receive", time: wsStart + 0.62, opcode: 1, data: JSON.stringify({ op: "ack", channel: "runs" }) },
+          { type: "receive", time: wsStart + 1.9, opcode: 1, data: JSON.stringify({ op: "event", data: { runId: "r-1", status: "running" } }) },
+          { type: "send", time: wsStart + 3.1, opcode: 1, data: "ping" },
+          { type: "receive", time: wsStart + 3.12, opcode: 1, data: "pong" },
+          // Binary frame that is valid UTF-8, and one that is not.
+          { type: "receive", time: wsStart + 4.0, opcode: 2, data: btoa(JSON.stringify({ op: "binary-json" })) },
+          { type: "receive", time: wsStart + 4.2, opcode: 2, data: btoa(String.fromCharCode(0xff, 0xfe, 0x00, 0x81)) },
+        ],
+      },
+      sampleHar.log.entries[1],
+    ],
+  },
+};
+
 const meta = {
   component: HarNetworkViewer,
   tags: ["ai-generated", "needs-work"],
@@ -71,4 +111,15 @@ type Story = StoryObj<typeof meta>;
 /** Scroll down and select a lower row: the detail panel should stay in view. */
 export const LongList: Story = {
   args: { runId: "demo-run" },
+};
+
+/**
+ * A WebSocket connection shows as type "ws". Selecting it opens the Messages
+ * tab with every frame, its direction, timing and decoded payload.
+ */
+export const WithWebSocket: Story = {
+  args: { runId: "demo-run" },
+  parameters: {
+    msw: { handlers: [http.get("*/api/v1/requests/:id/har", () => HttpResponse.json(webSocketHar))] },
+  },
 };
