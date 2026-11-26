@@ -243,7 +243,7 @@ The CLI exposes `codebase` commands for managing codebases and revisions. The Po
 | `packages/shared/src/codebases/codebase-client.ts` | Worker-side API client for revision resolution and archive download |
 | `packages/shared/src/codebases/codebase-seeder.ts` | Worker workspace seeding |
 | `apps/api/src/routes/codebases.ts` | REST endpoints for codebases, revisions, uploads, and archive proxying |
-| `apps/api/src/archive-har.ts` | Run archive packing, including `codebase.tar.gz` bundling and `run.yaml` codebase block |
+| `apps/api/src/archive-har.ts` | Run archive packing, including `codebase.tar.gz` bundling and `run.yaml` codebase block. Per-turn artifacts (HAR, chat export, chat result, tool calls, ATIF) are driven by the `BUNDLED_RUN_ARTIFACTS` spec table, so a new artifact type is one `BundledArtifactSpec` entry |
 | `apps/portal/src/pages/CodebaseDetail.tsx` | Codebase page mirroring the skills layout: selected revision card on the left, sidebar Details + clickable deep-linkable Revisions list, archive download |
 | `apps/api/src/utils/codebase-helpers.ts` | Blob container naming and submit-time codebase spec resolution |
 | `apps/api/src/routes/requests/index.ts` | Run submission integration and `codebase` spec handling |
