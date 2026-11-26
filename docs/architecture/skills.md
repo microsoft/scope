@@ -199,6 +199,12 @@ When a worker picks up a queued run, the queue processor:
 2. **Downloads** each skill's tar.gz archive via `SkillClient.downloadSkillArchive(ref)`
 3. **Extracts** to the workspace filesystem using `extractSkillsToWorkspace()`
 
+`extractSkillsToWorkspace()` takes only the resolved `SkillConfig[]`: each
+config carries its own `ref` (which archive to download) and `name` (which
+directory to install into), so there is no separate refs array to keep aligned.
+A skill whose download or extraction fails is logged and skipped; the remaining
+skills are still installed.
+
 The agent then discovers skills natively from the filesystem at startup.
 
 ```mermaid

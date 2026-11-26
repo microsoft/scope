@@ -590,7 +590,6 @@ export class CodingAgentQueueProcessor extends BaseQueueProcessor<RequestDocumen
     const workspacePath = this.processor.workspacePath || process.env.WORKSPACE_PATH || "/workspace";
     const skillClient = new SkillClient(apiBaseUrl);
     const installedPaths = await extractSkillsToWorkspace({
-      refs: requestDoc.skillRevisions,
       skillConfigs,
       skillClient,
       projectId: requestDoc.projectId,
