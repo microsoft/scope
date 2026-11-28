@@ -60,6 +60,7 @@ describe("parent-derived project writes", () => {
 
   beforeEach(() => {
     mocks = createAllMockDependencies();
+    // Keep worker and template resolution valid so failures isolate project checks.
     agentCollection = createMockCollection<CodingAgentDocument>([{
       _id: "coder-acp-copilot",
       name: "Fixture worker",
@@ -97,6 +98,7 @@ describe("parent-derived project writes", () => {
     ])("rejects an unavailable parent project with $status (query=$withQuery) before writing", async ({ status, withQuery }) => {
       const unavailableProject = randomUUID();
       const liveProject = randomUUID();
+      // A valid first parent exposes partial writes if a batch validates only as it inserts.
       const runs = [
         ...(bulk ? [parentRun(liveProject)] : []),
         parentRun(unavailableProject),
@@ -113,6 +115,7 @@ describe("parent-derived project writes", () => {
       });
       _injectTestDependencies({ ...mocks, collection, agentCollection, reportTemplateCollection });
 
+      // An unrelated live query scope must not replace the parent's destination.
       const query = withQuery ? `?projectId=${liveProject}` : "";
       const response = await request(testServer())
         .post(`/api/v1${path}${query}`)
@@ -123,6 +126,7 @@ describe("parent-derived project writes", () => {
         ? `Project '${unavailableProject}' not found.`
         : `Project '${unavailableProject}' is deleted; restore it before writing to it.`);
       expect(mocks.projectStore.get).toHaveBeenCalledWith(unavailableProject, { includeDeleted: true });
+      // Reject the entire operation before durable writes or worker dispatch.
       expect(collection.insertMany).not.toHaveBeenCalled();
       expect(mocks.reportCollection.insertOne).not.toHaveBeenCalled();
       expect(mocks.reportQueueClient.sendMessage).not.toHaveBeenCalled();
@@ -142,6 +146,7 @@ describe("parent-derived project writes", () => {
         .send(body(runs.map(run => run._id)));
 
       expect(response.status, JSON.stringify(response.body)).toBe(201);
+      // Repeated parents share one lookup but retain their individual destinations.
       expect(mocks.projectStore.get).toHaveBeenCalledTimes(bulk ? 2 : 1);
       expect(mocks.projectStore.get).toHaveBeenCalledWith(firstProject, { includeDeleted: true });
       if (bulk) {

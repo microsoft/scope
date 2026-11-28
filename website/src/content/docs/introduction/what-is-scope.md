@@ -83,6 +83,14 @@ It is **not** a hosted IDE or an agent runtime you embed in your own
 products — it's a measurement platform that drives existing agents
 against tasks you control.
 
+## Part of Developer Agent Experience
+
+Scope is the measurement tool of the
+[Developer Agent Experience (DevAX)](https://aka.ms/agent-experience)
+practice. DevAX covers the rest of the loop: deciding what to measure,
+designing evals that hold up, and testing fixes before you ship them.
+Start with its playbook if you're new to evaluating agent experience.
+
 ## Who it's for
 
 Scope is for teams that need to measure and compare AI coding

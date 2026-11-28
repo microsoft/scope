@@ -168,6 +168,14 @@ maintaining another release lookup or installation implementation.
 in-place requires `gh` configured with GitHub authentication. Alternatively,
 rerun the public installer without `gh`.
 
+The updater downloads into a temporary `.mjs` file beside the installed command,
+requires the executable `#!/usr/bin/env node` header, runs it with the current Node
+executable, and verifies its `--version` matches the selected release tag before
+replacing the installation atomically. Validation has a ten-second timeout with
+forced termination and disables update checks in the child process. A failed
+download, invalid bundle, or version mismatch removes the temporary file and
+leaves the installed CLI intact.
+
 ## Update check
 
 After each command, the CLI performs a non-blocking check for newer versions:

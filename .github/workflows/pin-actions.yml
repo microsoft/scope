@@ -1,0 +1,35 @@
+name: Pin GitHub Actions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/pinact.yaml"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/pinact.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pin-actions:
+    name: Validate immutable action references
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Validate action pins
+        uses: suzuki-shunsuke/pinact-action@b1a1f46bb10f2908950d95f626ca8cc109e2cf7d # v3.1.0
+        with:
+          config: .github/pinact.yaml
+          fix: "false"
+          github_token: ${{ github.token }}
+          verify: "true"

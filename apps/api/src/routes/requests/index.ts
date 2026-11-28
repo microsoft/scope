@@ -462,6 +462,44 @@ apiRoute(ctx.app, ctx.registry, {
     const { scenario: scenarioObj, persona: personaObj, maxIterations, personaInstructions, count = 1, model: requestedModel, reasoningEffort: requestedReasoningEffort, mcpServers: mcpServerSlugs, skills: skillSlugs, extensions: extensionIds, agentVersion: requestedAgentVersion, profileId: requestedProfileSpec, profileVariations, priority: requestedPriority, agentsMd: requestedAgentsMd, agentsMdParentIds: requestedAgentsMdParentIds, gates: requestedGates, codebase: codebaseSpec, codebaseRevisionId: requestedCodebaseRevisionId, resources: resourceSpecs } = req.body;
     let worker = req.query.worker as string | undefined;
 
+    const typedProfileVariations: string[] = Array.isArray(profileVariations)
+      ? profileVariations.filter((v: unknown): v is string => typeof v === "string")
+      : [];
+    const isVariationSubmit = typedProfileVariations.length > 0;
+
+    if (isVariationSubmit) {
+      if (!requestedProfileSpec) {
+        res.status(400).json({ error: "profileId (the base profile) is required when profileVariations are provided" });
+        return;
+      }
+
+      // Profile fan-out starts from shared run intent only. Every controlled
+      // value must be resolved independently from each profile.
+      const requestControlledFields: Array<[string, unknown]> = [
+        ["model", requestedModel],
+        ["reasoningEffort", requestedReasoningEffort],
+        ["agentVersion", requestedAgentVersion],
+        ["mcpServers", mcpServerSlugs],
+        ["skills", skillSlugs],
+        ["extensions", extensionIds],
+        ["resources", resourceSpecs],
+      ];
+      const providedControlledFields = requestControlledFields.filter(([, value]) => value !== undefined);
+      if (providedControlledFields.length > 0) {
+        res.status(400).json({
+          error: `In variation mode, request-level ${providedControlledFields.map(([field]) => field).join("/")} must be omitted; each profile supplies its own controlled configuration.`,
+        });
+        return;
+      }
+
+      if (worker !== undefined) {
+        res.status(400).json({
+          error: "The ?worker query parameter is not allowed in variation mode; worker is derived from each variation profile.",
+        });
+        return;
+      }
+    }
+
     // AGENTS.md body + lineage (for any caller that wants to attach an
     // AGENTS.md instruction file to a run).
     const agentsMdText =
@@ -520,34 +558,7 @@ apiRoute(ctx.app, ctx.registry, {
       label?: string;
     };
 
-    const typedProfileVariations: string[] = Array.isArray(profileVariations)
-      ? profileVariations.filter((v: unknown): v is string => typeof v === "string")
-      : [];
-    const isVariationSubmit = typedProfileVariations.length > 0;
-
     if (isVariationSubmit) {
-      if (!requestedProfileSpec) {
-        res.status(400).json({ error: "profileId (the base profile) is required when profileVariations are provided" });
-        return;
-      }
-
-      // In variation mode, controlled fields come from the variation profiles themselves.
-      if (requestedModel !== undefined || mcpServerSlugs !== undefined || skillSlugs !== undefined || extensionIds !== undefined) {
-        res.status(400).json({
-          error: "In variation mode, model/mcpServers/skills/extensions must be set via the variation profile.",
-        });
-        return;
-      }
-
-      // In variation mode, the worker is derived per-variation from each profile's workerType.
-      // Reject the ?worker= query param so callers don't think it has any effect.
-      if (worker) {
-        res.status(400).json({
-          error: "The ?worker query parameter is not allowed in variation mode; worker is derived from each variation profile.",
-        });
-        return;
-      }
-
       if (!scenarioObj || typeof scenarioObj !== "object" || !scenarioObj.task || typeof scenarioObj.task !== "string") {
         res.status(400).json({ error: "scenario.task is required and must be a string" });
         return;
@@ -569,7 +580,7 @@ apiRoute(ctx.app, ctx.registry, {
       }
 
       const baseParsed = (() => {
-        try { return parseProfileSpec(requestedProfileSpec); }
+        try { return parseProfileSpec(requestedProfileSpec!); }
         catch (err) { res.status(400).json({ error: (err as Error).message }); return null; }
       })();
       if (!baseParsed) return;
@@ -673,25 +684,17 @@ apiRoute(ctx.app, ctx.registry, {
         const effectiveMcpServers = variationProfileVersion.mcpServers ?? undefined;
         const effectiveSkills = variationProfileVersion.skillRevisions ?? undefined;
         const effectiveExtensions = variationProfileVersion.extensions ?? undefined;
-        const requestedVariationAgentVersion = variationProfileVersion.agentVersion ?? requestedAgentVersion;
         const targetCheck = await validateAgentTarget(ctx.agentCollection, {
           workerType: variationWorkerType,
-          requestedVersion: requestedVariationAgentVersion,
+          requestedVersion: variationProfileVersion.agentVersion,
           model: variationProfileVersion.model,
           requireModel: true,
           requirements: requestedAgentCapabilities({
-            reasoningEffort:
-              variationProfileVersion.reasoningEffort ?? requestedReasoningEffort,
+            reasoningEffort: variationProfileVersion.reasoningEffort,
             mcpServers: effectiveMcpServers,
             skillRevisions: effectiveSkills,
             extensions: effectiveExtensions,
-            // Mirrors resolveResourceBindings' precedence (profile wins). Uses the
-            // specs rather than resolved bindings because the capability check only
-            // needs to know whether any resource was requested, and resolution
-            // happens after this point.
-            resources:
-              normalizeResourceBindingSpecs(variationProfileVersion.resources)
-              ?? requestedResourceSpecs,
+            resources: normalizeResourceBindingSpecs(variationProfileVersion.resources),
           }),
           strictCapabilities: ctx.strictAgentCapabilities,
         });
@@ -772,7 +775,7 @@ apiRoute(ctx.app, ctx.registry, {
         const resourceResult = await resolveResourceBindings(
           ctx,
           projectId,
-          requestedResourceSpecs,
+          undefined,
           normalizeResourceBindingSpecs(variationProfileVersion.resources),
         );
         if (resourceResult.errors.length > 0) {
@@ -833,8 +836,8 @@ apiRoute(ctx.app, ctx.registry, {
             createdAt: new Date(),
             priority: requestedPriority ?? 0,
             ...(r.model ? { model: r.model } : {}),
-            ...((r.profileVersion.reasoningEffort ?? requestedReasoningEffort)
-              ? { reasoningEffort: r.profileVersion.reasoningEffort ?? requestedReasoningEffort }
+            ...(r.profileVersion.reasoningEffort
+              ? { reasoningEffort: r.profileVersion.reasoningEffort }
               : {}),
             ...(maxIterations ? { maxIterations } : {}),
             ...(personaInstructions ? { personaInstructions } : {}),
@@ -2210,11 +2213,19 @@ apiRoute(ctx.app, ctx.registry, {
     ).toArray();
     const existingIds = new Set(existingDocs.map(d => d._id));
 
-    // Soft-delete all matching documents
+    // Soft-delete all matching documents and their associated reports.
+    // Use one timestamp so the cascade is traceable as a single deletion event.
+    const deletedAt = new Date();
     const result = await ctx.requestCollection.updateMany(
       { _id: { $in: ids }, deletedAt: { $exists: false } },
-      { $set: { deletedAt: new Date() } }
+      { $set: { deletedAt } }
     );
+    if (existingIds.size > 0) {
+      await ctx.reportCollection.updateMany(
+        { requestId: { $in: [...existingIds] }, deletedAt: { $exists: false } },
+        { $set: { deletedAt, updatedAt: deletedAt } },
+      );
+    }
 
     // Determine which IDs were not found or already deleted
     const notFound = ids.filter(id => !existingIds.has(id));
@@ -2238,20 +2249,37 @@ apiRoute(ctx.app, ctx.registry, {
   handler: async (req, res) => {
     const { id } = req.params;
 
+    const deletedAt = new Date();
     const result = await ctx.requestCollection.updateOne(
       { _id: id, deletedAt: { $exists: false } },
-      { $set: { deletedAt: new Date() } }
+      { $set: { deletedAt } }
     );
 
     if (result.matchedCount === 0) {
       const exists = await ctx.requestCollection.findOne({ _id: id });
       if (!exists) {
         res.status(404).json({ error: "Request not found" });
-      } else {
-        res.status(410).json({ error: "Request already deleted" });
+        return;
       }
+
+      // Retrying a delete after the request was already soft-deleted should still
+      // finish the report cascade. The first attempt may have deleted the request
+      // and then failed before reaching the report update.
+      const cascadeDeletedAt =
+        exists.deletedAt instanceof Date ? exists.deletedAt : deletedAt;
+      await ctx.reportCollection.updateMany(
+        { requestId: id, deletedAt: { $exists: false } },
+        { $set: { deletedAt: cascadeDeletedAt, updatedAt: cascadeDeletedAt } },
+      );
+
+      res.status(410).json({ error: "Request already deleted" });
       return;
     }
+
+    await ctx.reportCollection.updateMany(
+      { requestId: id, deletedAt: { $exists: false } },
+      { $set: { deletedAt, updatedAt: deletedAt } },
+    );
 
     res.json({ id, deleted: true });
   },
