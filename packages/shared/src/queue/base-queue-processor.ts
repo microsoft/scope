@@ -9,6 +9,7 @@ import { LogEvent, BaseQueueProcessorConfig } from "../types/types.js";
 import { LogPublisher } from "../logging/log-publisher.js";
 import { BlobStorage } from "../storage/blob-storage.js";
 import { cancelExit } from "./cancel-exit.js";
+import { RunOwnershipLostError } from "./run-ownership.js";
 import { withRetry } from "../utils/retry.js";
 import { durationSetFields } from "../run-duration.js";
 import {
@@ -302,14 +303,25 @@ export abstract class BaseQueueProcessor<TDocument extends { _id: string } = any
         heartbeat = undefined;
       }
     } catch (error) {
-      console.error(`[${this.workerName}] Error processing message:`, error);
-
       // Defensive: if handleRequest threw before the inner finally ran (it
       // shouldn't, but guard anyway), stop the heartbeat now.
       if (heartbeat) {
         currentPopReceipt = heartbeat.stop();
         heartbeat = undefined;
       }
+
+      // Zombie worker (issue #803): another actor already owns the run's state.
+      // Never publish a `final` failure line or terminalize it — just stop.
+      if (error instanceof RunOwnershipLostError) {
+        console.warn(`[${this.workerName}] ${error.message}`);
+        await this.logPublisher
+          .publish(error.requestId, error.runId, "warn", error.message)
+          .catch(() => undefined);
+        await this.safeDeleteMessage(message.messageId, currentPopReceipt);
+        return;
+      }
+
+      console.error(`[${this.workerName}] Error processing message:`, error);
 
       if (documentId) {
         try {
