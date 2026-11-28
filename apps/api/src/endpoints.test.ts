@@ -1052,6 +1052,10 @@ describe("API Endpoints", () => {
       const res = await request(testServer()).delete("/api/v1/requests/r1");
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("deleted", true);
+      expect(mocks.reportCollection.updateMany).toHaveBeenCalledWith(
+        { requestId: "r1", deletedAt: { $exists: false } },
+        { $set: { deletedAt: expect.any(Date), updatedAt: expect.any(Date) } },
+      );
     });
 
     it("returns 404 when request not found", async () => {
@@ -1062,12 +1066,57 @@ describe("API Endpoints", () => {
       expect(res.status).toBe(404);
     });
 
-    it("returns 410 when request already deleted", async () => {
+    it("returns 410 when request already deleted and finishes the report cascade", async () => {
+      const deletedAt = new Date("2026-10-01T00:00:00Z");
       (mocks.collection.updateOne as any).mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
-      (mocks.collection.findOne as any).mockResolvedValue({ _id: "r1", deletedAt: new Date() });
+      (mocks.collection.findOne as any).mockResolvedValue({ _id: "r1", deletedAt });
 
       const res = await request(testServer()).delete("/api/v1/requests/r1");
       expect(res.status).toBe(410);
+      expect(mocks.reportCollection.updateMany).toHaveBeenCalledWith(
+        { requestId: "r1", deletedAt: { $exists: false } },
+        { $set: { deletedAt, updatedAt: deletedAt } },
+      );
+    });
+  });
+
+  describe("DELETE /api/v1/requests/bulk", () => {
+    it("cascades only to reports for requests that were actually deleted", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ _id: "r1" }, { _id: "r3" }]),
+      });
+      (mocks.collection.updateMany as any).mockResolvedValue({
+        matchedCount: 2,
+        modifiedCount: 2,
+      });
+
+      const res = await request(testServer())
+        .delete("/api/v1/requests/bulk")
+        .send({ ids: ["r1", "missing", "r3"] });
+
+      expect(res.status).toBe(200);
+      expect(mocks.reportCollection.updateMany).toHaveBeenCalledWith(
+        { requestId: { $in: ["r1", "r3"] }, deletedAt: { $exists: false } },
+        { $set: { deletedAt: expect.any(Date), updatedAt: expect.any(Date) } },
+      );
+      expect(res.body.notFound).toEqual(["missing"]);
+    });
+
+    it("does not cascade reports when no active requests matched", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+      (mocks.collection.updateMany as any).mockResolvedValue({
+        matchedCount: 0,
+        modifiedCount: 0,
+      });
+
+      const res = await request(testServer())
+        .delete("/api/v1/requests/bulk")
+        .send({ ids: ["missing"] });
+
+      expect(res.status).toBe(200);
+      expect(mocks.reportCollection.updateMany).not.toHaveBeenCalled();
     });
   });
 
@@ -1091,6 +1140,25 @@ describe("API Endpoints", () => {
       const res = await request(testServer()).get(`/api/v1/reports?projectId=${TEST_PROJECT_ID}`);
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
+      expect(mocks.reportCollection.find).toHaveBeenCalledWith({
+        deletedAt: { $exists: false },
+        projectId: TEST_PROJECT_ID,
+      });
+    });
+
+    it("filters soft-deleted reports when listing by requestId", async () => {
+      (mocks.reportCollection.find as any).mockReturnValue({
+        sort: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([]),
+        }),
+      });
+
+      const res = await request(testServer()).get("/api/v1/reports?requestId=r1");
+      expect(res.status).toBe(200);
+      expect(mocks.reportCollection.find).toHaveBeenCalledWith({
+        deletedAt: { $exists: false },
+        requestId: "r1",
+      });
     });
   });
 
@@ -1109,6 +1177,10 @@ describe("API Endpoints", () => {
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty("requestId", "r1");
       expect(res.body).toHaveProperty("status", "pending");
+      expect(mocks.collection.findOne).toHaveBeenCalledWith({
+        _id: "r1",
+        deletedAt: { $exists: false },
+      });
     });
 
     it("returns 400 when requestId missing", async () => {
@@ -1127,6 +1199,155 @@ describe("API Endpoints", () => {
         .send({ requestId: "no-such-run" });
 
       expect(res.status).toBe(404);
+      expect(mocks.collection.findOne).toHaveBeenCalledWith({
+        _id: "no-such-run",
+        deletedAt: { $exists: false },
+      });
+    });
+  });
+
+  describe("report soft-delete visibility", () => {
+    it("excludes deleted reports from bulk status", async () => {
+      (mocks.reportCollection.find as any).mockReturnValue({
+        sort: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([]),
+        }),
+      });
+
+      const res = await request(testServer())
+        .post("/api/v1/reports/bulk-status")
+        .send({ requestIds: ["r1", "r2"] });
+
+      expect(res.status).toBe(200);
+      expect(mocks.reportCollection.find).toHaveBeenCalledWith({
+        requestId: { $in: ["r1", "r2"] },
+        deletedAt: { $exists: false },
+      });
+    });
+
+    it("excludes deleted reports from bulk summary", async () => {
+      (mocks.reportCollection.aggregate as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+
+      const res = await request(testServer())
+        .post("/api/v1/reports/bulk-summary")
+        .send({ requestIds: ["r1", "r2"] });
+
+      expect(res.status).toBe(200);
+      const [pipeline] = (mocks.reportCollection.aggregate as any).mock.calls[0];
+      expect(pipeline[0]).toEqual({
+        $match: {
+          requestId: { $in: ["r1", "r2"] },
+          deletedAt: { $exists: false },
+        },
+      });
+    });
+
+    it("hides deleted reports from point reads", async () => {
+      (mocks.reportCollection.findOne as any).mockResolvedValue(null);
+
+      const res = await request(testServer()).get("/api/v1/reports/rp1");
+
+      expect(res.status).toBe(404);
+      expect(mocks.reportCollection.findOne).toHaveBeenCalledWith({
+        _id: "rp1",
+        deletedAt: { $exists: false },
+      });
+    });
+
+    it("hides deleted reports from log reads", async () => {
+      (mocks.reportCollection.findOne as any).mockResolvedValue(null);
+
+      const res = await request(testServer()).get("/api/v1/reports/rp1/logs");
+
+      expect(res.status).toBe(404);
+      expect(mocks.reportCollection.findOne).toHaveBeenCalledWith({
+        _id: "rp1",
+        deletedAt: { $exists: false },
+      });
+    });
+
+    it("hides deleted reports from report insight reads", async () => {
+      (mocks.reportCollection.findOne as any).mockResolvedValue(null);
+
+      const res = await request(testServer()).get("/api/v1/reports/rp1/insights");
+
+      expect(res.status).toBe(404);
+      expect(mocks.reportCollection.findOne).toHaveBeenCalledWith({
+        _id: "rp1",
+        deletedAt: { $exists: false },
+      });
+    });
+
+    it("hides deleted reports from insight report references", async () => {
+      (mocks.insightsCollection.findOne as any).mockResolvedValue({
+        _id: "i1",
+        content: "insight",
+        createdAt: new Date(),
+      });
+      (mocks.reportCollection.find as any).mockReturnValue({
+        sort: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([]),
+        }),
+      });
+
+      const res = await request(testServer()).get("/api/v1/insights/i1/reports");
+
+      expect(res.status).toBe(200);
+      expect(mocks.reportCollection.find).toHaveBeenCalledWith({
+        "insightReferences.insightId": "i1",
+        deletedAt: { $exists: false },
+      });
+    });
+
+    it("filters deleted runs from bulk report creation", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+
+      const res = await request(testServer())
+        .post("/api/v1/reports/bulk-create")
+        .send({ requestIds: ["r1"] });
+
+      expect(res.status).toBe(201);
+      expect(mocks.collection.find).toHaveBeenCalledWith({
+        _id: { $in: ["r1"] },
+        deletedAt: { $exists: false },
+      });
+    });
+
+    it("filters deleted runs from report triggering", async () => {
+      (mocks.collection.findOne as any).mockResolvedValue(null);
+
+      const res = await request(testServer())
+        .post("/api/v1/reports/trigger")
+        .send({ requestId: "r1" });
+
+      expect(res.status).toBe(404);
+      expect(mocks.collection.findOne).toHaveBeenCalledWith({
+        _id: "r1",
+        deletedAt: { $exists: false },
+      });
+    });
+
+    it("filters deleted runs from bulk report triggering", async () => {
+      (mocks.collection.find as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+      (mocks.reportTemplateCollection.find as any).mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+
+      const res = await request(testServer())
+        .post("/api/v1/reports/bulk-trigger")
+        .send({ requestIds: ["r1"] });
+
+      expect(res.status).toBe(201);
+      expect(mocks.collection.find).toHaveBeenCalledWith({
+        _id: { $in: ["r1"] },
+        deletedAt: { $exists: false },
+      });
     });
   });
 
@@ -2230,6 +2451,171 @@ describe("API Endpoints", () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("missing a prompt");
       expect(mocks.collection.insertMany).not.toHaveBeenCalled();
+    });
+
+    it("rejects shared resources in variation mode before resolving profiles", async () => {
+      // Model a required profile-owned binding so a request-level copy is
+      // unambiguously invalid during comparative fan-out.
+      const resourceRevision = {
+        _id: "resource-revision-1",
+        resourceId: "resource-1",
+        projectId: TEST_PROJECT_ID,
+        slug: "github-simulator",
+        revisionNumber: 1,
+        ref: "github-simulator@r1",
+        setup: { sh: "echo ready" },
+        exports: [],
+        parameters: [{ name: "REPO", required: true }],
+        contentSha256: "sha",
+        createdAt: new Date(),
+      };
+      (mocks.resourceStore.getBySlug as any).mockResolvedValue({
+        _id: "resource-1",
+        projectId: TEST_PROJECT_ID,
+        slug: "github-simulator",
+        latestRevisionId: resourceRevision._id,
+      });
+      (mocks.resourceRevisionStore.getLatest as any).mockResolvedValue(resourceRevision);
+      (mocks.profileVersionCollection.findOne as any).mockImplementation(
+        async (q: { profileId: string }) => ({
+          _id: `pv-${q.profileId}`,
+          profileId: q.profileId,
+          version: 1,
+          workerType: "coder-acp-copilot",
+          model: q.profileId === "base-profile" ? "m1" : "m2",
+          mcpServers: [],
+          skillRevisions: [],
+          extensions: [],
+          resources: [{
+            ref: "github-simulator",
+            params: { REPO: "microsoft/scope" },
+          }],
+        }),
+      );
+
+      // Validation must reject the ambiguous shared override before any
+      // profile-specific request is materialized.
+      const res = await request(testServer())
+        .post(`/api/v1/requests?projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "base-profile",
+          profileVariations: ["var-profile"],
+          resources: [{
+            ref: "github-simulator",
+            params: { REPO: "microsoft/scope" },
+          }],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("resources");
+      expect(mocks.collection.insertMany).not.toHaveBeenCalled();
+    });
+
+    // Every profile-managed request field follows the same no-shared-overrides
+    // contract in variation mode.
+    it.each([
+      ["model", "m1"],
+      ["reasoningEffort", "high"],
+      ["agentVersion", "v1"],
+      ["mcpServers", ["server-a"]],
+      ["skills", ["skill-a"]],
+      ["extensions", ["publisher.extension"]],
+    ])("rejects shared %s in variation mode", async (field, value) => {
+      const res = await request(testServer())
+        .post(`/api/v1/requests?projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "base-profile",
+          profileVariations: ["var-profile"],
+          [field]: value,
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain(field);
+      expect(mocks.collection.insertMany).not.toHaveBeenCalled();
+    });
+
+    it("rejects a shared worker query in variation mode", async () => {
+      const res = await request(testServer())
+        .post(`/api/v1/requests?projectId=${TEST_PROJECT_ID}&worker=coder-acp-copilot`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "base-profile",
+          profileVariations: ["var-profile"],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("worker");
+      expect(mocks.collection.insertMany).not.toHaveBeenCalled();
+    });
+
+    it("resolves each variation profile's resources without leaking base values", async () => {
+      // Give each profile a distinct required value so cross-profile leakage is
+      // directly observable in the persisted request documents.
+      const resourceRevision = {
+        _id: "resource-revision-1",
+        resourceId: "resource-1",
+        projectId: TEST_PROJECT_ID,
+        slug: "github-simulator",
+        revisionNumber: 1,
+        ref: "github-simulator@r1",
+        setup: { sh: "echo ready" },
+        exports: [],
+        parameters: [{ name: "REPO", required: true }],
+        contentSha256: "sha",
+        createdAt: new Date(),
+      };
+      (mocks.resourceStore.getBySlug as any).mockResolvedValue({
+        _id: "resource-1",
+        projectId: TEST_PROJECT_ID,
+        slug: "github-simulator",
+        latestRevisionId: resourceRevision._id,
+      });
+      (mocks.resourceRevisionStore.getLatest as any).mockResolvedValue(resourceRevision);
+      (mocks.profileVersionCollection.findOne as any).mockImplementation(
+        async (q: { profileId: string }) => ({
+          _id: `pv-${q.profileId}`,
+          ref: `${q.profileId}@1`,
+          profileId: q.profileId,
+          version: 1,
+          workerType: "coder-acp-copilot",
+          model: q.profileId === "base-profile" ? "m1" : "m2",
+          mcpServers: [],
+          skillRevisions: [],
+          extensions: [],
+          resources: [{
+            ref: "github-simulator",
+            params: {
+              REPO: q.profileId === "base-profile"
+                ? "baseline/repository"
+                : "comparison/repository",
+            },
+          }],
+        }),
+      );
+
+      const res = await request(testServer())
+        .post(`/api/v1/requests?projectId=${TEST_PROJECT_ID}`)
+        .send({
+          scenario: { task: "Build something", criteria: ["works"] },
+          profileId: "base-profile",
+          profileVariations: ["var-profile"],
+        });
+
+      expect(res.status).toBe(201);
+      const docs = (mocks.collection.insertMany as any).mock.calls[0][0];
+      expect(docs).toHaveLength(2);
+
+      // Both requests share the comparative submission, but each must retain
+      // only the resource value resolved from its own profile.
+      expect(docs.map((doc: { profileId: string; resources: Array<{ params: Record<string, string> }> }) => ({
+        profileId: doc.profileId,
+        repo: doc.resources[0].params.REPO,
+      }))).toEqual([
+        { profileId: "base-profile", repo: "baseline/repository" },
+        { profileId: "var-profile", repo: "comparison/repository" },
+      ]);
     });
   });
 

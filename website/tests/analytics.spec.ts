@@ -3,9 +3,9 @@
 
 import { expect, test, type Page } from '@playwright/test';
 
-const PUBLISHED_DATA_URLS = new Set([
-	'https://raw.githubusercontent.com/microsoft/scope/website-data/contributors.jsonl',
-]);
+const CONTRIBUTORS_DATA_URL = 'https://api.github.com/repos/microsoft/scope/contributors?anon=0&per_page=100';
+const PUBLISHED_DATA_URLS = new Set([CONTRIBUTORS_DATA_URL]);
+const CONTRIBUTORS_RESPONSE = [{ contributions: 1, login: 'octocat', type: 'User' }];
 
 interface AnalyticsTestState {
 	granted: boolean;
@@ -100,8 +100,15 @@ async function mockPublishedSite(page: Page, options: {
 	}, options);
 	await page.route('https://microsoft.github.io/**', async (route) => {
 		const url = new URL(route.request().url());
-		const response = await page.request.get(`http://127.0.0.1:14321${url.pathname}${url.search}`);
-		await route.fulfill({ response });
+		const response = await fetch(`http://127.0.0.1:14321${url.pathname}${url.search}`);
+		const headers = Object.fromEntries(response.headers);
+		delete headers['content-encoding'];
+		delete headers['content-length'];
+		await route.fulfill({
+			body: Buffer.from(await response.arrayBuffer()),
+			headers,
+			status: response.status,
+		});
 	});
 	await page.route('https://wcpstatic.microsoft.com/**', async (route) => {
 		await route.fulfill({ contentType: 'text/javascript', body: `(${consentStub.toString()})();` });
@@ -111,6 +118,13 @@ async function mockPublishedSite(page: Page, options: {
 	});
 	await page.route('https://*.events.data.microsoft.com/**', (route) => route.abort());
 }
+
+test.beforeEach(async ({ page }) => {
+	await page.route(CONTRIBUTORS_DATA_URL, (route) => route.fulfill({
+		contentType: 'application/json',
+		body: JSON.stringify(CONTRIBUTORS_RESPONSE),
+	}));
+});
 
 test('analytics waits for consent and uses the Scope configuration', async ({ page }) => {
 	await mockPublishedSite(page);

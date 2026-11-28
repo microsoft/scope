@@ -4,9 +4,9 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
-const PUBLISHED_DATA_URLS = new Set([
-	'https://raw.githubusercontent.com/microsoft/scope/website-data/contributors.jsonl',
-]);
+const CONTRIBUTORS_DATA_URL = 'https://api.github.com/repos/microsoft/scope/contributors?anon=0&per_page=100';
+const PUBLISHED_DATA_URLS = new Set([CONTRIBUTORS_DATA_URL]);
+const CONTRIBUTORS_RESPONSE = [{ contributions: 1, login: 'octocat', type: 'User' }];
 
 const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 
@@ -40,6 +40,13 @@ async function expectAccessible(page: Page) {
 		document.documentElement.scrollWidth <= document.documentElement.clientWidth,
 	)).toBe(true);
 }
+
+test.beforeEach(async ({ page }) => {
+	await page.route(CONTRIBUTORS_DATA_URL, (route) => route.fulfill({
+		contentType: 'application/json',
+		body: JSON.stringify(CONTRIBUTORS_RESPONSE),
+	}));
+});
 
 test('landing page and interactive example are accessible', async ({ page }) => {
 	await page.goto('/scope/');

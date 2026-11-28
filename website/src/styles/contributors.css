@@ -4,9 +4,6 @@
  */
 
 /*
- * Copyright (c) Microsoft Corporation.
- * Licensed under the MIT License.
- *
  * Contributors (<scope-contributors>). An avatar wall on the
  * landing page and a card grid on the Community > Contribute page. Shares
  * the card, message and sample-tag styles in contributions.css.
@@ -91,7 +88,7 @@
 }
 .thanks-tip::after { content: ''; position: absolute; top: 100%; left: calc(50% - var(--tip-shift, 0px)); border: 5px solid transparent; border-top-color: var(--scope-text); transform: translateX(-50%); }
 .thanks-tip__login { font-weight: 650; }
-.thanks-tip__prs { opacity: 0.75; }
+.thanks-tip__commits { opacity: 0.75; }
 .thanks-avatar:is(:hover, :focus-visible) .thanks-tip { opacity: 1; transform: translate(calc(-50% + var(--tip-shift, 0px)), 0) scale(1); }
 
 /* Skeletons. */
@@ -109,7 +106,7 @@
 .thanks-card:is(:hover, :focus-visible) .thanks-photo { box-shadow: 0 0 0 2px var(--scope-surface), 0 0 0 4px var(--scope-brand); }
 .thanks-card__body { display: flex; flex-direction: column; min-width: 0; }
 .thanks-card__login { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.thanks-card__prs { color: var(--scope-muted); font-size: 0.78rem; }
+.thanks-card__commits { color: var(--scope-muted); font-size: 0.78rem; }
 .thanks-card__arrow { margin-left: auto; color: var(--scope-brand); }
 .thanks-show-all { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem auto 0 !important; padding: 0.6rem 1.25rem; border: 1px solid var(--scope-border); border-radius: 999px; background: var(--scope-surface); color: var(--scope-brand); font: 600 0.9rem var(--sl-font); cursor: pointer; transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .thanks-show-all:is(:hover, :focus-visible) { border-color: var(--scope-brand); box-shadow: var(--scope-shadow); transform: translateY(-2px); }

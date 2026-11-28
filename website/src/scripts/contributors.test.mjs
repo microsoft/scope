@@ -8,55 +8,84 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
 	avatarUrl,
+	commitsLabel,
 	contributorsLabel,
+	fetchContributors,
 	firstPage,
 	parseContributors,
-	prsLabel,
 	prsUrl,
 	showAllLabel,
 	sortForDisplay,
 	tipShift,
-	totalPrs,
+	totalCommits,
 	visible,
 } from './contributors.ts';
 
-const line = (value) => JSON.stringify(value);
-
-test('parses JSON Lines and ignores blank lines', () => {
-	const text = [line({ login: 'ada', prs: 2 }), '', line({ login: 'grace-h', prs: 1 }), ''].join('\n');
-	assert.deepEqual(parseContributors(text), {
-		contributors: [{ login: 'ada', prs: 2 }, { login: 'grace-h', prs: 1 }],
+test('parses GitHub contributor records', () => {
+	const records = [
+		{ contributions: 2, login: 'ada', type: 'User' },
+		{ contributions: 1, login: 'grace-h', type: 'User' },
+	];
+	assert.deepEqual(parseContributors(records), {
+		contributors: [{ login: 'ada', commits: 2 }, { login: 'grace-h', commits: 1 }],
 		skipped: [],
 	});
 });
 
-test('treats an empty file as no contributors', () => {
-	assert.deepEqual(parseContributors(''), { contributors: [], skipped: [] });
+test('treats an empty array as no contributors', () => {
+	assert.deepEqual(parseContributors([]), { contributors: [], skipped: [] });
 });
 
-test('skips invalid logins, counts and duplicates without dropping the rest', () => {
-	const text = [
-		'{not json',
-		line({ login: 'dependabot[bot]', prs: 9 }),
-		line({ login: '-leading', prs: 1 }),
-		line({ login: 'double--hyphen', prs: 1 }),
-		line({ login: '../evil', prs: 1 }),
-		line({ login: 'zero', prs: 0 }),
-		line({ login: 'fraction', prs: 1.5 }),
-		line({ login: 'Kept', prs: 3 }),
-		line({ login: 'kept', prs: 1 }),
-	].join('\r\n');
-	const { contributors, skipped } = parseContributors(text);
-	assert.deepEqual(contributors, [{ login: 'Kept', prs: 3 }]);
+test('rejects a non-array response', () => {
+	assert.deepEqual(parseContributors({ message: 'rate limited' }), {
+		contributors: [],
+		skipped: [1],
+	});
+});
+
+test('skips bots, anonymous records, invalid values and duplicates', () => {
+	const records = [
+		{ contributions: 9, login: 'dependabot[bot]', type: 'Bot' },
+		{ contributions: 1, email: 'anonymous@example.com', type: 'Anonymous' },
+		{ contributions: 1, login: '-leading', type: 'User' },
+		{ contributions: 1, login: 'double--hyphen', type: 'User' },
+		{ contributions: 1, login: '../evil', type: 'User' },
+		{ contributions: 0, login: 'zero', type: 'User' },
+		{ contributions: 1.5, login: 'fraction', type: 'User' },
+		{ contributions: 3, login: 'Kept', type: 'User' },
+		{ contributions: 1, login: 'kept', type: 'User' },
+	];
+	const { contributors, skipped } = parseContributors(records);
+	assert.deepEqual(contributors, [{ login: 'Kept', commits: 3 }]);
 	assert.deepEqual(skipped, [1, 2, 3, 4, 5, 6, 7, 9]);
 });
 
-test('sorts by merged PRs, then login case-insensitively', () => {
+test('follows GitHub pagination links', async (context) => {
+	const originalFetch = globalThis.fetch;
+	context.after(() => { globalThis.fetch = originalFetch; });
+	const pages = new Map([
+		['https://api.example.test/contributors', new Response(
+			JSON.stringify([{ contributions: 2, login: 'ada', type: 'User' }]),
+			{ headers: { link: '<https://api.example.test/contributors?page=2>; rel="next", <https://api.example.test/contributors?page=2>; rel="last"' } },
+		)],
+		['https://api.example.test/contributors?page=2', new Response(
+			JSON.stringify([{ contributions: 1, login: 'grace-h', type: 'User' }]),
+		)],
+	]);
+	globalThis.fetch = async (url) => pages.get(String(url)) ?? new Response('', { status: 404 });
+
+	assert.deepEqual(await fetchContributors('https://api.example.test/contributors'), {
+		contributors: [{ login: 'ada', commits: 2 }, { login: 'grace-h', commits: 1 }],
+		skipped: [],
+	});
+});
+
+test('sorts by commits, then login case-insensitively', () => {
 	const sorted = sortForDisplay([
-		{ login: 'zed', prs: 1 },
-		{ login: 'Bea', prs: 1 },
-		{ login: 'max', prs: 4 },
-		{ login: 'alex', prs: 1 },
+		{ login: 'zed', commits: 1 },
+		{ login: 'Bea', commits: 1 },
+		{ login: 'max', commits: 4 },
+		{ login: 'alex', commits: 1 },
 	]);
 	assert.deepEqual(sorted.map((c) => c.login), ['max', 'alex', 'Bea', 'zed']);
 });
@@ -69,13 +98,13 @@ test('builds avatar and merged PR URLs', () => {
 	assert.equal(url.searchParams.get('q'), 'is:pr is:merged author:grace-h');
 });
 
-test('pluralizes labels and totals PRs', () => {
-	assert.equal(prsLabel(1), '1 merged PR');
-	assert.equal(prsLabel(3), '3 merged PRs');
+test('pluralizes labels and totals commits', () => {
+	assert.equal(commitsLabel(1), '1 commit on main');
+	assert.equal(commitsLabel(3), '3 commits on main');
 	assert.equal(contributorsLabel(1), 'contributor');
 	assert.equal(contributorsLabel(2), 'contributors');
-	assert.equal(totalPrs([{ login: 'a', prs: 2 }, { login: 'b', prs: 3 }]), 5);
-	assert.equal(totalPrs([]), 0);
+	assert.equal(totalCommits([{ login: 'a', commits: 2 }, { login: 'b', commits: 3 }]), 5);
+	assert.equal(totalCommits([]), 0);
 });
 
 test('keeps a slot for the overflow bubble', () => {
@@ -126,14 +155,14 @@ test('aligns a tooltip wider than the bounds to the left edge', () => {
 	assert.equal(50 + shift - 80, 0);
 });
 
-test('the dev sample file is valid and sorted like the published file', () => {
-	const text = readFileSync(new URL('../data/contributors.sample.jsonl', import.meta.url), 'utf8');
-	const { contributors, skipped } = parseContributors(text);
+test('the dev sample file matches GitHub and is sorted by login', () => {
+	const value = JSON.parse(readFileSync(new URL('../data/contributors.sample.json', import.meta.url), 'utf8'));
+	const { contributors, skipped } = parseContributors(value);
 	assert.deepEqual(skipped, []);
 	assert.ok(contributors.length >= 1);
 	const logins = contributors.map((c) => c.login.toLowerCase());
 	assert.deepEqual(logins, [...logins].sort());
-	for (const raw of text.trim().split('\n')) {
-		assert.deepEqual(Object.keys(JSON.parse(raw)), ['login', 'prs'], 'keys are sorted and nothing else is published');
+	for (const record of value) {
+		assert.deepEqual(Object.keys(record), ['contributions', 'login', 'type']);
 	}
 });

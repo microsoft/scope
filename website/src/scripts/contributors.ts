@@ -1,19 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Data helpers for the contributors thank-you section. The list is
-// published as JSON Lines on the `website-data` branch by
-// .github/workflows/contribution-data.yml and fetched in the browser.
-// This module has no DOM dependencies so it can be unit-tested in Node.
+// Data helpers for the contributors thank-you section. The browser reads
+// GitHub's repository contributor statistics directly. This module has no
+// DOM dependencies so it can be unit-tested in Node.
 
 const REPOSITORY = 'microsoft/scope';
-export const CONTRIBUTORS_DATA_URL = `https://raw.githubusercontent.com/${REPOSITORY}/website-data/contributors.jsonl`;
+export const CONTRIBUTORS_DATA_URL = `https://api.github.com/repos/${REPOSITORY}/contributors?anon=0&per_page=100`;
 export const CONTRIBUTORS_GRAPH_URL = `https://github.com/${REPOSITORY}/graphs/contributors`;
 
 export interface Contributor {
+	/** GitHub account login. */
 	login: string;
-	/** Number of merged pull requests. */
-	prs: number;
+	/** Number of commits attributed on the repository's default branch. */
+	commits: number;
 }
 
 export interface ContributorsResult {
@@ -25,42 +25,51 @@ export interface ContributorsResult {
 // GitHub logins: alphanumerics and single hyphens, up to 39 characters.
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 
-function isContributor(value: unknown): value is Contributor {
-	if (typeof value !== 'object' || value === null) return false;
-	const { login, prs } = value as Record<string, unknown>;
-	return typeof login === 'string' && LOGIN.test(login) && Number.isSafeInteger(prs) && (prs as number) > 0;
+/** Validates a GitHub contributor record before it enters the browser model. */
+function parseContributor(value: unknown): Contributor | undefined {
+	if (typeof value !== 'object' || value === null) return undefined;
+	const record = value as Record<string, unknown>;
+	const { contributions, login, type } = record;
+	if (typeof login !== 'string' || !LOGIN.test(login)) return undefined;
+	if (type !== 'User' || login.endsWith('[bot]')) return undefined;
+	if (typeof contributions !== 'number' || !Number.isSafeInteger(contributions) || contributions <= 0) return undefined;
+	return { login, commits: contributions };
 }
 
 /**
- * Parses the JSON Lines payload. Invalid lines, bot accounts and duplicate
- * logins are skipped so one bad line can't hide the list.
+ * Parses GitHub's contributor array. Invalid entries, bot accounts and
+ * duplicate logins are skipped so one bad entry can't hide the list.
  */
-export function parseContributors(text: string): ContributorsResult {
+export function parseContributors(value: unknown): ContributorsResult {
 	const contributors: Contributor[] = [];
 	const skipped: number[] = [];
 	const seen = new Set<string>();
-	text.split(/\r?\n/).forEach((line, index) => {
-		if (line.trim() === '') return;
-		let value: unknown;
-		try {
-			value = JSON.parse(line);
-		} catch {
+	if (!Array.isArray(value)) return { contributors, skipped: [1] };
+	value.forEach((entry, index) => {
+		const contributor = parseContributor(entry);
+		if (!contributor || seen.has(contributor.login.toLowerCase())) {
 			skipped.push(index + 1);
 			return;
 		}
-		if (!isContributor(value) || seen.has(value.login.toLowerCase())) {
-			skipped.push(index + 1);
-			return;
-		}
-		seen.add(value.login.toLowerCase());
-		contributors.push({ login: value.login, prs: value.prs });
+		seen.add(contributor.login.toLowerCase());
+		contributors.push(contributor);
 	});
 	return { contributors, skipped };
 }
 
-/** Display order: most merged PRs first, then by login. */
+/** Returns the URL GitHub identifies as the next page, when present. */
+function nextPageUrl(link: string | null): string | undefined {
+	if (!link) return undefined;
+	for (const part of link.split(',')) {
+		const match = part.match(/^\s*<([^>]+)>;\s*rel="([^"]+)"\s*$/);
+		if (match?.[2].split(/\s+/).includes('next')) return match[1];
+	}
+	return undefined;
+}
+
+/** Display order: most commits first, then by login. */
 export function sortForDisplay(contributors: readonly Contributor[]): Contributor[] {
-	return [...contributors].sort((a, b) => b.prs - a.prs || a.login.localeCompare(b.login, 'en', { sensitivity: 'base' }));
+	return [...contributors].sort((a, b) => b.commits - a.commits || a.login.localeCompare(b.login, 'en', { sensitivity: 'base' }));
 }
 
 export function avatarUrl(login: string, size = 96): string {
@@ -73,16 +82,16 @@ export function prsUrl(login: string): string {
 	return `https://github.com/${REPOSITORY}/pulls?q=${encodeURIComponent(query)}`;
 }
 
-export function prsLabel(count: number): string {
-	return count === 1 ? '1 merged PR' : `${count} merged PRs`;
+export function commitsLabel(count: number): string {
+	return count === 1 ? '1 commit on main' : `${count} commits on main`;
 }
 
 export function contributorsLabel(count: number): string {
 	return count === 1 ? 'contributor' : 'contributors';
 }
 
-export function totalPrs(contributors: readonly Contributor[]): number {
-	return contributors.reduce((sum, contributor) => sum + contributor.prs, 0);
+export function totalCommits(contributors: readonly Contributor[]): number {
+	return contributors.reduce((sum, contributor) => sum + contributor.commits, 0);
 }
 
 /** Splits the list into what fits under `limit` and how many are left over. */
@@ -117,9 +126,27 @@ export function tipShift(center: number, halfWidth: number, left: number, right:
 	return min > 0 ? min : max < 0 ? max : 0;
 }
 
-/** Fetches and parses the published list. Throws on network or HTTP errors. */
+/** Fetches and parses every GitHub contributor page. */
 export async function fetchContributors(url: string, timeoutMs = 8000): Promise<ContributorsResult> {
-	const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-	if (!response.ok) throw new Error(`Contributors request failed: HTTP ${response.status}`);
-	return parseContributors(await response.text());
+	const records: unknown[] = [];
+	const visited = new Set<string>();
+	let pageUrl: string | undefined = url;
+
+	while (pageUrl) {
+		if (visited.has(pageUrl)) throw new Error('Contributors pagination loop detected');
+		visited.add(pageUrl);
+
+		const response = await fetch(pageUrl, {
+			headers: { Accept: 'application/vnd.github+json' },
+			signal: AbortSignal.timeout(timeoutMs),
+		});
+		if (!response.ok) throw new Error(`Contributors request failed: HTTP ${response.status}`);
+
+		const page: unknown = await response.json();
+		if (!Array.isArray(page)) throw new Error('Contributors response was not an array');
+		records.push(...page);
+		pageUrl = nextPageUrl(response.headers.get('link'));
+	}
+
+	return parseContributors(records);
 }

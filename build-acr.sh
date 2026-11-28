@@ -49,6 +49,8 @@ build_image() {
   local dockerfile=$(get_dockerfile "$name")
   local full_image="scoped/${name}:latest"
   local git_commit=$(git rev-parse --short HEAD)
+  local git_branch=$(git rev-parse --abbrev-ref HEAD)
+  local git_branch_arg=""
   local build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local timestamp=$(date -u +%Y%m%dT%H%M%SZ)
 
@@ -81,12 +83,16 @@ build_image() {
   if [ -n "$version_prefix" ]; then
     image_args="${image_args} --image scoped/${name}:${version_prefix}-${timestamp}-${git_commit}"
   fi
+  if [ "$name" = "portal" ]; then
+    git_branch_arg="--build-arg GIT_BRANCH=${git_branch}"
+  fi
 
   az acr build \
     --registry "$ACR_NAME" \
     ${image_args} \
     --build-arg GIT_COMMIT="$git_commit" \
     --build-arg BUILD_TIME="$build_time" \
+    ${git_branch_arg} \
     ${extra_args} \
     --file "$dockerfile" \
     .
