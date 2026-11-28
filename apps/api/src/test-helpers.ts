@@ -9,6 +9,7 @@ import type {
 } from "mongodb";
 import type { BlobStorage } from "shared";
 import type { TestDependencies } from "./index.js";
+import type { ProjectLookup } from "./utils/project-scope.js";
 
 // ---------------------------------------------------------------------------
 // Mock MongoDB collection
@@ -196,6 +197,17 @@ export function createMockBlobStorage(): BlobStorage {
   } as unknown as BlobStorage;
 }
 
+/**
+ * Project store mock that treats every project id as live, so the
+ * LiveProjectGuard admits scoped writes. Override `get` per test to exercise
+ * unknown (null) or soft-deleted projects.
+ */
+export function createMockProjectStore() {
+  return {
+    get: vi.fn<ProjectLookup["get"]>(async (id) => ({ _id: id, name: `Project ${id}`, createdAt: new Date() })),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Aggregate: creates every mock dependency _injectTestDependencies accepts
 // ---------------------------------------------------------------------------
@@ -227,6 +239,7 @@ export function createAllMockDependencies() {
   const resourceResolver = createMockResourceResolver();
   const reportQueueClient = createMockQueueClient();
   const blobStorage = createMockBlobStorage();
+  const projectStore = createMockProjectStore();
 
   return {
     db,
@@ -257,6 +270,7 @@ export function createAllMockDependencies() {
     resourceResolver,
     reportQueueClient,
     blobStorage,
+    projectStore,
   } as unknown as TestDependencies & {
     // Expose typed mocks for fine-grained stubbing
     db: ReturnType<typeof createMockDb>;
@@ -285,5 +299,6 @@ export function createAllMockDependencies() {
     resourceResolver: ReturnType<typeof createMockResourceResolver>;
     reportQueueClient: ReturnType<typeof createMockQueueClient>;
     blobStorage: ReturnType<typeof createMockBlobStorage>;
+    projectStore: ReturnType<typeof createMockProjectStore>;
   };
 }

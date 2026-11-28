@@ -10,6 +10,7 @@ import type { BlobStorage } from "shared";
 import type { HeartbeatStore } from "shared";
 import type { UserStore } from "./auth/user-store.js";
 import type { UserAccessService } from "./auth/user-access-resolver.js";
+import type { LiveProjectGuard } from "./utils/project-scope.js";
 import type {
   TaskPromptStore,
   TaskPromptDocument,
@@ -125,6 +126,8 @@ export interface RouteContext {
   resourceRevisionStore: ResourceRevisionStore;
   resourceResolver: ResourceResolver;
   projectStore: ProjectStore;
+  /** Shared live-project validation for query-scoped and parent-derived writes. */
+  liveProjectGuard: LiveProjectGuard;
 
   // Token Manager client (null when TOKEN_MANAGER_URL not set)
   mcpSecretClient: McpSecretClient | null;

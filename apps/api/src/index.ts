@@ -47,7 +47,7 @@ import { registerInsightsRoutes } from "./routes/insights.js";
 import { registerSecretsRoutes } from "./routes/secrets.js";
 import { registerProfilesRoutes } from "./routes/profiles.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
-import { ProjectScopeError } from "./utils/project-scope.js";
+import { LiveProjectGuard, ProjectScopeError } from "./utils/project-scope.js";
 import { registerUsersRoutes } from "./routes/users.js";
 import type { RouteContext } from "./route-context.js";
 import type {
@@ -270,6 +270,7 @@ async function initializeClients(): Promise<void> {
 
 // Shared route context — module-level vars are populated by initializeClients()
 // before any HTTP request arrives, so handlers see the initialized values.
+const liveProjectGuard = new LiveProjectGuard(() => projectStore);
 const routeCtx: RouteContext = {
   get app() { return app; },
   get registry() { return registry; },
@@ -312,6 +313,7 @@ const routeCtx: RouteContext = {
   get resourceRevisionStore() { return resourceRevisionStore; },
   get resourceResolver() { return resourceResolver; },
   get projectStore() { return projectStore; },
+  liveProjectGuard,
   get reportQueueClient() { return reportQueueClient; },
   get blobStorage() { return blobStorage; },
   get heartbeatStore() { return heartbeatStore; },
@@ -332,6 +334,9 @@ app.use(
 );
 registerUsersRoutes(routeCtx);
 app.use(createUserAccessMiddleware(() => userAccessResolver));
+
+// Scoped writes must target a live project (404 unknown, 409 soft-deleted).
+app.use("/api/v1", liveProjectGuard.middleware());
 
 // Secrets/proxy routes must be registered first (before :id param routes)
 registerSecretsRoutes(routeCtx);
@@ -456,6 +461,7 @@ export interface TestDependencies {
   resourceResolver?: ResourceResolver;
   reportQueueClient?: QueueClient;
   blobStorage?: BlobStorage;
+  projectStore?: ProjectStore;
 }
 
 /** @internal — used by tests only to inject mock dependencies */
@@ -497,6 +503,7 @@ export function _injectTestDependencies(deps: TestDependencies): void {
   if (deps.resourceResolver) resourceResolver = deps.resourceResolver;
   if (deps.reportQueueClient) reportQueueClient = deps.reportQueueClient;
   if (deps.blobStorage) blobStorage = deps.blobStorage;
+  if (deps.projectStore) projectStore = deps.projectStore;
 }
 
 // ─── Start server when executed directly ─────────────────────────────────────
