@@ -44,7 +44,7 @@ safe-outputs:
     protected-files: fallback-to-issue
   push-to-pull-request-branch:
     target: "*"
-    title-prefix: "[Test Improver] "
+    required-title-prefix: "[Test Improver] "
     max: 4
   create-issue:
     title-prefix: "[Test Improver] "
@@ -56,7 +56,6 @@ safe-outputs:
     max: 1
 
 tools:
-  web-fetch:
   bash: true
   github:
     toolsets: [all]

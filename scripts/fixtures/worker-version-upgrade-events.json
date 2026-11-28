@@ -1,0 +1,38 @@
+[
+  {
+    "name": "unlabeled issue opened",
+    "eventName": "issues",
+    "payload": { "action": "opened", "issue": { "number": 1, "labels": [] } },
+    "checksMembership": false
+  },
+  {
+    "name": "issue with unrelated and near-match labels edited",
+    "eventName": "issues",
+    "payload": {
+      "action": "edited",
+      "issue": { "number": 1, "labels": [{ "name": "bug" }, { "name": "type: worker-update-extra" }] }
+    },
+    "checksMembership": false
+  },
+  {
+    "name": "issue opened with the worker update label",
+    "eventName": "issues",
+    "payload": { "action": "opened", "issue": { "number": 1, "labels": [{ "name": "type: worker-update" }] } },
+    "checksMembership": true
+  },
+  {
+    "name": "issue edited with the worker update label alongside another label",
+    "eventName": "issues",
+    "payload": {
+      "action": "edited",
+      "issue": { "number": 1, "labels": [{ "name": "bug" }, { "name": "type: worker-update" }] }
+    },
+    "checksMembership": true
+  },
+  {
+    "name": "manual dispatch without an issue",
+    "eventName": "workflow_dispatch",
+    "payload": { "ref": "refs/heads/main", "inputs": {} },
+    "checksMembership": true
+  }
+]

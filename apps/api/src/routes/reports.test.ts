@@ -10,18 +10,27 @@ import type { RouteContext } from "../route-context.js";
 import { registerReportsRoutes } from "./reports.js";
 
 function buildApp() {
-  let current = {
+  let current: {
+    _id: string;
+    projectId: string;
+    deletedAt?: Date;
+    run: { _id: string; status: string; postProcessorStatus: string };
+  } = {
     _id: "request-1", projectId: "project-1",
     run: { _id: "run-1", status: "done", postProcessorStatus: "done" },
   };
   const insertOne = vi.fn().mockResolvedValue({});
   const sendMessage = vi.fn().mockResolvedValue({});
   const findOne = vi.fn(async (filter: Record<string, unknown>) => {
-    const matches = Object.entries(filter).every(([key, value]) =>
-      key.startsWith("run.")
-        ? current.run[key.slice(4) as keyof typeof current.run] === value
-        : current[key as keyof typeof current] === value,
-    );
+    const matches = Object.entries(filter).every(([key, value]) => {
+      const actual = key.startsWith("run.")
+        ? current.run[key.slice(4) as keyof typeof current.run]
+        : current[key as keyof typeof current];
+      if (value && typeof value === "object" && "$exists" in value) {
+        return (actual !== undefined) === value.$exists;
+      }
+      return actual === value;
+    });
     return matches ? structuredClone(current) : null;
   });
   const app = express();
@@ -37,6 +46,7 @@ function buildApp() {
   } as unknown as RouteContext);
   return {
     app, insertOne, sendMessage, findOne,
+    deleteRequest: () => { current = { ...current, deletedAt: new Date() }; },
     replaceRun: (run: typeof current.run) => { current = { ...current, run }; },
   };
 }
@@ -44,6 +54,16 @@ function buildApp() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("automatic report attempt isolation", () => {
+  it("rejects a deleted request even when its originating attempt is ready", async () => {
+    const fixture = buildApp();
+    fixture.deleteRequest();
+    const response = await request(fixture.app).post("/api/v1/reports/trigger")
+      .send({ requestId: "request-1", runId: "run-1" });
+    expect(response.status).toBe(404);
+    expect(fixture.insertOne).not.toHaveBeenCalled();
+    expect(fixture.sendMessage).not.toHaveBeenCalled();
+  });
+
   it.each([
     { _id: "run-2", status: "done", postProcessorStatus: "done" },
     { _id: "run-1", status: "processing", postProcessorStatus: "done" },

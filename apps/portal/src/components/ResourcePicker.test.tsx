@@ -65,6 +65,7 @@ afterEach(() => {
 function renderPicker(props: {
   selected: ResourceBindingSpec[];
   profileBindings?: ResourceBindingSpec[];
+  bindingsLocked?: boolean;
   onChange?: (bindings: ResourceBindingSpec[]) => void;
 }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -73,6 +74,7 @@ function renderPicker(props: {
       <ResourcePicker
         selected={props.selected}
         profileBindings={props.profileBindings}
+        bindingsLocked={props.bindingsLocked}
         onChange={props.onChange ?? vi.fn()}
       />
     </QueryClientProvider>,
@@ -87,6 +89,7 @@ describe("ResourcePicker parameter bindings", () => {
     renderPicker({
       selected,
       profileBindings: selected,
+      bindingsLocked: true,
       onChange,
     });
 
@@ -98,6 +101,8 @@ describe("ResourcePicker parameter bindings", () => {
     const scenarioInput = screen.getByLabelText("SCENARIO") as HTMLInputElement;
     expect(scenarioInput.disabled).toBe(false);
     expect(scenarioInput.value).toBe("default-scenario");
+    expect(screen.queryByPlaceholderText("Search resources…")).toBeNull();
+    expect(screen.queryByText("Create a resource")).toBeNull();
 
     fireEvent.change(scenarioInput, { target: { value: "custom-scenario" } });
 

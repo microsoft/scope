@@ -299,6 +299,7 @@ function processChoices(
   if (!Array.isArray(choices)) return;
 
   for (const choice of choices) {
+    if (!choice || typeof choice !== "object") continue;
     const message = (choice as Record<string, unknown>).message as Record<string, unknown> | undefined;
     if (!message) continue;
 

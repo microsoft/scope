@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { execFile } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { promisify } from "node:util";
-import { resolve, join } from "node:path";
-import { existsSync, copyFileSync, chmodSync, mkdtempSync, rmSync } from "node:fs";
+import { resolve, join, dirname } from "node:path";
+import { existsSync, copyFileSync, chmodSync, mkdtempSync, rmSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 const execFileAsync = promisify(execFile);
@@ -174,5 +174,91 @@ describe("Bundle integration tests", () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+});
+
+// Keep updater cases in the bundle suite invoked by CI and CLI publication.
+describe.skipIf(process.platform === "win32")("standalone CLI update validation", () => {
+  let updateDirectory: string | undefined;
+  let releaseServer: Server | undefined;
+
+  afterEach(async () => {
+    if (releaseServer) await new Promise<void>((resolveClose) => releaseServer!.close(() => resolveClose()));
+    if (updateDirectory) rmSync(updateDirectory, { recursive: true, force: true });
+    releaseServer = undefined;
+    updateDirectory = undefined;
+  });
+
+  /** Exercise the real installed bundle with a local release list and fake downloader. */
+  async function runUpdate(downloadedSource: string) {
+    updateDirectory = mkdtempSync(join(tmpdir(), "scope-update-"));
+    const installedPath = join(updateDirectory, "scope");
+    copyFileSync(BUNDLE_PATH, installedPath);
+    const before = readFileSync(installedPath, "utf-8");
+
+    // The fake gh only writes the supplied synthetic bundle to the requested path.
+    const downloaderPath = join(updateDirectory, "gh");
+    writeFileSync(downloaderPath, `#!/usr/bin/env node
+  const fs = require("node:fs");
+  const args = process.argv.slice(2);
+  if (args[0] !== "release" || args[1] !== "download") process.exit(2);
+  fs.writeFileSync(args[args.indexOf("-O") + 1], process.env.SCOPE_TEST_BUNDLE);
+  `);
+    chmodSync(downloaderPath, 0o755);
+
+    releaseServer = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify([{ tag_name: "cli/v9.0.0" }]));
+    });
+    await new Promise<void>((resolveListen) => releaseServer!.listen(0, "127.0.0.1", resolveListen));
+    const address = releaseServer.address();
+    if (!address || typeof address === "string") throw new Error("Missing mock release server port");
+
+    let failed = false;
+    try {
+      await execFileAsync(process.execPath, ["--no-global-search-paths", installedPath, "update"], {
+        cwd: updateDirectory,
+        env: {
+          ...process.env,
+          NODE_PATH: "",
+          NODE_OPTIONS: "",
+          PATH: `${updateDirectory}:${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+          SCOPE_NO_UPDATE_CHECK: "1",
+          SCOPE_RELEASES_URL: `http://127.0.0.1:${address.port}`,
+          SCOPE_TEST_BUNDLE: downloadedSource,
+        },
+        timeout: 15_000,
+      });
+    } catch {
+      failed = true;
+    }
+    return { failed, before, after: readFileSync(installedPath, "utf-8"), files: readdirSync(updateDirectory) };
+  }
+
+  it.each([
+    ["invalid JavaScript", "#!/usr/bin/env node\nthis is not JavaScript"],
+    ["missing executable header", 'console.log("9.0.0");'],
+    ["wrong version", '#!/usr/bin/env node\nconsole.log("8.0.0");'],
+    [
+      "a bundle that ignores graceful termination",
+      '#!/usr/bin/env node\nprocess.on("SIGTERM", () => {}); console.log("9.0.0"); setInterval(() => {}, 1000);',
+    ],
+  ])("preserves the installed CLI for %s", async (_description, downloadedSource) => {
+    const result = await runUpdate(downloadedSource);
+    expect(result.failed).toBe(true);
+    expect(result.after).toBe(result.before);
+    expect(result.files).toEqual(["gh", "scope"]);
+  });
+
+  it("installs a matching executable bundle", async () => {
+    const downloadedSource = '#!/usr/bin/env node\nconsole.log("9.0.0");';
+    const result = await runUpdate(downloadedSource);
+    expect(result.failed).toBe(false);
+    expect(result.after).toBe(downloadedSource);
+    expect(result.files).toEqual(["gh", "scope"]);
+    const { stdout } = await execFileAsync(join(updateDirectory!, "scope"), ["--version"], {
+      timeout: 10_000,
+    });
+    expect(stdout.trim()).toBe("9.0.0");
   });
 });
