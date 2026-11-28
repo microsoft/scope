@@ -13,6 +13,7 @@ import {
 } from "shared";
 import type { ExtensionSearchResult } from "shared";
 import { apiRoute } from "../openapi/api-route.js";
+import { escapeSearchText } from "../utils/search.js";
 import type { ExtensionDocument, RouteContext } from "../route-context.js";
 import { ProjectIdQuerySchema, getQueryProjectId } from "../utils/project-scope.js";
 
@@ -110,8 +111,8 @@ apiRoute(ctx.app, ctx.registry, {
       const limit = Math.min(Math.max(parseInt(limitStr as string, 10) || 10, 1), 50);
       const query = q.trim();
 
-      // Search internal DB (case-insensitive regex), scoped to the project
-      const regex = { $regex: query, $options: "i" };
+      // Search internal DB (case-insensitive literal text), scoped to the project
+      const regex = { $regex: escapeSearchText(query), $options: "i" };
       const internalExtensions = await ctx.extensionCollection
         .find({
           deletedAt: { $exists: false },
