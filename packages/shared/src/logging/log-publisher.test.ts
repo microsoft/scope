@@ -111,6 +111,32 @@ describe("LogPublisher", () => {
     // Assembled at runtime so the source never contains a literal token shape.
     const githubToken = "gh" + "p_" + "a1B2".repeat(9);
 
+    it.each(["bearer", "BEARER", "bEaReR"])("redacts %s credentials at both publishers", async (scheme) => {
+      const credential = "synthetic" + "OpaqueCredential1234567890";
+      const message = `Authorization: ${scheme} ${credential}`;
+      const expected = `Authorization: ${scheme} [REDACTED:authorization-bearer]`;
+      const publisher = makePublisher();
+      await publisher.publish("run-abc", "attempt-1", "info", message, { args: { command: message } });
+
+      const streamed = JSON.parse(mockRedis.publish.mock.calls[0][1]);
+      const persisted: LogEvent = mockAppendLogEvent.mock.calls[0][2];
+      for (const event of [streamed, persisted]) {
+        expect(event.message).toBe(expected);
+        expect(event.data).toEqual({ args: { command: expected } });
+      }
+
+      const { RedisLogPublisher } = await import("./log-publisher.js");
+      const redisPublisher = new RedisLogPublisher({ redisHost: "127.0.0.1", redisPort: 1, redisPassword: "" });
+      (redisPublisher as any).redis?.disconnect?.();
+      (redisPublisher as any).redis = mockRedis;
+      (redisPublisher as any).redisBreaker = { execute: async (fn: () => Promise<unknown>) => fn() };
+      await redisPublisher.publish("run-abc", "info", message, { args: { command: message } });
+
+      const redisOnly = JSON.parse(mockRedis.publish.mock.calls[1][1]);
+      expect(redisOnly.message).toBe(expected);
+      expect(redisOnly.data).toEqual({ args: { command: expected } });
+    });
+
     it("redacts secrets in the message and data before both Redis and Blob", async () => {
       const publisher = makePublisher();
       await publisher.publish("run-abc", "attempt-1", "info", `cloning with ${githubToken}`, {

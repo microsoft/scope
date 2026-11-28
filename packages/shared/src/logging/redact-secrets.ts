@@ -6,8 +6,8 @@
  *
  * Name-based filters (e.g. the ACP workers' `formatToolArgs`) only catch a
  * secret stored under a sensitive-looking key. This module inspects the
- * *value*, so a token is caught wherever it appears — inside a `command`
- * argument, a free-text message, or a nested `data` field.
+ * *value*, so a recognized token can be caught inside a `command` argument,
+ * a free-text message, or a nested `data` field.
  *
  * It is applied once, centrally, in `LogPublisher` / `RedisLogPublisher`, the
  * boundary where log lines are persisted to Blob storage and fanned out to
@@ -18,6 +18,9 @@
  * TruffleHog): every rule matches a distinctive prefix or structure, so false
  * positives on ordinary debug output stay rare. Generic high-entropy and PII
  * detection are intentionally not included yet.
+ * Matching is stateless within each string: PEM protection requires the
+ * complete BEGIN/body/END block in that string. Separate log events, including
+ * forwarded subprocess stderr chunks, and incomplete blocks are not covered.
  */
 
 /** One value-based detection rule. */
@@ -40,7 +43,7 @@ const SECRET_RULES: readonly SecretRule[] = [
   { id: "azure-storage-key", pattern: /(?<prefix>\bAccountKey=)[A-Za-z0-9+/]{40,}={0,2}/g },
   // SAS signature only — the rest of the blob URL stays readable for debugging.
   { id: "azure-sas-signature", pattern: /(?<prefix>[?&]sig=)[A-Za-z0-9%+/=]{16,}/g },
-  { id: "authorization-bearer", pattern: /(?<prefix>\bBearer\s+)[A-Za-z0-9._~+/-]{16,}=*/g },
+  { id: "authorization-bearer", pattern: /(?<prefix>\bBearer\s+)[A-Za-z0-9._~+/-]{16,}=*/gi },
   { id: "jwt", pattern: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
   { id: "aws-access-key-id", pattern: /\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b/g },
   { id: "github-token", pattern: /\bgh[pousr]_[A-Za-z0-9]{36,255}\b/g },
@@ -59,7 +62,7 @@ const SECRET_RULES: readonly SecretRule[] = [
  * any rule, so the common case (ordinary log text) skips every regex.
  */
 const RULE_HINTS: readonly string[] = [
-  "PRIVATE KEY", "AccountKey=", "sig=", "Bearer", "eyJ", "AKIA", "ASIA", "ABIA", "ACCA",
+  "PRIVATE KEY", "AccountKey=", "sig=", "eyJ", "AKIA", "ASIA", "ABIA", "ACCA",
   "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "xox", "_live_", "_test_", "sk-", "AIza", "npm_", "hf_",
 ];
 
@@ -75,7 +78,9 @@ const MAX_DATA_DEPTH = 8;
  * @returns The text with secrets replaced; the same string when nothing matched.
  */
 export function redactSecrets(text: string): string {
-  if (!RULE_HINTS.some((hint) => text.includes(hint))) return text;
+  // HTTP authentication schemes are case-insensitive; retain their original
+  // casing through the rule's prefix capture when replacing the credential.
+  if (!RULE_HINTS.some((hint) => text.includes(hint)) && !/bearer/i.test(text)) return text;
 
   let result = text;
   for (const rule of SECRET_RULES) {
