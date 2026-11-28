@@ -9,6 +9,7 @@ import type {
 } from "mongodb";
 import type { BlobStorage } from "shared";
 import type { TestDependencies } from "./index.js";
+import type { ProjectLookup } from "./utils/project-scope.js";
 
 // ---------------------------------------------------------------------------
 // Mock MongoDB collection
@@ -203,7 +204,7 @@ export function createMockBlobStorage(): BlobStorage {
  */
 export function createMockProjectStore() {
   return {
-    get: vi.fn(async (id: string) => ({ _id: id, name: `Project ${id}`, createdAt: new Date() })),
+    get: vi.fn<ProjectLookup["get"]>(async (id) => ({ _id: id, name: `Project ${id}`, createdAt: new Date() })),
   };
 }
 

@@ -62,6 +62,9 @@ apiRoute(ctx.app, ctx.registry, {
         return;
       }
 
+      // Validate the destination inherited from the run before creating a report.
+      await ctx.liveProjectGuard.assertWritable(run.projectId);
+
       // Verify the template exists (if specified) within the run's project
       if (templateId) {
         const template = await ctx.reportTemplateCollection.findOne({ projectId: run.projectId, id: templateId, deletedAt: { $exists: false } });
@@ -163,6 +166,8 @@ apiRoute(ctx.app, ctx.registry, {
 
       // Verify all runs exist
       const runs = await ctx.requestCollection.find({ _id: { $in: requestIds } as any }).toArray();
+      // Check every parent scope before inserting or queuing any reports.
+      await ctx.liveProjectGuard.assertAllWritable(runs.map(run => run.projectId));
       const foundIds = new Set(runs.map(r => r._id));
       const notFound = requestIds.filter(id => !foundIds.has(id));
 
@@ -502,6 +507,9 @@ apiRoute(ctx.app, ctx.registry, {
         return;
       }
 
+      // Triggered reports inherit the run's destination, not an optional query scope.
+      await ctx.liveProjectGuard.assertWritable(run.projectId);
+
       // Fetch task prompt document (needed for promptFeature trigger evaluation)
       let taskPrompt: TaskPromptDocument | null = null;
       if (run.taskPromptId) {
@@ -574,6 +582,8 @@ apiRoute(ctx.app, ctx.registry, {
 
       // Fetch runs
       const runs = await ctx.requestCollection.find({ _id: { $in: requestIds } as any }).toArray();
+      // Validate the entire batch before a matching template can enqueue a report.
+      await ctx.liveProjectGuard.assertAllWritable(runs.map(run => run.projectId));
       const foundIds = new Set(runs.map(r => r._id));
       const notFound = requestIds.filter(id => !foundIds.has(id));
 

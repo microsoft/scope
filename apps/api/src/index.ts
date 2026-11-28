@@ -270,6 +270,7 @@ async function initializeClients(): Promise<void> {
 
 // Shared route context — module-level vars are populated by initializeClients()
 // before any HTTP request arrives, so handlers see the initialized values.
+const liveProjectGuard = new LiveProjectGuard(() => projectStore);
 const routeCtx: RouteContext = {
   get app() { return app; },
   get registry() { return registry; },
@@ -312,6 +313,7 @@ const routeCtx: RouteContext = {
   get resourceRevisionStore() { return resourceRevisionStore; },
   get resourceResolver() { return resourceResolver; },
   get projectStore() { return projectStore; },
+  liveProjectGuard,
   get reportQueueClient() { return reportQueueClient; },
   get blobStorage() { return blobStorage; },
   get heartbeatStore() { return heartbeatStore; },
@@ -334,7 +336,7 @@ registerUsersRoutes(routeCtx);
 app.use(createUserAccessMiddleware(() => userAccessResolver));
 
 // Scoped writes must target a live project (404 unknown, 409 soft-deleted).
-app.use("/api/v1", new LiveProjectGuard(() => projectStore).middleware());
+app.use("/api/v1", liveProjectGuard.middleware());
 
 // Secrets/proxy routes must be registered first (before :id param routes)
 registerSecretsRoutes(routeCtx);

@@ -163,7 +163,12 @@ never defaulted. The single carrier is the **`?projectId=` query parameter**. He
 enforces referential integrity itself: `LiveProjectGuard` (mounted on `/api/v1`) checks every
 non-`GET`/`HEAD`/`OPTIONS` request that carries `?projectId=` against the `projects`
 collection before any route runs — **404** when the project does not exist, **409** when it is
-soft-deleted (restore it first). Projects confirmed live are cached in-process for 10s
+soft-deleted (restore it first). Bulk request resubmission and all report-creation routes
+(single, bulk, trigger, and bulk-trigger) also use the same guard on the destination projects
+copied from their parent requests. These checks apply even without `?projectId=`, or when it
+names a different project. Batches validate every distinct destination before the first
+insert or queue message, so a rejected project cannot leave a partially created batch.
+Projects confirmed live are cached in-process for 10s
 (`LIVE_PROJECT_CACHE_TTL_MS`); misses are never cached, so a new or restored project is
 writable immediately, while a just-deleted project may accept writes on an instance for at most
 one TTL. Scoped reads are not checked: listing an unknown or deleted project returns an empty

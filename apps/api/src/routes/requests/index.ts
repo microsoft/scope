@@ -2015,6 +2015,9 @@ apiRoute(ctx.app, ctx.registry, {
       { _id: { $in: ids }, deletedAt: { $exists: false } }
     ).toArray();
 
+    // Each new request inherits its original's project, regardless of query scope.
+    await ctx.liveProjectGuard.assertAllWritable(originalRuns.map(run => run.projectId));
+
     const foundIds = new Set(originalRuns.map(r => r._id));
     const notFound = ids.filter((id: string) => !foundIds.has(id));
 

@@ -218,9 +218,20 @@ export class LiveProjectGuard {
   }
 
   /**
+   * Validate every distinct destination before a batch starts writing.
+   * @param projectIds - Resolved destination scopes, usually copied from parents.
+   */
+  async assertAllWritable(projectIds: Iterable<string>): Promise<void> {
+    for (const projectId of new Set(projectIds)) {
+      await this.assertWritable(projectId);
+    }
+  }
+
+  /**
    * Express middleware applying {@link assertWritable} to every non-read
    * request that carries a `?projectId=` scope. Requests without the query
-   * param are left to the route's own scope handling.
+   * param are left to the route's own scope handling. Parent-derived creates
+   * must also validate their resolved destination through this guard.
    */
   middleware(): RequestHandler {
     return (req: Request, _res: Response, next: NextFunction) => {
