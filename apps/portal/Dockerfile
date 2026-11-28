@@ -1,16 +1,13 @@
 # Shared Portal dependency layer
 FROM node:20-alpine AS deps
 ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
-ENV npm_config_registry=${NPM_CONFIG_REGISTRY} \
-    COREPACK_NPM_REGISTRY=${NPM_CONFIG_REGISTRY}
-# corepack bootstraps pnpm from the registry's per-version metadata endpoint,
-# which some private registry proxies don't serve; fall back to a pinned global
-# install (honors npm_config_registry) so restricted networks can still build.
-RUN corepack enable && (corepack prepare pnpm@10.29.1 --activate || npm install -g pnpm@10.29.1 --force)
+ARG COREPACK_NPM_REGISTRY=
+COPY scripts/bootstrap-pnpm.sh /usr/local/bin/bootstrap-pnpm
+RUN NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY}" COREPACK_NPM_REGISTRY="${COREPACK_NPM_REGISTRY}" sh /usr/local/bin/bootstrap-pnpm
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/portal/package.json apps/portal/
-RUN pnpm install --frozen-lockfile --filter portal --prod=false
+RUN NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY}" pnpm install --frozen-lockfile --filter portal --prod=false
 
 # --- Dev stage: Vite dev server with HMR ---
 # Built from `deps` (not `builder`) so the dev image skips the production build.

@@ -3,8 +3,7 @@
 // Licensed under the MIT License.
 
 // Thanks contributors: everyone (bots aside) who got a pull request merged.
-// The contribution-data workflow publishes the list to the website-data
-// branch, and the browser fetches it. See website/AGENTS.md.
+// The browser fetches GitHub's contributor statistics. See website/AGENTS.md.
 import '../../styles/contributions.css';
 import '../../styles/contributors.css';
 import { CONTRIBUTORS_DATA_URL, CONTRIBUTORS_GRAPH_URL } from '../../scripts/contributors';
@@ -46,7 +45,7 @@ const listId = `thanks-list-${variant}`;
 		)
 	}
 	<p class="contrib-message thanks-message--empty">
-		No pull request contributors are available yet.
+		No contributors with commits on main are available yet.
 	</p>
 	<p class="contrib-message thanks-message--error">
 		We couldn't load the list. See
