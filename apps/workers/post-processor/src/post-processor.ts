@@ -62,8 +62,8 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
       trackMetric({ name: "post_processor.cold_start_ms", value: process.uptime() * 1000, properties: { service: "post-processor" } });
     }
 
-    if (!msg?.type) {
-      await log("warn", "Message missing 'type' field, discarding");
+    if (!msg?.type || !msg.runId) {
+      await log("warn", "Message missing 'type' or 'runId' field, discarding");
       await this.safeDeleteMessage(message.messageId, heartbeat.stop());
       return;
     }
@@ -75,13 +75,18 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
       return;
     }
 
-    // Set status to "processing".
-    // Concurrency safety: the Azure Storage Queue guarantees at-most-once delivery
-    // via visibility timeout, so only one worker processes a given message at a time.
-    await this.collection.updateOne(
-      { _id: doc._id } as any,
+    // Claim only the completed attempt named by the message. A retry can replace
+    // doc.run between dequeue and this write.
+    const runFilter = { _id: doc._id, "run._id": msg.runId, "run.status": "done" };
+    const claim = await this.collection.updateOne(
+      runFilter as any,
       { $set: { "run.postProcessorStatus": "processing" } } as any,
     );
+    if (claim.matchedCount === 0) {
+      await log("info", `Discarding post-processing for superseded run ${msg.runId}`);
+      await this.safeDeleteMessage(message.messageId, heartbeat.stop());
+      return;
+    }
 
     try {
       await log("info", `Running handler: ${msg.type}`);
@@ -96,8 +101,8 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
       await handler.process(msg, ctx);
 
       // Stamp version and status on success
-      await this.collection.updateOne(
-        { _id: doc._id } as any,
+      const completed = await this.collection.updateOne(
+        runFilter as any,
         {
           $set: {
             "run.postProcessorVersion": POST_PROCESSOR_VERSION,
@@ -106,15 +111,19 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
         } as any,
       );
 
-      await log("info", `Post-processing complete (v${POST_PROCESSOR_VERSION})`);
-      trackMetric({ name: "post_processor.processing_duration_ms", value: Date.now() - processStart, properties: { service: "post-processor", handlerType: msg.type } });
-      trackEvent({ name: "post_processor.processing_completed", properties: { handlerType: msg.type, requestId: doc._id } });
+      if (completed.matchedCount === 0) {
+        await log("info", `Post-processing finished for superseded run ${msg.runId}; skipping report trigger`);
+      } else {
+        await log("info", `Post-processing complete (v${POST_PROCESSOR_VERSION})`);
+        trackMetric({ name: "post_processor.processing_duration_ms", value: Date.now() - processStart, properties: { service: "post-processor", handlerType: msg.type } });
+        trackEvent({ name: "post_processor.processing_completed", properties: { handlerType: msg.type, requestId: doc._id } });
 
-      // Trigger report generation now that enrichment is done (best-effort)
-      try {
-        await this.triggerReportGeneration(doc._id, log);
-      } catch (error) {
-        await log("warn", `Failed to trigger report generation after retries: ${error}`);
+        // Trigger report generation now that enrichment is done (best-effort).
+        try {
+          await this.triggerReportGeneration(doc._id, msg.runId, log);
+        } catch (error) {
+          await log("warn", `Failed to trigger report generation after retries: ${error}`);
+        }
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -122,7 +131,7 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
 
       // Mark as failed so scheduler doesn't immediately re-dispatch
       await this.collection.updateOne(
-        { _id: doc._id } as any,
+        runFilter as any,
         { $set: { "run.postProcessorStatus": "failed" } } as any,
       );
 
@@ -139,13 +148,13 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
    * Called after post-processing succeeds so reports can use enriched data.
    */
   @Retry({ maxRetries: 3, baseDelayMs: 1000, isRetryable: () => true })
-  private async triggerReportGeneration(requestId: string, log: (level: LogEvent["level"], message: string) => Promise<void>): Promise<void> {
+  private async triggerReportGeneration(requestId: string, runId: string, log: (level: LogEvent["level"], message: string) => Promise<void>): Promise<void> {
     if (!this.apiBaseUrl) return;
 
     const response = await fetch(`${this.apiBaseUrl}/api/v1/reports/trigger`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requestId }),
+      body: JSON.stringify({ requestId, runId }),
     });
     if (response.ok) {
       const result = await response.json() as { triggered: number };

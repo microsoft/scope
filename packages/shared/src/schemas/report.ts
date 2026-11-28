@@ -37,6 +37,7 @@ export const ReportResponseSchema = z
   .object({
     _id: z.string(),
     requestId: z.string(),
+    runId: z.string().optional(),
     templateId: z.string().optional(),
     reporter: ReporterSchema.optional(),
     content: z.string().optional(),
@@ -73,6 +74,7 @@ export const BulkReportStatusInputSchema = z
 export const TriggerReportsInputSchema = z
   .object({
     requestId: z.string(),
+    runId: z.string().min(1).optional(),
   })
   .openapi("TriggerReportsInput");
 

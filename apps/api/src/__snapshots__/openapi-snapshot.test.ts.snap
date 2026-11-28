@@ -2369,6 +2369,9 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
           "requestId": {
             "type": "string",
           },
+          "runId": {
+            "type": "string",
+          },
           "status": {
             "enum": [
               "pending",
@@ -3668,6 +3671,10 @@ exports[`OpenAPI spec snapshot > matches the committed snapshot 1`] = `
       "TriggerReportsInput": {
         "properties": {
           "requestId": {
+            "type": "string",
+          },
+          "runId": {
+            "minLength": 1,
             "type": "string",
           },
         },

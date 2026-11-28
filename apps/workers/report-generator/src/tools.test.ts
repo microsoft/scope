@@ -354,3 +354,50 @@ describe("createReportTools - permissions", () => {
     }
   });
 });
+
+describe("report tools pinned to the originating attempt", () => {
+  it.each(["get_run_summary", "list_turns", "get_turn_detail", "get_criteria_trajectory"])(
+    "%s reads the original attempt after retry", async (name) => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(mockResponse({
+          _id: REQUEST_ID, scenario: { criteria: [] },
+          run: { _id: "run-2", status: "pending", turns: [] },
+        }))
+        .mockResolvedValueOnce(mockResponse({
+          _id: "run-1", status: "done",
+          turns: [{ iteration: 1, passed: true, criteriaResults: [{ criterionId: "c1", passed: true }] }],
+        }));
+      vi.stubGlobal("fetch", fetchMock);
+      const tools = createReportTools(API_BASE, REQUEST_ID, SNAPSHOTS_DIR, REPORT_ID, "run-1");
+      const result = await findTool(tools, name).handler({ iteration: 1 });
+      expect(result.error).toBeUndefined();
+      expect(fetchMock).toHaveBeenLastCalledWith(`${API_BASE}/api/v1/requests/${REQUEST_ID}/runs/run-1`);
+      if (name === "get_run_summary") expect(result.status).toBe("done");
+      if (name === "list_turns") expect(result.total).toBe(1);
+      if (name === "get_turn_detail") expect(result.passed).toBe(true);
+      if (name === "get_criteria_trajectory") expect(result.trajectory.c1[0].passed).toBe(true);
+    },
+  );
+
+  it("does not fall back to the new attempt if the original was removed", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResponse({ _id: REQUEST_ID, run: { _id: "run-2", status: "done" } }))
+      .mockResolvedValueOnce(mockResponse(null, false, 404));
+    vi.stubGlobal("fetch", fetchMock);
+    const tools = createReportTools(API_BASE, REQUEST_ID, SNAPSHOTS_DIR, REPORT_ID, "run-1");
+    expect(await findTool(tools, "get_run_summary").handler({})).toEqual({
+      error: expect.stringContaining("Failed to fetch report attempt: 404"),
+    });
+  });
+
+  it.each([
+    ["extract_snapshot", "/snapshots/1"],
+    ["get_atif_trajectory", "/atif?iteration=1"],
+  ])("%s uses attempt-specific artifacts", async (name, path) => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(null, false, 404));
+    vi.stubGlobal("fetch", fetchMock);
+    const tools = createReportTools(API_BASE, REQUEST_ID, "/tmp/missing-report-attempt-test", REPORT_ID, "run-1");
+    await findTool(tools, name).handler({ iteration: 1 });
+    expect(fetchMock).toHaveBeenCalledWith(`${API_BASE}/api/v1/requests/${REQUEST_ID}/runs/run-1${path}`);
+  });
+});

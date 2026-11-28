@@ -488,17 +488,26 @@ apiRoute(ctx.app, ctx.registry, {
   },
   handler: async (req, res, next) => {
     try {
-      const { requestId } = req.body;
+      const { requestId, runId } = req.body;
 
       if (!requestId || typeof requestId !== "string") {
         res.status(400).json({ error: "requestId is required and must be a string" });
         return;
       }
 
-      // Fetch the completed run
-      const run = await ctx.requestCollection.findOne({ _id: requestId, deletedAt: { $exists: false } });
+      // Automatic triggers must still refer to the completed, enriched attempt.
+      // Omitted runId retains the manual trigger API's existing behavior.
+      const run = await ctx.requestCollection.findOne({
+        _id: requestId,
+        deletedAt: { $exists: false },
+        ...(runId ? {
+          "run._id": runId,
+          "run.status": "done",
+          "run.postProcessorStatus": "done",
+        } : {}),
+      });
       if (!run) {
-        res.status(404).json({ error: `Run ${requestId} not found` });
+        res.status(404).json({ error: `Ready run ${runId ?? requestId} not found` });
         return;
       }
 
@@ -530,6 +539,7 @@ apiRoute(ctx.app, ctx.registry, {
             _id: reportId,
             projectId: run.projectId,
             requestId,
+            runId: run.run?._id,
             templateId: template.id,
             status: "pending",
             createdAt: new Date(),

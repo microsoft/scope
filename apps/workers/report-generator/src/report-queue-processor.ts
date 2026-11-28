@@ -107,7 +107,8 @@ export class ReportQueueProcessor extends BaseQueueProcessor<ReportDocument> {
         this.reportConfig.apiBaseUrl,
         requestId,
         snapshotsDir,
-        reportId
+        reportId,
+        doc.runId
       );
 
       await log("info", "Initialized tools, starting Copilot SDK session");

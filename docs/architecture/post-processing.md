@@ -24,7 +24,8 @@ Two paths trigger post-processing:
 ### Flow
 
 1. Queue message arrives: `{ type: "atif", requestId, runId }`
-2. Worker fetches the request document from MongoDB
+2. Worker claims the completed attempt using `{ _id: requestId, "run._id": runId,
+   "run.status": "done" }`. A message for an older attempt is discarded.
 3. For each iteration turn with a `harUrl`:
 
     - Downloads the HAR blob from Azure Blob Storage
@@ -33,7 +34,20 @@ Two paths trigger post-processing:
     - Updates `run.turns.$.atifUrl` in the request document
 
 4. On success, stamps `run.postProcessorVersion` and sets `run.postProcessorStatus: "done"`
-5. Triggers report generation via the API (best-effort, with retry)
+5. Triggers report generation with `{ requestId, runId }` via the API (best-effort, with retry)
+
+The handler's turn read and `atifUrl` writes, plus every post-processor status
+write, use the same attempt filter. If a retry replaces the run while the handler
+is working, its old-attempt artifact may finish uploading, but no field on the
+new attempt is changed and report generation is skipped. If the retry occurs after
+completion is stamped, the trigger API checks the originating run ID, terminal
+status, and completed post-processing before accepting the automatic trigger.
+Reports persist that run ID, and their data tools resolve that attempt (including
+history and attempt-specific artifacts). A retry after trigger acceptance can
+therefore finish a report for the original attempt, but cannot create a report
+using the replacement attempt's data. Manual triggers without `runId` retain their
+existing behavior and pin the current attempt when creating a report. Legacy
+reports without a stored `runId` continue to read the current attempt.
 
 ### Blob Storage Layout
 
