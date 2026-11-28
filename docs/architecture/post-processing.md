@@ -17,6 +17,11 @@ Two paths trigger post-processing:
 1. **Event-driven (primary):** Coder workers enqueue a post-processing message immediately when a run completes, setting `run.postProcessorStatus: "queued"` atomically in the same DB write.
 2. **Scheduler backfill:** The `PostProcessorDispatcher` polls every 30 seconds for runs that have `status: "done"` but no `postProcessorStatus` set (or a `postProcessorVersion` below the current target). This catches runs that completed before the event-driven dispatch was deployed, or that need re-processing after a version bump.
 
+If the scheduler's queue send fails, it releases only the claimed run attempt
+while its post-processing status is still `queued`. A concurrent retry's newer
+attempt is left untouched. The rollback also preserves `processing` or terminal
+status when a worker received the message despite a lost send acknowledgement.
+
 ## ATIF Generation
 
 [ATIF](https://github.com/AISafety-ATIF/specification) (AI Tool Interaction Format) is an open specification for recording AI agent tool interactions. The post-processor converts HAR (HTTP Archive) recordings captured during benchmark runs into ATIF trajectory files using the [`atifact`](https://github.com/waldekmastykarz/atifact) package (pinned to `^0.10.1`, which extracts trajectories from both HTTP/SSE exchanges and WebSocket exchanges in a HAR).
