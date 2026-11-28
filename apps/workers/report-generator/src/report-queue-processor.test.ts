@@ -67,6 +67,7 @@ vi.mock("os", () => ({
 }));
 
 import { ReportQueueProcessor } from "./report-queue-processor.js";
+import { createReportTools } from "./tools.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -416,11 +417,15 @@ describe("ReportQueueProcessor – handleRequest template validation", () => {
   }
 
   it("throws when report has no templateId", async () => {
-    const doc = makeReportDoc({ templateId: undefined });
+    const doc = makeReportDoc({ templateId: undefined, runId: "original-attempt" });
 
     await expect(
       (processor as any).handleRequest(doc, makeMessage(), "pop-1", log)
     ).rejects.toThrow("has no templateId");
+
+    expect(createReportTools).toHaveBeenLastCalledWith(
+      "http://localhost:3000", "req-1", "/tmp/report-report-1", "report-1", "original-attempt",
+    );
 
     // Status should NOT be set to "generating" since template validation fails first
     expect(mockUpdateOne).not.toHaveBeenCalled();

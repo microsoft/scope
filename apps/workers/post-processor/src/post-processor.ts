@@ -120,7 +120,7 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
 
         // Trigger report generation now that enrichment is done (best-effort).
         try {
-          await this.triggerReportGeneration(doc._id, log);
+          await this.triggerReportGeneration(doc._id, msg.runId, log);
         } catch (error) {
           await log("warn", `Failed to trigger report generation after retries: ${error}`);
         }
@@ -148,13 +148,13 @@ export class PostProcessor extends BaseQueueProcessor<RequestDocument> {
    * Called after post-processing succeeds so reports can use enriched data.
    */
   @Retry({ maxRetries: 3, baseDelayMs: 1000, isRetryable: () => true })
-  private async triggerReportGeneration(requestId: string, log: (level: LogEvent["level"], message: string) => Promise<void>): Promise<void> {
+  private async triggerReportGeneration(requestId: string, runId: string, log: (level: LogEvent["level"], message: string) => Promise<void>): Promise<void> {
     if (!this.apiBaseUrl) return;
 
     const response = await fetch(`${this.apiBaseUrl}/api/v1/reports/trigger`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requestId }),
+      body: JSON.stringify({ requestId, runId }),
     });
     if (response.ok) {
       const result = await response.json() as { triggered: number };
