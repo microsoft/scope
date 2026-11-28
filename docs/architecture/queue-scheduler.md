@@ -208,8 +208,9 @@ write the worker makes between its claim and its terminal write — `run.turns` 
 (`run.resources`, `run.mcpRegistered`) — is filtered on
 [`ownedRunFilter`](../../packages/shared/src/queue/run-ownership.ts):
 `{ _id, "run._id": runId, "run.status": "processing", "run.worker.instanceId": <self> }`
-(issue #803). The terminal write and the error-path failure write were already gated
-the same way.
+(issue #803). The existing error-path failure write uses the same ownership guard.
+The success-terminal write checks the request ID, run ID, and processing status,
+but does not check `run.worker.instanceId`.
 
 When a turn, gate or setup-video write matches nothing, the worker throws
 `RunOwnershipLostError`. It propagates out of the multi-turn loop, so no further
